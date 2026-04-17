@@ -1,0 +1,178 @@
+# ------------------------------------------------------------
+# Production stack for Hetzner VPS — integrates with existing
+# Coolify-Traefik proxy. No Caddy, no port conflicts.
+#
+# Prerequisites on the VPS:
+#   - Coolify installed (its `coolify` network must already exist)
+#   - /opt/b2c/.env filled with the production env values
+#   - DNS A records for $EVOLUTION_DOMAIN and $AGENTS_DOMAIN
+#     pointing to this VPS's public IP
+#
+# Bring up from /opt/b2c:
+#   docker compose -f whatsapp/docker-compose.vps.yml up -d
+#
+# Traefik (from Coolify) auto-issues Let's Encrypt certs for
+# evolution.* and agents.* the first time it receives traffic.
+# ------------------------------------------------------------
+
+networks:
+  coolify:
+    external: true
+  b2c_internal:
+    driver: bridge
+
+volumes:
+  evolution_instances:
+  evolution_pgdata:
+  evolution_redisdata:
+
+services:
+
+  # ── Evolution API (WhatsApp QR + REST + webhooks) ────────
+  evolution_api:
+    image: atendai/evolution-api:v2.1.1
+    container_name: aa_evolution
+    restart: unless-stopped
+    env_file: ../.env
+    # Hairpin NAT fix: Evolution's outbound HTTPS to agents.aprender-aleman.de
+    # (on this same VPS) is blocked by Hetzner. Route internally to
+    # coolify-proxy (Traefik) which hands the request to agents_webhook via
+    # Host-header matching. IP is stable as long as coolify-proxy isn't
+    # recreated; re-run bootstrap if that changes.
+    extra_hosts:
+      - "agents.aprender-aleman.de:10.0.1.6"
+      - "evolution.aprender-aleman.de:10.0.1.6"
+    environment:
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+      - SERVER_URL=https://${EVOLUTION_DOMAIN}
+      - SERVER_TYPE=http
+      - CORS_ORIGIN=*
+      - CORS_METHODS=POST,GET,PUT,DELETE
+      - LOG_LEVEL=ERROR,WARN,INFO
+      - DEL_INSTANCE=false
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:${EVOLUTION_DB_PASSWORD}@evolution_db:5432/evolution?schema=public
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_exchange
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://evolution_redis:6379/6
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=true
+      - CACHE_LOCAL_ENABLED=false
+      - QRCODE_LIMIT=30
+      - QRCODE_COLOR=#F97316
+      - WEBHOOK_GLOBAL_ENABLED=false
+      - CONFIG_SESSION_PHONE_CLIENT=Aprender-Aleman
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+    volumes:
+      - evolution_instances:/evolution/instances
+    depends_on:
+      evolution_db:    { condition: service_healthy }
+      evolution_redis: { condition: service_healthy }
+    networks:
+      - coolify        # for Traefik to reach it + for agents webhook
+      - b2c_internal   # for private DB/Redis traffic
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=coolify"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.aa-evolution-http.entrypoints=http"
+      - "traefik.http.routers.aa-evolution-http.rule=Host(`${EVOLUTION_DOMAIN}`)"
+      - "traefik.http.routers.aa-evolution-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.aa-evolution-https.entrypoints=https"
+      - "traefik.http.routers.aa-evolution-https.rule=Host(`${EVOLUTION_DOMAIN}`)"
+      - "traefik.http.routers.aa-evolution-https.tls=true"
+      - "traefik.http.routers.aa-evolution-https.tls.certresolver=letsencrypt"
+      - "traefik.http.services.aa-evolution.loadbalancer.server.port=8080"
+
+  # ── Evolution's own Postgres (separate from Supabase) ────
+  evolution_db:
+    image: postgres:15-alpine
+    container_name: aa_evolution_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=evolution
+      - POSTGRES_PASSWORD=${EVOLUTION_DB_PASSWORD}
+      - POSTGRES_DB=evolution
+    volumes:
+      - evolution_pgdata:/var/lib/postgresql/data
+    networks: [ b2c_internal ]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Evolution's own Redis ────────────────────────────────
+  evolution_redis:
+    image: redis:7-alpine
+    container_name: aa_evolution_redis
+    restart: unless-stopped
+    volumes:
+      - evolution_redisdata:/data
+    networks: [ b2c_internal ]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Our agents webhook server (FastAPI — /webhook/*) ─────
+  agents_webhook:
+    build:
+      context: ..
+      dockerfile: agents/Dockerfile
+    image: aa_agents:latest
+    container_name: aa_agents_webhook
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      # Inside the container, Evolution is reachable via the service DNS name
+      - EVOLUTION_API_URL=http://evolution_api:8080
+      - AGENTS_WEBHOOK_URL=https://${AGENTS_DOMAIN}/webhook/whatsapp
+      - WEBHOOK_HOST=0.0.0.0
+      - WEBHOOK_PORT=8000
+    depends_on:
+      evolution_api: { condition: service_started }
+    networks:
+      - coolify
+      - b2c_internal
+    command: ["python", "-m", "agents.webhook_server"]
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=coolify"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.aa-agents-http.entrypoints=http"
+      - "traefik.http.routers.aa-agents-http.rule=Host(`${AGENTS_DOMAIN}`)"
+      - "traefik.http.routers.aa-agents-http.middlewares=redirect-to-https"
+      - "traefik.http.routers.aa-agents-https.entrypoints=https"
+      - "traefik.http.routers.aa-agents-https.rule=Host(`${AGENTS_DOMAIN}`)"
+      - "traefik.http.routers.aa-agents-https.tls=true"
+      - "traefik.http.routers.aa-agents-https.tls.certresolver=letsencrypt"
+      - "traefik.http.services.aa-agents.loadbalancer.server.port=8000"
+
+  # ── Scheduler: Agent 0 watcher + reminders + notifications ─
+  agents_scheduler:
+    image: aa_agents:latest
+    container_name: aa_agents_scheduler
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      - EVOLUTION_API_URL=http://evolution_api:8080
+    depends_on:
+      agents_webhook: { condition: service_started }
+    networks:
+      - b2c_internal
+      - coolify   # needs Evolution reachable via its Traefik hostname too, kept for simplicity
+    command: ["python", "-m", "agents.scheduler"]
+
+  # ── Redirect-to-https shared middleware (register once) ──
+  # Traefik needs the middleware to exist somewhere — we attach a
+  # dummy echo container that just declares it.
+  # (Coolify already declares similar ones; harmless if duplicate.)

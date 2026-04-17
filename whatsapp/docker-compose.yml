@@ -1,0 +1,132 @@
+# Evolution API v2 stack for Aprender-Aleman.de
+#
+# Local dev:  docker compose up -d
+# Production: docker compose --profile production up -d  (enables Caddy HTTPS)
+#
+# First-time setup:
+#   1. cp .env.example .env
+#   2. Edit .env — set EVOLUTION_API_KEY to a strong random string
+#   3. docker compose up -d
+#   4. python ../agents/scripts/bootstrap_whatsapp.py
+#      → prints a QR URL you open in a browser and scan with WhatsApp
+
+services:
+  evolution_api:
+    image: atendai/evolution-api:v2.1.1
+    container_name: aa_evolution
+    restart: unless-stopped
+    ports:
+      - "${EVOLUTION_PORT:-8080}:8080"
+    environment:
+      # Auth
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
+
+      # Server
+      - SERVER_URL=${EVOLUTION_PUBLIC_URL:-http://localhost:8080}
+      - SERVER_TYPE=http
+      - CORS_ORIGIN=*
+      - CORS_METHODS=POST,GET,PUT,DELETE
+      - LOG_LEVEL=ERROR,WARN,INFO
+      - DEL_INSTANCE=false
+
+      # Database (its own Postgres — separate from Supabase)
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:${EVOLUTION_DB_PASSWORD}@postgres:5432/evolution?schema=public
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution_exchange
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+
+      # Cache / sessions
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/6
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=true
+      - CACHE_LOCAL_ENABLED=false
+
+      # QR
+      - QRCODE_LIMIT=30
+      - QRCODE_COLOR=#F97316
+
+      # Webhook defaults — agents webhook server receives events
+      - WEBHOOK_GLOBAL_ENABLED=false
+      - WEBHOOK_GLOBAL_URL=${AGENTS_WEBHOOK_URL:-http://host.docker.internal:8000/webhook/whatsapp}
+      - WEBHOOK_EVENTS_QRCODE_UPDATED=true
+      - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
+      - WEBHOOK_EVENTS_MESSAGES_UPDATE=true
+      - WEBHOOK_EVENTS_CONNECTION_UPDATE=true
+      - WEBHOOK_EVENTS_SEND_MESSAGE=true
+
+      # Ban protection — Evolution's built-in message randomization
+      - CONFIG_SESSION_PHONE_CLIENT=Aprender-Aleman
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+
+    volumes:
+      - evolution_instances:/evolution/instances
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    extra_hosts:
+      # Allows the container to reach the agents service running on the host
+      # machine during local dev (Python FastAPI on port 8000).
+      - "host.docker.internal:host-gateway"
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: aa_evolution_db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=evolution
+      - POSTGRES_PASSWORD=${EVOLUTION_DB_PASSWORD}
+      - POSTGRES_DB=evolution
+    volumes:
+      - evolution_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U evolution"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: aa_evolution_redis
+    restart: unless-stopped
+    volumes:
+      - evolution_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── Production-only: Caddy HTTPS reverse proxy ────────────
+  # Enable with:  docker compose --profile production up -d
+  caddy:
+    image: caddy:2-alpine
+    container_name: aa_evolution_caddy
+    profiles: ["production"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - EVOLUTION_DOMAIN=${EVOLUTION_DOMAIN:-evolution.example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - evolution_api
+
+volumes:
+  evolution_instances:
+  evolution_pgdata:
+  evolution_redisdata:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,26 @@
+# --- Core ---
+python-dotenv==1.0.1
+psycopg[binary]==3.2.3
+pydantic==2.9.2
+
+# --- Claude API ---
+anthropic==0.39.0
+
+# --- HTTP client (Evolution API, Calendly) ---
+httpx==0.27.2
+
+# --- FastAPI (webhook receivers + notifications) ---
+fastapi==0.115.4
+uvicorn[standard]==0.32.0
+
+# --- Scheduling (APScheduler for Agent 0) ---
+APScheduler==3.10.4
+
+# --- Timezone ---
+pytz==2024.2
+
+# --- Password hashing (admin auth helper) ---
+bcrypt==4.2.0
+
+# --- Logging ---
+structlog==24.4.0
