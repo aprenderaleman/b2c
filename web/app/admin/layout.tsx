@@ -17,7 +17,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 Aprender-Aleman<span className="text-slate-600 dark:text-slate-400">.de</span> Admin
               </Link>
               <Link href="/admin" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Hoy</Link>
-              <Link href="/admin/leads" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Todos los leads</Link>
+              <Link href="/admin/leads" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Leads</Link>
+              <Link href="/admin/estudiantes" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Estudiantes</Link>
+              <Link href="/admin/profesores" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Profesores</Link>
             </nav>
             <div className="flex items-center gap-3">
               <ThemeToggle />
