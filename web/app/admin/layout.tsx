@@ -20,6 +20,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin/leads" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Leads</Link>
               <Link href="/admin/estudiantes" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Estudiantes</Link>
               <Link href="/admin/profesores" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Profesores</Link>
+              <Link href="/admin/clases" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Clases</Link>
             </nav>
             <div className="flex items-center gap-3">
               <ThemeToggle />
