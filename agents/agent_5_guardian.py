@@ -235,7 +235,7 @@ def _send_trial_confirmation(lead: dict) -> None:
             f"¿Me confirmas que asistirás?\n"
             f"— Stiv"
         )
-    send_approved(lead, body, is_new_conversation=False)
+    send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
 
 def _send_trial_reminder(lead: dict) -> None:
@@ -258,7 +258,7 @@ def _send_trial_reminder(lead: dict) -> None:
             f"¡Nos vemos! 😊\n"
             f"— Stiv"
         )
-    send_approved(lead, body, is_new_conversation=False)
+    send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
 
 def _send_welcome_message(lead: dict) -> None:
@@ -284,7 +284,7 @@ def _send_welcome_message(lead: dict) -> None:
             f"Bienvenido oficialmente a la Academia. 🇩🇪\n"
             f"— Stiv"
         )
-    send_approved(lead, body, is_new_conversation=False)
+    send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
 
 def _send_goodbye(lead: dict) -> None:
@@ -293,7 +293,7 @@ def _send_goodbye(lead: dict) -> None:
         body = f"Alles Gute, {name}. 🧡\n— Stiv"
     else:
         body = f"Te deseamos lo mejor, {name}. 🧡\n— Stiv"
-    send_approved(lead, body, is_new_conversation=False)
+    send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
 
 # ──────────────────────────────────────────────────────────
@@ -451,7 +451,7 @@ def _process_absent_followup(lead: dict) -> None:
         next_status = "lost"
         next_delta = None
 
-    result = send_approved(lead, body, is_new_conversation=False)
+    result = send_approved(lead, body, is_new_conversation=False, advance_followup=False)
     if not result.success:
         return
 

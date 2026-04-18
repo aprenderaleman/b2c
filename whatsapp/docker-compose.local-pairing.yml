@@ -1,0 +1,35 @@
+# Local pairing — minimal stack, v1.8.7 (pre-v2 rewrite).
+services:
+  evolution_api:
+    image: atendai/evolution-api:v1.8.7
+    container_name: aa_pair_evolution
+    ports:
+      - "8090:8080"
+    environment:
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=local-pairing-key
+      - SERVER_URL=http://localhost:8090
+      - SERVER_TYPE=http
+      - CORS_ORIGIN=*
+      - LOG_LEVEL=ERROR,WARN,INFO
+      - DATABASE_ENABLED=false
+      - REDIS_ENABLED=false
+      - CACHE_REDIS_ENABLED=false
+      - CACHE_LOCAL_ENABLED=true
+      - QRCODE_LIMIT=30
+      - CONFIG_SESSION_PHONE_CLIENT=Aprender-Aleman
+      - CONFIG_SESSION_PHONE_NAME=Chrome
+      - STORE_MESSAGES=true
+      - STORE_CONTACTS=true
+      - CLEAN_STORE_MESSAGES=true
+      - CLEAN_STORE_CLEANING_INTERVAL=7200
+      - CLEAN_STORE_MESSAGES_UP_TO=2
+      - WEBHOOK_GLOBAL_ENABLED=false
+      - INSTANCE_EXPIRATION_TIME=false
+    volumes:
+      - pair_instances:/evolution/instances
+      - pair_store:/evolution/store
+
+volumes:
+  pair_instances:
+  pair_store:

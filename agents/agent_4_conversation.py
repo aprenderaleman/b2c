@@ -188,7 +188,7 @@ def _handle_booking(lead: dict, wa: WhatsAppService | None) -> HandleResult:
             f"— Stiv"
         )
     update_status(lead["id"], "link_sent", author="agent_4")
-    result = send_approved(lead, body, is_new_conversation=False, wa=wa)
+    result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
     return HandleResult("booking", sent=result.success, message_sent=body)
 
 
@@ -223,7 +223,7 @@ def _handle_human_request(lead: dict, wa: WhatsAppService | None) -> HandleResul
         content="Lead asked for human contact — paused for Gelfis.",
         metadata={"alert_gelfis": True},
     )
-    result = send_approved(lead, body, is_new_conversation=False, wa=wa)
+    result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
     return HandleResult("human_request", sent=result.success, message_sent=body)
 
 
@@ -243,7 +243,7 @@ def _handle_negative(lead: dict, wa: WhatsAppService | None) -> HandleResult:
             f"— Stiv"
         )
     update_status(lead["id"], "lost", author="agent_4")
-    result = send_approved(lead, body, is_new_conversation=False, wa=wa)
+    result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
     return HandleResult("negative", sent=result.success, message_sent=body)
 
 
@@ -283,5 +283,5 @@ def _handle_ai_reply(lead: dict, incoming: str, wa: WhatsAppService | None) -> H
             return HandleResult("ai_reply", sent=False)
         draft = draft2
 
-    result = send_approved(lead, draft.text, is_new_conversation=False, wa=wa)
+    result = send_approved(lead, draft.text, is_new_conversation=False, advance_followup=False, wa=wa)
     return HandleResult("ai_reply", sent=result.success, message_sent=draft.text)

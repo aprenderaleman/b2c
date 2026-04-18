@@ -23,26 +23,30 @@ networks:
 
 volumes:
   evolution_instances:
-  evolution_pgdata:
-  evolution_redisdata:
+  evolution_store:          # v1.8 file-based message/contact store
+  evolution_pgdata:         # kept for rollback to v2, unused by v1.8
+  evolution_redisdata:      # kept for rollback to v2, unused by v1.8
 
 services:
 
   # ── Evolution API (WhatsApp QR + REST + webhooks) ────────
   evolution_api:
-    image: atendai/evolution-api:v2.1.1
+    # v2.x has a Baileys bug that traps instances in a startup-restart loop
+    # on this setup (never reaches QR generation). v1.8.7 works reliably.
+    image: atendai/evolution-api:v1.8.7
     container_name: aa_evolution
     restart: unless-stopped
     env_file: ../.env
     # Hairpin NAT fix: Evolution's outbound HTTPS to agents.aprender-aleman.de
     # (on this same VPS) is blocked by Hetzner. Route internally to
     # coolify-proxy (Traefik) which hands the request to agents_webhook via
-    # Host-header matching. IP is stable as long as coolify-proxy isn't
-    # recreated; re-run bootstrap if that changes.
+    # Host-header matching.
     extra_hosts:
       - "agents.aprender-aleman.de:10.0.1.6"
       - "evolution.aprender-aleman.de:10.0.1.6"
     environment:
+      # v1.8 uses a flatter env schema than v2.
+      - AUTHENTICATION_TYPE=apikey
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
       - AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES=true
       - SERVER_URL=https://${EVOLUTION_DOMAIN}
@@ -50,34 +54,27 @@ services:
       - CORS_ORIGIN=*
       - CORS_METHODS=POST,GET,PUT,DELETE
       - LOG_LEVEL=ERROR,WARN,INFO
-      - DEL_INSTANCE=false
-      - DATABASE_ENABLED=true
-      - DATABASE_PROVIDER=postgresql
-      - DATABASE_CONNECTION_URI=postgresql://evolution:${EVOLUTION_DB_PASSWORD}@evolution_db:5432/evolution?schema=public
-      - DATABASE_CONNECTION_CLIENT_NAME=evolution_exchange
-      - DATABASE_SAVE_DATA_INSTANCE=true
-      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
-      - DATABASE_SAVE_MESSAGE_UPDATE=true
-      - DATABASE_SAVE_DATA_CONTACTS=true
-      - DATABASE_SAVE_DATA_CHATS=true
-      - CACHE_REDIS_ENABLED=true
-      - CACHE_REDIS_URI=redis://evolution_redis:6379/6
-      - CACHE_REDIS_PREFIX_KEY=evolution
-      - CACHE_REDIS_SAVE_INSTANCES=true
-      - CACHE_LOCAL_ENABLED=false
+      - DATABASE_ENABLED=false         # v1.8 only needs DB for Chatwoot integration
+      - REDIS_ENABLED=false
+      - CACHE_REDIS_ENABLED=false
+      - CACHE_LOCAL_ENABLED=true
+      - STORE_MESSAGES=true
+      - STORE_CONTACTS=true
+      - CLEAN_STORE_MESSAGES=true
+      - CLEAN_STORE_CLEANING_INTERVAL=7200
+      - CLEAN_STORE_MESSAGES_UP_TO=2
       - QRCODE_LIMIT=30
       - QRCODE_COLOR=#F97316
       - WEBHOOK_GLOBAL_ENABLED=false
       - CONFIG_SESSION_PHONE_CLIENT=Aprender-Aleman
       - CONFIG_SESSION_PHONE_NAME=Chrome
+      - INSTANCE_EXPIRATION_TIME=false
     volumes:
       - evolution_instances:/evolution/instances
-    depends_on:
-      evolution_db:    { condition: service_healthy }
-      evolution_redis: { condition: service_healthy }
+      - evolution_store:/evolution/store
+    # v1.8 doesn't need Postgres/Redis — uses file-based local cache.
     networks:
-      - coolify        # for Traefik to reach it + for agents webhook
-      - b2c_internal   # for private DB/Redis traffic
+      - coolify
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=coolify"

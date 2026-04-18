@@ -154,7 +154,7 @@ async def calendly_webhook(
         log.exception("Calendly handler failed")
         raise HTTPException(status_code=500, detail="handler error")
 
-    return JSONResponse({"ok": True, "lead_id": lead_id})
+    return JSONResponse({"ok": True, "lead_id": str(lead_id) if lead_id else None})
 
 
 # ──────────────────────────────────────────────────────────

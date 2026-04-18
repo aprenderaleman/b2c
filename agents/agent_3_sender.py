@@ -59,8 +59,22 @@ def send_approved(
     text: str,
     *,
     is_new_conversation: bool = False,
+    advance_followup: bool = True,
     wa: WhatsAppService | None = None,
 ) -> SendResult:
+    """
+    Send a message via WhatsApp.
+
+    advance_followup=True (default, Agent 0 path): bumps current_followup_number
+    and schedules the next cold-outreach contact via schedule_next_contact().
+    This drives the 5-contact sequence.
+
+    advance_followup=False (Agent 4 / Agent 5 reply path): do NOT bump the
+    counter. Conversation replies, Calendly confirmations, trial reminders,
+    etc. are not part of the outreach sequence — advancing the counter would
+    overwrite statuses set by those flows (e.g. 'link_sent', 'needs_human',
+    'trial_scheduled').
+    """
     instance = _active_instance()
 
     # 1. Rate-limit / window check.
@@ -79,7 +93,8 @@ def send_approved(
         try:
             msg_id = wa.send_text(instance, lead["whatsapp_normalized"], text)
             _log_sent(lead["id"], instance, lead["whatsapp_normalized"], text, msg_id, attempt)
-            _advance_lead_after_send(lead["id"])
+            if advance_followup:
+                _advance_lead_after_send(lead["id"])
             return SendResult(success=True, message_id=msg_id, retries=attempt)
         except WhatsAppError as e:
             err = str(e)

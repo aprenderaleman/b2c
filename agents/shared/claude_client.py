@@ -194,28 +194,37 @@ def complete_json(
     cache_system: bool = True,
 ) -> tuple[dict[str, Any], dict[str, int]]:
     """
-    Structured-output call. Enforces a JSON schema on the response.
+    Structured-output call. We ask for JSON-only output in the system prompt
+    and parse what we get back. We deliberately avoid the SDK's output_config
+    feature to stay compatible with older anthropic SDK versions.
     """
+    # Append a JSON-only instruction + the schema so the model knows the shape.
+    json_system = (
+        system
+        + "\n\nOUTPUT FORMAT:\n"
+        + "Return ONLY valid JSON matching this JSON Schema (no prose, no code fences):\n"
+        + json.dumps(schema, ensure_ascii=False)
+    )
+
     kwargs: dict[str, Any] = {
         "model": model,
         "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": user}],
-        "output_config": {
-            "format": {
-                "type": "json_schema",
-                "schema": schema,
-            }
-        },
     }
     if cache_system:
         kwargs["system"] = [
-            {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+            {"type": "text", "text": json_system, "cache_control": {"type": "ephemeral"}}
         ]
     else:
-        kwargs["system"] = system
+        kwargs["system"] = json_system
 
     resp = client().messages.create(**kwargs)
     text = "\n".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+    # Tolerate accidental code fences
+    if text.startswith("```"):
+        text = text.strip("`")
+        if text.lower().startswith("json"):
+            text = text[4:].strip()
     try:
         data = json.loads(text)
     except json.JSONDecodeError as e:
