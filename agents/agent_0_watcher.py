@@ -54,7 +54,18 @@ PAUSED_STATUSES = (
 
 
 def _leads_due() -> list[dict]:
-    """Return leads that Agent 0 should process this tick."""
+    """
+    Return leads Agent 0 should process this tick.
+
+    A lead is due if EITHER:
+      - status='new' AND next_contact_date IS NULL  (truly untouched, pick up ASAP)
+      - next_contact_date IS NOT NULL AND <= NOW() AND status not paused
+        (any lead whose scheduled next-contact time has arrived)
+
+    We require next_contact_date IS NULL for 'new' so that when Agent 3
+    postpones a failed first-contact attempt, the lead isn't immediately
+    re-picked on the next tick.
+    """
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             f"""
@@ -62,7 +73,7 @@ def _leads_due() -> list[dict]:
                    goal, urgency, status, current_followup_number,
                    next_contact_date, messages_seen_count
               FROM leads
-             WHERE status = 'new'
+             WHERE (status = 'new' AND next_contact_date IS NULL)
                 OR (
                        next_contact_date IS NOT NULL
                    AND next_contact_date <= NOW()

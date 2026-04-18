@@ -197,16 +197,34 @@ async def whatsapp_webhook(request: Request):
 
 
 def _handle_whatsapp_message(payload: dict[str, Any]) -> None:
+    import json as _json
     data = payload.get("data") or payload
     key = data.get("key") or {}
     remote_jid = key.get("remoteJid") or ""
+    sender_pn = (
+        data.get("sender")
+        or key.get("senderPn")
+        or key.get("participantPn")
+        or ""
+    )
+    log.info("WA msg: jid=%r sender=%r fromMe=%r", remote_jid, sender_pn, key.get("fromMe"))
+    if not key.get("fromMe"):
+        # Full payload dump on inbound so we can see what Evolution gives us for
+        # @lid→phone mapping.  Remove once inbound is reliably handled.
+        log.info("inbound raw: %s", _json.dumps({k: v for k, v in data.items() if k != 'message'}, default=str)[:1200])
+
     if key.get("fromMe"):
         return  # ignore our own outbound echoes
     if "@g.us" in remote_jid:
         return  # group chats — not supported
 
-    # Extract the raw phone (strip @s.whatsapp.net)
-    raw_phone = remote_jid.split("@", 1)[0]
+    # Prefer the actual phone (senderPn) over LID/JID. WhatsApp's newer "@lid"
+    # format doesn't identify by phone number, so we fall back through options.
+    raw_phone = ""
+    if sender_pn:
+        raw_phone = sender_pn.split("@", 1)[0]
+    if not raw_phone:
+        raw_phone = remote_jid.split("@", 1)[0]
     if not raw_phone.startswith("+"):
         raw_phone = "+" + raw_phone
     try:

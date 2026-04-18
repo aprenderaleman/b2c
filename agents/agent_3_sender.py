@@ -89,6 +89,9 @@ def send_approved(
     if gate != "ok":
         log.info("Blocked send for lead %s: %s", lead["id"], gate)
         _log_send_blocked(lead["id"], instance, gate, text)
+        # IMPORTANT: postpone next_contact_date so Agent 0 doesn't hot-loop
+        # the same lead every tick while the block is in effect.
+        _postpone_for_block(lead["id"], gate)
         return SendResult(success=False, reason=f"blocked:{gate}")
 
     wa = wa or WhatsAppService()
@@ -269,3 +272,17 @@ def _postpone_next_contact(lead_id: str, hours: int) -> None:
             """,
             (str(hours), lead_id),
         )
+
+
+def _postpone_for_block(lead_id: str, reason: str) -> None:
+    """Decide how far to push next_contact_date based on the block reason."""
+    # hourly_cap  : 1h  — cap resets hourly
+    # daily_cap   : ~9h — enough to reach the next morning window
+    # out_of_window / paused : 6h
+    hours = {
+        "hourly_cap":    1,
+        "daily_cap":     9,
+        "out_of_window": 6,
+        "paused":        6,
+    }.get(reason, 2)
+    _postpone_next_contact(lead_id, hours)

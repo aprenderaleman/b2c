@@ -179,15 +179,18 @@ class WhatsAppService:
         """
         Send a WhatsApp text message. Returns the Evolution message id on success.
         Raises WhatsAppError otherwise.
+
+        Uses the Evolution v1.8 shape: {number, options, textMessage:{text}}.
+        (v2.x used a flatter {number, text} shape but v1.8 is what works on our VPS.)
         """
         payload = {
             "number": self._to_jid(to_e164),
-            "text": text,
             "options": {
                 "delay": 1200,
                 "presence": "composing",
                 "linkPreview": False,
             },
+            "textMessage": {"text": text},
         }
         res = self._request("POST", f"/message/sendText/{name}", json=payload)
         if isinstance(res, dict):
