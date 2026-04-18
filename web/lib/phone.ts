@@ -17,10 +17,15 @@ const KNOWN_CC = [
 export function normalizePhone(raw: string, defaultCountry = "49"): string {
   if (raw == null) throw new Error("Phone number is empty");
   const hadPlus = raw.trim().startsWith("+");
-  const digits = raw.replace(/\D/g, "");
+  let digits = raw.replace(/\D/g, "");
   if (!digits) throw new Error("Phone number contains no digits");
 
-  if (hadPlus) return "+" + digits;
+  if (hadPlus) {
+    // Common user mistake: selecting "+49" in the dropdown AND typing the
+    // national trunk 0 in the number field ("+49 0152…"). Strip the 0.
+    digits = stripTrunkZeroAfterCC(digits, defaultCountry);
+    return "+" + digits;
+  }
   if (digits.startsWith("00")) return "+" + digits.slice(2);
   if (digits.startsWith("0")) return "+" + defaultCountry + digits.slice(1);
 
@@ -30,6 +35,17 @@ export function normalizePhone(raw: string, defaultCountry = "49"): string {
     }
   }
   return "+" + defaultCountry + digits;
+}
+
+function stripTrunkZeroAfterCC(digits: string, defaultCountry: string): string {
+  const candidates = Array.from(new Set([...KNOWN_CC, defaultCountry]))
+    .sort((a, b) => b.length - a.length);
+  for (const cc of candidates) {
+    if (digits.startsWith(cc) && digits[cc.length] === "0" && digits.length - cc.length - 1 >= 6) {
+      return cc + digits.slice(cc.length + 1);
+    }
+  }
+  return digits;
 }
 
 export function isValidE164(phone: string): boolean {

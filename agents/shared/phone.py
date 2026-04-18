@@ -65,6 +65,10 @@ def normalize_phone(raw: str, default_country: str = "49") -> str:
         raise ValueError("Phone number contains no digits")
 
     if had_plus:
+        # Common user mistake: picking "+49" in the country dropdown AND typing
+        # the national trunk 0 in the number field (e.g. "+49 0152..."). Strip
+        # that trailing 0 when it follows a known country code.
+        digits = _strip_trunk_zero_after_cc(digits, default_country)
         return "+" + digits
 
     if digits.startswith("00"):
@@ -77,6 +81,20 @@ def normalize_phone(raw: str, default_country: str = "49") -> str:
         return "+" + digits
 
     return "+" + default_country + digits
+
+
+def _strip_trunk_zero_after_cc(digits: str, default_country: str) -> str:
+    """If digits begin with a known country code followed by a redundant '0'
+    (the domestic trunk prefix), drop the '0'."""
+    candidates = list(KNOWN_COUNTRY_CODES) + [default_country]
+    for cc in sorted(set(candidates), key=len, reverse=True):
+        if digits.startswith(cc) and digits[len(cc):].startswith("0"):
+            # Plausibility check: what remains after stripping '0' must still
+            # be a reasonable local-number length (at least 6 digits).
+            remainder = digits[len(cc) + 1:]
+            if len(remainder) >= 6:
+                return cc + remainder
+    return digits
 
 
 def _starts_with_known_cc(digits: str) -> bool:

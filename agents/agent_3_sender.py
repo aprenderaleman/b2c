@@ -48,10 +48,17 @@ class SendResult:
 
 
 _MAX_RETRIES = 3
+_TRANSIENT_BACKOFF_HOURS = 6
 
 
 def _active_instance() -> str:
     return get_config("active_whatsapp_instance") or "aprender-aleman-main"
+
+
+def _is_invalid_number_error(err: str) -> bool:
+    """Evolution returns 400 with {"exists": false} when the target phone
+    has no WhatsApp account. This is PERMANENT — retries never change it."""
+    return '"exists":false' in err or '"exists": false' in err
 
 
 def send_approved(
@@ -86,9 +93,10 @@ def send_approved(
 
     wa = wa or WhatsAppService()
 
-    # 2. Send with retries.
+    # 2. Send with retries — but skip retry on permanent failures.
     delay = 2.0
     err: str = ""
+    permanent = False
     for attempt in range(_MAX_RETRIES):
         try:
             msg_id = wa.send_text(instance, lead["whatsapp_normalized"], text)
@@ -99,12 +107,27 @@ def send_approved(
         except WhatsAppError as e:
             err = str(e)
             log.warning("Send attempt %d failed for lead %s: %s", attempt + 1, lead["id"], err)
+            if _is_invalid_number_error(err):
+                # The number doesn't exist on WhatsApp. Three more retries
+                # won't change that — bail.
+                permanent = True
+                break
             time.sleep(delay)
             delay *= 2
 
-    # 3. All retries failed.
+    # 3. All retries failed — log + decide what to do with this lead.
     _log_send_failed(lead["id"], instance, lead["whatsapp_normalized"], text, err)
-    _alert_gelfis_send_failed(lead, err)
+    if permanent:
+        # CRITICAL: mark the lead so Agent 0 never picks it up again.
+        # Without this, Agent 0 would re-attempt every 15 min forever
+        # (because next_contact_date is only advanced on successful sends).
+        _mark_lead_invalid_phone(lead["id"])
+    else:
+        # Transient error (5xx, timeout, Evolution down…). Push the next
+        # contact date into the future so we don't hot-loop, and alert
+        # Gelfis once (notifications.py has its own 6h dedup).
+        _postpone_next_contact(lead["id"], hours=_TRANSIENT_BACKOFF_HOURS)
+        _alert_gelfis_send_failed(lead, err)
     return SendResult(success=False, reason=f"error:{err}", retries=_MAX_RETRIES)
 
 
@@ -210,3 +233,39 @@ def _alert_gelfis_send_failed(lead: dict, err: str) -> None:
         content=f"Send failure — needs attention. Error: {err[:300]}",
         metadata={"alert_gelfis": True, "failed_at": datetime.utcnow().isoformat()},
     )
+
+
+def _mark_lead_invalid_phone(lead_id: str) -> None:
+    """Permanent failure — WhatsApp confirmed the number doesn't exist.
+    Move the lead to 'lost' status and clear the next_contact_date so
+    Agent 0 never picks it up again."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE leads
+               SET status = 'lost',
+                   next_contact_date = NULL
+             WHERE id = %s
+            """,
+            (lead_id,),
+        )
+    log_timeline(
+        lead_id,
+        type="status_change",
+        author="agent_3",
+        content="Marked lost — phone number is not on WhatsApp.",
+    )
+
+
+def _postpone_next_contact(lead_id: str, hours: int) -> None:
+    """Back off after a transient send failure so we don't hot-loop every
+    Agent 0 tick."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE leads
+               SET next_contact_date = NOW() + (%s || ' hours')::interval
+             WHERE id = %s
+            """,
+            (str(hours), lead_id),
+        )
