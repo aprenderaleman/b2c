@@ -35,11 +35,35 @@ const WINDOWS: Window[] = [
   { type: "class_reminder_15m", lowMs: 10 * 60_000,     highMs: 20 * 60_000,     labelEs: "15 minutos",  labelDe: "15 Minuten" },
 ];
 
-export async function POST(req: Request) {
+/**
+ * Auth accepts either form:
+ *   - Authorization: Bearer <CRON_SECRET>   ← Vercel Cron sends this shape
+ *   - X-Cron-Secret: <CRON_SECRET>          ← manual / external scheduler
+ */
+function authorisedCronRequest(req: Request): boolean {
   const expected = process.env.CRON_SECRET;
-  if (!expected) return NextResponse.json({ error: "cron_not_configured" }, { status: 503 });
-  const provided = req.headers.get("x-cron-secret");
-  if (!provided || provided !== expected) {
+  if (!expected) return false;
+
+  const bearer = req.headers.get("authorization");
+  if (bearer && bearer.toLowerCase().startsWith("bearer ")) {
+    const token = bearer.slice(7).trim();
+    if (token === expected) return true;
+  }
+  const xh = req.headers.get("x-cron-secret");
+  if (xh && xh === expected) return true;
+  return false;
+}
+
+// Vercel Cron sends GET by default. We also accept POST for manual
+// invocations (curl -X POST -H "X-Cron-Secret: ...").
+export async function GET(req: Request) { return runCron(req); }
+export async function POST(req: Request) { return runCron(req); }
+
+async function runCron(req: Request) {
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: "cron_not_configured" }, { status: 503 });
+  }
+  if (!authorisedCronRequest(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
