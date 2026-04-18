@@ -5,6 +5,7 @@ import { createClass } from "@/lib/classes";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
+import { wireChatsForClass } from "@/lib/chat";
 
 /**
  * POST /api/admin/classes
@@ -75,6 +76,16 @@ export async function POST(req: Request) {
     const msg = e instanceof Error ? e.message : "unknown";
     return NextResponse.json({ error: "create_failed", message: msg }, { status: 500 });
   }
+
+  // Auto-create chats for this class (direct chat for individual, group
+  // chat anchored to the parent class for series). Best-effort.
+  wireChatsForClass({
+    classId:    result.parentId,
+    type:       body.type,
+    teacherId:  body.teacherId,
+    studentIds: body.studentIds,
+    classTitle: body.title,
+  }).catch(e => console.error("wireChatsForClass failed:", e));
 
   // Fire notifications — don't await each individually, we want to finish
   // the HTTP request fast. Batched in the background.

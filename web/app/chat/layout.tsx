@@ -1,0 +1,38 @@
+import Link from "next/link";
+import { auth, signOut } from "@/lib/auth";
+import { NotificationsBell } from "@/components/NotificationsBell";
+import { ThemeToggle } from "@/components/ThemeToggle";
+import { defaultPathForRole, type Role } from "@/lib/rbac";
+
+export default async function ChatLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+  const role = (session?.user as { role?: Role } | undefined)?.role;
+  const home = role ? defaultPathForRole(role) : "/login";
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
+      <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 h-14 flex items-center justify-between">
+          <div className="flex items-center gap-6 text-sm font-medium">
+            <Link href={home} className="text-brand-600 dark:text-brand-400 font-bold">
+              Aprender-Aleman<span className="text-slate-600 dark:text-slate-400">.de</span>
+            </Link>
+            <Link href={home} className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">← Salir del chat</Link>
+          </div>
+          <div className="flex items-center gap-3">
+            <NotificationsBell />
+            <ThemeToggle />
+            {session?.user && (
+              <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
+                <button type="submit" className="text-sm text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400">
+                  Cerrar sesión
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      </header>
+      {children}
+    </div>
+  );
+}
