@@ -5,47 +5,128 @@
 :root {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
                "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+
+  /* Light theme — warm off-white, not sterile */
+  --bg-base:    #FFFBF5;       /* warm cream */
+  --bg-card:    #FFFFFF;
+  --bg-muted:   #FAF5EC;
+  --fg-base:    #0F172A;       /* slate-900 */
+  --fg-muted:   #475569;       /* slate-600 */
+  --fg-soft:    #64748B;       /* slate-500 */
+  --border:     #EADFCE;       /* warm border */
+  --border-hi:  #F9A875;       /* orange-ish */
+}
+
+.dark {
+  /* Dark theme — deep near-black with warm undertone */
+  --bg-base:    #0A0A0F;
+  --bg-card:    #141420;
+  --bg-muted:   #1C1C2A;
+  --fg-base:    #F1F5F9;
+  --fg-muted:   #94A3B8;
+  --fg-soft:    #64748B;
+  --border:     #27272F;
+  --border-hi:  #3F3F4A;
 }
 
 html, body {
-  background: #ffffff;
-  color: #0f172a;
+  background: var(--bg-base);
+  color: var(--fg-base);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body {
+  background-image:
+    radial-gradient(ellipse 100% 60% at 50% 0%, rgba(249, 115, 22, 0.09), transparent 60%),
+    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(251, 146, 60, 0.06), transparent 55%);
+  min-height: 100vh;
+}
+
+.dark body {
+  background-image:
+    radial-gradient(ellipse 110% 60% at 50% 0%, rgba(251, 146, 60, 0.13), transparent 60%),
+    radial-gradient(ellipse 90% 60% at 0% 100%, rgba(249, 115, 22, 0.08), transparent 55%);
 }
 
 @layer components {
+  /* Primary CTA — bold, glowy, modern */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2
-           rounded-full bg-brand-500 px-6 py-3 font-semibold text-white
-           shadow-brand transition-all
-           hover:bg-brand-600 hover:-translate-y-0.5
+    @apply relative inline-flex items-center justify-center gap-2
+           rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600
+           px-7 py-4 text-base font-bold text-white
+           shadow-brand-lg
+           transition-all duration-200
+           hover:from-brand-500 hover:to-brand-700
+           hover:-translate-y-0.5 hover:shadow-glow
            active:translate-y-0
-           disabled:opacity-40 disabled:cursor-not-allowed disabled:translate-y-0;
+           disabled:opacity-40 disabled:cursor-not-allowed
+           disabled:hover:translate-y-0 disabled:hover:shadow-brand-lg
+           focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/35;
+    min-height: 52px;
   }
+
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2
-           rounded-full bg-white px-6 py-3 font-semibold text-slate-700
-           border border-slate-200 transition-all
+           rounded-2xl bg-white dark:bg-slate-800
+           px-6 py-3 text-sm font-semibold
+           text-slate-700 dark:text-slate-200
+           border border-slate-200 dark:border-slate-700
+           transition-all duration-150
            hover:border-brand-400 hover:text-brand-600
+           dark:hover:text-brand-400 dark:hover:border-brand-500
            disabled:opacity-40 disabled:cursor-not-allowed;
+    min-height: 44px;
   }
+
+  /* Option cards (funnel) — refreshed */
   .option-card {
     @apply flex items-center gap-3 w-full text-left
-           rounded-2xl border border-slate-200 bg-white
-           px-5 py-4 text-slate-800
-           transition-all cursor-pointer
-           hover:border-brand-400 hover:bg-brand-50/50
+           rounded-2xl border bg-white dark:bg-slate-800
+           border-slate-200 dark:border-slate-700
+           px-5 py-4
+           text-slate-800 dark:text-slate-100
+           transition-all duration-150 cursor-pointer
+           hover:border-brand-400 hover:bg-brand-50/60
+           dark:hover:bg-slate-700/60 dark:hover:border-brand-500
            active:scale-[0.99];
+    min-height: 56px;
   }
   .option-card--selected {
-    @apply border-brand-500 bg-brand-50 text-brand-900
-           ring-2 ring-brand-500/20;
+    @apply border-brand-500 bg-brand-50 dark:bg-brand-500/10
+           text-brand-900 dark:text-brand-200
+           ring-2 ring-brand-500/25;
   }
+
   .input-text {
-    @apply w-full rounded-xl border border-slate-200 bg-white
-           px-4 py-3 text-slate-800 placeholder-slate-400
+    @apply w-full rounded-xl border
+           border-slate-200 dark:border-slate-700
+           bg-white dark:bg-slate-800
+           px-4 py-3.5
+           text-slate-800 dark:text-slate-100
+           placeholder-slate-400 dark:placeholder-slate-500
            focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500
            transition-all;
+    min-height: 48px;
+  }
+
+  /* Soft elevated card used on the homepage */
+  .surface-card {
+    @apply rounded-3xl bg-white dark:bg-slate-800/60
+           border border-slate-200 dark:border-slate-700
+           shadow-sm backdrop-blur-sm;
+  }
+}
+
+/* Reduce motion respected */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* Ensure inputs and text are 16px+ on mobile to avoid iOS auto-zoom */
+@media (max-width: 480px) {
+  input[type="text"], input[type="tel"], input[type="email"], input[type="password"], textarea, select {
+    font-size: 16px !important;
   }
 }

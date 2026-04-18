@@ -21,7 +21,19 @@ export const translations = {
       advantage3Body:
         "Plan personalizado para visa, trabajo, estudios o exámenes oficiales.",
       cta: "Comenzar ahora",
-      footer: "© {year} Aprender-Aleman.de",
+      ctaHint: "Gratis · 2 minutos · sin tarjeta",
+      trust1: "Profes certificados",
+      trust2: "Clases 1-a-1",
+      trust3: "Goethe · TELC",
+      examsTitle: "Preparación oficial Goethe & TELC",
+      examsSubtitle:
+        "Nuestros profesores nativos te preparan al detalle para aprobar los exámenes oficiales que exigen visa, universidad y trabajo en DACH.",
+      examGoetheTitle: "Goethe-Zertifikat",
+      examGoetheBody: "A1 · A2 · B1 · B2 · C1 · C2. El estándar internacional reconocido por embajadas y universidades alemanas.",
+      examTelcTitle: "telc Deutsch",
+      examTelcBody: "A1 · A2 · B1 · B2 · C1. Aceptado para la ciudadanía alemana (Einbürgerungstest) y para profesiones reguladas.",
+      examsCTA: "Quiero prepararme →",
+      footer: "© {year} Linguify Global LLC · Aprender-Aleman.de",
     },
     funnel: {
       progress: "Paso {n} de 5",
@@ -112,7 +124,19 @@ export const translations = {
       advantage3Body:
         "Persönlicher Plan für Visum, Job, Studium oder offizielle Prüfungen.",
       cta: "Jetzt starten",
-      footer: "© {year} Aprender-Aleman.de",
+      ctaHint: "Kostenlos · 2 Minuten · ohne Karte",
+      trust1: "Zertifizierte Lehrer",
+      trust2: "1-zu-1 Unterricht",
+      trust3: "Goethe · TELC",
+      examsTitle: "Offizielle Prüfungsvorbereitung Goethe & TELC",
+      examsSubtitle:
+        "Unsere Muttersprachler bereiten dich gezielt auf die offiziellen Prüfungen vor, die du für Visum, Studium und Job in DACH brauchst.",
+      examGoetheTitle: "Goethe-Zertifikat",
+      examGoetheBody: "A1 · A2 · B1 · B2 · C1 · C2. Der internationale Standard, anerkannt von Botschaften und deutschen Universitäten.",
+      examTelcTitle: "telc Deutsch",
+      examTelcBody: "A1 · A2 · B1 · B2 · C1. Anerkannt für die deutsche Einbürgerung und für reglementierte Berufe.",
+      examsCTA: "Ich will mich vorbereiten →",
+      footer: "© {year} Linguify Global LLC · Aprender-Aleman.de",
     },
     funnel: {
       progress: "Schritt {n} von 5",

@@ -126,7 +126,7 @@ export function Funnel() {
           <div className="flex-1">
             <ProgressBar step={step} total={TOTAL_STEPS} />
           </div>
-          <span className="text-sm text-slate-500 font-medium whitespace-nowrap">
+          <span className="text-sm text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
             {interpolate(t.funnel.progress, { n: step })}
           </span>
         </div>
@@ -192,7 +192,7 @@ function StepLevel({ form, setForm }: StepProps) {
   const opts: GermanLevel[] = ["A0", "A1-A2", "B1", "B2+"];
   return (
     <div className="space-y-5">
-      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
+      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-50">
         {t.step1.title}
       </h2>
       <div className="grid gap-3">
@@ -221,7 +221,7 @@ function StepName({ form, setForm }: StepProps) {
   const { t } = useLang();
   return (
     <div className="space-y-5">
-      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
+      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-50">
         {t.step2.title}
       </h2>
       <input
@@ -247,7 +247,7 @@ function StepGoal({ form, setForm }: StepProps) {
   const firstName = form.name.trim().split(/\s+/)[0] || "";
   return (
     <div className="space-y-5">
-      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
+      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-50">
         {interpolate(t.step3.title, { name: firstName })}
       </h2>
       <div className="grid gap-3">
@@ -279,10 +279,10 @@ function StepWhatsapp({ form, setForm }: StepProps) {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
+      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-50">
         {t.step4.title}
       </h2>
-      <p className="text-slate-600">{t.step4.subtitle}</p>
+      <p className="text-slate-600 dark:text-slate-300">{t.step4.subtitle}</p>
 
       <div className="flex gap-2">
         <select
@@ -319,7 +319,7 @@ function StepWhatsapp({ form, setForm }: StepProps) {
           className="mt-1 h-5 w-5 rounded border-slate-300 text-brand-500
                      focus:ring-brand-500 cursor-pointer"
         />
-        <span className="text-sm text-slate-700">
+        <span className="text-sm text-slate-700 dark:text-slate-200">
           {t.step4.gdprLabel}{" "}
           <Link href="/privacy" target="_blank" className="text-brand-600 hover:underline">
             {t.step4.gdprLink}
@@ -341,7 +341,7 @@ function StepUrgency({ form, setForm }: StepProps) {
   ];
   return (
     <div className="space-y-5">
-      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">
+      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-50">
         {t.step5.title}
       </h2>
       <div className="grid gap-3">
