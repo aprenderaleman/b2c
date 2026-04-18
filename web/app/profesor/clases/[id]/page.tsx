@@ -5,6 +5,8 @@ import { getTeacherByUserId } from "@/lib/academy";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs, getClassById } from "@/lib/classes";
 import { EndClassModal } from "@/components/classes/EndClassModal";
 import { formatDurationHms, getRecordingsForClass } from "@/lib/recordings";
+import { getClassHomework } from "@/lib/homework";
+import { HomeworkSection } from "@/components/homework/HomeworkSection";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,7 @@ export default async function TeacherClassDetail({
   const start = new Date(cls.scheduled_at);
   const end   = new Date(start.getTime() + cls.duration_minutes * 60 * 1000);
   const recordings = await getRecordingsForClass(cls.id);
+  const homework   = await getClassHomework(cls.id);
 
   // Suggest a duration for the end-class modal: real elapsed time from
   // started_at to now, clamped to the originally scheduled duration × 1.5
@@ -108,6 +111,8 @@ export default async function TeacherClassDetail({
               <p className="mt-3 text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{cls.topic}</p>
             </section>
           )}
+
+          <HomeworkSection classId={cls.id} assignments={homework} />
         </div>
 
         <div className="lg:col-span-1 space-y-5">
