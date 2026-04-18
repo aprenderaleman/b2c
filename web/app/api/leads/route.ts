@@ -9,11 +9,22 @@ const LeadSchema = z.object({
   german_level:        z.enum(["A0", "A1-A2", "B1", "B2+"]),
   goal:                z.enum(["work", "visa", "studies", "exam", "travel", "already_in_dach"]),
   urgency:             z.enum(["asap", "under_3_months", "in_6_months", "next_year", "just_looking"]),
+  budget:              z.enum(["under_100", "100_500", "500_1000", "1000_3000", "over_3000", "not_sure"]).nullable().optional(),
   whatsapp_raw:        z.string().min(5).max(60),
   whatsapp_normalized: z.string().min(5).max(20),
   language:            z.enum(["es", "de"]),
   gdpr_accepted:       z.literal(true),   // must be true
 });
+
+// Human-readable budget labels for the DB (matches what Gelfis sees on Calendly)
+const BUDGET_LABELS: Record<string, string> = {
+  under_100:   "Menos de 100 €",
+  "100_500":   "100 € – 500 €",
+  "500_1000":  "500 € – 1000 €",
+  "1000_3000": "1000 € – 3000 €",
+  over_3000:   "Más de 3000 €",
+  not_sure:    "Aún no lo sé",
+};
 
 export async function POST(req: Request) {
   let body: unknown;
@@ -55,6 +66,7 @@ export async function POST(req: Request) {
     german_level: data.german_level,
     goal: data.goal,
     urgency: data.urgency,
+    budget: data.budget ? BUDGET_LABELS[data.budget] : null,
     gdpr_accepted: true,
     gdpr_accepted_at: new Date().toISOString(),
     source: "funnel",
@@ -78,6 +90,7 @@ export async function POST(req: Request) {
         german_level: insert.german_level,
         goal: insert.goal,
         urgency: insert.urgency,
+        budget: insert.budget,
       })
       .eq("id", existing.id);
     if (error) {
@@ -104,7 +117,7 @@ export async function POST(req: Request) {
   await logTimeline(created.id, {
     type: "agent_note",
     author: "system",
-    content: `New lead from funnel — level=${data.german_level}, goal=${data.goal}, urgency=${data.urgency}, lang=${data.language}.`,
+    content: `New lead from funnel — level=${data.german_level}, goal=${data.goal}, urgency=${data.urgency}, budget=${insert.budget ?? "?"}, lang=${data.language}.`,
   });
 
   return NextResponse.json({ id: created.id, deduplicated: false });

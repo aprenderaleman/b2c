@@ -17,18 +17,21 @@ type Goal =
   | "work" | "visa" | "studies" | "exam" | "travel" | "already_in_dach";
 type Urgency =
   | "asap" | "under_3_months" | "in_6_months" | "next_year" | "just_looking";
+type Budget =
+  | "under_100" | "100_500" | "500_1000" | "1000_3000" | "over_3000" | "not_sure";
 
 type FormState = {
   german_level: GermanLevel | null;
   name: string;
   goal: Goal | null;
-  country_code: string;   // "+49" format
-  phone_local: string;    // digits only
+  country_code: string;
+  phone_local: string;
   gdpr_accepted: boolean;
   urgency: Urgency | null;
+  budget: Budget | null;
 };
 
-const TOTAL_STEPS = 5;
+const TOTAL_STEPS = 6;
 
 const slideVariants = {
   enter:  (dir: number) => ({ x: dir > 0 ? 48 : -48, opacity: 0 }),
@@ -53,6 +56,7 @@ export function Funnel() {
     phone_local: "",
     gdpr_accepted: false,
     urgency: null,
+    budget: null,
   });
 
   const canContinue = useMemo(() => {
@@ -62,6 +66,7 @@ export function Funnel() {
       case 3: return form.goal !== null;
       case 4: return form.phone_local.replace(/\D/g, "").length >= 6 && form.gdpr_accepted;
       case 5: return form.urgency !== null;
+      case 6: return form.budget !== null;
       default: return false;
     }
   }, [step, form]);
@@ -97,6 +102,7 @@ export function Funnel() {
           german_level: form.german_level,
           goal: form.goal,
           urgency: form.urgency,
+          budget: form.budget,
           whatsapp_raw: rawPhone,
           whatsapp_normalized,
           language: lang,
@@ -127,7 +133,7 @@ export function Funnel() {
             <ProgressBar step={step} total={TOTAL_STEPS} />
           </div>
           <span className="text-sm text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
-            {interpolate(t.funnel.progress, { n: step })}
+            {interpolate(t.funnel.progress, { n: step, total: TOTAL_STEPS })}
           </span>
         </div>
 
@@ -147,6 +153,7 @@ export function Funnel() {
               {step === 3 && <StepGoal form={form} setForm={setForm} />}
               {step === 4 && <StepWhatsapp form={form} setForm={setForm} />}
               {step === 5 && <StepUrgency form={form} setForm={setForm} />}
+              {step === 6 && <StepBudget form={form} setForm={setForm} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -355,6 +362,43 @@ function StepUrgency({ form, setForm }: StepProps) {
             }`}
           >
             <span className="font-medium">{t.step5.options[u]}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// STEP 6 — Budget
+// ─────────────────────────────────────────────────────────
+
+function StepBudget({ form, setForm }: StepProps) {
+  const { t } = useLang();
+  const opts: Budget[] = [
+    "under_100", "100_500", "500_1000", "1000_3000", "over_3000", "not_sure",
+  ];
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-50">
+          {t.step6.title}
+        </h2>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+          {t.step6.subtitle}
+        </p>
+      </div>
+      <div className="grid gap-3">
+        {opts.map((b) => (
+          <button
+            key={b}
+            type="button"
+            onClick={() => setForm({ ...form, budget: b })}
+            className={`option-card ${
+              form.budget === b ? "option-card--selected" : ""
+            }`}
+          >
+            <span className="font-medium">{t.step6.options[b]}</span>
           </button>
         ))}
       </div>

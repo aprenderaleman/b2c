@@ -36,7 +36,7 @@ function ES() {
         30 N Gould St Ste R<br />
         Sheridan, WY 82801, Estados Unidos<br />
         <br />
-        Managing Member: Gelfis Isaac Horn Moreta<br />
+        Managing Member: Gelfis Horn<br />
         Email: <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a><br />
         Teléfono / WhatsApp: +49 1525 3409644<br />
         <br />
@@ -187,7 +187,7 @@ function DE() {
         30 N Gould St Ste R<br />
         Sheridan, WY 82801, USA<br />
         <br />
-        Managing Member: Gelfis Isaac Horn Moreta<br />
+        Managing Member: Gelfis Horn<br />
         E-Mail: <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a><br />
         Telefon / WhatsApp: +49 1525 3409644<br />
         <br />

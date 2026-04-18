@@ -7,7 +7,7 @@ export const translations = {
       whatsappLabel: "WhatsApp",
     },
     home: {
-      tagline: "Academia online con profesores nativos + IA",
+      tagline: "Academia Premium de alemán online con profesores nativos certificados",
       title: "Aprender Alemán Online",
       subtitle:
         "Cursos intensivos con profesores nativos certificados. Prepárate para tu visa, estudios o trabajo en Alemania y Suiza con horarios flexibles y clases personalizadas.",
@@ -36,7 +36,7 @@ export const translations = {
       footer: "© {year} Linguify Global LLC · Aprender-Aleman.de",
     },
     funnel: {
-      progress: "Paso {n} de 5",
+      progress: "Paso {n} de {total}",
       back: "Atrás",
       next: "Siguiente",
       finish: "Finalizar",
@@ -89,6 +89,18 @@ export const translations = {
         just_looking:  "Solo estoy viendo",
       },
     },
+    step6: {
+      title: "¿Cuánto podrías invertir al mes en tu alemán?",
+      subtitle: "No es un compromiso — nos ayuda a recomendarte el plan correcto.",
+      options: {
+        under_100:   "Menos de 100 €",
+        "100_500":   "100 € – 500 €",
+        "500_1000":  "500 € – 1000 €",
+        "1000_3000": "1000 € – 3000 €",
+        over_3000:   "Más de 3000 €",
+        not_sure:    "Aún no lo sé",
+      },
+    },
     confirmation: {
       title: "¡Listo, {name}! 🎉",
       body:
@@ -110,7 +122,7 @@ export const translations = {
       whatsappLabel: "WhatsApp",
     },
     home: {
-      tagline: "Online-Akademie mit Muttersprachlern + KI",
+      tagline: "Premium-Online-Akademie mit zertifizierten muttersprachlichen Lehrern",
       title: "Deutsch online lernen",
       subtitle:
         "Intensive Kurse mit zertifizierten muttersprachlichen Lehrern. Bereite dich auf dein Visum, Studium oder deinen Job in Deutschland und der Schweiz vor — mit flexiblen Zeiten und persönlichen Plänen.",
@@ -139,7 +151,7 @@ export const translations = {
       footer: "© {year} Linguify Global LLC · Aprender-Aleman.de",
     },
     funnel: {
-      progress: "Schritt {n} von 5",
+      progress: "Schritt {n} von {total}",
       back: "Zurück",
       next: "Weiter",
       finish: "Fertig",
@@ -190,6 +202,18 @@ export const translations = {
         in_6_months:   "In 6 Monaten",
         next_year:     "Im nächsten Jahr",
         just_looking:  "Ich schaue nur",
+      },
+    },
+    step6: {
+      title: "Wie viel könntest du monatlich in dein Deutsch investieren?",
+      subtitle: "Keine Verpflichtung — hilft uns, den passenden Plan zu empfehlen.",
+      options: {
+        under_100:   "Weniger als 100 €",
+        "100_500":   "100 € – 500 €",
+        "500_1000":  "500 € – 1000 €",
+        "1000_3000": "1000 € – 3000 €",
+        over_3000:   "Mehr als 3000 €",
+        not_sure:    "Weiß ich noch nicht",
       },
     },
     confirmation: {

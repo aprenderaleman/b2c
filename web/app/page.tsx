@@ -8,7 +8,7 @@ import { useLang } from "@/lib/lang-context";
 import { interpolate } from "@/lib/i18n";
 
 export default function HomePage() {
-  const { t, lang } = useLang();
+  const { t } = useLang();
 
   return (
     <>
@@ -38,12 +38,12 @@ export default function HomePage() {
             </span>
 
             <h1 className="font-extrabold tracking-tight text-slate-900 dark:text-slate-50
-                           text-4xl sm:text-5xl md:text-6xl leading-[1.05]
+                           text-5xl sm:text-6xl md:text-7xl leading-[1.02]
                            max-w-3xl">
-              {t.home.title}
-              <span className="block mt-2 bg-gradient-to-br from-brand-400 via-brand-500 to-brand-600
+              <span className="bg-gradient-to-br from-slate-900 via-slate-800 to-brand-600
+                               dark:from-slate-50 dark:via-brand-200 dark:to-brand-500
                                bg-clip-text text-transparent">
-                {lang === "de" ? "mit Ergebnissen." : "con resultados."}
+                {t.home.title}
               </span>
             </h1>
 
