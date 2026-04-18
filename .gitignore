@@ -34,6 +34,9 @@ yarn-error.log*
 # Local dev (Claude Code launch.json varies per machine)
 .claude/
 
+# WhatsApp pairing QR (locally-generated, stale after ~30s)
+web/public/qr-local.png
+
 # IDE
 .vscode/
 .idea/
