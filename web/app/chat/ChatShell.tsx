@@ -155,8 +155,6 @@ function ActiveChat({ chat, currentUserId, chats, onChange }: {
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading,  setLoading]  = useState(true);
-  const [text,     setText]     = useState("");
-  const [sending,  setSending]  = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
@@ -189,10 +187,11 @@ function ActiveChat({ chat, currentUserId, chats, onChange }: {
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
-  const send = async () => {
+  // Legacy plain-text sender kept for backward compat; now unused — Composer
+  // handles sending via its own internal fetch.
+  const _unusedSend = async (text: string) => {
     const t = text.trim();
-    if (!t || sending) return;
-    setSending(true);
+    if (!t) return;
     try {
       const res = await fetch(`/api/chat/${chat.id}/messages`, {
         method: "POST",
@@ -200,11 +199,11 @@ function ActiveChat({ chat, currentUserId, chats, onChange }: {
         body: JSON.stringify({ content: t }),
       });
       if (res.ok) {
-        setText("");
         await load();
       }
-    } finally { setSending(false); }
+    } catch { /* ignore */ }
   };
+  void _unusedSend;   // keep reference so the type-checker doesn't complain
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -232,30 +231,111 @@ function ActiveChat({ chat, currentUserId, chats, onChange }: {
         ))}
       </div>
 
-      <div className="px-3 sm:px-4 py-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-        <div className="flex items-end gap-2">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void send();
-              }
-            }}
-            placeholder="Escribe un mensaje…"
-            rows={1}
-            className="flex-1 resize-none rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 max-h-32"
-          />
-          <button
-            type="button"
-            onClick={() => void send()}
-            disabled={sending || !text.trim()}
-            className="btn-primary text-sm shrink-0"
-          >
-            {sending ? "…" : "Enviar"}
-          </button>
+      <Composer chatId={chat.id} onSent={() => void load()} />
+    </div>
+  );
+}
+
+function Composer({ chatId, onSent }: { chatId: string; onSent: () => void }) {
+  const [text,      setText]      = useState("");
+  const [attaching, setAttaching] = useState(false);
+  const [sending,   setSending]   = useState(false);
+  const [pending,   setPending]   = useState<Array<{
+    url: string; name: string; size: number; content_type: string;
+  }>>([]);
+
+  const uploadFiles = async (files: FileList) => {
+    setAttaching(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const form = new FormData();
+        form.append("file", f);
+        const res = await fetch("/api/chat/upload", { method: "POST", body: form });
+        if (!res.ok) continue;
+        const data = await res.json();
+        setPending(prev => [...prev, {
+          url: data.url, name: data.name, size: data.size, content_type: data.content_type,
+        }]);
+      }
+    } finally { setAttaching(false); }
+  };
+
+  const send = async () => {
+    const t = text.trim();
+    if ((!t && pending.length === 0) || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch(`/api/chat/${chatId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: t, attachments: pending }),
+      });
+      if (res.ok) {
+        setText("");
+        setPending([]);
+        onSent();
+      }
+    } finally { setSending(false); }
+  };
+
+  return (
+    <div className="px-3 sm:px-4 py-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      {pending.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {pending.map((p, i) => (
+            <span
+              key={i}
+              className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-xs text-slate-700 dark:text-slate-300"
+            >
+              📎 {p.name}
+              <button
+                type="button"
+                onClick={() => setPending(pending.filter((_, idx) => idx !== i))}
+                className="text-slate-400 hover:text-red-500"
+                aria-label={`Quitar ${p.name}`}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
         </div>
+      )}
+      <div className="flex items-end gap-2">
+        <label className="inline-flex items-center justify-center h-10 w-10 shrink-0 cursor-pointer rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+          <span aria-hidden>📎</span>
+          <input
+            type="file"
+            className="hidden"
+            multiple
+            onChange={(e) => {
+              if (e.target.files) void uploadFiles(e.target.files);
+              e.target.value = "";
+            }}
+            disabled={attaching}
+          />
+        </label>
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          placeholder={attaching ? "Subiendo…" : "Escribe un mensaje…"}
+          rows={1}
+          className="flex-1 resize-none rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 max-h-32"
+        />
+        <button
+          type="button"
+          onClick={() => void send()}
+          disabled={sending || attaching || (!text.trim() && pending.length === 0)}
+          className="btn-primary text-sm shrink-0"
+        >
+          {sending ? "…" : "Enviar"}
+        </button>
       </div>
     </div>
   );
