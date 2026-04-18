@@ -64,24 +64,7 @@ async function runCron(req: Request) {
     return NextResponse.json({ error: "cron_not_configured" }, { status: 503 });
   }
   if (!authorisedCronRequest(req)) {
-    // TEMP DEBUG: surface the first and last chars of the env secret +
-    // provided secret so we can tell if they differ, without leaking
-    // the full value. Remove after verification.
-    const env = process.env.CRON_SECRET;
-    const xh  = req.headers.get("x-cron-secret") ?? "";
-    const au  = req.headers.get("authorization") ?? "";
-    return NextResponse.json({
-      error: "unauthorized",
-      debug: {
-        env_len:  env?.length ?? 0,
-        env_head: env?.slice(0, 4) ?? "",
-        env_tail: env?.slice(-4) ?? "",
-        xh_len:   xh.length,
-        xh_head:  xh.slice(0, 4),
-        xh_tail:  xh.slice(-4),
-        au_head:  au.slice(0, 10),
-      },
-    }, { status: 401 });
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const now = Date.now();
