@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs, getClassById } from "@/lib/classes";
 import { CancelClassButton } from "./CancelClassButton";
+import { AttendanceEditor } from "@/components/classes/AttendanceEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -79,27 +80,33 @@ export default async function ClassDetailPage({
 
         <div className="lg:col-span-2 space-y-5">
           <Panel title={`Estudiantes (${cls.participants.length})`}>
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {cls.participants.map(p => (
-                <li key={p.student_id} className="py-2 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm text-slate-900 dark:text-slate-100">
-                      {p.student_name ?? p.student_email}
+            {(cls.status === "completed" || cls.status === "live" || cls.status === "absent") ? (
+              <AttendanceEditor
+                classId={cls.id}
+                participants={cls.participants.map(p => ({
+                  student_id:    p.student_id,
+                  student_name:  p.student_name,
+                  student_email: p.student_email,
+                  attended:      p.attended,
+                }))}
+              />
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {cls.participants.map(p => (
+                  <li key={p.student_id} className="py-2 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm text-slate-900 dark:text-slate-100">
+                        {p.student_name ?? p.student_email}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                        {p.student_email}
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                      {p.student_email}
-                    </div>
-                  </div>
-                  {p.attended === null ? (
-                    <span className="text-xs text-slate-400">—</span>
-                  ) : p.attended ? (
-                    <span className="text-xs text-emerald-700 dark:text-emerald-300">Asistió</span>
-                  ) : (
-                    <span className="text-xs text-amber-700 dark:text-amber-300">No asistió</span>
-                  )}
-                </li>
-              ))}
-            </ul>
+                    <span className="text-xs text-slate-400">Se marcará cuando la clase termine</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Panel>
 
           {cls.topic && (

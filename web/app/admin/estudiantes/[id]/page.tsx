@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { getStudentById, moneyFromCents, subscriptionStatusEs, subscriptionTypeEs } from "@/lib/academy";
 import { listStudentPayments, moneyFromCents as moneyFromCentsFinance } from "@/lib/finance";
 import { RecordPaymentButton } from "@/components/admin/RecordPaymentButton";
+import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
+import { listStudentCertificates } from "@/lib/certificates";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +18,7 @@ export default async function StudentDetailPage({
   if (!student) notFound();
 
   const payments = await listStudentPayments(id);
+  const certs    = await listStudentCertificates(id);
   const waDigits = student.phone?.replace(/\D/g, "") ?? "";
 
   return (
@@ -53,6 +56,7 @@ export default async function StudentDetailPage({
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <RecordPaymentButton studentId={student.id} currentLevel={student.current_level} />
+            <IssueCertificateButton studentId={student.id} />
             {student.lead_id && (
               <Link
                 href={`/admin/leads/${student.lead_id}`}
@@ -119,6 +123,36 @@ export default async function StudentDetailPage({
               </ul>
             )}
           </Panel>
+          <Panel title={`Certificados (${certs.length})`}>
+            {certs.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Aún sin certificados. Se emiten automáticamente al pasar hitos
+                (50 clases) o manualmente con el botón &quot;🏅 Emitir certificado&quot; arriba.
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {certs.map(c => (
+                  <li key={c.id} className="py-2 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{c.title}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        Emitido {new Date(c.issued_at).toLocaleDateString("es-ES")}
+                      </div>
+                    </div>
+                    <a
+                      href={`/api/certificates/${c.id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-brand-600 dark:text-brand-400 hover:underline"
+                    >
+                      PDF →
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+
           <Panel title="Próxima clase">
             <p className="text-sm text-slate-500 dark:text-slate-400">
               Las clases asignadas aparecerán aquí. Mientras tanto, agenda una desde

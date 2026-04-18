@@ -7,6 +7,7 @@ import { EndClassModal } from "@/components/classes/EndClassModal";
 import { formatDurationHms, getRecordingsForClass } from "@/lib/recordings";
 import { getClassHomework } from "@/lib/homework";
 import { HomeworkSection } from "@/components/homework/HomeworkSection";
+import { AttendanceEditor } from "@/components/classes/AttendanceEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -78,31 +79,51 @@ export default async function TeacherClassDetail({
           <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
               Estudiantes ({cls.participants.length})
+              {(cls.status === "completed" || cls.status === "live" || cls.status === "absent") && (
+                <span className="ml-2 text-[10px] font-medium normal-case tracking-normal text-brand-600 dark:text-brand-400">
+                  · marca la asistencia
+                </span>
+              )}
             </h2>
-            <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
-              {cls.participants.map(p => (
-                <li key={p.student_id} className="py-2.5 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                      {p.student_name ?? p.student_email}
+
+            {(cls.status === "completed" || cls.status === "live" || cls.status === "absent") ? (
+              <div className="mt-3">
+                <AttendanceEditor
+                  classId={cls.id}
+                  participants={cls.participants.map(p => ({
+                    student_id:    p.student_id,
+                    student_name:  p.student_name,
+                    student_email: p.student_email,
+                    attended:      p.attended,
+                  }))}
+                />
+              </div>
+            ) : (
+              <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+                {cls.participants.map(p => (
+                  <li key={p.student_id} className="py-2.5 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {p.student_name ?? p.student_email}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
+                        {p.student_email}
+                      </div>
                     </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">
-                      {p.student_email}
-                    </div>
-                  </div>
-                  {p.student_phone && (
-                    <a
-                      href={`https://wa.me/${p.student_phone.replace(/\D/g, "")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium rounded-full border border-[#25D366]/30 bg-[#25D366]/10 px-3 py-1 text-[#128c7e] hover:bg-[#25D366]/20 dark:text-[#25D366]"
-                    >
-                      WhatsApp →
-                    </a>
-                  )}
-                </li>
-              ))}
-            </ul>
+                    {p.student_phone && (
+                      <a
+                        href={`https://wa.me/${p.student_phone.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-medium rounded-full border border-[#25D366]/30 bg-[#25D366]/10 px-3 py-1 text-[#128c7e] hover:bg-[#25D366]/20 dark:text-[#25D366]"
+                      >
+                        WhatsApp →
+                      </a>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
 
           {cls.topic && (

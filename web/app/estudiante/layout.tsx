@@ -24,6 +24,7 @@ export default async function StudentLayout({
             <Link href="/estudiante" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Inicio</Link>
             <Link href="/estudiante/clases" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Mis clases</Link>
             <Link href="/estudiante/tareas" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Tareas</Link>
+            <Link href="/estudiante/certificados" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Certificados</Link>
             <Link href="/chat" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Chat</Link>
           </nav>
           <div className="flex items-center gap-3">
