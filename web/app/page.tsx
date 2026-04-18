@@ -29,12 +29,11 @@ export default function HomePage() {
             className="flex flex-col items-center gap-5"
           >
             <Image
-              src="/logo.svg"
+              src="/logo.png"
               alt="Hans — profesor IA"
               width={140}
               height={140}
               priority
-              unoptimized
               className="drop-shadow-xl"
             />
             <span className="inline-block rounded-full bg-brand-50 px-4 py-1.5 text-sm font-medium text-brand-700">

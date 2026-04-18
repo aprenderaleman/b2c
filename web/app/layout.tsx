@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description:
     "Academia online de alemán para hispanohablantes. Profesores nativos + IA + resultados garantizados.",
   icons: {
-    icon: "/logo.svg",
+    icon: "/logo.png",
   },
 };
 
