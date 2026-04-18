@@ -130,7 +130,13 @@ export const translations = {
     confirmation: {
       title: "¡Listo, {name}! 🎉",
       body:
-        "Uno de nuestros asesores te contactará pronto por WhatsApp para diseñarte un plan a medida y agendarte una clase de prueba gratuita.",
+        "Uno de nuestros asesores te contactará pronto por WhatsApp para diseñarte un plan a medida. Si prefieres, puedes agendar tu clase de prueba gratuita ahora mismo.",
+      bookCtaBadge: "Acceso directo",
+      bookCtaTitle: "Reserva tu clase de prueba gratis",
+      bookCtaBody:
+        "Elige el horario que mejor te venga. Es 100% online, sin compromiso y sin tarjeta.",
+      bookCtaButton: "Agendar mi clase ahora →",
+      bookCtaHint:   "Toma 1 minuto · clase de 30 min con un profesor nativo",
       schuleHint:
         "Mientras tanto, empieza a practicar tu alemán gratis en SCHULE, nuestra aula virtual.",
       schuleCta: "Ir a SCHULE →",
@@ -286,7 +292,13 @@ export const translations = {
     confirmation: {
       title: "Fertig, {name}! 🎉",
       body:
-        "Einer unserer Berater kontaktiert dich in Kürze per WhatsApp, um einen persönlichen Plan zu erstellen und eine kostenlose Probestunde zu vereinbaren.",
+        "Einer unserer Berater kontaktiert dich in Kürze per WhatsApp, um dir einen persönlichen Plan zu erstellen. Du kannst deine kostenlose Probestunde aber auch direkt jetzt selbst buchen.",
+      bookCtaBadge: "Direkter Zugang",
+      bookCtaTitle: "Buche deine kostenlose Probestunde",
+      bookCtaBody:
+        "Wähle den Termin, der dir am besten passt. 100 % online, unverbindlich, ohne Karte.",
+      bookCtaButton: "Jetzt Probestunde buchen →",
+      bookCtaHint:   "Dauert 1 Minute · 30-Min-Stunde mit einem muttersprachlichen Lehrer",
       schuleHint:
         "In der Zwischenzeit kannst du schon kostenlos auf SCHULE, unserem virtuellen Klassenzimmer, üben.",
       schuleCta: "Zu SCHULE →",
