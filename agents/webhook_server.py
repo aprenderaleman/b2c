@@ -197,7 +197,6 @@ async def whatsapp_webhook(request: Request):
 
 
 def _handle_whatsapp_message(payload: dict[str, Any]) -> None:
-    import json as _json
     data = payload.get("data") or payload
     key = data.get("key") or {}
     remote_jid = key.get("remoteJid") or ""
@@ -207,31 +206,37 @@ def _handle_whatsapp_message(payload: dict[str, Any]) -> None:
         or key.get("participantPn")
         or ""
     )
-    log.info("WA msg: jid=%r sender=%r fromMe=%r", remote_jid, sender_pn, key.get("fromMe"))
-    if not key.get("fromMe"):
-        # Full payload dump on inbound so we can see what Evolution gives us for
-        # @lid→phone mapping.  Remove once inbound is reliably handled.
-        log.info("inbound raw: %s", _json.dumps({k: v for k, v in data.items() if k != 'message'}, default=str)[:1200])
+    push_name = data.get("pushName") or ""
+    log.info("WA msg: jid=%r sender=%r fromMe=%r push=%r",
+             remote_jid, sender_pn, key.get("fromMe"), push_name)
 
     if key.get("fromMe"):
         return  # ignore our own outbound echoes
     if "@g.us" in remote_jid:
         return  # group chats — not supported
 
-    # Prefer the actual phone (senderPn) over LID/JID. WhatsApp's newer "@lid"
-    # format doesn't identify by phone number, so we fall back through options.
-    raw_phone = ""
-    if sender_pn:
-        raw_phone = sender_pn.split("@", 1)[0]
-    if not raw_phone:
-        raw_phone = remote_jid.split("@", 1)[0]
-    if not raw_phone.startswith("+"):
-        raw_phone = "+" + raw_phone
-    try:
-        normalized = normalize_phone(raw_phone)
-    except ValueError:
-        log.warning("Received message with un-normalizable phone: %r", raw_phone)
-        return
+    # Resolve the lead. Three strategies in order:
+    #   1. JID is '@s.whatsapp.net' → extract phone, normalize, lookup by phone.
+    #   2. JID is '@lid' → lookup by stored lid column first.
+    #   3. Fall back to matching by pushName (strip the '~' prefix WhatsApp
+    #      adds for non-contacts). Persist the LID on first match so future
+    #      messages from the same user route directly.
+    lead = None
+    is_lid = remote_jid.endswith("@lid")
+    if not is_lid:
+        # Prefer senderPn, then the raw JID
+        raw_phone = (sender_pn.split("@", 1)[0] if sender_pn
+                     else remote_jid.split("@", 1)[0])
+        if raw_phone and not raw_phone.startswith("+"):
+            raw_phone = "+" + raw_phone
+        try:
+            normalized = normalize_phone(raw_phone)
+            lead = get_lead_by_phone(normalized)
+        except ValueError:
+            log.warning("Un-normalizable phone: %r", raw_phone)
+            return
+    else:
+        lead = _resolve_lead_for_lid(remote_jid, push_name)
 
     # Extract text body (Evolution nests it in message.conversation or extendedTextMessage.text)
     msg = data.get("message") or {}
@@ -242,9 +247,9 @@ def _handle_whatsapp_message(payload: dict[str, Any]) -> None:
         or ""
     ).strip()
 
-    lead = get_lead_by_phone(normalized)
     if not lead:
-        log.info("Inbound WhatsApp from unknown number %s — ignoring.", normalized)
+        log.info("Inbound WhatsApp unmatched — jid=%r push=%r — ignoring.",
+                 remote_jid, push_name)
         return
 
     if not text:
@@ -258,6 +263,68 @@ def _handle_whatsapp_message(payload: dict[str, Any]) -> None:
         return
 
     handle_incoming_message(lead, text)
+
+
+def _resolve_lead_for_lid(remote_jid: str, push_name: str) -> dict | None:
+    """
+    Resolve a lead from an '@lid'-style remoteJid.
+
+    1. If we've already linked this LID to a lead, look it up directly.
+    2. Otherwise match by pushName (case-insensitive, stripping the '~'
+       prefix that WhatsApp adds for contacts not in the user's phonebook).
+       On a *unique* match, persist the LID on the lead for future O(1)
+       lookups.
+    3. Ambiguous name (multiple matches) or no match → None.
+    """
+    # 1. Direct LID lookup
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT * FROM leads WHERE whatsapp_lid = %s",
+            (remote_jid,),
+        )
+        row = cur.fetchone()
+        if row:
+            return dict(row)
+
+    # 2. pushName-based fallback — only helpful if the lead supplied their
+    # name on the funnel and it matches the WhatsApp profile.
+    clean = (push_name or "").lstrip("~").strip()
+    if not clean:
+        return None
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT * FROM leads
+             WHERE status NOT IN ('lost','cold','converted')
+               AND (whatsapp_lid IS NULL OR whatsapp_lid = %s)
+               AND (
+                     lower(name) = lower(%s)
+                  OR lower(name) LIKE lower(%s)
+                  OR lower(%s) LIKE lower(name) || ' %%'
+               )
+             ORDER BY created_at DESC
+             LIMIT 2
+            """,
+            (remote_jid, clean, clean.split()[0] + " %", clean),
+        )
+        rows = list(cur.fetchall())
+
+    if len(rows) == 1:
+        lead = dict(rows[0])
+        # Persist the LID so next time we skip the name match.
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE leads SET whatsapp_lid = %s WHERE id = %s",
+                (remote_jid, lead["id"]),
+            )
+        log.info("LID %s bound to lead %s (%s) by pushName match.",
+                 remote_jid, lead["id"], lead["name"])
+        return lead
+
+    if len(rows) > 1:
+        log.warning("Ambiguous pushName %r — %d candidate leads; ignoring.",
+                    clean, len(rows))
+    return None
 
 
 def _handle_whatsapp_status_update(payload: dict[str, Any]) -> None:
