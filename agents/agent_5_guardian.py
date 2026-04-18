@@ -247,19 +247,19 @@ def _send_trial_confirmation(lead: dict) -> None:
     link = lead.get("trial_zoom_link") or "(te lo enviaré en el recordatorio)"
     if lead["language"] == "de":
         body = (
-            f"Super, {name}! 🎉\n"
-            f"Deine Probestunde ist am {date} um {time} Uhr.\n"
-            f"Hier ist der Link: {link}\n"
-            f"Kannst du mir kurz bestätigen, dass du dabei bist?\n"
-            f"— Stiv"
+            f"Super, {name}! 🎉\n\n"
+            f"Deine Probestunde ist am {date} um {time} Uhr.\n\n"
+            f"Hier ist der Link:\n{link}\n\n"
+            f"Kannst du mir kurz bestätigen, dass du dabei bist?\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     else:
         body = (
-            f"¡Perfecto, {name}! 🎉\n"
-            f"Tu clase de prueba está agendada para el {date} a las {time}.\n"
-            f"Aquí tienes el enlace: {link}\n"
-            f"¿Me confirmas que asistirás?\n"
-            f"— Stiv"
+            f"¡Perfecto, {name}! 🎉\n\n"
+            f"Tu clase de prueba está agendada para el {date} a las {time}.\n\n"
+            f"Aquí tienes el enlace:\n{link}\n\n"
+            f"¿Me confirmas que asistirás?\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
@@ -270,19 +270,19 @@ def _send_trial_reminder(lead: dict) -> None:
     link = lead.get("trial_zoom_link") or ""
     if lead["language"] == "de":
         body = (
-            f"Hallo {name}! \n"
-            f"Erinnerung: Deine Probestunde ist heute um {time} Uhr.\n"
-            f"Link: {link}\n"
-            f"Bis gleich! 😊\n"
-            f"— Stiv"
+            f"Hallo {name}! 👋\n\n"
+            f"Erinnerung: Deine Probestunde ist heute um {time} Uhr.\n\n"
+            f"Link:\n{link}\n\n"
+            f"Bis gleich! 😊\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     else:
         body = (
-            f"¡Hola {name}!\n"
-            f"Recordatorio de tu clase de prueba hoy a las {time}.\n"
-            f"Enlace: {link}\n"
-            f"¡Nos vemos! 😊\n"
-            f"— Stiv"
+            f"¡Hola {name}! 👋\n\n"
+            f"Recordatorio de tu clase de prueba hoy a las {time}.\n\n"
+            f"Enlace:\n{link}\n\n"
+            f"¡Nos vemos! 😊\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
@@ -291,24 +291,23 @@ def _send_welcome_message(lead: dict) -> None:
     name = _first_name(lead)
     if lead["language"] == "de":
         body = (
-            f"Willkommen bei Aprender-Aleman.de, {name}! 🎉\n"
-            f"Wir freuen uns sehr, dass du dabei bist.\n"
-            f"Während du auf deine Stunden wartest, kannst du schon auf "
-            f"SCHULE zugreifen — unserem virtuellen Klassenzimmer. "
-            f"Kostenlos für alle unsere Schüler:\n"
-            f"https://schule.aprender-aleman.de\n"
-            f"Offiziell willkommen in der Akademie. 🇩🇪\n"
-            f"— Stiv"
+            f"Willkommen bei Aprender-Aleman.de, {name}! 🎉\n\n"
+            f"Wir freuen uns sehr, dass du dabei bist.\n\n"
+            f"Während du auf deine Stunden wartest, kannst du schon kostenlos auf "
+            f"SCHULE üben — unserem virtuellen Klassenzimmer:\n"
+            f"https://schule.aprender-aleman.de\n\n"
+            f"Offiziell willkommen in der Akademie. 🇩🇪\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     else:
         body = (
-            f"¡Bienvenido a Aprender-Aleman.de, {name}! 🎉\n"
-            f"Estamos felices de tenerte con nosotros.\n"
-            f"Mientras esperas tus clases, ya puedes acceder a SCHULE, "
-            f"nuestra aula virtual — es gratis para todos nuestros alumnos:\n"
-            f"https://schule.aprender-aleman.de\n"
-            f"Bienvenido oficialmente a la Academia. 🇩🇪\n"
-            f"— Stiv"
+            f"¡Bienvenido a Aprender-Aleman.de, {name}! 🎉\n\n"
+            f"Estamos felices de tenerte con nosotros.\n\n"
+            f"Mientras esperas tus clases, ya puedes acceder a SCHULE, nuestra "
+            f"aula virtual gratuita:\n"
+            f"https://schule.aprender-aleman.de\n\n"
+            f"Bienvenido oficialmente a la Academia. 🇩🇪\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
@@ -316,9 +315,9 @@ def _send_welcome_message(lead: dict) -> None:
 def _send_goodbye(lead: dict) -> None:
     name = _first_name(lead)
     if lead["language"] == "de":
-        body = f"Alles Gute, {name}. 🧡\n— Stiv"
+        body = f"Alles Gute, {name}. 🧡\n\nStiv, Aprender-Aleman.de"
     else:
-        body = f"Te deseamos lo mejor, {name}. 🧡\n— Stiv"
+        body = f"Te deseamos lo mejor, {name}. 🧡\n\nStiv, Aprender-Aleman.de"
     send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
 
@@ -436,43 +435,43 @@ def _process_absent_followup(lead: dict) -> None:
 
     if status == "trial_absent":
         body = (
-            f"Hallo {name}, alles gut bei dir? 😊\n"
-            f"Ich habe gesehen, dass du gestern nicht in der Probestunde warst. "
-            f"Möchtest du einen neuen Termin vereinbaren?\n"
-            f"— Stiv"
+            f"Hallo {name}, alles gut bei dir? 😊\n\n"
+            f"Ich habe gesehen, dass du gestern nicht in der Probestunde warst.\n\n"
+            f"Möchtest du einen neuen Termin vereinbaren?\n\n"
+            f"Stiv, Aprender-Aleman.de"
         ) if lang == "de" else (
-            f"Hola {name}, ¿todo bien? 😊\n"
-            f"Vi que ayer no pudiste conectarte a la clase de prueba. "
-            f"¿Quieres que reagendemos?\n"
-            f"— Stiv"
+            f"Hola {name}, ¿todo bien? 😊\n\n"
+            f"Vi que ayer no pudiste conectarte a la clase de prueba.\n\n"
+            f"¿Quieres que reagendemos?\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
         next_status = "absent_followup_1"
         next_delta = timedelta(days=3)  # +4d after absent total
     elif status == "absent_followup_1":
         body = (
-            f"Hallo {name}, ich versuche es noch einmal. 🧡\n"
+            f"Hallo {name}, ich versuche es noch einmal. 🧡\n\n"
             f"Wenn du Deutsch immer noch lernen möchtest, sag mir Bescheid "
-            f"und wir suchen einen neuen Termin.\n"
-            f"— Stiv"
+            f"und wir suchen einen neuen Termin.\n\n"
+            f"Stiv, Aprender-Aleman.de"
         ) if lang == "de" else (
-            f"Hola {name}, vuelvo a escribirte. 🧡\n"
-            f"Si aún te interesa aprender alemán, dímelo y coordinamos un "
-            f"nuevo horario.\n"
-            f"— Stiv"
+            f"Hola {name}, vuelvo a escribirte. 🧡\n\n"
+            f"Si aún te interesa aprender alemán, dímelo y coordinamos "
+            f"un nuevo horario.\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
         next_status = "absent_followup_2"
         next_delta = timedelta(days=6)
     else:  # absent_followup_2
         body = (
-            f"Hallo {name}, letztes Mal von meiner Seite. \n"
-            f"Falls du Deutsch lernen möchtest, schreib mir einfach — ansonsten "
-            f"alles Gute für dich! 🧡\n"
-            f"— Stiv"
+            f"Hallo {name}, letztes Mal von meiner Seite.\n\n"
+            f"Falls du Deutsch lernen möchtest, schreib mir einfach — "
+            f"ansonsten alles Gute für dich! 🧡\n\n"
+            f"Stiv, Aprender-Aleman.de"
         ) if lang == "de" else (
-            f"Hola {name}, último mensaje por mi parte.\n"
-            f"Si quieres aprender alemán, escríbeme — si no, te deseamos lo "
-            f"mejor. 🧡\n"
-            f"— Stiv"
+            f"Hola {name}, último mensaje por mi parte.\n\n"
+            f"Si quieres aprender alemán, escríbeme — si no, te deseamos "
+            f"lo mejor. 🧡\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
         next_status = "lost"
         next_delta = None

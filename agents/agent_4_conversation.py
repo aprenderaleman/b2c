@@ -80,7 +80,24 @@ NEGATIVE_WORDS = {
     ],
 }
 
+# "Broad info request" — when the lead wants details beyond what we'd send
+# conversationally (prices, curriculum, teachers…). We reply with the
+# public website URL in one short message.
+INFO_WORDS = {
+    "es": [
+        "más info", "mas info", "más información", "mas informacion",
+        "informacion", "información", "detalles", "precios", "precio",
+        "cuanto cuesta", "cuánto cuesta", "pagina web", "página web",
+        "sitio web", "la web", "ver web", "ver la web",
+    ],
+    "de": [
+        "mehr info", "mehr infos", "mehr informationen", "details",
+        "preis", "preise", "webseite", "website", "homepage",
+    ],
+}
+
 CALENDLY_URL = "https://calendly.com/d/cxf3-s6q-76f/sesion-de-prueba-de-aleman"
+WEBSITE_URL  = "https://aprender-aleman.de"
 
 
 def _norm(text: str) -> str:
@@ -109,7 +126,7 @@ def _has_phrase(text_norm: str, phrases: list[str]) -> str | None:
 
 
 Intent = Literal[
-    "booking", "human_request", "negative", "ai_reply",
+    "booking", "human_request", "negative", "info_request", "ai_reply",
     "already_converted_ignore", "needs_human_already_paused_ignore",
 ]
 
@@ -150,16 +167,22 @@ def handle_incoming_message(
         return HandleResult("needs_human_already_paused_ignore", sent=False)
 
     text_norm = _norm(text)
+    other_lang = "es" if lang == "de" else "de"
 
-    # LAYER 1 — keywords (zero AI cost)
-    if _has_phrase(text_norm, NEGATIVE_WORDS[lang] + NEGATIVE_WORDS["es" if lang == "de" else "de"]):
+    # LAYER 1 — keywords (zero AI cost).  Order matters: negative first so
+    # "no quiero más info" wins over the "info" keyword; human request next;
+    # then booking; then broad-info request.
+    if _has_phrase(text_norm, NEGATIVE_WORDS[lang] + NEGATIVE_WORDS[other_lang]):
         return _handle_negative(lead, wa)
 
-    if _has_phrase(text_norm, HUMAN_WORDS[lang] + HUMAN_WORDS["es" if lang == "de" else "de"]):
+    if _has_phrase(text_norm, HUMAN_WORDS[lang] + HUMAN_WORDS[other_lang]):
         return _handle_human_request(lead, wa)
 
     if _has_phrase(text_norm, BOOKING_WORDS[lang]):
         return _handle_booking(lead, wa)
+
+    if _has_phrase(text_norm, INFO_WORDS[lang] + INFO_WORDS[other_lang]):
+        return _handle_info_request(lead, wa)
 
     # LAYER 2 — AI reply
     return _handle_ai_reply(lead, text, wa)
@@ -175,21 +198,53 @@ def _handle_booking(lead: dict, wa: WhatsAppService | None) -> HandleResult:
     name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
     if lang == "de":
         body = (
-            f"Super, {name}! 🎉\n"
-            f"Hier ist der Link, um deinen Termin für die kostenlose "
-            f"Probestunde zu wählen:\n{CALENDLY_URL}\n"
-            f"— Stiv"
+            f"Super, {name}! 🎉\n\n"
+            f"Hier ist der Link, um deinen Termin für die kostenlose Probestunde "
+            f"zu wählen:\n{CALENDLY_URL}\n\n"
+            f"Sag mir Bescheid, wenn du Hilfe brauchst.\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     else:
         body = (
-            f"¡Genial, {name}! 🎉\n"
-            f"Aquí tienes el enlace para elegir el horario de tu clase "
-            f"de prueba gratuita:\n{CALENDLY_URL}\n"
-            f"— Stiv"
+            f"¡Genial, {name}! 🎉\n\n"
+            f"Aquí tienes el enlace para elegir el horario de tu clase de prueba "
+            f"gratuita:\n{CALENDLY_URL}\n\n"
+            f"Dime si necesitas ayuda para elegir el horario.\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     update_status(lead["id"], "link_sent", author="agent_4")
     result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
     return HandleResult("booking", sent=result.success, message_sent=body)
+
+
+def _handle_info_request(lead: dict, wa: WhatsAppService | None) -> HandleResult:
+    """Lead asked for broad info. Point them at the website and keep the
+    conversation open without advancing any funnel state."""
+    lang = lead.get("language", "es")
+    name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
+    if lang == "de":
+        body = (
+            f"Klar, {name}! 👋\n\n"
+            f"Hier findest du alle Details zu unseren Kursen — Preise, "
+            f"Methode, Lehrer:\n{WEBSITE_URL}\n\n"
+            f"Wenn dir danach noch was unklar ist, frag mich einfach.\n\n"
+            f"Stiv, Aprender-Aleman.de"
+        )
+    else:
+        body = (
+            f"¡Claro, {name}! 👋\n\n"
+            f"Aquí tienes toda la info detallada de nuestros cursos — precios, "
+            f"método, profesores:\n{WEBSITE_URL}\n\n"
+            f"Si te queda alguna duda después de verla, pregúntame lo que quieras.\n\n"
+            f"Stiv, Aprender-Aleman.de"
+        )
+    # Move to in_conversation so subsequent messages don't trigger cold outreach
+    if lead.get("status") in ("new", "contacted_1", "contacted_2", "contacted_3",
+                              "contacted_4", "contacted_5"):
+        update_status(lead["id"], "in_conversation", author="agent_4")
+    result = send_approved(lead, body, is_new_conversation=False,
+                           advance_followup=False, wa=wa)
+    return HandleResult("info_request", sent=result.success, message_sent=body)
 
 
 def _handle_human_request(lead: dict, wa: WhatsAppService | None) -> HandleResult:
@@ -198,22 +253,21 @@ def _handle_human_request(lead: dict, wa: WhatsAppService | None) -> HandleResul
     name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
     if lang == "de":
         body = (
-            f"Klar, {name}! 😊\n"
-            f"Ich leite dich direkt an Gelfis weiter. Er meldet sich in "
-            f"den nächsten Stunden persönlich bei dir.\n"
-            f"Falls du in der Zwischenzeit schon etwas üben magst, schau "
-            f"gerne in SCHULE vorbei — unser kostenloses virtuelles "
-            f"Klassenzimmer: https://schule.aprender-aleman.de\n"
-            f"— Stiv"
+            f"Klar, {name}! 😊\n\n"
+            f"Ich leite dich direkt an Gelfis weiter. Er meldet sich in den "
+            f"nächsten Stunden persönlich bei dir.\n\n"
+            f"In der Zwischenzeit kannst du schon kostenlos auf SCHULE üben:\n"
+            f"https://schule.aprender-aleman.de\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     else:
         body = (
-            f"¡Claro, {name}! 😊\n"
+            f"¡Claro, {name}! 😊\n\n"
             f"Voy a transferirte con Gelfis directamente. Él te contactará "
-            f"personalmente en las próximas horas.\n"
-            f"Mientras tanto, si quieres explorar, entra a SCHULE, nuestra "
-            f"aula virtual gratuita: https://schule.aprender-aleman.de\n"
-            f"— Stiv"
+            f"personalmente en las próximas horas.\n\n"
+            f"Mientras tanto, si quieres, practica gratis en SCHULE:\n"
+            f"https://schule.aprender-aleman.de\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     update_status(lead["id"], "needs_human", author="agent_4")
     log_timeline(
@@ -232,15 +286,15 @@ def _handle_negative(lead: dict, wa: WhatsAppService | None) -> HandleResult:
     name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
     if lang == "de":
         body = (
-            f"Alles klar, {name}. Ich schreibe dir nicht mehr.\n"
-            f"Viel Erfolg weiterhin mit deinem Deutsch!\n"
-            f"— Stiv"
+            f"Alles klar, {name}. Ich schreibe dir nicht mehr.\n\n"
+            f"Viel Erfolg weiterhin mit deinem Deutsch!\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     else:
         body = (
-            f"Entendido, {name}. No te escribo más.\n"
-            f"¡Mucho éxito con tu alemán!\n"
-            f"— Stiv"
+            f"Entendido, {name}. No te escribo más.\n\n"
+            f"¡Mucho éxito con tu alemán!\n\n"
+            f"Stiv, Aprender-Aleman.de"
         )
     update_status(lead["id"], "lost", author="agent_4")
     result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)

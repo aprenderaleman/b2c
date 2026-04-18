@@ -47,9 +47,11 @@ export default function HomePage() {
               </span>
             </h1>
 
-            <p className="max-w-2xl text-base sm:text-lg text-slate-600 dark:text-slate-300
-                          leading-relaxed">
-              {t.home.subtitle}
+            <p className="max-w-2xl text-lg sm:text-xl md:text-2xl
+                          font-semibold
+                          text-slate-700 dark:text-slate-200
+                          leading-relaxed sm:leading-snug">
+              {renderBold(t.home.subtitle)}
             </p>
 
             <div className="mt-2 flex flex-col items-center gap-3 w-full sm:w-auto">
@@ -252,5 +254,18 @@ function ExamCard({ tag, title, body }: { tag: string; title: string; body: stri
       <div className="mt-1 text-xl font-bold">{title}</div>
       <p className="mt-2 text-sm text-slate-300 leading-relaxed">{body}</p>
     </div>
+  );
+}
+
+/** Render markdown-style **bold** segments with brand colour. */
+function renderBold(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**")
+      ? (
+        <strong key={i} className="text-brand-600 dark:text-brand-400 font-extrabold">
+          {part.slice(2, -2)}
+        </strong>
+      )
+      : <span key={i}>{part}</span>
   );
 }

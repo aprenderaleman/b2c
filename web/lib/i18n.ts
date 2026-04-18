@@ -10,7 +10,7 @@ export const translations = {
       tagline: "Academia Premium de alemán online con profesores nativos certificados",
       title: "Aprender Alemán Online",
       subtitle:
-        "Cursos intensivos con profesores nativos certificados. Prepárate para tu visa, estudios o trabajo en Alemania y Suiza con horarios flexibles y clases personalizadas.",
+        "Cursos **intensivos** con **profesores nativos certificados**. Prepárate para tu **visa**, **estudios** o **trabajo** en **Alemania y Suiza** con **horarios flexibles** y **clases personalizadas**.",
       advantage1Title: "Profesores nativos",
       advantage1Body:
         "Certificados, de Alemania y Suiza, que también hablan español.",
@@ -125,7 +125,7 @@ export const translations = {
       tagline: "Premium-Online-Akademie mit zertifizierten muttersprachlichen Lehrern",
       title: "Deutsch online lernen",
       subtitle:
-        "Intensive Kurse mit zertifizierten muttersprachlichen Lehrern. Bereite dich auf dein Visum, Studium oder deinen Job in Deutschland und der Schweiz vor — mit flexiblen Zeiten und persönlichen Plänen.",
+        "**Intensive Kurse** mit **zertifizierten muttersprachlichen Lehrern**. Bereite dich auf dein **Visum**, **Studium** oder deinen **Job** in **Deutschland und der Schweiz** vor — mit **flexiblen Zeiten** und **persönlichen Plänen**.",
       advantage1Title: "Muttersprachliche Lehrer",
       advantage1Body:
         "Zertifiziert, aus Deutschland und der Schweiz, sprechen auch Spanisch.",

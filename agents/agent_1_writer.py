@@ -67,22 +67,28 @@ def _goal_context(lead: dict) -> str:
     return table.get(lead["goal"], table["work"])
 
 
+SIGN_OFF_ES = "\n\nStiv, Aprender-Aleman.de"
+SIGN_OFF_DE = "\n\nStiv, Aprender-Aleman.de"
+
+
 def _template_contact_1(lead: dict) -> str:
     name, ctx = _first_name(lead), _goal_context(lead)
     if lead["language"] == "de":
         return (
-            f"Hallo {name}! 👋\n"
-            f"Ich bin Stiv von Aprender-Aleman.de. Wir haben deine Anfrage erhalten.\n"
-            f"Wir würden dich gerne zu einer kostenlosen Probestunde einladen, um dein "
-            f"Niveau zu prüfen und einen persönlichen Plan für {ctx} zu erstellen.\n"
+            f"Hallo {name}! 👋\n\n"
+            f"Ich bin Stiv von Aprender-Aleman.de — wir haben deine Anfrage erhalten.\n\n"
+            f"Wir würden dich gerne zu einer *kostenlosen Probestunde* einladen, "
+            f"um dein Niveau zu prüfen und einen persönlichen Plan für {ctx} zu erstellen.\n\n"
             f"Soll ich dir den Link zum Terminbuchen schicken?"
+            + SIGN_OFF_DE
         )
     return (
-        f"¡Hola {name}! 👋\n"
-        f"Soy Stiv de Aprender-Aleman.de. Recibimos tu solicitud.\n"
-        f"Nos gustaría invitarte a una clase de prueba gratuita para conocer tu nivel y "
-        f"diseñarte un plan personalizado para {ctx}.\n"
+        f"¡Hola {name}! 👋\n\n"
+        f"Soy Stiv de Aprender-Aleman.de — recibimos tu solicitud.\n\n"
+        f"Nos gustaría invitarte a una *clase de prueba gratuita* para conocer tu nivel "
+        f"y diseñarte un plan personalizado para {ctx}.\n\n"
         f"¿Te envío el enlace para que elijas el horario que mejor te venga?"
+        + SIGN_OFF_ES
     )
 
 
@@ -90,14 +96,17 @@ def _template_contact_2(lead: dict) -> str:
     name = _first_name(lead)
     if lead["language"] == "de":
         return (
-            f"Hallo {name}, hast du meine Nachricht von gestern gesehen? 😊\n"
+            f"Hallo {name}, hast du meine Nachricht von gestern gesehen? 😊\n\n"
             f"Ich schreibe dir, falls du gerne einen Termin für die kostenlose "
-            f"Probestunde vereinbaren möchtest. Ganz unverbindlich."
+            f"Probestunde vereinbaren möchtest.\n\n"
+            f"Ganz unverbindlich."
+            + SIGN_OFF_DE
         )
     return (
-        f"Hola {name}, ¿viste mi mensaje de ayer? 😊\n"
-        f"Te escribo por si quieres que agendemos la clase de prueba gratuita. "
+        f"Hola {name}, ¿viste mi mensaje de ayer? 😊\n\n"
+        f"Te escribo por si quieres que agendemos la clase de prueba gratuita.\n\n"
         f"Es sin compromiso."
+        + SIGN_OFF_ES
     )
 
 
@@ -111,11 +120,18 @@ TASK: Write a brief follow-up WhatsApp message to a lead who has NOT replied
 to previous outreach. You are trying to re-engage them — kindly, not pushy.
 
 HARD LIMITS (a stricter reviewer will reject anything that breaks these):
-  - MAX 350 characters total including the signature.
-  - MAX 3 short paragraphs. A paragraph = 1-2 short sentences.
+  - MAX 400 characters total including the signature.
+  - MAX 3 short paragraphs separated by blank lines (one \\n\\n between each).
+    Every message has the shape:
+
+        greeting / hook
+
+        main point
+
+        Stiv, Aprender-Aleman.de
+
   - NO bullet lists.
   - NO Calendly link unless the lead already asked to book.
-  - Sign as "Stiv" on its own final line.
 
 TONE rules:
   - Acknowledge time has passed without guilt-tripping.
@@ -125,7 +141,6 @@ TONE rules:
   - At contact 5 (final), make it clear this is the last message — still warm.
 
 Output MUST be only the message text. No preamble, no markdown, no code fences.
-Before outputting, mentally count characters — if >350, cut words until it fits.
 """
 
 _CONVERSATION_SYSTEM = BRAND_CONTEXT + """
@@ -134,13 +149,20 @@ TASK: Write a brief WhatsApp reply to a lead's incoming message.
 
 Rules specific to this task:
   - Read the conversation context carefully, then answer the actual question.
-  - Short and direct: 2-4 lines. No marketing.
-  - If the lead clearly wants to book, say so and mention you'll send the
-    booking link (Agent 3 attaches it after approval).
-  - If the lead asks something outside your knowledge (specific teacher
-    names, unlisted prices, custom schedules), say honestly you'll check
-    with the team — this routes to human handoff.
-  - Sign as "Stiv".
+  - **Short and direct: 2-4 short paragraphs, each separated by a blank
+    line (\\n\\n).** No dense walls of text.
+  - If the lead clearly wants to book, say so — Agent 3 attaches the
+    Calendly link on approval.
+  - If the lead asks for broad info (prices, full curriculum, teachers,
+    methodology), point them to https://aprender-aleman.de and invite
+    them to ask anything specific after visiting.
+  - If the lead asks something you genuinely don't know (a specific
+    teacher by name, a custom schedule not in your facts), say honestly
+    you'll check with the team — this routes to human handoff.
+  - End with the signature line:
+
+        Stiv, Aprender-Aleman.de
+
   - Output MUST be only the message text, no preamble, no markdown.
 """
 
