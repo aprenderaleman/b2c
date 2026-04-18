@@ -1,0 +1,138 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { requireRole } from "@/lib/rbac";
+import { authorizeAulaAccess } from "@/lib/aula";
+import { getClassById, formatClassTimeEs } from "@/lib/classes";
+import { livekitConfigured } from "@/lib/livekit";
+import { AulaClient } from "./AulaClient";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Aula virtual · Aprender-Aleman.de" };
+
+/**
+ * Full-page branded classroom. Not wrapped by any role-layout so it fills
+ * the viewport edge-to-edge. Role gate runs SSR; the actual media
+ * connection is kicked off in the client component.
+ */
+export default async function AulaPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const session = await requireRole(["superadmin", "admin", "teacher", "student"]);
+  const { id } = await params;
+
+  const cls = await getClassById(id);
+  if (!cls) notFound();
+
+  const access = await authorizeAulaAccess(id, session.user.id, session.user.role);
+  if (!access.ok) {
+    if (access.reason === "cancelled") return <CancelledScreen />;
+    if (access.reason === "not_authorized") redirect("/"); // bounced
+    return <NotFoundScreen />;
+  }
+
+  if (!access.canEnterNow) {
+    return (
+      <ClosedScreen
+        opensAt={access.opensAt}
+        closesAt={access.closesAt}
+        classTitle={cls.title}
+      />
+    );
+  }
+
+  if (!livekitConfigured()) {
+    return <NotConfiguredScreen classTitle={cls.title} />;
+  }
+
+  return (
+    <AulaClient
+      classId={cls.id}
+      classTitle={cls.title}
+      scheduledAt={cls.scheduled_at}
+      durationMinutes={cls.duration_minutes}
+      isHost={access.role === "host"}
+      displayName={session.user.name ?? session.user.email ?? "Participante"}
+      backHref={
+        session.user.role === "student"  ? `/estudiante/clases/${cls.id}` :
+        session.user.role === "teacher"  ? `/profesor/clases/${cls.id}`   :
+                                           `/admin/clases/${cls.id}`
+      }
+    />
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Fallback screens
+// ───────────────────────────────────────────────────────────────────
+
+function Frame({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 text-slate-100 flex items-center justify-center px-5 py-10">
+      <div className="w-full max-w-lg rounded-3xl bg-slate-800/60 backdrop-blur border border-slate-700 p-8 text-center shadow-2xl">
+        {children}
+      </div>
+    </main>
+  );
+}
+
+function ClosedScreen({ opensAt, closesAt, classTitle }: {
+  opensAt: Date; closesAt: Date; classTitle: string;
+}) {
+  const now = new Date();
+  const isBefore = now < opensAt;
+  return (
+    <Frame>
+      <div className="text-5xl mb-4" aria-hidden>{isBefore ? "⏳" : "🔒"}</div>
+      <h1 className="text-2xl font-bold">{classTitle}</h1>
+      <p className="mt-3 text-slate-300">
+        {isBefore
+          ? <>El aula abrirá 15 minutos antes del inicio.<br/>Disponible a las <strong className="text-brand-300">{formatClassTimeEs(opensAt)}</strong> (Berlín).</>
+          : <>El aula ya ha cerrado para esta clase (30 min después del final).</>}
+      </p>
+      <p className="mt-6 text-xs text-slate-400">
+        Cierre total: {formatClassTimeEs(closesAt)} (Berlín)
+      </p>
+      <Link href="/" className="btn-primary mt-8 inline-flex">
+        Volver al inicio
+      </Link>
+    </Frame>
+  );
+}
+
+function CancelledScreen() {
+  return (
+    <Frame>
+      <div className="text-5xl mb-4" aria-hidden>❌</div>
+      <h1 className="text-2xl font-bold">Clase cancelada</h1>
+      <p className="mt-3 text-slate-300">Esta clase ha sido cancelada. Si crees que es un error, contacta con el equipo.</p>
+      <Link href="/" className="btn-primary mt-8 inline-flex">Volver al inicio</Link>
+    </Frame>
+  );
+}
+
+function NotFoundScreen() {
+  return (
+    <Frame>
+      <div className="text-5xl mb-4" aria-hidden>🔍</div>
+      <h1 className="text-2xl font-bold">Clase no encontrada</h1>
+      <Link href="/" className="btn-primary mt-8 inline-flex">Volver al inicio</Link>
+    </Frame>
+  );
+}
+
+function NotConfiguredScreen({ classTitle }: { classTitle: string }) {
+  return (
+    <Frame>
+      <div className="text-5xl mb-4" aria-hidden>🛠️</div>
+      <h1 className="text-2xl font-bold">Aula en preparación</h1>
+      <p className="mt-3 text-slate-300">
+        {classTitle} está agendada, pero la sala de video aún no está
+        configurada en el servidor. Avisaremos a los participantes en cuanto
+        esté lista.
+      </p>
+      <Link href="/" className="btn-primary mt-8 inline-flex">Volver al inicio</Link>
+    </Frame>
+  );
+}
