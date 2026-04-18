@@ -21,6 +21,7 @@ export default async function StudentLayout({
               Aprender-Aleman<span className="text-slate-600 dark:text-slate-400">.de</span>
             </Link>
             <Link href="/estudiante" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Inicio</Link>
+            <Link href="/estudiante/clases" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Mis clases</Link>
           </nav>
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
