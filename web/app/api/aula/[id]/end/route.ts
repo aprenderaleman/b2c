@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { authorizeAulaAccess } from "@/lib/aula";
+import { logClassHoursAndRollup } from "@/lib/finance";
 
 /**
  * POST /api/aula/[id]/end
@@ -43,6 +44,14 @@ export async function POST(
 
   const sb = supabaseAdmin();
 
+  // Fetch teacher_id from the class so we can log hours.
+  const { data: cls } = await sb
+    .from("classes")
+    .select("teacher_id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!cls) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
   // Mark attendance: any participant who never marked "joined" stays as null
   // (admin can flip later). Every participant who DID appear in the room is
   // already set via LiveKit webhooks (Phase 6 wiring). For now just mark
@@ -59,5 +68,18 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  // Log hours into the teacher's monthly earnings aggregate. Best-effort:
+  // if this fails the class is still completed — admin can re-run rollup.
+  try {
+    await logClassHoursAndRollup({
+      classId:         id,
+      teacherId:       (cls as { teacher_id: string }).teacher_id,
+      durationMinutes: parsed.data.actualDurationMinutes,
+    });
+  } catch (e) {
+    console.error("logClassHoursAndRollup failed:", e);
+  }
+
   return NextResponse.json({ ok: true });
 }

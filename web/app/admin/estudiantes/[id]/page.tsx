@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getStudentById, moneyFromCents, subscriptionStatusEs, subscriptionTypeEs } from "@/lib/academy";
+import { listStudentPayments, moneyFromCents as moneyFromCentsFinance } from "@/lib/finance";
+import { RecordPaymentButton } from "@/components/admin/RecordPaymentButton";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,7 @@ export default async function StudentDetailPage({
   const student = await getStudentById(id);
   if (!student) notFound();
 
+  const payments = await listStudentPayments(id);
   const waDigits = student.phone?.replace(/\D/g, "") ?? "";
 
   return (
@@ -48,14 +51,17 @@ export default async function StudentDetailPage({
               <StatusBadge status={student.subscription_status} />
             </div>
           </div>
-          {student.lead_id && (
-            <Link
-              href={`/admin/leads/${student.lead_id}`}
-              className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-            >
-              Ver lead original →
-            </Link>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <RecordPaymentButton studentId={student.id} currentLevel={student.current_level} />
+            {student.lead_id && (
+              <Link
+                href={`/admin/leads/${student.lead_id}`}
+                className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                Ver lead original →
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 
@@ -86,19 +92,37 @@ export default async function StudentDetailPage({
         </div>
 
         <div className="lg:col-span-2 space-y-5">
+          <Panel title={`Pagos (${payments.length})`}>
+            {payments.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Aún no hay pagos registrados. Pulsa &quot;Registrar pago&quot; cuando recibas uno.
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {payments.map(p => (
+                  <li key={p.id} className="py-2.5 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {moneyFromCentsFinance(p.amount_cents, p.currency)}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        <span className="capitalize">{p.type.replace(/_/g, " ")}</span>
+                        {p.classes_added > 0 && <> · +{p.classes_added} clases</>}
+                        {p.note && <> · {p.note}</>}
+                      </div>
+                    </div>
+                    <span className="text-xs text-slate-400">
+                      {p.paid_at ? new Date(p.paid_at).toLocaleDateString("es-ES") : new Date(p.created_at).toLocaleDateString("es-ES")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
           <Panel title="Próxima clase">
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              La agenda de clases llegará en la siguiente fase.
-            </p>
-          </Panel>
-          <Panel title="Historial de clases">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Aquí verás las clases pasadas, grabaciones y asistencia.
-            </p>
-          </Panel>
-          <Panel title="Notas de Gelfis">
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Las notas del admin sobre el estudiante llegan en la siguiente fase.
+              Las clases asignadas aparecerán aquí. Mientras tanto, agenda una desde
+              <Link href="/admin/clases" className="text-brand-600 dark:text-brand-400 hover:underline"> Clases</Link>.
             </p>
           </Panel>
         </div>
