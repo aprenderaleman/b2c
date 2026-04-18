@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationsBell } from "@/components/NotificationsBell";
 
 export const metadata = { title: "Admin · Aprender-Aleman.de" };
 
@@ -23,6 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin/clases" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Clases</Link>
             </nav>
             <div className="flex items-center gap-3">
+              <NotificationsBell />
               <ThemeToggle />
               <form action={async () => { "use server"; await signOut({ redirectTo: "/admin/login" }); }}>
                 <button type="submit" className="text-sm text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400">

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { signOut } from "@/lib/auth";
 import { requireRole } from "@/lib/rbac";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationsBell } from "@/components/NotificationsBell";
 
 export const metadata = { title: "Estudiante · Aprender-Aleman.de" };
 
@@ -27,6 +28,7 @@ export default async function StudentLayout({
             <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
               {session.user.name ?? session.user.email}
             </span>
+            <NotificationsBell />
             <ThemeToggle />
             <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
               <button type="submit" className="text-sm text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400">

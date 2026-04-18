@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { createClass } from "@/lib/classes";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { supabaseAdmin } from "@/lib/supabase";
+import { createNotification } from "@/lib/notifications";
 
 /**
  * POST /api/admin/classes
@@ -114,10 +115,10 @@ async function notifyParticipantsOnCreation(
   const scheduledAt = new Date((firstClass as { scheduled_at: string }).scheduled_at);
   const count = createdClassIds.length;
 
-  // Teacher
+  // Teacher — WhatsApp + in-app notification
   const { data: teacher } = await sb
     .from("teachers")
-    .select("users!inner(phone, full_name, language_preference)")
+    .select("user_id, users!inner(phone, full_name, language_preference)")
     .eq("id", teacherId)
     .maybeSingle();
 
@@ -125,15 +126,26 @@ async function notifyParticipantsOnCreation(
   const tu = (Array.isArray(teacherUser) ? teacherUser[0] : teacherUser) as
     | { phone: string | null; full_name: string | null; language_preference: "es" | "de" }
     | undefined;
+  const teacherUserId = (teacher as { user_id: string } | null)?.user_id;
   if (tu?.phone) {
     const text = teacherMessage(tu.language_preference, scheduledAt, count, (firstClass as { title: string }).title);
     await sendWhatsappText(tu.phone, text);
   }
+  if (teacherUserId) {
+    await createNotification({
+      user_id: teacherUserId,
+      type:    "class_scheduled",
+      title:   count === 1 ? "Nueva clase agendada" : `Nueva serie (${count} clases) agendada`,
+      body:    `${(firstClass as { title: string }).title} — ${fmtDate(scheduledAt, tu?.language_preference ?? "es")}`,
+      link:    `/profesor/clases/${createdClassIds[0]}`,
+      class_id: createdClassIds[0],
+    });
+  }
 
-  // Students
+  // Students — WhatsApp + in-app notification
   const { data: studentRows } = await sb
     .from("students")
-    .select("id, users!inner(phone, full_name, language_preference)")
+    .select("id, user_id, users!inner(phone, full_name, language_preference)")
     .in("id", studentIds);
 
   for (const s of studentRows ?? []) {
@@ -141,9 +153,25 @@ async function notifyParticipantsOnCreation(
     const uu = (Array.isArray(u) ? u[0] : u) as
       | { phone: string | null; full_name: string | null; language_preference: "es" | "de" }
       | undefined;
-    if (!uu?.phone) continue;
-    const text = studentMessage(uu.language_preference, scheduledAt, count, (firstClass as { title: string }).title);
-    await sendWhatsappText(uu.phone, text);
+    const userId = (s as { user_id: string }).user_id;
+
+    if (uu?.phone) {
+      const text = studentMessage(uu.language_preference, scheduledAt, count, (firstClass as { title: string }).title);
+      await sendWhatsappText(uu.phone, text);
+    }
+    if (userId) {
+      const lang = uu?.language_preference ?? "es";
+      await createNotification({
+        user_id:  userId,
+        type:     "class_scheduled",
+        title:    lang === "de"
+          ? (count === 1 ? "Neue Stunde agendiert" : `Neue Serie (${count} Stunden) agendiert`)
+          : (count === 1 ? "Nueva clase agendada" : `Nueva serie (${count} clases) agendada`),
+        body:     `${(firstClass as { title: string }).title} — ${fmtDate(scheduledAt, lang)}`,
+        link:     `/estudiante/clases/${createdClassIds[0]}`,
+        class_id: createdClassIds[0],
+      });
+    }
   }
 }
 
