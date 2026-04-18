@@ -3,6 +3,8 @@ import { requireRole } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { getStudentUpcomingClasses, type ClassWithPeople, classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { NextClassCard } from "@/components/classes/NextClassCard";
+import { getStudentProgress } from "@/lib/teacher-notes";
+import { ProgressBars } from "@/components/teacher/ProgressBars";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,7 @@ export default async function StudentHome() {
   }
 
   const upcoming = await getStudentUpcomingClasses(student.id, new Date(), 60);
+  const progress = await getStudentProgress(student.id);
   const [next, ...rest] = upcoming;
 
   return (
@@ -93,6 +96,18 @@ export default async function StudentHome() {
       )}
 
       <ExternalToolsRow />
+
+      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Tu progreso
+        </h2>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          Tus profesores actualizan estas puntuaciones tras cada bloque de trabajo.
+        </p>
+        <div className="mt-4">
+          <ProgressBars studentId={student.id} scores={progress} editable={false} />
+        </div>
+      </section>
 
       <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">

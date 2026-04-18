@@ -22,6 +22,7 @@ export default async function TeacherLayout({
               Aprender-Aleman<span className="text-slate-600 dark:text-slate-400">.de</span>
             </Link>
             <Link href="/profesor" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Inicio</Link>
+            <Link href="/profesor/estudiantes" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Estudiantes</Link>
             <Link href="/profesor/disponibilidad" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Disponibilidad</Link>
             <Link href="/profesor/ganancias" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Ganancias</Link>
             <Link href="/chat" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Chat</Link>
