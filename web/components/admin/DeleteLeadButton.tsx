@@ -16,7 +16,12 @@ export function DeleteLeadButton({ leadId }: { leadId: string }) {
     >
       <button
         type="submit"
-        className="text-xs font-medium rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-700 hover:bg-red-100"
+        className="text-xs font-medium rounded-full
+                   border border-red-200 dark:border-red-500/30
+                   bg-red-50 dark:bg-red-500/10
+                   px-3 py-1
+                   text-red-700 dark:text-red-300
+                   hover:bg-red-100 dark:hover:bg-red-500/20"
         title="RGPD: derecho de supresión"
       >
         Eliminar (RGPD)

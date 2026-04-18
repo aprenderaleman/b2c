@@ -39,21 +39,21 @@ export default async function LeadDetail({
 
   return (
     <main className="space-y-5">
-      <Link href="/admin/leads" className="text-sm text-slate-500 hover:text-brand-600">
+      <Link href="/admin/leads" className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400">
         ← Volver a todos los leads
       </Link>
 
       {/* Header */}
-      <header className="rounded-3xl border border-slate-200 bg-white p-5">
+      <header className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold text-slate-900">{lead.name || "Lead sin nombre"}</h1>
-            <div className="mt-1 flex items-center gap-3 text-sm text-slate-600">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">{lead.name || "Lead sin nombre"}</h1>
+            <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
               <a
                 href={`https://wa.me/${waNumber}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="font-mono text-brand-600 hover:underline"
+                className="font-mono text-brand-600 dark:text-brand-400 hover:underline"
               >
                 {lead.whatsapp_normalized}
               </a>
@@ -102,12 +102,12 @@ export default async function LeadDetail({
               />
               <button type="submit" className="btn-primary text-sm">Añadir nota</button>
             </form>
-            <ul className="mt-4 divide-y divide-slate-100">
-              {notes.length === 0 && <li className="py-2 text-sm text-slate-500">Aún no hay notas.</li>}
+            <ul className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
+              {notes.length === 0 && <li className="py-2 text-sm text-slate-500 dark:text-slate-400">Aún no hay notas.</li>}
               {notes.map((n) => (
                 <li key={n.id} className="py-2">
-                  <div className="text-xs text-slate-500">{new Date(n.created_at).toLocaleString("es-ES")}</div>
-                  <div className="text-sm text-slate-800 whitespace-pre-wrap">{n.note}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">{new Date(n.created_at).toLocaleString("es-ES")}</div>
+                  <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{n.note}</div>
                 </li>
               ))}
             </ul>
@@ -118,8 +118,8 @@ export default async function LeadDetail({
         <div className="lg:col-span-2">
           <Panel title={`Historial (${timeline.length})`}>
             {timeline.length === 0
-              ? <p className="text-sm text-slate-500">Aún no hay eventos.</p>
-              : <ul className="divide-y divide-slate-100">
+              ? <p className="text-sm text-slate-500 dark:text-slate-400">Aún no hay eventos.</p>
+              : <ul className="divide-y divide-slate-100 dark:divide-slate-800">
                   {timeline.map((e) => <TimelineItem key={e.id} entry={e} />)}
                 </ul>}
           </Panel>
@@ -131,8 +131,8 @@ export default async function LeadDetail({
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600">{title}</h2>
+    <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">{title}</h2>
       <div className="mt-3">{children}</div>
     </section>
   );
@@ -141,8 +141,8 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
 function Kv({ k, v }: { k: string; v: string }) {
   return (
     <div className="flex items-baseline justify-between gap-4 py-1 text-sm">
-      <span className="text-slate-500">{k}</span>
-      <span className="text-slate-900 text-right break-all">{v}</span>
+      <span className="text-slate-500 dark:text-slate-400">{k}</span>
+      <span className="text-slate-900 dark:text-slate-100 text-right break-all">{v}</span>
     </div>
   );
 }
@@ -155,28 +155,28 @@ function LeadActions({ leadId, status }: { leadId: string; status: string }) {
     <div className="flex items-center gap-2 flex-wrap">
       {canConvert && (
         <form action={`/api/admin/leads/${leadId}/convert`} method="post">
-          <button type="submit" className="text-xs font-medium rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700 hover:bg-emerald-100">
+          <button type="submit" className="text-xs font-medium rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20">
             Convertir
           </button>
         </form>
       )}
       {canReactivate && (
         <form action={`/api/admin/leads/${leadId}/reactivate`} method="post">
-          <button type="submit" className="text-xs font-medium rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-700 hover:bg-blue-100">
+          <button type="submit" className="text-xs font-medium rounded-full border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 px-3 py-1 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-500/20">
             Reactivar seguimiento auto
           </button>
         </form>
       )}
       {canMarkLost && (
         <form action={`/api/admin/leads/${leadId}/lost`} method="post">
-          <button type="submit" className="text-xs font-medium rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700 hover:bg-slate-100">
+          <button type="submit" className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
             Marcar perdido
           </button>
         </form>
       )}
       <a
         href={`/api/admin/leads/${leadId}/export`}
-        className="text-xs font-medium rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 hover:bg-slate-50"
+        className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
         title="RGPD: descargar todos los datos de este lead"
       >
         Exportar (JSON)
@@ -188,28 +188,28 @@ function LeadActions({ leadId, status }: { leadId: string; status: string }) {
 
 function TimelineItem({ entry }: { entry: { timestamp: string; type: string; content: string; author: string } }) {
   const color: Record<string, string> = {
-    system_message_sent:    "bg-emerald-50 text-emerald-700 border-emerald-200",
-    lead_message_received:  "bg-blue-50    text-blue-700    border-blue-200",
-    status_change:          "bg-slate-50   text-slate-700   border-slate-200",
-    agent_note:             "bg-slate-50   text-slate-500   border-slate-200",
-    gelfis_note:            "bg-orange-50  text-orange-700  border-orange-200",
-    calendly_event:         "bg-violet-50  text-violet-700  border-violet-200",
-    trial_reminder:         "bg-cyan-50    text-cyan-700    border-cyan-200",
-    conversion:             "bg-emerald-50 text-emerald-700 border-emerald-200",
-    escalation:             "bg-red-50     text-red-700     border-red-200",
-    send_failed:            "bg-red-50     text-red-700     border-red-200",
-    whatsapp_read_receipt:  "bg-slate-50   text-slate-500   border-slate-200",
+    system_message_sent:    "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30",
+    lead_message_received:  "bg-blue-50    dark:bg-blue-500/10    text-blue-700    dark:text-blue-300    border-blue-200    dark:border-blue-500/30",
+    status_change:          "bg-slate-50   dark:bg-slate-800      text-slate-700   dark:text-slate-300   border-slate-200   dark:border-slate-700",
+    agent_note:             "bg-slate-50   dark:bg-slate-800      text-slate-500   dark:text-slate-400   border-slate-200   dark:border-slate-700",
+    gelfis_note:            "bg-orange-50  dark:bg-orange-500/10  text-orange-700  dark:text-orange-300  border-orange-200  dark:border-orange-500/30",
+    calendly_event:         "bg-violet-50  dark:bg-violet-500/10  text-violet-700  dark:text-violet-300  border-violet-200  dark:border-violet-500/30",
+    trial_reminder:         "bg-cyan-50    dark:bg-cyan-500/10    text-cyan-700    dark:text-cyan-300    border-cyan-200    dark:border-cyan-500/30",
+    conversion:             "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30",
+    escalation:             "bg-red-50     dark:bg-red-500/10     text-red-700     dark:text-red-300     border-red-200     dark:border-red-500/30",
+    send_failed:            "bg-red-50     dark:bg-red-500/10     text-red-700     dark:text-red-300     border-red-200     dark:border-red-500/30",
+    whatsapp_read_receipt:  "bg-slate-50   dark:bg-slate-800      text-slate-500   dark:text-slate-400   border-slate-200   dark:border-slate-700",
   };
-  const cls = color[entry.type] ?? "bg-slate-50 text-slate-500 border-slate-200";
+  const cls = color[entry.type] ?? "bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700";
   const label = TIMELINE_LABELS[entry.type] ?? entry.type;
   return (
     <li className="py-3">
       <div className="flex items-center gap-2 text-xs">
         <span className={`rounded-full border px-2 py-0.5 font-medium ${cls}`}>{label}</span>
-        <span className="text-slate-500">{entry.author}</span>
-        <span className="ml-auto text-slate-400">{new Date(entry.timestamp).toLocaleString("es-ES")}</span>
+        <span className="text-slate-500 dark:text-slate-400">{entry.author}</span>
+        <span className="ml-auto text-slate-400 dark:text-slate-500">{new Date(entry.timestamp).toLocaleString("es-ES")}</span>
       </div>
-      <div className="mt-1 text-sm text-slate-800 whitespace-pre-wrap">{entry.content}</div>
+      <div className="mt-1 text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{entry.content}</div>
     </li>
   );
 }

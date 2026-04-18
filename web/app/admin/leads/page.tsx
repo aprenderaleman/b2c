@@ -81,12 +81,12 @@ export default async function AllLeadsPage({
     <main className="space-y-5">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Todos los leads</h1>
-          <p className="text-sm text-slate-500">{total.toLocaleString("es-ES")} resultado{total === 1 ? "" : "s"}</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Todos los leads</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{total.toLocaleString("es-ES")} resultado{total === 1 ? "" : "s"}</p>
         </div>
       </header>
 
-      <form method="get" className="rounded-2xl bg-white border border-slate-200 p-4 grid gap-3 sm:grid-cols-4">
+      <form method="get" className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 grid gap-3 sm:grid-cols-4">
         <input
           name="q"
           defaultValue={filter.q ?? ""}
@@ -129,9 +129,9 @@ export default async function AllLeadsPage({
         <button type="submit" className="btn-primary">Filtrar</button>
       </form>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-600">
+          <thead className="bg-slate-50 dark:bg-slate-800/60 text-left text-slate-600 dark:text-slate-300">
             <tr>
               <Th>Nombre</Th>
               <Th>WhatsApp</Th>
@@ -145,14 +145,14 @@ export default async function AllLeadsPage({
               <Th>Clase</Th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
             {rows.length === 0 && (
-              <tr><td colSpan={10} className="p-6 text-center text-slate-500">No hay leads que coincidan.</td></tr>
+              <tr><td colSpan={10} className="p-6 text-center text-slate-500 dark:text-slate-400">No hay leads que coincidan.</td></tr>
             )}
             {rows.map((l) => (
-              <tr key={l.id} className="hover:bg-slate-50/60">
+              <tr key={l.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                 <Td>
-                  <Link href={`/admin/leads/${l.id}`} className="font-medium text-slate-900 hover:text-brand-600">
+                  <Link href={`/admin/leads/${l.id}`} className="font-medium text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400">
                     {l.name || "—"}
                   </Link>
                 </Td>
@@ -211,7 +211,7 @@ function Pagination({ page, totalPages, sp }: {
   return (
     <nav className="flex items-center justify-center gap-2 text-sm">
       {page > 1 && <Link href={qs(page - 1)} className="btn-secondary text-xs">← Anterior</Link>}
-      <span className="text-slate-600">Página {page} / {totalPages}</span>
+      <span className="text-slate-600 dark:text-slate-300">Página {page} / {totalPages}</span>
       {page < totalPages && <Link href={qs(page + 1)} className="btn-secondary text-xs">Siguiente →</Link>}
     </nav>
   );

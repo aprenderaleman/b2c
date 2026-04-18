@@ -26,13 +26,16 @@ export default async function LoginPage({
     <main className="min-h-[80vh] flex items-center justify-center">
       <form
         action={doLogin}
-        className="w-full max-w-sm rounded-3xl bg-white border border-slate-200 p-8 shadow-sm"
+        className="w-full max-w-sm rounded-3xl
+                   bg-white dark:bg-slate-900
+                   border border-slate-200 dark:border-slate-800
+                   p-8 shadow-sm"
       >
-        <h1 className="text-xl font-bold text-slate-900">Iniciar sesión</h1>
-        <p className="mt-1 text-sm text-slate-500">Aprender-Aleman.de</p>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Iniciar sesión</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Aprender-Aleman.de</p>
 
         <label className="block mt-6">
-          <span className="text-sm font-medium text-slate-700">Correo electrónico</span>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Correo electrónico</span>
           <input
             name="email"
             type="email"
@@ -43,7 +46,7 @@ export default async function LoginPage({
         </label>
 
         <label className="block mt-4">
-          <span className="text-sm font-medium text-slate-700">Contraseña</span>
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Contraseña</span>
           <input
             name="password"
             type="password"
@@ -54,7 +57,7 @@ export default async function LoginPage({
         </label>
 
         {error && (
-          <p className="mt-4 text-sm text-red-600">
+          <p className="mt-4 text-sm text-red-600 dark:text-red-400">
             Credenciales incorrectas. Inténtalo de nuevo.
           </p>
         )}
