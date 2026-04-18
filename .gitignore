@@ -10,6 +10,7 @@ known_hosts
 *.pem
 *.key
 deploy_tokens.txt
+.cron-secret.local
 
 # Python
 __pycache__/

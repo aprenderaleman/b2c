@@ -52,7 +52,7 @@ const desired = [
   { key: "SCHULE_URL",          value: "https://schule.aprender-aleman.de",                      targets: ["production", "preview", "development"] },
   { key: "EMAIL_FROM",          value: "Aprender-Aleman.de <info@aprender-aleman.de>",           targets: ["production", "preview", "development"] },
   { key: "DIGEST_RECIPIENT",    value: env.ADMIN_EMAIL || "gelfis@aprender-aleman.de",           targets: ["production"] },
-  { key: "CRON_SECRET",         value: cronSecret,                                               targets: ["production", "preview"], sensitive: true },
+  { key: "CRON_SECRET",         value: cronSecret,                                               targets: ["production", "preview", "development"] },
 ];
 
 async function listVars() {
@@ -104,8 +104,11 @@ async function main() {
     await createVar(d);
   }
 
-  console.log("\nDone. Cron secret generated:");
-  console.log("  CRON_SECRET length:", cronSecret.length, "chars");
+  // Persist the generated CRON_SECRET locally so smoke-tests can read it.
+  // .cron-secret.local is in .gitignore.
+  const outPath = path.join(repoRoot, ".cron-secret.local");
+  fs.writeFileSync(outPath, cronSecret + "\n");
+  console.log(`\nDone. CRON_SECRET (${cronSecret.length} chars) written to .cron-secret.local`);
   console.log("\nNOTE: not set here (need Gelfis input):");
   console.log("  - RESEND_API_KEY        (after Resend account + DNS)");
   console.log("  - AGENTS_BASE_URL       (https://agents.aprender-aleman.de if same)");
