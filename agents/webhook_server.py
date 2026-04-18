@@ -36,6 +36,7 @@ from agents.agent_5_guardian import (
 from agents.shared.db import get_conn
 from agents.shared.leads import get_lead_by_phone, log_timeline
 from agents.shared.phone import normalize_phone
+from agents.whatsapp_service import WhatsAppError, WhatsAppService
 
 # In-memory store for the latest QR (per instance).
 # Evolution regenerates QRs every ~30s while pairing; we keep the latest.
@@ -390,6 +391,70 @@ def _handle_qrcode_updated(payload: dict[str, Any]) -> None:
         return
     _QR_LATEST[inst] = png
     log.info("QR cached for instance %s (%d bytes)", inst, len(png))
+
+
+# ──────────────────────────────────────────────────────────
+# Internal endpoint — called from Vercel (web app) to send one-off
+# WhatsApp messages (welcome, notifications, etc.) without giving
+# Vercel direct access to Evolution API.
+# ──────────────────────────────────────────────────────────
+
+
+@app.post("/internal/send-text")
+async def internal_send_text(request: Request):
+    """
+    POST body: {"phone": "+4915...", "text": "..."}
+    Auth: X-Internal-Secret header must match AGENTS_INTERNAL_SECRET env.
+    """
+    expected = os.environ.get("AGENTS_INTERNAL_SECRET")
+    if not expected:
+        raise HTTPException(status_code=503, detail="internal_secret_not_configured")
+
+    provided = request.headers.get("x-internal-secret")
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid_json")
+
+    phone = (body.get("phone") or "").strip()
+    text  = (body.get("text")  or "").strip()
+    if not phone or not text:
+        raise HTTPException(status_code=400, detail="missing_phone_or_text")
+
+    # Normalize / sanity-check the phone.
+    try:
+        normalized = normalize_phone(phone)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"invalid_phone:{e}")
+
+    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    wa = WhatsAppService()
+
+    try:
+        message_id = wa.send_text(instance, normalized, text)
+    except WhatsAppError as e:
+        log.warning("internal/send-text failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"whatsapp_error:{e}")
+
+    # Best-effort timeline log (so the message shows up under the lead's
+    # history if it matches). If there's no lead row this silently skips.
+    try:
+        lead = get_lead_by_phone(normalized)
+        if lead:
+            log_timeline(
+                lead["id"],
+                type="system_message_sent",
+                author="web",
+                content=text,
+                metadata={"trigger": "internal_send_text", "message_id": message_id},
+            )
+    except Exception as e:
+        log.debug("timeline log on /internal/send-text failed: %s", e)
+
+    return {"ok": True, "messageId": message_id}
 
 
 # ──────────────────────────────────────────────────────────

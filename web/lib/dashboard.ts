@@ -21,6 +21,7 @@ export type LeadRow = {
   source: string;
   last_message_seen_at: string | null;
   messages_seen_count: number;
+  converted_to_user_id: string | null;
 };
 
 export type TimelineRow = {

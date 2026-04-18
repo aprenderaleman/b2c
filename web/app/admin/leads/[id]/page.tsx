@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getGelfisNotes, getLeadById, getTimeline } from "@/lib/dashboard";
+import { supabaseAdmin } from "@/lib/supabase";
 import { StatusBadge } from "@/components/admin/StatusBadge";
-import { DeleteLeadButton } from "@/components/admin/DeleteLeadButton";
+import { LeadActions } from "@/components/admin/LeadActions";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,18 @@ export default async function LeadDetail({
     getGelfisNotes(lead.id),
   ]);
 
+  // If the lead has been converted, resolve the student_id so the
+  // "Ver estudiante →" link on <LeadActions> can link to it directly.
+  let studentId: string | null = null;
+  if (lead.converted_to_user_id) {
+    const { data } = await supabaseAdmin()
+      .from("students")
+      .select("id")
+      .eq("user_id", lead.converted_to_user_id)
+      .maybeSingle();
+    studentId = (data?.id as string | null) ?? null;
+  }
+
   const waNumber = lead.whatsapp_normalized.replace("+", "");
 
   return (
@@ -63,7 +76,20 @@ export default async function LeadDetail({
               <StatusBadge status={lead.status} />
             </div>
           </div>
-          <LeadActions leadId={lead.id} status={lead.status} />
+          <LeadActions
+            lead={{
+              id:                   lead.id,
+              name:                 lead.name ?? "",
+              email:                lead.email ?? null,
+              phone:                lead.whatsapp_normalized,
+              language:             (lead.language as "es" | "de") ?? "es",
+              german_level:         lead.german_level,
+              goal:                 lead.goal ?? null,
+              status:               lead.status,
+              converted_to_user_id: (lead as { converted_to_user_id?: string | null }).converted_to_user_id ?? null,
+              student_id:           studentId,
+            }}
+          />
         </div>
       </header>
 
@@ -143,45 +169,6 @@ function Kv({ k, v }: { k: string; v: string }) {
     <div className="flex items-baseline justify-between gap-4 py-1 text-sm">
       <span className="text-slate-500 dark:text-slate-400">{k}</span>
       <span className="text-slate-900 dark:text-slate-100 text-right break-all">{v}</span>
-    </div>
-  );
-}
-
-function LeadActions({ leadId, status }: { leadId: string; status: string }) {
-  const canConvert   = status !== "converted" && status !== "lost";
-  const canReactivate = status === "needs_human";
-  const canMarkLost  = status !== "lost";
-  return (
-    <div className="flex items-center gap-2 flex-wrap">
-      {canConvert && (
-        <form action={`/api/admin/leads/${leadId}/convert`} method="post">
-          <button type="submit" className="text-xs font-medium rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20">
-            Convertir
-          </button>
-        </form>
-      )}
-      {canReactivate && (
-        <form action={`/api/admin/leads/${leadId}/reactivate`} method="post">
-          <button type="submit" className="text-xs font-medium rounded-full border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 px-3 py-1 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-500/20">
-            Reactivar seguimiento auto
-          </button>
-        </form>
-      )}
-      {canMarkLost && (
-        <form action={`/api/admin/leads/${leadId}/lost`} method="post">
-          <button type="submit" className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
-            Marcar perdido
-          </button>
-        </form>
-      )}
-      <a
-        href={`/api/admin/leads/${leadId}/export`}
-        className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-        title="RGPD: descargar todos los datos de este lead"
-      >
-        Exportar (JSON)
-      </a>
-      <DeleteLeadButton leadId={leadId} />
     </div>
   );
 }
