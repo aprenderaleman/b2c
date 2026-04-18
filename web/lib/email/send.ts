@@ -2,6 +2,7 @@ import { fromAddress, getResend } from "./client";
 import { renderWelcomeStudent, type WelcomeStudentVars } from "./templates/welcome-student";
 import { renderWelcomeStaff,   type WelcomeStaffVars }   from "./templates/welcome-staff";
 import { renderPasswordReset,  type PasswordResetVars }  from "./templates/password-reset";
+import { renderDailyDigest,    type DailyDigestVars }    from "./templates/daily-digest";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -75,5 +76,16 @@ export async function sendPasswordResetEmail(
   vars: PasswordResetVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderPasswordReset(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Send the daily digest email to admin (Gelfis).
+ */
+export async function sendDailyDigestEmail(
+  to: string,
+  vars: DailyDigestVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderDailyDigest(vars);
   return sendRaw(to, subject, html, text);
 }
