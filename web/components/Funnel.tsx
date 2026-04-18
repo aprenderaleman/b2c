@@ -15,8 +15,6 @@ import { COUNTRY_CODES, isValidE164, normalizePhone } from "@/lib/phone";
 type GermanLevel = "A0" | "A1-A2" | "B1" | "B2+";
 type Goal =
   | "work" | "visa" | "studies" | "exam" | "travel" | "already_in_dach";
-type Urgency =
-  | "asap" | "under_3_months" | "in_6_months" | "next_year" | "just_looking";
 type Budget =
   | "under_100" | "100_500" | "500_1000" | "1000_3000" | "over_3000" | "not_sure";
 
@@ -27,11 +25,10 @@ type FormState = {
   country_code: string;
   phone_local: string;
   gdpr_accepted: boolean;
-  urgency: Urgency | null;
   budget: Budget | null;
 };
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5;
 
 const slideVariants = {
   enter:  (dir: number) => ({ x: dir > 0 ? 48 : -48, opacity: 0 }),
@@ -55,7 +52,6 @@ export function Funnel() {
     country_code: "+49",
     phone_local: "",
     gdpr_accepted: false,
-    urgency: null,
     budget: null,
   });
 
@@ -65,8 +61,7 @@ export function Funnel() {
       case 2: return form.name.trim().length >= 2;
       case 3: return form.goal !== null;
       case 4: return form.phone_local.replace(/\D/g, "").length >= 6 && form.gdpr_accepted;
-      case 5: return form.urgency !== null;
-      case 6: return form.budget !== null;
+      case 5: return form.budget !== null;
       default: return false;
     }
   }, [step, form]);
@@ -101,7 +96,6 @@ export function Funnel() {
           name: form.name.trim(),
           german_level: form.german_level,
           goal: form.goal,
-          urgency: form.urgency,
           budget: form.budget,
           whatsapp_raw: rawPhone,
           whatsapp_normalized,
@@ -152,8 +146,7 @@ export function Funnel() {
               {step === 2 && <StepName form={form} setForm={setForm} />}
               {step === 3 && <StepGoal form={form} setForm={setForm} />}
               {step === 4 && <StepWhatsapp form={form} setForm={setForm} />}
-              {step === 5 && <StepUrgency form={form} setForm={setForm} />}
-              {step === 6 && <StepBudget form={form} setForm={setForm} />}
+              {step === 5 && <StepBudget form={form} setForm={setForm} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -338,39 +331,7 @@ function StepWhatsapp({ form, setForm }: StepProps) {
 }
 
 // ─────────────────────────────────────────────────────────
-// STEP 5 — Urgency
-// ─────────────────────────────────────────────────────────
-
-function StepUrgency({ form, setForm }: StepProps) {
-  const { t } = useLang();
-  const opts: Urgency[] = [
-    "asap", "under_3_months", "in_6_months", "next_year", "just_looking",
-  ];
-  return (
-    <div className="space-y-5">
-      <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-50">
-        {t.step5.title}
-      </h2>
-      <div className="grid gap-3">
-        {opts.map((u) => (
-          <button
-            key={u}
-            type="button"
-            onClick={() => setForm({ ...form, urgency: u })}
-            className={`option-card ${
-              form.urgency === u ? "option-card--selected" : ""
-            }`}
-          >
-            <span className="font-medium">{t.step5.options[u]}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────
-// STEP 6 — Budget
+// STEP 5 — Budget
 // ─────────────────────────────────────────────────────────
 
 function StepBudget({ form, setForm }: StepProps) {
@@ -382,10 +343,10 @@ function StepBudget({ form, setForm }: StepProps) {
     <div className="space-y-4">
       <div>
         <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-slate-50">
-          {t.step6.title}
+          {t.step5.title}
         </h2>
         <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          {t.step6.subtitle}
+          {t.step5.subtitle}
         </p>
       </div>
       <div className="grid gap-3">
@@ -398,7 +359,7 @@ function StepBudget({ form, setForm }: StepProps) {
               form.budget === b ? "option-card--selected" : ""
             }`}
           >
-            <span className="font-medium">{t.step6.options[b]}</span>
+            <span className="font-medium">{t.step5.options[b]}</span>
           </button>
         ))}
       </div>

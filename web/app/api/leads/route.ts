@@ -4,11 +4,16 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { isValidE164, normalizePhone } from "@/lib/phone";
 
 // All enums must match the Postgres enums in db/migrations/001.
+//
+// NOTE: `urgency` is no longer asked in the funnel (removed for a shorter
+// form). Kept optional here because the Postgres column is still NOT NULL;
+// if absent, we persist "just_looking" as the neutral default. Agents read
+// the value but it no longer drives prioritisation meaningfully.
 const LeadSchema = z.object({
   name:                z.string().trim().min(2).max(80),
   german_level:        z.enum(["A0", "A1-A2", "B1", "B2+"]),
   goal:                z.enum(["work", "visa", "studies", "exam", "travel", "already_in_dach"]),
-  urgency:             z.enum(["asap", "under_3_months", "in_6_months", "next_year", "just_looking"]),
+  urgency:             z.enum(["asap", "under_3_months", "in_6_months", "next_year", "just_looking"]).optional(),
   budget:              z.enum(["under_100", "100_500", "500_1000", "1000_3000", "over_3000", "not_sure"]).nullable().optional(),
   whatsapp_raw:        z.string().min(5).max(60),
   whatsapp_normalized: z.string().min(5).max(20),
@@ -65,7 +70,7 @@ export async function POST(req: Request) {
     language: data.language,
     german_level: data.german_level,
     goal: data.goal,
-    urgency: data.urgency,
+    urgency: data.urgency ?? "just_looking",   // funnel no longer asks; DB column is NOT NULL
     budget: data.budget ? BUDGET_LABELS[data.budget] : null,
     gdpr_accepted: true,
     gdpr_accepted_at: new Date().toISOString(),
@@ -82,16 +87,20 @@ export async function POST(req: Request) {
   if (existing) {
     // Re-submission: update funnel fields but keep current status /
     // conversation state intact. We never reset status back to 'new'.
+    // Only update `urgency` if the client actually sent one — otherwise
+    // we'd overwrite a previously-captured value with the default.
+    const updatePayload: Record<string, unknown> = {
+      name: insert.name,
+      language: insert.language,
+      german_level: insert.german_level,
+      goal: insert.goal,
+      budget: insert.budget,
+    };
+    if (data.urgency) updatePayload.urgency = data.urgency;
+
     const { error } = await sb
       .from("leads")
-      .update({
-        name: insert.name,
-        language: insert.language,
-        german_level: insert.german_level,
-        goal: insert.goal,
-        urgency: insert.urgency,
-        budget: insert.budget,
-      })
+      .update(updatePayload)
       .eq("id", existing.id);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -117,7 +126,7 @@ export async function POST(req: Request) {
   await logTimeline(created.id, {
     type: "agent_note",
     author: "system",
-    content: `New lead from funnel — level=${data.german_level}, goal=${data.goal}, urgency=${data.urgency}, budget=${insert.budget ?? "?"}, lang=${data.language}.`,
+    content: `New lead from funnel — level=${data.german_level}, goal=${data.goal}, budget=${insert.budget ?? "?"}, lang=${data.language}.`,
   });
 
   return NextResponse.json({ id: created.id, deduplicated: false });

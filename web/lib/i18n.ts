@@ -106,16 +106,6 @@ export const translations = {
       errorGdpr: "Debes aceptar para continuar.",
     },
     step5: {
-      title: "¿Cuándo necesitas lograr tu objetivo?",
-      options: {
-        asap:          "Lo antes posible",
-        under_3_months:"Menos de 3 meses",
-        in_6_months:   "En 6 meses",
-        next_year:     "En el próximo año",
-        just_looking:  "Solo estoy viendo",
-      },
-    },
-    step6: {
       title: "¿Cuánto podrías invertir al mes en tu alemán?",
       subtitle: "No es un compromiso — nos ayuda a recomendarte el plan correcto.",
       options: {
@@ -267,16 +257,6 @@ export const translations = {
       errorGdpr: "Du musst zustimmen, um fortzufahren.",
     },
     step5: {
-      title: "Bis wann möchtest du dein Ziel erreichen?",
-      options: {
-        asap:          "So schnell wie möglich",
-        under_3_months:"In weniger als 3 Monaten",
-        in_6_months:   "In 6 Monaten",
-        next_year:     "Im nächsten Jahr",
-        just_looking:  "Ich schaue nur",
-      },
-    },
-    step6: {
       title: "Wie viel könntest du monatlich in dein Deutsch investieren?",
       subtitle: "Keine Verpflichtung — hilft uns, den passenden Plan zu empfehlen.",
       options: {
