@@ -50,6 +50,98 @@ export type TeacherRow = {
 };
 
 // =============================================================================
+// Identity resolution — user_id → student_id / teacher_id
+// =============================================================================
+
+/**
+ * Given a `users.id`, find the corresponding teacher row (or null).
+ * Used by /profesor pages to gate queries by teacher identity.
+ */
+export async function getTeacherByUserId(userId: string): Promise<TeacherRow | null> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("teachers")
+    .select(`
+      id, user_id, bio, languages_spoken, specialties,
+      hourly_rate, currency, payment_method, notes, active, created_at,
+      users!inner(email, full_name, phone, language_preference, active)
+    `)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const u = (data as { users: unknown }).users;
+  const uu = (Array.isArray(u) ? u[0] : u) as
+    | { email: string; full_name: string | null; phone: string | null;
+        language_preference: "es" | "de"; active: boolean; }
+    | undefined;
+  return {
+    id:                   data.id as string,
+    user_id:              data.user_id as string,
+    email:                uu?.email ?? "",
+    full_name:            uu?.full_name ?? null,
+    phone:                uu?.phone ?? null,
+    language_preference:  uu?.language_preference ?? "es",
+    active:               Boolean(data.active),
+    bio:                  (data.bio as string | null) ?? null,
+    languages_spoken:     (data.languages_spoken as string[]) ?? [],
+    specialties:          (data.specialties as string[]) ?? [],
+    hourly_rate:          (data.hourly_rate as string | null) ?? null,
+    currency:             (data.currency as string) ?? "EUR",
+    payment_method:       (data.payment_method as string | null) ?? null,
+    notes:                (data.notes as string | null) ?? null,
+    created_at:           data.created_at as string,
+  };
+}
+
+/**
+ * Given a `users.id`, find the corresponding student row (or null).
+ */
+export async function getStudentByUserId(userId: string): Promise<StudentRow | null> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("students")
+    .select(`
+      id, user_id, lead_id, current_level, goal,
+      subscription_type, subscription_status, classes_remaining,
+      classes_per_month, monthly_price_cents, currency,
+      schule_access, hans_access, notes, converted_at,
+      users!inner(email, full_name, phone, language_preference, active)
+    `)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const u = (data as { users: unknown }).users;
+  const uu = (Array.isArray(u) ? u[0] : u) as
+    | { email: string; full_name: string | null; phone: string | null;
+        language_preference: "es" | "de"; active: boolean; }
+    | undefined;
+  return {
+    id:                   data.id as string,
+    user_id:              data.user_id as string,
+    email:                uu?.email ?? "",
+    full_name:            uu?.full_name ?? null,
+    phone:                uu?.phone ?? null,
+    language_preference:  uu?.language_preference ?? "es",
+    active:               uu?.active ?? true,
+    current_level:        (data.current_level as string) ?? "A0",
+    goal:                 (data.goal as string | null) ?? null,
+    subscription_type:    data.subscription_type as string,
+    subscription_status:  data.subscription_status as string,
+    classes_remaining:    (data.classes_remaining as number) ?? 0,
+    classes_per_month:    (data.classes_per_month as number | null) ?? null,
+    monthly_price_cents:  (data.monthly_price_cents as number | null) ?? null,
+    currency:             (data.currency as string) ?? "EUR",
+    schule_access:        Boolean(data.schule_access),
+    hans_access:          Boolean(data.hans_access),
+    converted_at:         data.converted_at as string,
+    lead_id:              (data.lead_id as string | null) ?? null,
+    notes:                (data.notes as string | null) ?? null,
+  };
+}
+
+// =============================================================================
 // Queries — students
 // =============================================================================
 
