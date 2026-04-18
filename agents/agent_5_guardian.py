@@ -87,9 +87,35 @@ def on_calendly_invitee_created(payload: dict) -> str | None:
     """
     Handle Calendly webhook for a new trial booking. Returns the lead_id
     handled (new or updated), or None on failure.
+
+    Calendly v2 payload shape:
+        {
+          "event": "invitee.created",
+          "payload": {
+            "email": "...",
+            "name": "...",
+            "text_reminder_number": "...",       # optional
+            "questions_and_answers": [...],
+            "scheduled_event": {                 # <-- the event details
+              "start_time": "...",
+              "end_time": "...",
+              "location": {...},
+              ...
+            },
+            "event": "https://api.calendly.com/scheduled_events/<uuid>",   # just a URL string
+            ...
+          }
+        }
     """
+    import json as _json
     data = payload.get("payload", {})
-    event = data.get("event", {}) or data.get("scheduled_event", {})
+    log.info("Calendly invitee.created payload: %s",
+             _json.dumps({k: v for k, v in data.items() if k != 'tracking'}, default=str)[:800])
+    # Use scheduled_event — `data['event']` is often a URL string, not an object.
+    event_obj = data.get("scheduled_event")
+    if not isinstance(event_obj, dict):
+        event_obj = data.get("event") if isinstance(data.get("event"), dict) else {}
+    event = event_obj
     invitee = data
 
     raw_phone = _extract_phone(invitee)
