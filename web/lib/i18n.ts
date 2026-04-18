@@ -131,7 +131,6 @@ export const translations = {
       title: "¡Listo, {name}! 🎉",
       body:
         "Uno de nuestros asesores te contactará pronto por WhatsApp para diseñarte un plan a medida. Si prefieres, puedes agendar tu clase de prueba gratuita ahora mismo.",
-      bookCtaBadge: "Acceso directo",
       bookCtaTitle: "Reserva tu clase de prueba gratis",
       bookCtaBody:
         "Elige el horario que mejor te venga. Es 100% online, sin compromiso y sin tarjeta.",
@@ -293,7 +292,6 @@ export const translations = {
       title: "Fertig, {name}! 🎉",
       body:
         "Einer unserer Berater kontaktiert dich in Kürze per WhatsApp, um dir einen persönlichen Plan zu erstellen. Du kannst deine kostenlose Probestunde aber auch direkt jetzt selbst buchen.",
-      bookCtaBadge: "Direkter Zugang",
       bookCtaTitle: "Buche deine kostenlose Probestunde",
       bookCtaBody:
         "Wähle den Termin, der dir am besten passt. 100 % online, unverbindlich, ohne Karte.",

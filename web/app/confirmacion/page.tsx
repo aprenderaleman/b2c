@@ -51,31 +51,30 @@ export default function ConfirmationPage() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.15 }}
-            className="relative w-full overflow-hidden rounded-3xl
-                       bg-gradient-to-br from-brand-500 to-brand-600
-                       p-6 sm:p-8 text-white shadow-brand-lg"
+            className="w-full rounded-3xl
+                       bg-white dark:bg-slate-900
+                       border border-slate-200 dark:border-slate-800
+                       p-6 sm:p-8 shadow-sm"
           >
-            {/* Decorative glows */}
-            <div className="pointer-events-none absolute -top-16 -left-16 h-44 w-44
-                            rounded-full bg-white/10 blur-3xl"/>
-            <div className="pointer-events-none absolute -bottom-16 -right-16 h-44 w-44
-                            rounded-full bg-white/10 blur-3xl"/>
-
-            <div className="relative flex flex-col items-center gap-3 text-center">
-              <span className="inline-flex items-center gap-2 rounded-full
-                               bg-white/15 ring-1 ring-white/20
-                               text-white/90 text-[11px] font-semibold uppercase tracking-wider
-                               px-3 py-1">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                  <path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19a2 2 0 002 2h14a2 2 0 002-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/>
+            <div className="flex flex-col items-center gap-3 text-center">
+              <span className="inline-flex h-11 w-11 items-center justify-center
+                               rounded-xl bg-brand-50 dark:bg-brand-500/15
+                               text-brand-600 dark:text-brand-400"
+                    aria-hidden>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" />
+                  <line x1="16" y1="2"  x2="16" y2="6" />
+                  <line x1="8"  y1="2"  x2="8"  y2="6" />
+                  <line x1="3"  y1="10" x2="21" y2="10" />
                 </svg>
-                {t.confirmation.bookCtaBadge}
               </span>
 
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
+              <h2 className="text-lg sm:text-xl font-bold tracking-tight
+                             text-slate-900 dark:text-slate-50">
                 {t.confirmation.bookCtaTitle}
               </h2>
-              <p className="text-white/90 max-w-md text-sm sm:text-base leading-relaxed">
+              <p className="max-w-md text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                 {t.confirmation.bookCtaBody}
               </p>
 
@@ -83,14 +82,11 @@ export default function ConfirmationPage() {
                 href={CALENDLY_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-2 rounded-2xl
-                           bg-white text-brand-600 px-7 py-4 text-base font-bold
-                           hover:bg-brand-50 transition-colors
-                           focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40"
+                className="btn-primary mt-2"
               >
                 {t.confirmation.bookCtaButton}
               </a>
-              <span className="text-xs text-white/80">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
                 {t.confirmation.bookCtaHint}
               </span>
             </div>
