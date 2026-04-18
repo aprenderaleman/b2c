@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { signIn, auth } from "@/lib/auth";
 
-export const metadata = { title: "Sign in · Admin" };
+export const metadata = { title: "Iniciar sesión · Admin" };
 
 export default async function LoginPage({
   searchParams,
@@ -28,11 +28,11 @@ export default async function LoginPage({
         action={doLogin}
         className="w-full max-w-sm rounded-3xl bg-white border border-slate-200 p-8 shadow-sm"
       >
-        <h1 className="text-xl font-bold text-slate-900">Admin sign in</h1>
+        <h1 className="text-xl font-bold text-slate-900">Iniciar sesión</h1>
         <p className="mt-1 text-sm text-slate-500">Aprender-Aleman.de</p>
 
         <label className="block mt-6">
-          <span className="text-sm font-medium text-slate-700">Email</span>
+          <span className="text-sm font-medium text-slate-700">Correo electrónico</span>
           <input
             name="email"
             type="email"
@@ -43,7 +43,7 @@ export default async function LoginPage({
         </label>
 
         <label className="block mt-4">
-          <span className="text-sm font-medium text-slate-700">Password</span>
+          <span className="text-sm font-medium text-slate-700">Contraseña</span>
           <input
             name="password"
             type="password"
@@ -55,12 +55,12 @@ export default async function LoginPage({
 
         {error && (
           <p className="mt-4 text-sm text-red-600">
-            Invalid credentials. Try again.
+            Credenciales incorrectas. Inténtalo de nuevo.
           </p>
         )}
 
         <button type="submit" className="btn-primary w-full mt-6">
-          Sign in
+          Entrar
         </button>
       </form>
     </main>

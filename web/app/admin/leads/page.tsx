@@ -3,11 +3,49 @@ import { getLeads, type LeadsFilter } from "@/lib/dashboard";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "All leads · Admin" };
+export const metadata = { title: "Todos los leads · Admin" };
 
 const PAGE_SIZE = 50;
 
 type SP = Promise<Record<string, string | string[] | undefined>>;
+
+// Spanish labels for status values (kept in sync with StatusBadge)
+const STATUS_LABELS: Record<string, string> = {
+  new: "Nuevo",
+  contacted_1: "Contacto 1",
+  contacted_2: "Contacto 2",
+  contacted_3: "Contacto 3",
+  contacted_4: "Contacto 4",
+  in_conversation: "En conversación",
+  link_sent: "Enlace enviado",
+  trial_scheduled: "Clase agendada",
+  trial_reminded: "Recordatorio enviado",
+  trial_absent: "No asistió",
+  absent_followup_1: "Reenganche 1",
+  absent_followup_2: "Reenganche 2",
+  absent_followup_3: "Reenganche 3",
+  needs_human: "Requiere humano",
+  converted: "Convertido",
+  cold: "Frío",
+  lost: "Perdido",
+};
+
+const GOAL_LABELS: Record<string, string> = {
+  work: "Trabajar",
+  visa: "Visa / residencia",
+  studies: "Estudios",
+  exam: "Examen oficial",
+  travel: "Viajes",
+  already_in_dach: "Ya vivo en DACH",
+};
+
+const URGENCY_LABELS: Record<string, string> = {
+  asap: "Lo antes posible",
+  under_3_months: "< 3 meses",
+  in_6_months: "6 meses",
+  next_year: "Próximo año",
+  just_looking: "Solo viendo",
+};
 
 export default async function AllLeadsPage({
   searchParams,
@@ -43,8 +81,8 @@ export default async function AllLeadsPage({
     <main className="space-y-5">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">All leads</h1>
-          <p className="text-sm text-slate-500">{total.toLocaleString()} result{total === 1 ? "" : "s"}</p>
+          <h1 className="text-2xl font-bold text-slate-900">Todos los leads</h1>
+          <p className="text-sm text-slate-500">{total.toLocaleString("es-ES")} resultado{total === 1 ? "" : "s"}</p>
         </div>
       </header>
 
@@ -52,64 +90,64 @@ export default async function AllLeadsPage({
         <input
           name="q"
           defaultValue={filter.q ?? ""}
-          placeholder="Search name or phone…"
+          placeholder="Buscar por nombre o teléfono…"
           className="input-text sm:col-span-2"
         />
         <select name="status" defaultValue={(filter.status?.[0] ?? "") as string} className="input-text">
-          <option value="">All statuses</option>
+          <option value="">Todos los estados</option>
           {[
             "new","contacted_1","contacted_2","contacted_3","contacted_4",
             "in_conversation","link_sent","trial_scheduled","trial_reminded",
             "trial_absent","absent_followup_1","absent_followup_2","absent_followup_3",
             "needs_human","converted","cold","lost",
-          ].map((s) => <option key={s} value={s}>{s}</option>)}
+          ].map((s) => <option key={s} value={s}>{STATUS_LABELS[s] ?? s}</option>)}
         </select>
         <select name="goal" defaultValue={(filter.goal?.[0] ?? "") as string} className="input-text">
-          <option value="">All goals</option>
+          <option value="">Todos los objetivos</option>
           {["work","visa","studies","exam","travel","already_in_dach"]
-            .map((g) => <option key={g} value={g}>{g}</option>)}
+            .map((g) => <option key={g} value={g}>{GOAL_LABELS[g] ?? g}</option>)}
         </select>
         <select name="urgency" defaultValue={(filter.urgency?.[0] ?? "") as string} className="input-text">
-          <option value="">All urgency</option>
+          <option value="">Toda la urgencia</option>
           {["asap","under_3_months","in_6_months","next_year","just_looking"]
-            .map((u) => <option key={u} value={u}>{u}</option>)}
+            .map((u) => <option key={u} value={u}>{URGENCY_LABELS[u] ?? u}</option>)}
         </select>
         <select name="level" defaultValue={(filter.german_level?.[0] ?? "") as string} className="input-text">
-          <option value="">All levels</option>
+          <option value="">Todos los niveles</option>
           {["A0","A1-A2","B1","B2+"].map((l) => <option key={l} value={l}>{l}</option>)}
         </select>
         <select name="lang" defaultValue={filter.language ?? ""} className="input-text">
-          <option value="">Any lang</option>
+          <option value="">Cualquier idioma</option>
           <option value="es">ES</option>
           <option value="de">DE</option>
         </select>
         <select name="trial" defaultValue={filter.has_trial ?? ""} className="input-text">
-          <option value="">Trial scheduled?</option>
-          <option value="yes">With trial</option>
-          <option value="no">Without trial</option>
+          <option value="">¿Con clase agendada?</option>
+          <option value="yes">Con clase</option>
+          <option value="no">Sin clase</option>
         </select>
-        <button type="submit" className="btn-primary">Filter</button>
+        <button type="submit" className="btn-primary">Filtrar</button>
       </form>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-slate-600">
             <tr>
-              <Th>Name</Th>
+              <Th>Nombre</Th>
               <Th>WhatsApp</Th>
-              <Th>Status</Th>
-              <Th>Level</Th>
-              <Th>Goal</Th>
-              <Th>Urgency</Th>
-              <Th>Lang</Th>
+              <Th>Estado</Th>
+              <Th>Nivel</Th>
+              <Th>Objetivo</Th>
+              <Th>Urgencia</Th>
+              <Th>Idioma</Th>
               <Th>#</Th>
-              <Th>Next action</Th>
-              <Th>Trial</Th>
+              <Th>Próximo contacto</Th>
+              <Th>Clase</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {rows.length === 0 && (
-              <tr><td colSpan={10} className="p-6 text-center text-slate-500">No leads match.</td></tr>
+              <tr><td colSpan={10} className="p-6 text-center text-slate-500">No hay leads que coincidan.</td></tr>
             )}
             {rows.map((l) => (
               <tr key={l.id} className="hover:bg-slate-50/60">
@@ -121,18 +159,18 @@ export default async function AllLeadsPage({
                 <Td><code className="text-xs">{l.whatsapp_normalized}</code></Td>
                 <Td><StatusBadge status={l.status} /></Td>
                 <Td>{l.german_level}</Td>
-                <Td>{l.goal}</Td>
-                <Td>{l.urgency}</Td>
+                <Td>{GOAL_LABELS[l.goal] ?? l.goal}</Td>
+                <Td>{URGENCY_LABELS[l.urgency] ?? l.urgency}</Td>
                 <Td>{l.language}</Td>
                 <Td>{l.current_followup_number}</Td>
                 <Td>
                   {l.next_contact_date
-                    ? new Date(l.next_contact_date).toLocaleDateString("de-DE")
+                    ? new Date(l.next_contact_date).toLocaleDateString("es-ES")
                     : "—"}
                 </Td>
                 <Td>
                   {l.trial_scheduled_at
-                    ? new Date(l.trial_scheduled_at).toLocaleDateString("de-DE")
+                    ? new Date(l.trial_scheduled_at).toLocaleDateString("es-ES")
                     : "—"}
                 </Td>
               </tr>
@@ -172,9 +210,9 @@ function Pagination({ page, totalPages, sp }: {
   };
   return (
     <nav className="flex items-center justify-center gap-2 text-sm">
-      {page > 1 && <Link href={qs(page - 1)} className="btn-secondary text-xs">← Prev</Link>}
-      <span className="text-slate-600">Page {page} / {totalPages}</span>
-      {page < totalPages && <Link href={qs(page + 1)} className="btn-secondary text-xs">Next →</Link>}
+      {page > 1 && <Link href={qs(page - 1)} className="btn-secondary text-xs">← Anterior</Link>}
+      <span className="text-slate-600">Página {page} / {totalPages}</span>
+      {page < totalPages && <Link href={qs(page + 1)} className="btn-secondary text-xs">Siguiente →</Link>}
     </nav>
   );
 }

@@ -21,35 +21,35 @@ export default async function TodayView() {
   return (
     <main className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold text-slate-900">Today</h1>
-        <p className="text-slate-500 text-sm">What needs your attention right now.</p>
+        <h1 className="text-2xl font-bold text-slate-900">Hoy</h1>
+        <p className="text-slate-500 text-sm">Lo que necesita tu atención ahora.</p>
       </header>
 
       {/* Quick stats */}
       <section className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="New leads today"       value={stats.newLeadsToday}       emoji="🆕" />
-        <StatCard label="Active conversations"  value={stats.activeConversations} emoji="💬" />
-        <StatCard label="Conversions (7 days)"  value={stats.conversionsThisWeek} emoji="🎉" accent />
+        <StatCard label="Leads nuevos hoy"          value={stats.newLeadsToday}       emoji="🆕" />
+        <StatCard label="Conversaciones activas"    value={stats.activeConversations} emoji="💬" />
+        <StatCard label="Conversiones (7 días)"     value={stats.conversionsThisWeek} emoji="🎉" accent />
       </section>
 
       {/* Trials today */}
-      <Section title="📅 Trial classes scheduled today" count={trials.length}>
+      <Section title="📅 Clases de prueba agendadas para hoy" count={trials.length}>
         {trials.length === 0
-          ? <EmptyState text="No trials on the calendar today." />
+          ? <EmptyState text="No hay clases de prueba en la agenda de hoy." />
           : <TrialList leads={trials} />}
       </Section>
 
       {/* Needs human */}
-      <Section title="🚨 Needs human" count={needsHuman.length} tone="red">
+      <Section title="🚨 Requieren humano" count={needsHuman.length} tone="red">
         {needsHuman.length === 0
-          ? <EmptyState text="Nobody is waiting for you." />
+          ? <EmptyState text="Nadie está esperando por ti." />
           : <LeadList leads={needsHuman} />}
       </Section>
 
       {/* Stale */}
-      <Section title="⏳ In conversation, no movement > 48h" count={stale.length} tone="amber">
+      <Section title="⏳ En conversación, sin movimiento > 48 h" count={stale.length} tone="amber">
         {stale.length === 0
-          ? <EmptyState text="All active conversations are fresh." />
+          ? <EmptyState text="Todas las conversaciones activas están al día." />
           : <LeadList leads={stale} />}
       </Section>
     </main>
@@ -127,7 +127,7 @@ function TrialList({ leads }: { leads: LeadRow[] }) {
       {leads.map((l) => {
         const t = l.trial_scheduled_at ? new Date(l.trial_scheduled_at) : null;
         const timeLabel = t
-          ? t.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" })
+          ? t.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" })
           : "—";
         return (
           <li key={l.id} className="py-3 flex items-center justify-between gap-4">
@@ -156,12 +156,12 @@ function TrialActions({ leadId }: { leadId: string }) {
     <div className="flex items-center gap-2">
       <form action={`/api/admin/leads/${leadId}/trial/attended`} method="post">
         <button type="submit" className="text-xs font-medium rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-emerald-700 hover:bg-emerald-100">
-          Mark attended
+          Asistió
         </button>
       </form>
       <form action={`/api/admin/leads/${leadId}/trial/absent`} method="post">
         <button type="submit" className="text-xs font-medium rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700 hover:bg-amber-100">
-          Mark absent
+          No asistió
         </button>
       </form>
     </div>

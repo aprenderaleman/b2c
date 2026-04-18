@@ -7,8 +7,8 @@ export function DeleteLeadButton({ leadId }: { leadId: string }) {
       method="post"
       onSubmit={(e) => {
         if (!confirm(
-          "This will PERMANENTLY erase the lead, their timeline and all notes. " +
-          "Export the data first if you might need it. Continue?"
+          "Esto BORRARÁ PERMANENTEMENTE al lead, su historial y todas las notas. " +
+          "Exporta los datos primero si podrías necesitarlos. ¿Continuar?"
         )) {
           e.preventDefault();
         }
@@ -17,9 +17,9 @@ export function DeleteLeadButton({ leadId }: { leadId: string }) {
       <button
         type="submit"
         className="text-xs font-medium rounded-full border border-red-200 bg-red-50 px-3 py-1 text-red-700 hover:bg-red-100"
-        title="GDPR right to erasure"
+        title="RGPD: derecho de supresión"
       >
-        Delete (GDPR)
+        Eliminar (RGPD)
       </button>
     </form>
   );

@@ -53,7 +53,7 @@ passes the following checklist and can be sent to the lead:
   [2] Tone: warm, professional, NEVER pushy or salesy.
   [3] Written in the lead's language (es/de) — no mixing.
   [4] Brief and direct — max 5 short lines / ~400 chars total.
-  [5] Calendly URL https://calendly.com/d/cxf3-s6q-76f/sesion-de-prueba-de-aleman
+  [5] Calendly URL https://calendly.com/aprenderaleman2026/sesion-de-prueba-de-aleman
       present ONLY if the lead already asked to book a trial class.
       If the draft includes it WITHOUT that signal → REJECT.
   [6] Signed as "Stiv" — anywhere in the message.

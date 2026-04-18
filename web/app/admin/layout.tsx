@@ -15,12 +15,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin" className="text-brand-600 dark:text-brand-400 font-bold">
                 Aprender-Aleman<span className="text-slate-600 dark:text-slate-400">.de</span> Admin
               </Link>
-              <Link href="/admin" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Today</Link>
-              <Link href="/admin/leads" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">All leads</Link>
+              <Link href="/admin" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Hoy</Link>
+              <Link href="/admin/leads" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Todos los leads</Link>
             </nav>
             <form action={async () => { "use server"; await signOut({ redirectTo: "/admin/login" }); }}>
               <button type="submit" className="text-sm text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400">
-                Sign out
+                Cerrar sesión
               </button>
             </form>
           </div>

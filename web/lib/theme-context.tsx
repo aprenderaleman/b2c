@@ -19,11 +19,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
+    // Light mode is the default. Dark mode requires explicit user opt-in
+    // (persisted in localStorage). We deliberately ignore `prefers-color-scheme`
+    // to keep the marketing surface consistent for the majority of visitors.
     const stored = (typeof window !== "undefined"
       ? (localStorage.getItem(STORAGE_KEY) as Theme | null)
       : null);
-    const resolved: Theme = stored
-      ?? (window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const resolved: Theme = stored === "dark" ? "dark" : "light";
     setThemeState(resolved);
     document.documentElement.classList.toggle("dark", resolved === "dark");
   }, []);
@@ -50,12 +52,14 @@ export function useTheme(): Ctx {
 
 /**
  * Synchronous script that runs BEFORE React hydrates, so users with a saved
- * dark preference don't see a flash of white. Embed inside <head>.
+ * dark preference don't see a flash of white. Light mode is the default;
+ * only an explicit 'dark' value in localStorage opts into dark mode.
+ * Embed inside <head>.
  */
 export const THEME_INIT_SCRIPT = `
 try {
-  var t = localStorage.getItem('${STORAGE_KEY}');
-  if (!t) { t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
-  if (t === 'dark') document.documentElement.classList.add('dark');
+  if (localStorage.getItem('${STORAGE_KEY}') === 'dark') {
+    document.documentElement.classList.add('dark');
+  }
 } catch (e) {}
 `;

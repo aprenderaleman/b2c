@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Header } from "@/components/Header";
 import { WhatsAppFloat } from "@/components/WhatsAppFloat";
@@ -18,7 +19,7 @@ export default function HomePage() {
         <BackgroundBlobs />
 
         {/* ────────── HERO ────────── */}
-        <section className="relative mx-auto max-w-5xl px-5 sm:px-6 pt-16 sm:pt-24 pb-14 sm:pb-20 text-center">
+        <section className="relative mx-auto max-w-5xl px-5 sm:px-6 pt-16 sm:pt-24 pb-10 sm:pb-14 text-center">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -64,16 +65,42 @@ export default function HomePage() {
               </span>
             </div>
 
-            {/* Trust badges under CTA */}
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2
-                            text-sm text-slate-600 dark:text-slate-400">
-              <TrustBadge label={t.home.trust1} />
-              <Dot />
-              <TrustBadge label={t.home.trust2} />
-              <Dot />
-              <TrustBadge label={t.home.trust3} />
+            {/* Trust badges under CTA (title + body) */}
+            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 w-full max-w-3xl">
+              <TrustBadge title={t.home.trust1Title} body={t.home.trust1Body} />
+              <TrustBadge title={t.home.trust2Title} body={t.home.trust2Body} />
+              <TrustBadge title={t.home.trust3Title} body={t.home.trust3Body} />
             </div>
           </motion.div>
+        </section>
+
+        {/* ────────── HOW IT WORKS ────────── */}
+        <section className="relative mx-auto max-w-6xl px-5 sm:px-6 py-14 sm:py-20">
+          <SectionHeader
+            title={t.home.howItWorksTitle}
+            subtitle={t.home.howItWorksSubtitle}
+          />
+          <div className="mt-10 grid gap-5 sm:gap-6 sm:grid-cols-3">
+            <StepCard
+              number={1}
+              title={t.home.step1Label}
+              body={t.home.step1Body}
+              delay={0.05}
+            />
+            <StepCard
+              number={2}
+              title={t.home.step2Label}
+              body={t.home.step2Body}
+              delay={0.15}
+              highlight
+            />
+            <StepCard
+              number={3}
+              title={t.home.step3Label}
+              body={t.home.step3Body}
+              delay={0.25}
+            />
+          </div>
         </section>
 
         {/* ────────── ADVANTAGES ────────── */}
@@ -164,6 +191,58 @@ export default function HomePage() {
           </motion.div>
         </section>
 
+        {/* ────────── FAQ ────────── */}
+        <section className="relative mx-auto max-w-3xl px-5 sm:px-6 py-14 sm:py-20">
+          <SectionHeader title={t.home.faqTitle} />
+          <div className="mt-8 flex flex-col gap-3">
+            <FaqItem q={t.home.faq1Q} a={t.home.faq1A} />
+            <FaqItem q={t.home.faq2Q} a={t.home.faq2A} />
+            <FaqItem q={t.home.faq3Q} a={t.home.faq3A} />
+            <FaqItem q={t.home.faq4Q} a={t.home.faq4A} />
+            <FaqItem q={t.home.faq5Q} a={t.home.faq5A} />
+          </div>
+        </section>
+
+        {/* ────────── FINAL CTA ────────── */}
+        <section className="relative mx-auto max-w-4xl px-5 sm:px-6 pb-16 sm:pb-24">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-80px" }}
+            transition={{ duration: 0.5 }}
+            className="relative overflow-hidden rounded-3xl
+                       bg-gradient-to-br from-brand-500 to-brand-600
+                       p-8 sm:p-12 text-center text-white shadow-brand"
+          >
+            <div className="pointer-events-none absolute -top-16 -left-16 h-48 w-48
+                            rounded-full bg-white/10 blur-3xl"/>
+            <div className="pointer-events-none absolute -bottom-16 -right-16 h-48 w-48
+                            rounded-full bg-white/10 blur-3xl"/>
+            <div className="relative">
+              <h2 className="text-2xl sm:text-4xl font-extrabold tracking-tight">
+                {t.home.finalCtaTitle}
+              </h2>
+              <p className="mt-3 text-white/90 max-w-2xl mx-auto text-sm sm:text-base">
+                {t.home.finalCtaBody}
+              </p>
+              <div className="mt-6 flex flex-col items-center gap-3">
+                <Link
+                  href="/funnel"
+                  className="inline-flex items-center gap-2 rounded-2xl
+                             bg-white text-brand-600 px-7 py-4 text-base font-bold
+                             hover:bg-brand-50 transition-colors
+                             focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40"
+                >
+                  {t.home.finalCtaButton}
+                </Link>
+                <span className="text-xs text-white/80">
+                  {t.home.ctaHint}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        </section>
+
         {/* ────────── FOOTER ────────── */}
         <footer className="relative border-t border-slate-200 dark:border-slate-800
                            py-8 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -201,21 +280,72 @@ function BackgroundBlobs() {
   );
 }
 
-function TrustBadge({ label }: { label: string }) {
+function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-           stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-           className="text-brand-500" aria-hidden>
-        <polyline points="20 6 9 17 4 12" />
-      </svg>
-      <span className="font-medium">{label}</span>
-    </span>
+    <div className="text-center">
+      <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-slate-50">
+        {title}
+      </h2>
+      {subtitle && (
+        <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-400">
+          {subtitle}
+        </p>
+      )}
+    </div>
   );
 }
 
-function Dot() {
-  return <span className="h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600 hidden sm:block" aria-hidden />;
+function TrustBadge({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="flex items-start gap-3 text-left">
+      <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center
+                       rounded-full bg-brand-50 dark:bg-brand-500/15
+                       text-brand-600 dark:text-brand-400
+                       ring-1 ring-brand-500/20">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+             aria-hidden>
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </span>
+      <span className="flex flex-col">
+        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+          {title}
+        </span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">
+          {body}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function StepCard({
+  number, title, body, delay, highlight,
+}: {
+  number: number; title: string; body: string; delay: number; highlight?: boolean;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.45, delay }}
+      className={`surface-card relative p-6 transition-all
+                  hover:-translate-y-0.5 hover:shadow-brand
+                  ${highlight ? "ring-1 ring-brand-500/30 bg-gradient-to-br from-white to-brand-50 dark:from-slate-800/60 dark:to-brand-500/5" : ""}`}
+    >
+      <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl font-bold text-lg
+                       ${highlight
+                          ? "bg-gradient-to-br from-brand-400 to-brand-600 text-white shadow-brand"
+                          : "bg-brand-50 dark:bg-slate-700/50 text-brand-600 dark:text-brand-300"}`}
+           aria-hidden>
+        {number}
+      </div>
+      <h3 className="mt-4 text-lg font-bold text-slate-900 dark:text-slate-50">{title}</h3>
+      <p className="mt-1 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{body}</p>
+    </motion.div>
+  );
 }
 
 function Advantage({
@@ -226,7 +356,8 @@ function Advantage({
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.45, delay }}
       className={`surface-card p-5 sm:p-6 transition-all
                   hover:-translate-y-0.5 hover:shadow-brand
@@ -253,6 +384,42 @@ function ExamCard({ tag, title, body }: { tag: string; title: string; body: stri
       </div>
       <div className="mt-1 text-xl font-bold">{title}</div>
       <p className="mt-2 text-sm text-slate-300 leading-relaxed">{body}</p>
+    </div>
+  );
+}
+
+function FaqItem({ q, a }: { q: string; a: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="surface-card overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left
+                   hover:bg-brand-50/40 dark:hover:bg-slate-800/40 transition-colors"
+      >
+        <span className="text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+          {q}
+        </span>
+        <span
+          className={`ml-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full
+                      bg-brand-50 dark:bg-brand-500/15 text-brand-600 dark:text-brand-300
+                      transition-transform ${open ? "rotate-45" : ""}`}
+          aria-hidden
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </span>
+      </button>
+      {open && (
+        <div className="px-5 pb-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+          {a}
+        </div>
+      )}
     </div>
   );
 }

@@ -96,7 +96,7 @@ INFO_WORDS = {
     ],
 }
 
-CALENDLY_URL = "https://calendly.com/d/cxf3-s6q-76f/sesion-de-prueba-de-aleman"
+CALENDLY_URL = "https://calendly.com/aprenderaleman2026/sesion-de-prueba-de-aleman"
 WEBSITE_URL  = "https://aprender-aleman.de"
 
 
