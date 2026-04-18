@@ -6,16 +6,18 @@ import {
   getTodaysTrials,
   type LeadRow,
 } from "@/lib/dashboard";
+import { computeRiskAlerts } from "@/lib/reports";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 
 export const dynamic = "force-dynamic"; // always fresh — this is the nerve-center
 
 export default async function TodayView() {
-  const [trials, needsHuman, stale, stats] = await Promise.all([
+  const [trials, needsHuman, stale, stats, risks] = await Promise.all([
     getTodaysTrials(),
     getLeadsNeedingHuman(),
     getStaleConversations(),
     getQuickStats(),
+    computeRiskAlerts().catch(() => []),
   ]);
 
   return (
@@ -31,6 +33,35 @@ export default async function TodayView() {
         <StatCard label="Conversaciones activas"    value={stats.activeConversations} emoji="💬" />
         <StatCard label="Conversiones (7 días)"     value={stats.conversionsThisWeek} emoji="🎉" accent />
       </section>
+
+      {/* Risk alerts (students at risk — low attendance, inactivity, etc.) */}
+      {risks.length > 0 && (
+        <Section title="🔔 Alertas de estudiantes" count={risks.length} tone="red">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {risks.slice(0, 5).map((a, i) => (
+              <li key={i} className="py-2.5 flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{a.subject}</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">{a.detail}</div>
+                </div>
+                {a.link && (
+                  <Link href={a.link} className="text-xs text-brand-600 dark:text-brand-400 hover:underline">
+                    Ver →
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+          {risks.length > 5 && (
+            <Link
+              href="/admin/reportes"
+              className="mt-3 inline-block text-xs text-brand-600 dark:text-brand-400 hover:underline"
+            >
+              Ver las {risks.length} alertas →
+            </Link>
+          )}
+        </Section>
+      )}
 
       {/* Trials today */}
       <Section title="📅 Clases de prueba agendadas para hoy" count={trials.length}>

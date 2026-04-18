@@ -23,6 +23,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/admin/profesores" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Profesores</Link>
               <Link href="/admin/clases" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Clases</Link>
               <Link href="/admin/finanzas" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Finanzas</Link>
+              <Link href="/admin/reportes" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Reportes</Link>
               <Link href="/chat" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Chat</Link>
             </nav>
             <div className="flex items-center gap-3">
