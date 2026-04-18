@@ -1,6 +1,7 @@
 import { fromAddress, getResend } from "./client";
 import { renderWelcomeStudent, type WelcomeStudentVars } from "./templates/welcome-student";
-import { renderPasswordReset, type PasswordResetVars } from "./templates/password-reset";
+import { renderWelcomeStaff,   type WelcomeStaffVars }   from "./templates/welcome-staff";
+import { renderPasswordReset,  type PasswordResetVars }  from "./templates/password-reset";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -52,6 +53,17 @@ export async function sendWelcomeStudentEmail(
   vars: WelcomeStudentVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderWelcomeStudent(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Send the "welcome to the team" email for a newly-created admin or teacher.
+ */
+export async function sendWelcomeStaffEmail(
+  to: string,
+  vars: WelcomeStaffVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderWelcomeStaff(vars);
   return sendRaw(to, subject, html, text);
 }
 
