@@ -19,6 +19,7 @@ import {
   type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
 import { RoomEvent, Track, type Participant } from "livekit-client";
+import { Reactions } from "./Reactions";
 
 type Props = {
   classId:          string;
@@ -115,6 +116,7 @@ export function AulaClient(p: Props) {
           />
         </div>
         <RoomAudioRenderer />
+        <Reactions />
         {p.isHost && <HostTeardown classId={p.classId} backHref={p.backHref} />}
         {p.isHost && <RecordingAutoStart classId={p.classId} />}
       </LiveKitRoom>

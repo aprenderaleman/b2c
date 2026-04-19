@@ -3,6 +3,8 @@ import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { getUserIcalToken, icalUrlFor } from "@/lib/user-extras";
 import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
+import { getAttendanceStreakForStudent } from "@/lib/attendance-streak";
+import { AttendanceStreakCard } from "@/components/classes/AttendanceStreakCard";
 import { getStudentUpcomingClasses, type ClassWithPeople, classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { NextClassCard } from "@/components/classes/NextClassCard";
 import { getStudentProgress } from "@/lib/teacher-notes";
@@ -36,6 +38,7 @@ export default async function StudentHome() {
   const upcoming = await getStudentUpcomingClasses(student.id, new Date(), 60);
   const progress = await getStudentProgress(student.id);
   const icalToken = await getUserIcalToken(session.user.id);
+  const streak    = await getAttendanceStreakForStudent(student.id);
   const [next, ...rest] = upcoming;
 
   return (
@@ -61,6 +64,8 @@ export default async function StudentHome() {
       ) : (
         <EmptyNext />
       )}
+
+      <AttendanceStreakCard current={streak.current} best={streak.best} />
 
       {rest.length > 0 && (
         <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5">
