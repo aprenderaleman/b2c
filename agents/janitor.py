@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 import sys
 from datetime import datetime, timezone
 
@@ -71,11 +72,30 @@ def _check_scheduler_freshness() -> None:
             msg = f"Scheduler heartbeat stale by {m:.0f} min — self-restarting container."
             log.warning(msg)
             note_critical(msg)
-            # Flush logs, then exit non-zero. Docker policy `unless-stopped`
-            # brings the container back up with a fresh process tree.
+            # Flush logs, then kill ourselves HARD. We escalate in three steps
+            # because we've observed os._exit() getting swallowed when
+            # APScheduler's executor is mid-teardown and some child thread is
+            # blocked on a socket/DB wait.
             sys.stdout.flush()
             sys.stderr.flush()
-            os._exit(2)
+            try:
+                # 1) Ask the whole process tree to terminate cleanly.
+                os.kill(os.getpid(), signal.SIGTERM)
+            except Exception:
+                pass
+            # 2) If we're still here 3s later, os._exit (POSIX-level).
+            try:
+                import time as _t
+                _t.sleep(3)
+            except Exception:
+                pass
+            try:
+                os._exit(2)
+            except Exception:
+                pass
+            # 3) Last resort: SIGKILL ourselves. Docker restart policy fires
+            #    on any non-zero exit.
+            os.kill(os.getpid(), signal.SIGKILL)
     except Exception as e:
         log.warning("scheduler-freshness check failed: %s", e)
 
