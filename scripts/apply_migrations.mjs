@@ -34,7 +34,15 @@ const env = {};
 for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
   const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
   if (!m) continue;
-  env[m[1]] = m[2].replace(/^"(.*)"$/, "$1");
+  let v = m[2];
+  // Strip surrounding quotes of EITHER kind. The original regex only
+  // stripped double quotes, so single-quoted values (like the bcrypt
+  // hash in our .env: ADMIN_PASSWORD_HASH='$2a$...') carried a literal
+  // trailing quote into the seeded row — causing login to fail.
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    v = v.slice(1, -1);
+  }
+  env[m[1]] = v;
 }
 
 const DATABASE_URL = env.DATABASE_URL;

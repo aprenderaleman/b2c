@@ -27,7 +27,12 @@ const envPath   = path.join(repoRoot, ".env");
 const env = {};
 for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
   const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-  if (m) env[m[1]] = m[2].replace(/^"(.*)"$/, "$1");
+  if (!m) continue;
+  let v = m[2];
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    v = v.slice(1, -1);
+  }
+  env[m[1]] = v;
 }
 
 const email   = (process.env.USER_EMAIL   ?? env.ADMIN_EMAIL ?? "").trim().toLowerCase();
