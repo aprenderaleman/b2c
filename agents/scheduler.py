@@ -71,8 +71,37 @@ def _agent_0_tick_with_beat() -> None:
             log.warning("heartbeat write failed: %s", e)
 
 
+def _heartbeat_keepalive() -> None:
+    """Pure scheduler-liveness signal — runs every 5 min 24/7 (not tied to
+    business hours), so outside the Agent 0 window the janitor doesn't
+    mistake an idle evening for a frozen container."""
+    try:
+        beat("scheduler", note="keepalive")
+    except Exception as e:
+        log.warning("heartbeat keepalive failed: %s", e)
+
+
 def main() -> int:
+    # BOOTSTRAP BEAT — write a fresh heartbeat BEFORE starting APScheduler.
+    # Without this, a just-booted container has no recent 'scheduler' beat;
+    # the janitor fires 10 min later, reads an old stale value from the DB,
+    # and kills the container again → restart loop.
+    try:
+        beat("scheduler", note="bootstrap")
+        log.info("bootstrap heartbeat written")
+    except Exception as e:
+        log.warning("bootstrap heartbeat failed (continuing anyway): %s", e)
+
     sched = BlockingScheduler(timezone=BERLIN)
+
+    # Pure liveness heartbeat — 5 min, 24/7. Decoupled from Agent 0 so the
+    # container stays "alive" even outside business hours.
+    sched.add_job(
+        _heartbeat_keepalive,
+        IntervalTrigger(minutes=5, timezone=BERLIN),
+        id="heartbeat_keepalive",
+        max_instances=1, coalesce=True,
+    )
 
     # Agent 0 — lead watcher
     sched.add_job(
