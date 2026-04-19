@@ -117,23 +117,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    ...authConfig.callbacks,
-    // Propagate `role` and `id` into the JWT so the session has them.
-    jwt: async ({ token, user }) => {
-      if (user) {
-        const u = user as { id?: string; role?: Role };
-        if (u.id)   token.id   = u.id;
-        if (u.role) token.role = u.role;
-      }
-      return token;
-    },
-    session: async ({ session, token }) => {
-      if (session.user) {
-        (session.user as { id?: string }).id   = (token.id   as string | undefined) ?? "";
-        (session.user as { role?: Role }).role = (token.role as Role   | undefined) ?? "superadmin";
-      }
-      return session;
-    },
-  },
+  // All callbacks (jwt / session / authorized) live in authConfig so
+  // the edge middleware sees the same shape as Node routes do.
 });

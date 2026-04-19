@@ -33,6 +33,26 @@ export const authConfig: NextAuthConfig = {
   pages:   { signIn: "/login" },
   providers: [],   // filled in by lib/auth.ts (Node-only)
   callbacks: {
+    // JWT + session callbacks MUST live here (not in lib/auth.ts) so the
+    // edge middleware can read `auth.user.role` without re-running the
+    // providers. Without this the middleware saw session.user without a
+    // role and bounced every authenticated request back to /login.
+    jwt: ({ token, user }) => {
+      if (user) {
+        const u = user as { id?: string; role?: Role };
+        if (u.id)   token.id   = u.id;
+        if (u.role) token.role = u.role;
+      }
+      return token;
+    },
+    session: ({ session, token }) => {
+      if (session.user) {
+        (session.user as { id?: string }).id  = (token.id   as string | undefined) ?? "";
+        (session.user as { role?: Role }).role = (token.role as Role   | undefined);
+      }
+      return session;
+    },
+
     authorized: ({ auth, request }) => {
       const { pathname } = request.nextUrl;
 
@@ -46,11 +66,14 @@ export const authConfig: NextAuthConfig = {
       if (!auth?.user) return false;   // NextAuth will redirect to /login
 
       const role = (auth.user as { role?: Role }).role;
+      // No role on the session token → treat as unauthenticated. Happens
+      // when the JWT was minted by an older build; returning false lets
+      // NextAuth redirect to /login, the user signs in again, and the
+      // new JWT carries the role claim.
       if (!role) return false;
       if (gate.roles.includes(role)) return true;
 
       // Authenticated but wrong role → bounce them to their own home.
-      // We signal this by returning a Response that NextAuth forwards.
       return Response.redirect(new URL(defaultPathForRole(role), request.nextUrl));
     },
   },
