@@ -42,9 +42,10 @@ export default async function TeacherAvailabilityPage() {
         <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-50">Tu disponibilidad</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 max-w-2xl">
           Marca en qué franjas horarias sueles estar disponible para dar clase.
-          El admin verá esto como referencia al agendar clases contigo — no es
-          un calendario cerrado, así que siempre puedes decir que sí a una
-          clase fuera de estos horarios.
+          Puedes añadir <strong>varias franjas en el mismo día</strong> (por ejemplo,
+          Lunes 08:00–14:00 + 18:00–20:00) pulsando "+ Añadir franja" tantas veces
+          como necesites. El admin verá esto como referencia al agendar clases — no
+          es un calendario cerrado.
         </p>
       </header>
 

@@ -26,6 +26,8 @@ export function AvailabilityEditor({ initialBlocks }: { initialBlocks: Block[] }
   const byDay: Record<number, Block[]> = {};
   for (const d of [0,1,2,3,4,5,6]) byDay[d] = [];
   for (const b of blocks)          byDay[b.day_of_week].push(b);
+  // Sort each day's blocks chronologically so multiple slots render 08-14, 18-20.
+  for (const d of [0,1,2,3,4,5,6]) byDay[d].sort((a, b) => a.start_time.localeCompare(b.start_time));
 
   const addBlock = (day: number) => {
     setBlocks([...blocks, {
@@ -74,9 +76,16 @@ export function AvailabilityEditor({ initialBlocks }: { initialBlocks: Block[] }
       {WEEK_ORDER.map(day => (
         <section key={day} className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
           <div className="flex items-center justify-between gap-3 px-1">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-50">
-              {DAY_LABELS_ES[day]}
-            </h3>
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                {DAY_LABELS_ES[day]}
+              </h3>
+              {byDay[day].length > 0 && (
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  · {byDay[day].length} franja{byDay[day].length === 1 ? "" : "s"}
+                </span>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => addBlock(day)}
