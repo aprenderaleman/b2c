@@ -6,6 +6,7 @@ import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
 import { getAttendanceStreakForStudent } from "@/lib/attendance-streak";
 import { AttendanceStreakCard } from "@/components/classes/AttendanceStreakCard";
 import { OpenSchuleButton } from "@/components/entitlements/OpenSchuleButton";
+import { OpenHansButton } from "@/components/entitlements/OpenHansButton";
 import { getStudentUpcomingClasses, type ClassWithPeople, classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { NextClassCard } from "@/components/classes/NextClassCard";
 import { getStudentProgress } from "@/lib/teacher-notes";
@@ -162,12 +163,7 @@ function ExternalToolsRow() {
   return (
     <section className="grid gap-4 sm:grid-cols-2">
       <OpenSchuleButton />
-      <ExternalCard
-        emoji="🤖"
-        title="HANS"
-        body="Tu profesor de IA 24/7 — practica conversación cuando quieras."
-        href="https://hans.aprender-aleman.de"
-      />
+      <OpenHansButton />
     </section>
   );
 }
