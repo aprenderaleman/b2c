@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs, getClassById } from "@/lib/classes";
 import { EndClassModal } from "@/components/classes/EndClassModal";
@@ -16,7 +16,10 @@ export default async function TeacherClassDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireRole(["teacher", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["teacher", "admin", "superadmin"],
+    "teacher",
+  );
   const { id } = await params;
 
   const cls = await getClassById(id);

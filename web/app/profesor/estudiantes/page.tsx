@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 
@@ -12,7 +12,10 @@ export const metadata = { title: "Mis estudiantes · Profesor" };
  * teacher_id = me.
  */
 export default async function TeacherStudentsPage() {
-  const session = await requireRole(["teacher", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["teacher", "admin", "superadmin"],
+    "teacher",
+  );
   const me = await getTeacherByUserId(session.user.id);
   if (!me) {
     return (

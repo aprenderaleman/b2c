@@ -35,7 +35,65 @@ export default async function TeacherPayrollPage({
         </p>
       </header>
 
-      <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+      {/* Mobile: card grid. Desktop: full table. Both fed by the same rows. */}
+      <section className="sm:hidden space-y-3">
+        {rows.length === 0 && (
+          <div className="rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+            Sin horas registradas este mes.
+          </div>
+        )}
+        {rows.map(r => {
+          const monthStr = focus.toISOString().slice(0, 7);
+          return (
+            <article key={r.id ?? r.teacher_id} className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 space-y-3">
+              <header className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">{r.teacher_name ?? "—"}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{r.teacher_email}</p>
+                </div>
+                {r.paid ? (
+                  <span className="shrink-0 inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 text-[11px] font-medium">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    Pagado
+                  </span>
+                ) : (
+                  <span className="shrink-0 inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-300 text-[11px] font-medium">
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    Pendiente
+                  </span>
+                )}
+              </header>
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <div className="text-slate-500 dark:text-slate-400">Clases</div>
+                  <div className="font-semibold text-slate-900 dark:text-slate-50 text-sm">{r.classes_count}</div>
+                </div>
+                <div>
+                  <div className="text-slate-500 dark:text-slate-400">Horas</div>
+                  <div className="font-semibold text-slate-900 dark:text-slate-50 text-sm">{(r.total_minutes / 60).toFixed(1)}</div>
+                </div>
+                <div>
+                  <div className="text-slate-500 dark:text-slate-400">Ganancia</div>
+                  <div className="font-semibold text-slate-900 dark:text-slate-50 text-sm font-mono">{moneyFromCents(r.amount_cents, r.currency)}</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                {r.id && <PayToggle earningsId={r.id} paid={r.paid} />}
+                <a
+                  href={`/api/admin/finanzas/profesores/${r.teacher_id}/invoice/${monthStr}`}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 px-3 py-1 ml-auto"
+                >
+                  PDF ↓
+                </a>
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      <section className="hidden sm:block rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 dark:bg-slate-800/60 text-left text-slate-600 dark:text-slate-300 text-xs">
             <tr>

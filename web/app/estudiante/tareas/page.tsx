@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { getStudentHomework } from "@/lib/homework";
 import { HomeworkSubmitCard } from "./HomeworkSubmitCard";
@@ -8,7 +8,10 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Tareas · Estudiante" };
 
 export default async function StudentHomeworkPage() {
-  const session = await requireRole(["student", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["student", "admin", "superadmin"],
+    "student",
+  );
   const student = await getStudentByUserId(session.user.id);
 
   if (!student) {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { formatMonthEs, getTeacherEarningsSummary, moneyFromCents } from "@/lib/finance";
 
@@ -7,7 +7,10 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Mis ganancias · Profesor" };
 
 export default async function TeacherEarningsPage() {
-  const session = await requireRole(["teacher", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["teacher", "admin", "superadmin"],
+    "teacher",
+  );
   const teacher = await getTeacherByUserId(session.user.id);
 
   if (!teacher) {

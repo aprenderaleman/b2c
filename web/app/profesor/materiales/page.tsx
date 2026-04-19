@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { listTeacherMaterials } from "@/lib/materials";
 import { MaterialsClient } from "./MaterialsClient";
@@ -11,7 +11,10 @@ export default async function TeacherMaterialsPage({
 }: {
   searchParams: Promise<{ q?: string; tag?: string }>;
 }) {
-  const session = await requireRole(["teacher", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["teacher", "admin", "superadmin"],
+    "teacher",
+  );
   const me = await getTeacherByUserId(session.user.id);
   if (!me) {
     return (

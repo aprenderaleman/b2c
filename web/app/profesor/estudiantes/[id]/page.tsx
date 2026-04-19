@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentById, getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getStudentProgress, listNotesForStudent } from "@/lib/teacher-notes";
@@ -19,7 +19,10 @@ export default async function TeacherStudentDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireRole(["teacher", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["teacher", "admin", "superadmin"],
+    "teacher",
+  );
   const { id: studentId } = await params;
 
   const student = await getStudentById(studentId);

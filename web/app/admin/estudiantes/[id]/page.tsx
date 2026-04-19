@@ -4,6 +4,7 @@ import { getStudentById, moneyFromCents, subscriptionStatusEs, subscriptionTypeE
 import { listStudentPayments, moneyFromCents as moneyFromCentsFinance } from "@/lib/finance";
 import { RecordPaymentButton } from "@/components/admin/RecordPaymentButton";
 import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
+import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 import { listStudentCertificates } from "@/lib/certificates";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +56,11 @@ export default async function StudentDetailPage({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <ImpersonateButton
+              userId={student.user_id}
+              userName={student.full_name ?? student.email}
+              role="student"
+            />
             <RecordPaymentButton studentId={student.id} currentLevel={student.current_level} />
             <IssueCertificateButton studentId={student.id} />
             {student.lead_id && (

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
@@ -13,7 +13,10 @@ export const metadata = { title: "Mis clases · Aprender-Aleman.de" };
  * lands in Phase 6 when/if someone has >500 classes.
  */
 export default async function StudentClassesPage() {
-  const session = await requireRole(["student", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["student", "admin", "superadmin"],
+    "student",
+  );
   const student = await getStudentByUserId(session.user.id);
 
   if (!student) {

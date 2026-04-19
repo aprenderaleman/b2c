@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { getTeacherAvailability } from "@/lib/availability";
 import { AvailabilityEditor } from "./AvailabilityEditor";
@@ -8,7 +8,10 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Disponibilidad · Profesor" };
 
 export default async function TeacherAvailabilityPage() {
-  const session = await requireRole(["teacher", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["teacher", "admin", "superadmin"],
+    "teacher",
+  );
   const teacher = await getTeacherByUserId(session.user.id);
 
   if (!teacher) {

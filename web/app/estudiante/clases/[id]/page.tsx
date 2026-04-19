@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs, getClassById } from "@/lib/classes";
 import { formatDurationHms, getRecordingsForClass } from "@/lib/recordings";
@@ -12,7 +12,10 @@ export default async function StudentClassDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireRole(["student", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["student", "admin", "superadmin"],
+    "student",
+  );
   const { id } = await params;
   const cls = await getClassById(id);
   if (!cls) notFound();

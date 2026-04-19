@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTeacherById } from "@/lib/academy";
+import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 
 export const dynamic = "force-dynamic";
 
@@ -22,28 +23,35 @@ export default async function TeacherDetailPage({
       </Link>
 
       <header className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
-            {teacher.full_name || "Profesor sin nombre"}
-          </h1>
-          <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 flex-wrap">
-            <span className="font-mono">{teacher.email}</span>
-            {teacher.phone && (
-              <>
-                <span>·</span>
-                <a
-                  href={`https://wa.me/${waDigits}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-mono text-brand-600 dark:text-brand-400 hover:underline"
-                >
-                  {teacher.phone}
-                </a>
-              </>
-            )}
-            <span>·</span>
-            <span>{teacher.language_preference.toUpperCase()}</span>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
+              {teacher.full_name || "Profesor sin nombre"}
+            </h1>
+            <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 flex-wrap">
+              <span className="font-mono">{teacher.email}</span>
+              {teacher.phone && (
+                <>
+                  <span>·</span>
+                  <a
+                    href={`https://wa.me/${waDigits}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-brand-600 dark:text-brand-400 hover:underline"
+                  >
+                    {teacher.phone}
+                  </a>
+                </>
+              )}
+              <span>·</span>
+              <span>{teacher.language_preference.toUpperCase()}</span>
+            </div>
           </div>
+          <ImpersonateButton
+            userId={teacher.user_id}
+            userName={teacher.full_name ?? teacher.email}
+            role="teacher"
+          />
         </div>
       </header>
 

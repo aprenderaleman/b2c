@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { listStudentCertificates } from "@/lib/certificates";
 
@@ -6,7 +6,10 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Certificados · Estudiante" };
 
 export default async function StudentCertificatesPage() {
-  const session = await requireRole(["student", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["student", "admin", "superadmin"],
+    "student",
+  );
   const student = await getStudentByUserId(session.user.id);
 
   if (!student) {
