@@ -25,8 +25,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from agents.agent_0_watcher import tick as agent_0_tick
 from agents.agent_5_guardian import send_trial_reminders_for_today, tick_absent_followups
+from agents.janitor import run as janitor_run
 from agents.notifications import notify_daily_summary, notify_trial_30min, scan_escalations_and_notify
 from agents.shared.db import get_conn
+from agents.shared.heartbeat import beat
 from agents.shared.rate_limits import BERLIN
 
 log = logging.getLogger("scheduler")
@@ -56,14 +58,36 @@ def _notify_trials_30min() -> None:
         notify_trial_30min(lead)
 
 
+def _agent_0_tick_with_beat() -> None:
+    """Wraps Agent 0's tick so every cycle leaves a heartbeat, even if the
+    tick skipped (outside send window). Lets the janitor detect a truly
+    frozen scheduler vs. a correctly idle one."""
+    try:
+        agent_0_tick()
+    finally:
+        try:
+            beat("scheduler", note="agent_0 tick")
+        except Exception as e:
+            log.warning("heartbeat write failed: %s", e)
+
+
 def main() -> int:
     sched = BlockingScheduler(timezone=BERLIN)
 
     # Agent 0 — lead watcher
     sched.add_job(
-        agent_0_tick,
+        _agent_0_tick_with_beat,
         CronTrigger(minute="*/15", hour="8-18", timezone=BERLIN),
         id="agent_0_tick",
+        max_instances=1, coalesce=True,
+    )
+
+    # Janitor — self-healing. Runs every 10 min, 24/7 (even outside the
+    # send window and on Sundays — it's the thing that catches freezes).
+    sched.add_job(
+        janitor_run,
+        IntervalTrigger(minutes=10, timezone=BERLIN),
+        id="janitor",
         max_instances=1, coalesce=True,
     )
 

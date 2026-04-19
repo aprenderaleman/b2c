@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationsBell } from "@/components/NotificationsBell";
+import { SystemHealthBanner } from "@/components/admin/SystemHealthBanner";
 
 export const metadata = { title: "Admin · Aprender-Aleman.de" };
 
@@ -38,6 +39,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </div>
         </header>
       )}
+      {session?.user && <SystemHealthBanner />}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
         {children}
       </div>
