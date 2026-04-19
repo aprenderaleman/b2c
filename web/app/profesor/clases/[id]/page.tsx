@@ -8,6 +8,7 @@ import { formatDurationHms, getRecordingsForClass } from "@/lib/recordings";
 import { getClassHomework } from "@/lib/homework";
 import { HomeworkSection } from "@/components/homework/HomeworkSection";
 import { AttendanceEditor } from "@/components/classes/AttendanceEditor";
+import { ClassActions } from "./ClassActions";
 
 export const dynamic = "force-dynamic";
 
@@ -59,21 +60,32 @@ export default async function TeacherClassDetail({
       )}
 
       <header className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">{cls.title}</h1>
-          <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 flex-wrap">
-            <span className="capitalize">{formatClassDateEs(start)}</span>
-            <span>·</span>
-            <span className="font-mono">
-              {formatClassTimeEs(start)}–{formatClassTimeEs(end)} (Berlín)
-            </span>
-            <span>·</span>
-            <span>{cls.duration_minutes} min</span>
-            <span>·</span>
-            <span>{cls.type === "individual" ? "Individual" : "Grupo"}</span>
-            <span>·</span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">{classStatusEs(cls.status)}</span>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">{cls.title}</h1>
+            <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 flex-wrap">
+              <span className="capitalize">{formatClassDateEs(start)}</span>
+              <span>·</span>
+              <span className="font-mono">
+                {formatClassTimeEs(start)}–{formatClassTimeEs(end)} (Berlín)
+              </span>
+              <span>·</span>
+              <span>{cls.duration_minutes} min</span>
+              <span>·</span>
+              <span>{cls.type === "individual" ? "Individual" : "Grupo"}</span>
+              <span>·</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">{classStatusEs(cls.status)}</span>
+            </div>
           </div>
+          {cls.status === "scheduled" && (
+            <ClassActions
+              classId={cls.id}
+              scheduledAt={cls.scheduled_at}
+              durationMinutes={cls.duration_minutes}
+              title={cls.title}
+              topic={cls.topic}
+            />
+          )}
         </div>
       </header>
 
