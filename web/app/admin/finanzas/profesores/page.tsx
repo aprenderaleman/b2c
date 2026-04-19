@@ -56,31 +56,44 @@ export default async function TeacherPayrollPage({
                 </td>
               </tr>
             )}
-            {rows.map(r => (
-              <tr key={r.id ?? r.teacher_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                <Td className="font-medium">{r.teacher_name ?? "—"}</Td>
-                <Td><code className="text-xs">{r.teacher_email}</code></Td>
-                <Td>{r.classes_count}</Td>
-                <Td>{(r.total_minutes / 60).toFixed(1)} h</Td>
-                <Td className="font-mono">{moneyFromCents(r.amount_cents, r.currency)}</Td>
-                <Td>
-                  {r.paid ? (
-                    <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 text-xs">
-                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      Pagado {r.paid_at ? new Date(r.paid_at).toLocaleDateString("es-ES") : ""}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-300 text-xs">
-                      <span className="h-2 w-2 rounded-full bg-amber-500" />
-                      Pendiente
-                    </span>
-                  )}
-                </Td>
-                <Td>
-                  {r.id && <PayToggle earningsId={r.id} paid={r.paid} />}
-                </Td>
-              </tr>
-            ))}
+            {rows.map(r => {
+              const monthStr = focus.toISOString().slice(0, 7);
+              return (
+                <tr key={r.id ?? r.teacher_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                  <Td className="font-medium">{r.teacher_name ?? "—"}</Td>
+                  <Td><code className="text-xs">{r.teacher_email}</code></Td>
+                  <Td>{r.classes_count}</Td>
+                  <Td>{(r.total_minutes / 60).toFixed(1)} h</Td>
+                  <Td className="font-mono">{moneyFromCents(r.amount_cents, r.currency)}</Td>
+                  <Td>
+                    {r.paid ? (
+                      <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 text-xs">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        Pagado {r.paid_at ? new Date(r.paid_at).toLocaleDateString("es-ES") : ""}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-300 text-xs">
+                        <span className="h-2 w-2 rounded-full bg-amber-500" />
+                        Pendiente
+                      </span>
+                    )}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-2">
+                      {r.id && <PayToggle earningsId={r.id} paid={r.paid} />}
+                      <a
+                        href={`/api/admin/finanzas/profesores/${r.teacher_id}/invoice/${monthStr}`}
+                        target="_blank"
+                        rel="noopener"
+                        className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 px-3 py-1"
+                      >
+                        PDF ↓
+                      </a>
+                    </div>
+                  </Td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </section>

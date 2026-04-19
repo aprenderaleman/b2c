@@ -42,6 +42,11 @@ export type TeacherMonthlyEarnings = {
  * Called from /api/aula/[id]/end after a class gets its actual_duration
  * confirmed. Inserts one class_hours_log row + upserts the monthly
  * teacher_earnings aggregate. Idempotent on class_id.
+ *
+ * Billing uses the per-class-type rate (migration 023):
+ *   - group       → teachers.rate_group_cents
+ *   - individual  → teachers.rate_individual_cents
+ * and the 45/90-minute duration rule so we don't pay 1h for a 12-min no-show.
  */
 export async function logClassHoursAndRollup(args: {
   classId:          string;
@@ -50,19 +55,40 @@ export async function logClassHoursAndRollup(args: {
 }): Promise<void> {
   const sb = supabaseAdmin();
 
-  // Snapshot the teacher's current rate so a later change doesn't rewrite
-  // the past. A teacher without a rate set is logged at 0 — admin can fix
-  // later by editing rate + re-running a rollup.
+  // Fetch class.type so we pick the right rate; also record it into classes.
+  const { data: cls } = await sb
+    .from("classes")
+    .select("type")
+    .eq("id", args.classId)
+    .maybeSingle();
+  const classType = (cls as { type: "group" | "individual" } | null)?.type ?? "group";
+
   const { data: t } = await sb
     .from("teachers")
-    .select("hourly_rate, currency")
+    .select("rate_group_cents, rate_individual_cents, currency")
     .eq("id", args.teacherId)
     .maybeSingle();
 
-  const rateRaw    = (t as { hourly_rate: string | null } | null)?.hourly_rate;
-  const currency   = ((t as { currency: string } | null)?.currency ?? "EUR");
-  const rate       = rateRaw !== null && rateRaw !== undefined ? Number(rateRaw) : 0;
-  const amountCents = Math.round((rate * args.durationMinutes / 60) * 100);
+  const rateCents = classType === "individual"
+    ? ((t as { rate_individual_cents: number } | null)?.rate_individual_cents ?? 0)
+    : ((t as { rate_group_cents:      number } | null)?.rate_group_cents      ?? 0);
+  const currency  = ((t as { currency: string } | null)?.currency ?? "EUR");
+  const rate      = rateCents / 100;  // EUR per hour, stored as NUMERIC in class_hours_log
+
+  // Duration rule: <45 → 0h (no pay), 45-90 → 1h, >90 → 2h.
+  const billedHours = args.durationMinutes < 45 ? 0
+                    : args.durationMinutes <= 90 ? 1 : 2;
+  const amountCents = billedHours * rateCents;
+
+  // Also stamp billed_hours on the class itself for the pack-consumption view.
+  await sb.from("classes").update({ billed_hours: billedHours }).eq("id", args.classId);
+
+  // Skip the hours log entirely if nothing to pay (short class); still
+  // update the month rollup so a prior mistake gets corrected.
+  if (billedHours === 0) {
+    await rollupTeacherMonth(args.teacherId, new Date());
+    return;
+  }
 
   // Insert the hours-log row. UNIQUE on class_id prevents double-logging
   // if the end-class endpoint is called twice.
@@ -70,7 +96,7 @@ export async function logClassHoursAndRollup(args: {
     {
       class_id:         args.classId,
       teacher_id:       args.teacherId,
-      duration_minutes: args.durationMinutes,
+      duration_minutes: billedHours * 60,     // billed, not wall-clock
       rate_at_time:     rate,
       amount_cents:     amountCents,
       currency,
