@@ -18,10 +18,12 @@ export default async function LoginPage({
   const session = await auth();
   const { error, next } = await searchParams;
 
-  // If already signed in, send them to the right home.
-  if (session?.user) {
-    const role = (session.user as { role?: Role }).role ?? "superadmin";
-    redirect(next && next !== "/" ? next : defaultPathForRole(role));
+  // If already signed in WITH a valid role, bounce to the right home.
+  // A session without `role` means the cookie is from an older build —
+  // ignore it and let the user sign in again (prevents redirect loops).
+  const sessionRole = (session?.user as { role?: Role } | undefined)?.role;
+  if (session?.user && sessionRole) {
+    redirect(next && next !== "/" ? next : defaultPathForRole(sessionRole));
   }
 
   async function doLogin(formData: FormData) {
