@@ -16,6 +16,7 @@ type HealthResponse = {
   status:   Status;
   critical: string | null;
   services: Service[];
+  infra?:   { livekit?: { configured: boolean; url: string | null } };
 };
 
 const POLL_MS = 30_000;   // 30 s — cheap: 2 tiny DB queries per poll
@@ -129,6 +130,20 @@ export function SystemHealthDot() {
               )}
             </ul>
           </div>
+
+          {data?.infra && (
+            <div className="px-4 py-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-2">
+              <Dot status={data.infra.livekit?.configured ? "green" : "yellow"} />
+              <span>
+                LiveKit {data.infra.livekit?.configured ? "configurado" : "sin credenciales"}
+              </span>
+              {data.infra.livekit?.url && (
+                <code className="ml-auto text-[9px] text-slate-400 truncate max-w-[10rem]" title={data.infra.livekit.url}>
+                  {data.infra.livekit.url.replace(/^wss?:\/\//, "")}
+                </code>
+              )}
+            </div>
+          )}
 
           <footer className="px-4 py-2 bg-slate-50 dark:bg-slate-800/60 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
             <span>Auto-refresca cada 30 s</span>

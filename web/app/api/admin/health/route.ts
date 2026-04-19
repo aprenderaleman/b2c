@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
+import { livekitConfigured, livekitUrl } from "@/lib/livekit";
 
 /**
  * GET /api/admin/health
@@ -67,11 +68,20 @@ export async function GET() {
     else if (s.state === "yellow" && rollup === "green") rollup = "yellow";
   }
 
+  // Lightweight infra status (LiveKit) — booleans, not a critical-dot input.
+  const infra = {
+    livekit: {
+      configured: livekitConfigured(),
+      url:        livekitConfigured() ? livekitUrl() : null,
+    },
+  };
+
   return NextResponse.json(
     {
       status:   rollup,
       critical: critical || null,
       services,
+      infra,
     },
     {
       // No client-side HTTP cache; we want the dot to reflect live state.
