@@ -5,6 +5,7 @@ import { getUserIcalToken, icalUrlFor } from "@/lib/user-extras";
 import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
 import { getAttendanceStreakForStudent } from "@/lib/attendance-streak";
 import { AttendanceStreakCard } from "@/components/classes/AttendanceStreakCard";
+import { OpenSchuleButton } from "@/components/entitlements/OpenSchuleButton";
 import { getStudentUpcomingClasses, type ClassWithPeople, classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { NextClassCard } from "@/components/classes/NextClassCard";
 import { getStudentProgress } from "@/lib/teacher-notes";
@@ -160,12 +161,7 @@ function EmptyNext() {
 function ExternalToolsRow() {
   return (
     <section className="grid gap-4 sm:grid-cols-2">
-      <ExternalCard
-        emoji="🎓"
-        title="SCHULE"
-        body="Ejercicios autoevaluables, audios, gramática y vocabulario."
-        href="https://schule.aprender-aleman.de"
-      />
+      <OpenSchuleButton />
       <ExternalCard
         emoji="🤖"
         title="HANS"
