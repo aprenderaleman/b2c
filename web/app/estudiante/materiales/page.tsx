@@ -1,6 +1,6 @@
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
-import { listSharedMaterials, levelsVisibleToStudent, type CefrLevel } from "@/lib/shared-materials";
+import { listSharedMaterials } from "@/lib/shared-materials";
 import { SharedMaterialsSection } from "@/components/materials/SharedMaterialsSection";
 import { listMaterialsVisibleToStudent } from "@/lib/materials";
 
@@ -32,9 +32,10 @@ export default async function StudentMaterialsPage() {
     );
   }
 
-  const visible = levelsVisibleToStudent(student.current_level as CefrLevel);
+  // Gelfis pidió que los estudiantes vean TODOS los niveles — sin filtrar
+  // por current_level. Les sirve para adelantar, repasar o elegir nivel.
   const [shared, fromTeachers] = await Promise.all([
-    listSharedMaterials(visible),
+    listSharedMaterials(),
     listMaterialsVisibleToStudent(student.id),
   ]);
 
@@ -43,10 +44,9 @@ export default async function StudentMaterialsPage() {
       <header>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Material de estudio</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 max-w-2xl">
-          Presentaciones oficiales para repasar entre clases. Tu nivel actual es{" "}
+          Presentaciones oficiales de todos los niveles (A1 → B2). Tu nivel actual es{" "}
           <strong className="text-slate-700 dark:text-slate-200">{student.current_level}</strong>,
-          así que puedes ver {visible.join(" · ")}. A medida que subas de nivel se te
-          desbloquearán los siguientes.
+          pero puedes explorar cualquier lección para adelantar, repasar o ver de qué va el próximo nivel.
         </p>
       </header>
 

@@ -26,6 +26,22 @@ export function Header() {
           </span>
         </Link>
         <div className="flex items-center gap-2">
+          <Link
+            href="/login"
+            className="inline-flex items-center gap-1.5 rounded-full
+                       border border-brand-200 dark:border-brand-500/40
+                       bg-brand-50 dark:bg-brand-500/10
+                       text-brand-700 dark:text-brand-300
+                       hover:bg-brand-100 dark:hover:bg-brand-500/20
+                       px-3.5 py-1.5 text-sm font-semibold transition-colors"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+              <path d="M10 17l5-5-5-5" />
+              <path d="M15 12H3" />
+            </svg>
+            Iniciar sesión
+          </Link>
           <ThemeToggle />
           <LanguageToggle />
         </div>

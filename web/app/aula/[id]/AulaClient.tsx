@@ -116,6 +116,7 @@ export function AulaClient(p: Props) {
         </div>
         <RoomAudioRenderer />
         {p.isHost && <HostTeardown classId={p.classId} backHref={p.backHref} />}
+        {p.isHost && <RecordingAutoStart classId={p.classId} />}
       </LiveKitRoom>
     </main>
   );
@@ -332,6 +333,65 @@ function TopBar({ classId, title, scheduledAt, durationMinutes, isHost, backHref
       </div>
     </header>
   );
+}
+
+/**
+ * Fires exactly once when the teacher's client mounts inside the room.
+ * Calls the start-recording endpoint; the backend is idempotent so a
+ * duplicate call (e.g. if the teacher refreshes) just returns the
+ * existing egress id. Failures are non-blocking — the class continues
+ * without recording and the teacher sees a small amber pill in the top
+ * bar explaining why (useful while Gelfis still hasn't set up S3).
+ */
+function RecordingAutoStart({ classId }: { classId: string }) {
+  const [state, setState] = useState<
+    | { kind: "idle" }
+    | { kind: "recording"; egressId: string }
+    | { kind: "skipped"; reason: string }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/aula/${classId}/recording/start`, { method: "POST" });
+        const data = await res.json();
+        if (cancelled) return;
+        if (res.ok)                                    setState({ kind: "recording", egressId: data.egress_id });
+        else if (data.error === "recording_storage_missing")
+                                                       setState({ kind: "skipped",   reason: "storage" });
+        else if (data.error === "livekit_not_configured")
+                                                       setState({ kind: "skipped",   reason: "livekit" });
+        else                                           setState({ kind: "error",     message: data.error ?? "error" });
+      } catch (e) {
+        if (!cancelled) setState({ kind: "error", message: e instanceof Error ? e.message : "network" });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [classId]);
+
+  if (state.kind === "recording") {
+    return (
+      <div className="pointer-events-none absolute top-16 left-4 z-20 inline-flex items-center gap-1.5 rounded-full bg-red-600/95 px-2.5 py-1 text-[11px] font-semibold text-white shadow-lg">
+        <span className="h-2 w-2 rounded-full bg-white animate-pulse" />
+        REC
+      </div>
+    );
+  }
+  if (state.kind === "skipped") {
+    return (
+      <div
+        className="pointer-events-none absolute top-16 left-4 z-20 inline-flex items-center gap-1.5 rounded-full bg-amber-500/90 px-2.5 py-1 text-[11px] font-semibold text-amber-950 shadow-lg"
+        title={state.reason === "storage"
+          ? "Grabación desactivada: el admin aún no ha configurado el almacenamiento S3."
+          : "Grabación desactivada: LiveKit no configurado."}
+      >
+        ⚠ Grabación no disponible
+      </div>
+    );
+  }
+  return null;
 }
 
 /**
