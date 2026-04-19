@@ -5,7 +5,9 @@ import { listStudentPayments, moneyFromCents as moneyFromCentsFinance } from "@/
 import { RecordPaymentButton } from "@/components/admin/RecordPaymentButton";
 import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
+import { AdjustClassesButton } from "@/components/admin/AdjustClassesButton";
 import { listStudentCertificates } from "@/lib/certificates";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +23,17 @@ export default async function StudentDetailPage({
   const payments = await listStudentPayments(id);
   const certs    = await listStudentCertificates(id);
   const waDigits = student.phone?.replace(/\D/g, "") ?? "";
+
+  // Pull the pack numbers from the view so we can show + adjust them.
+  const { data: pack } = await supabaseAdmin()
+    .from("v_student_packs")
+    .select("classes_purchased, classes_adjustment, classes_consumed, classes_remaining")
+    .eq("student_id", id)
+    .maybeSingle();
+  const packRow = pack as {
+    classes_purchased: number; classes_adjustment: number;
+    classes_consumed:  number; classes_remaining: number;
+  } | null;
 
   return (
     <main className="space-y-5">
@@ -61,6 +74,16 @@ export default async function StudentDetailPage({
               userName={student.full_name ?? student.email}
               role="student"
             />
+            {packRow && (
+              <AdjustClassesButton
+                studentId={student.id}
+                studentName={student.full_name ?? student.email}
+                currentRemaining={packRow.classes_remaining}
+                purchased={packRow.classes_purchased}
+                consumed={packRow.classes_consumed}
+                currentAdjustment={packRow.classes_adjustment}
+              />
+            )}
             <RecordPaymentButton studentId={student.id} currentLevel={student.current_level} />
             <IssueCertificateButton studentId={student.id} />
             {student.lead_id && (
@@ -74,6 +97,28 @@ export default async function StudentDetailPage({
           </div>
         </div>
       </header>
+
+      {packRow && (
+        <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+              Pack de clases
+            </h2>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              Restantes: <strong className="text-slate-900 dark:text-slate-50 text-base">{packRow.classes_remaining}</strong>
+              {" "}· comprado: {packRow.classes_purchased}
+              {" "}· dadas: {packRow.classes_consumed}
+              {packRow.classes_adjustment !== 0 && (
+                <> · ajuste manual: <strong className={
+                  packRow.classes_adjustment > 0
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : "text-red-600 dark:text-red-400"
+                }>{packRow.classes_adjustment > 0 ? `+${packRow.classes_adjustment}` : packRow.classes_adjustment}</strong></>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-1 space-y-5">
