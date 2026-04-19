@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { getTeacherUpcomingClasses, type ClassWithPeople, classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { NextClassCard } from "@/components/classes/NextClassCard";
@@ -7,7 +7,10 @@ import { NextClassCard } from "@/components/classes/NextClassCard";
 export const dynamic = "force-dynamic";
 
 export default async function TeacherHome() {
-  const session = await requireRole(["teacher", "admin", "superadmin"]);
+  const session = await requireRoleWithImpersonation(
+    ["teacher", "admin", "superadmin"],
+    "teacher",
+  );
   const firstName = (session.user.name ?? session.user.email).split(/\s+/)[0];
 
   const teacher = await getTeacherByUserId(session.user.id);

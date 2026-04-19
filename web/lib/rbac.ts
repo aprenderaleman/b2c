@@ -13,6 +13,7 @@
 
 import { redirect } from "next/navigation";
 import { auth } from "./auth";
+import { getImpersonation } from "./impersonation";
 
 export type Role = "superadmin" | "admin" | "teacher" | "student";
 
@@ -74,4 +75,44 @@ export async function requireRole(roles: Role[]): Promise<AuthedSession> {
  */
 function currentPath(): string {
   return "/";
+}
+
+/**
+ * Like requireRole, but if the caller is admin AND there is an active
+ * impersonation cookie pointing at a user with the expected role, the
+ * returned session.user.id / role / email / name belong to the target.
+ * A third field, `impersonation`, is populated so pages can show "you are
+ * viewing as X" hints (the sticky banner already lives at the layout
+ * level; this is just data).
+ *
+ * Use this in /estudiante/* and /profesor/* pages so "Ver como" actually
+ * loads the target's data.
+ */
+export async function requireRoleWithImpersonation(
+  allowed:    Role[],
+  expectRole: "teacher" | "student",
+): Promise<AuthedSession & {
+  impersonation: null | { admin_id: string; admin_name: string; original_user_id: string };
+}> {
+  const session = await requireRole(allowed);
+  const imp     = await getImpersonation();
+
+  const canImpersonate = session.user.role === "admin" || session.user.role === "superadmin";
+  if (!imp || !canImpersonate || imp.target_role !== expectRole) {
+    return { ...session, impersonation: null };
+  }
+
+  return {
+    user: {
+      id:    imp.target_id,
+      email: imp.target_email,
+      name:  imp.target_name,
+      role:  imp.target_role,
+    },
+    impersonation: {
+      admin_id:         imp.admin_id,
+      admin_name:       imp.admin_name,
+      original_user_id: session.user.id,
+    },
+  };
 }

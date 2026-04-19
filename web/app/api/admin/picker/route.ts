@@ -1,20 +1,49 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 
 /**
  * GET /api/admin/picker
  *
- * Returns the minimal teacher + student lists needed to populate the
- * "Create class" modal's dropdowns. We keep it as a single endpoint so
- * the modal only makes one round-trip.
+ * Two modes:
+ *   - (default)   returns teachers + students arrays used by the "Create
+ *                 class" modal's dropdowns.
+ *   - ?q=<str>    additionally returns a flat `users` array ({ id,
+ *                 full_name, email, role }) filtered by name/email —
+ *                 used by the impersonation picker. `id` is users.id
+ *                 (NOT teachers.id / students.id), required by
+ *                 /api/admin/impersonate/start.
  */
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const role = (session.user as { role?: string }).role;
+  if (role !== "admin" && role !== "superadmin") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
+  const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
   const sb = supabaseAdmin();
+
+  // For the search variant, query users table directly.
+  if (q.length >= 2) {
+    const { data } = await sb
+      .from("users")
+      .select("id, full_name, email, role, active")
+      .eq("active", true)
+      .in("role", ["teacher", "student"])
+      .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
+      .order("full_name", { ascending: true })
+      .limit(20);
+    const users = (data ?? []).map(u => ({
+      id:        (u as { id: string }).id,
+      full_name: (u as { full_name: string | null }).full_name,
+      email:     (u as { email: string }).email,
+      role:      (u as { role: "teacher" | "student" }).role,
+    }));
+    return NextResponse.json({ users });
+  }
 
   const [teachersRes, studentsRes] = await Promise.all([
     sb.from("teachers")

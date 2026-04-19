@@ -1,50 +1,51 @@
-import Link from "next/link";
 import { auth, signOut } from "@/lib/auth";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import { NotificationsBell } from "@/components/NotificationsBell";
+import { AppShell } from "@/components/nav/AppShell";
+import { ImpersonationBanner } from "@/components/nav/ImpersonationBanner";
 import { SystemHealthBanner } from "@/components/admin/SystemHealthBanner";
-import { SystemHealthDot } from "@/components/admin/SystemHealthDot";
+import { NAV_BY_ROLE } from "@/lib/nav-items";
+import { getImpersonation } from "@/lib/impersonation";
 
 export const metadata = { title: "Admin · Aprender-Aleman.de" };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
+  const role    = (session?.user as { role?: "superadmin" | "admin" | "teacher" | "student" } | undefined)?.role;
+  const display = (session?.user?.name ?? session?.user?.email ?? "Admin") as string;
+  const imp     = await getImpersonation();
+
+  // If a non-admin somehow lands here, send them to the login redirector;
+  // middleware should already prevent this but belt-and-suspenders.
+  if (!session?.user || (role !== "admin" && role !== "superadmin")) {
+    return <>{children}</>;
+  }
+
+  const items = NAV_BY_ROLE[role];
+
+  const logoutForm = (
+    <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
+      <button type="submit">Cerrar sesión</button>
+    </form>
+  );
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      {session?.user && (
-        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 h-14 flex items-center justify-between">
-            <nav className="flex items-center gap-6 text-sm font-medium">
-              <Link href="/admin" className="text-brand-600 dark:text-brand-400 font-bold">
-                Aprender-Aleman<span className="text-slate-600 dark:text-slate-400">.de</span> Admin
-              </Link>
-              <Link href="/admin" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Hoy</Link>
-              <Link href="/admin/leads" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Leads</Link>
-              <Link href="/admin/estudiantes" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Estudiantes</Link>
-              <Link href="/admin/profesores" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Profesores</Link>
-              <Link href="/admin/clases" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Clases</Link>
-              <Link href="/admin/finanzas" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Finanzas</Link>
-              <Link href="/admin/reportes" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Reportes</Link>
-              <Link href="/chat" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Chat</Link>
-            </nav>
-            <div className="flex items-center gap-3">
-              <SystemHealthDot />
-              <NotificationsBell />
-              <ThemeToggle />
-              <form action={async () => { "use server"; await signOut({ redirectTo: "/admin/login" }); }}>
-                <button type="submit" className="text-sm text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400">
-                  Cerrar sesión
-                </button>
-              </form>
-            </div>
-          </div>
-        </header>
+    <>
+      {imp && (
+        <ImpersonationBanner
+          adminName={imp.admin_name}
+          targetName={imp.target_name}
+          targetRole={imp.target_role}
+        />
       )}
-      {session?.user && <SystemHealthBanner />}
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
+      <AppShell
+        items={items}
+        role={role}
+        userDisplayName={display}
+        impersonated={Boolean(imp)}
+        logoutForm={logoutForm}
+      >
+        <SystemHealthBanner />
         {children}
-      </div>
-    </div>
+      </AppShell>
+    </>
   );
 }
