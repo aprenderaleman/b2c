@@ -17,9 +17,20 @@ type StudentOption = {
   subscription_status: string;
 };
 
-type Props = { open: boolean; onClose: () => void };
+type Props = {
+  open:    boolean;
+  onClose: () => void;
+  /**
+   * "admin" (default): uses /api/admin/picker + /api/admin/classes, lets
+   * the admin pick any teacher + any student. "teacher": uses
+   * /api/teacher/picker (own students only) + /api/teacher/classes; the
+   * teacher picker is hidden and teacherId is ignored server-side
+   * (forced to the caller's own teacher_id).
+   */
+  mode?: "admin" | "teacher";
+};
 
-export function CreateClassModal({ open, onClose }: Props) {
+export function CreateClassModal({ open, onClose, mode = "admin" }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -40,33 +51,38 @@ export function CreateClassModal({ open, onClose }: Props) {
   const [title,             setTitle]             = useState("");
   const [topic,             setTopic]             = useState("");
 
-  // Load picker options when opened.
+  // Load picker options when opened. In teacher mode we only load our
+  // own students; teacherId is forced server-side so the picker is hidden.
   useEffect(() => {
     if (!open) return;
     setLoadingOpts(true);
-    fetch("/api/admin/picker")
+    const url = mode === "teacher" ? "/api/teacher/picker" : "/api/admin/picker";
+    fetch(url)
       .then(r => r.json())
       .then(data => {
-        setTeachers(data.teachers ?? []);
+        setTeachers(mode === "teacher" ? [] : (data.teachers ?? []));
         setStudents(data.students ?? []);
       })
       .catch(e => setError(String(e)))
       .finally(() => setLoadingOpts(false));
-  }, [open]);
+  }, [open, mode]);
 
-  // Auto-default title as the admin fills the form.
+  // Auto-default title as the form fills.
   useEffect(() => {
-    if (title) return;           // user customised it already
-    if (!teacherId || selectedStudents.length === 0) return;
-    const t  = teachers.find(x => x.id === teacherId);
+    if (title) return;                                // user customised it
+    if (selectedStudents.length === 0) return;
+    if (mode === "admin" && !teacherId) return;       // admin needs a teacher first
+    const t = mode === "admin" ? teachers.find(x => x.id === teacherId) : null;
     if (type === "individual") {
       const s = students.find(x => x.id === selectedStudents[0]);
-      if (t && s) setTitle(`${s.full_name ?? s.email} — Clase individual`);
-    } else {
-      if (t) setTitle(`Grupo con ${t.full_name ?? t.email}`);
+      if (s) setTitle(`${s.full_name ?? s.email} — Clase individual`);
+    } else if (mode === "admin" && t) {
+      setTitle(`Grupo con ${t.full_name ?? t.email}`);
+    } else if (mode === "teacher") {
+      setTitle(`Grupo (${selectedStudents.length} alumnos)`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teacherId, selectedStudents, type]);
+  }, [teacherId, selectedStudents, type, mode]);
 
   if (!open) return null;
 
@@ -80,7 +96,7 @@ export function CreateClassModal({ open, onClose }: Props) {
 
   const submit = () => {
     setError(null);
-    if (!teacherId) { setError("Elige un profesor."); return; }
+    if (mode === "admin" && !teacherId) { setError("Elige un profesor."); return; }
     if (selectedStudents.length === 0) { setError("Añade al menos un estudiante."); return; }
     if (type === "individual" && selectedStudents.length !== 1) {
       setError("Una clase individual es con un solo estudiante."); return;
@@ -94,22 +110,27 @@ export function CreateClassModal({ open, onClose }: Props) {
     // timezone, which for Gelfis is Europe/Berlin already. Good enough.
     const scheduledAt = new Date(`${dateStr}T${timeStr}:00`).toISOString();
 
+    const endpoint = mode === "teacher" ? "/api/teacher/classes" : "/api/admin/classes";
+    const payload: Record<string, unknown> = {
+      type,
+      studentIds:        selectedStudents,
+      scheduledAt,
+      durationMinutes,
+      recurrencePattern,
+      recurrenceEndDate: recurrencePattern === "none" ? null : recurrenceEndDate || null,
+      title:             title.trim(),
+      topic:             topic.trim() || null,
+    };
+    if (mode === "admin") {
+      payload.teacherId  = teacherId;
+      payload.notesAdmin = null;
+    }
+
     startTransition(async () => {
-      const res = await fetch("/api/admin/classes", {
+      const res = await fetch(endpoint, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          type,
-          teacherId,
-          studentIds:        selectedStudents,
-          scheduledAt,
-          durationMinutes,
-          recurrencePattern,
-          recurrenceEndDate: recurrencePattern === "none" ? null : recurrenceEndDate || null,
-          title:             title.trim(),
-          topic:             topic.trim() || null,
-          notesAdmin:        null,
-        }),
+        body:    JSON.stringify(payload),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -155,17 +176,19 @@ export function CreateClassModal({ open, onClose }: Props) {
             </div>
           </Field>
 
-          {/* Teacher */}
-          <Field label="Profesor">
-            <select value={teacherId} onChange={(e) => setTeacherId(e.target.value)} className="input-text">
-              <option value="">Selecciona un profesor</option>
-              {teachers.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.full_name ?? "—"} ({t.email})
-                </option>
-              ))}
-            </select>
-          </Field>
+          {/* Teacher — only shown in admin mode. Teachers schedule only for themselves. */}
+          {mode === "admin" && (
+            <Field label="Profesor">
+              <select value={teacherId} onChange={(e) => setTeacherId(e.target.value)} className="input-text">
+                <option value="">Selecciona un profesor</option>
+                {teachers.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.full_name ?? "—"} ({t.email})
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
 
           {/* Students */}
           <Field label={type === "individual" ? "Estudiante" : "Estudiantes (múltiple)"}>

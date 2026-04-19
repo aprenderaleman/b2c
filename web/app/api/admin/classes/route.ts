@@ -30,6 +30,10 @@ const Body = z.object({
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const role = (session.user as { role?: string }).role;
+  if (role !== "admin" && role !== "superadmin") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   let rawBody: unknown;
   try { rawBody = await req.json(); }

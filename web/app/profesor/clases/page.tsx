@@ -3,6 +3,7 @@ import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
+import { NewClassButton } from "./NewClassButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mis clases · Profesor" };
@@ -91,12 +92,15 @@ export default async function TeacherClassesPage() {
 
   return (
     <main className="space-y-5">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Mis clases</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {upcoming.length} próxima{upcoming.length === 1 ? "" : "s"} · {past.length} en el histórico ·{" "}
-          {completedHours} h facturadas
-        </p>
+      <header className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Mis clases</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {upcoming.length} próxima{upcoming.length === 1 ? "" : "s"} · {past.length} en el histórico ·{" "}
+            {completedHours} h facturadas
+          </p>
+        </div>
+        <NewClassButton />
       </header>
 
       <Block title="Próximas" rows={upcoming} empty="No tienes clases agendadas." />
