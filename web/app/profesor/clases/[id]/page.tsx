@@ -9,6 +9,8 @@ import { getClassHomework } from "@/lib/homework";
 import { HomeworkSection } from "@/components/homework/HomeworkSection";
 import { AttendanceEditor } from "@/components/classes/AttendanceEditor";
 import { ClassActions } from "./ClassActions";
+import { GroupDocButton } from "@/components/classes/GroupDocButton";
+import { getGroupForClass } from "@/lib/student-groups";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +38,7 @@ export default async function TeacherClassDetail({
   const end   = new Date(start.getTime() + cls.duration_minutes * 60 * 1000);
   const recordings = await getRecordingsForClass(cls.id);
   const homework   = await getClassHomework(cls.id);
+  const group     = await getGroupForClass(cls.id);
 
   // Suggest a duration for the end-class modal: real elapsed time from
   // started_at to now, clamped to the originally scheduled duration × 1.5
@@ -77,15 +80,18 @@ export default async function TeacherClassDetail({
               <span className="text-xs text-slate-500 dark:text-slate-400">{classStatusEs(cls.status)}</span>
             </div>
           </div>
-          {cls.status === "scheduled" && (
-            <ClassActions
-              classId={cls.id}
-              scheduledAt={cls.scheduled_at}
-              durationMinutes={cls.duration_minutes}
-              title={cls.title}
-              topic={cls.topic}
-            />
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            <GroupDocButton documentUrl={group?.document_url ?? null} />
+            {cls.status === "scheduled" && (
+              <ClassActions
+                classId={cls.id}
+                scheduledAt={cls.scheduled_at}
+                durationMinutes={cls.duration_minutes}
+                title={cls.title}
+                topic={cls.topic}
+              />
+            )}
+          </div>
         </div>
       </header>
 

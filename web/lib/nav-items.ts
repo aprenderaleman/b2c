@@ -60,10 +60,11 @@ function adminItems(): NavItem[] {
     { label: "Clases",      href: "/admin/clases",      icon: "calendarDays",  priority: 2 },
     { label: "Estudiantes", href: "/admin/estudiantes", icon: "graduationCap", priority: 3 },
     { label: "Finanzas",    href: "/admin/finanzas",    icon: "wallet",        priority: 4 },
-    { label: "Leads",       href: "/admin/leads",       icon: "users",         priority: 5 },
-    { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 6 },
-    { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 7 },
-    { label: "Chat",        href: "/chat",               icon: "messageCircle", priority: 8 },
+    { label: "Grupos",      href: "/admin/grupos",      icon: "folder",        priority: 5 },
+    { label: "Leads",       href: "/admin/leads",       icon: "users",         priority: 6 },
+    { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 7 },
+    { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
+    { label: "Chat",        href: "/chat",               icon: "messageCircle", priority: 9 },
   ];
 }
 
