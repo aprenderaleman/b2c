@@ -3,6 +3,7 @@ import { auth, signOut } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { SystemHealthBanner } from "@/components/admin/SystemHealthBanner";
+import { SystemHealthDot } from "@/components/admin/SystemHealthDot";
 
 export const metadata = { title: "Admin · Aprender-Aleman.de" };
 
@@ -28,6 +29,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link href="/chat" className="text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400">Chat</Link>
             </nav>
             <div className="flex items-center gap-3">
+              <SystemHealthDot />
               <NotificationsBell />
               <ThemeToggle />
               <form action={async () => { "use server"; await signOut({ redirectTo: "/admin/login" }); }}>
