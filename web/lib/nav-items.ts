@@ -47,9 +47,10 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
   student: [
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
     { label: "Mis clases",   href: "/estudiante/clases",        icon: "calendarDays",   priority: 2 },
-    { label: "Tareas",       href: "/estudiante/tareas",        icon: "fileText",       priority: 3 },
-    { label: "Chat",         href: "/chat",                      icon: "messageCircle",  priority: 4 },
-    { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 5 },
+    { label: "Material",     href: "/estudiante/materiales",    icon: "bookOpen",       priority: 3 },
+    { label: "Tareas",       href: "/estudiante/tareas",        icon: "fileText",       priority: 4 },
+    { label: "Chat",         href: "/chat",                      icon: "messageCircle",  priority: 5 },
+    { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
   ],
 };
 

@@ -1,6 +1,8 @@
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { listTeacherMaterials } from "@/lib/materials";
+import { listSharedMaterials } from "@/lib/shared-materials";
+import { SharedMaterialsSection } from "@/components/materials/SharedMaterialsSection";
 import { MaterialsClient } from "./MaterialsClient";
 
 export const dynamic = "force-dynamic";
@@ -28,27 +30,40 @@ export default async function TeacherMaterialsPage({
   }
 
   const sp = await searchParams;
-  const materials = await listTeacherMaterials(me.id, sp.q, sp.tag);
+  const [materials, sharedMaterials] = await Promise.all([
+    listTeacherMaterials(me.id, sp.q, sp.tag),
+    listSharedMaterials(),
+  ]);
   // Aggregate tags for the sidebar.
   const tagCounts: Record<string, number> = {};
   for (const m of materials) for (const t of m.tags) tagCounts[t] = (tagCounts[t] ?? 0) + 1;
 
   return (
-    <main className="space-y-5">
+    <main className="space-y-6">
       <header>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Mis materiales</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Materiales</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Biblioteca personal de PDFs, audios, imágenes. Tagéalos por nivel / destreza / tema para
-          reutilizarlos fácilmente en distintas clases.
+          Presentaciones Gamma oficiales de la academia (todos los niveles) + tu biblioteca personal.
         </p>
       </header>
 
-      <MaterialsClient
-        initialMaterials={materials}
-        tagCounts={tagCounts}
-        currentQ={sp.q ?? ""}
-        currentTag={sp.tag ?? ""}
-      />
+      <SharedMaterialsSection materials={sharedMaterials} />
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">Tu biblioteca personal</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            PDFs, audios, imágenes que subes tú. Tagéalos por nivel / destreza / tema para
+            reutilizarlos fácilmente en distintas clases.
+          </p>
+        </div>
+        <MaterialsClient
+          initialMaterials={materials}
+          tagCounts={tagCounts}
+          currentQ={sp.q ?? ""}
+          currentTag={sp.tag ?? ""}
+        />
+      </section>
     </main>
   );
 }
