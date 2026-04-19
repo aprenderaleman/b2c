@@ -1,7 +1,20 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { AuthError } from "next-auth";
 import { signIn, auth } from "@/lib/auth";
 import { defaultPathForRole, type Role } from "@/lib/rbac";
+
+/**
+ * Next.js uses a thrown "NEXT_REDIRECT" sentinel to perform its
+ * redirect() helper. Any catch block that re-throws user-supplied
+ * errors must let this special error bubble up unchanged, otherwise
+ * the redirect turns into a 500.
+ */
+function isRedirectError(e: unknown): boolean {
+  return Boolean(e && typeof e === "object" && "digest" in e &&
+    typeof (e as { digest?: unknown }).digest === "string" &&
+    (e as { digest: string }).digest.startsWith("NEXT_REDIRECT"));
+}
 
 export const metadata = { title: "Iniciar sesión · Aprender-Aleman.de" };
 
@@ -28,14 +41,29 @@ export default async function LoginPage({
 
   async function doLogin(formData: FormData) {
     "use server";
-    // NextAuth will figure out the post-login redirect target from the
-    // session.role via the middleware's authorized() callback. We just
-    // punt them back to the page they came from (or the role default).
-    await signIn("credentials", {
-      email:      String(formData.get("email") ?? ""),
-      password:   String(formData.get("password") ?? ""),
-      redirectTo: "/login/redirect",
-    });
+    try {
+      await signIn("credentials", {
+        email:      String(formData.get("email") ?? ""),
+        password:   String(formData.get("password") ?? ""),
+        redirectTo: "/login/redirect",
+      });
+    } catch (e) {
+      // Next's redirect() helper works by throwing — re-throw so Next
+      // can actually perform the navigation. Without this the redirect
+      // surfaces as an "Application error" page.
+      if (isRedirectError(e)) throw e;
+
+      // NextAuth surfaces bad credentials / config issues as AuthError.
+      // Map them back to /login?error=... so the UI shows "credenciales
+      // incorrectas" instead of a 500.
+      if (e instanceof AuthError) {
+        redirect(`/login?error=${encodeURIComponent(e.type)}`);
+      }
+      // Anything else — log and re-throw so the error boundary can
+      // display something useful instead of swallowing it silently.
+      console.error("login server action failed:", e);
+      throw e;
+    }
   }
 
   return (
