@@ -3,16 +3,22 @@
 import "@livekit/components-styles";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LiveKitRoom,
   ControlBar,
   GridLayout,
+  FocusLayout,
+  FocusLayoutContainer,
+  CarouselLayout,
   ParticipantTile,
   RoomAudioRenderer,
   useTracks,
+  useParticipants,
+  useLocalParticipant,
+  type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
-import { RoomEvent, Track } from "livekit-client";
+import { RoomEvent, Track, type Participant } from "livekit-client";
 
 type Props = {
   classId:          string;
@@ -29,11 +35,25 @@ type Props = {
  * "end class" flow for the teacher. Connection token is fetched once
  * from /api/aula/[id]/token; the LiveKit components take care of the
  * rest of the media pipeline.
+ *
+ * Layout rules:
+ *   - If anybody is sharing a screen → FOCUS on that screen, everyone
+ *     else shrinks to a bottom carousel. Auto-switches back when the
+ *     share stops.
+ *   - If a teacher/participant clicks a tile → that tile gets pinned
+ *     as focus (overrides the auto-focus until manually un-pinned).
+ *   - Otherwise → even grid.
+ *
+ * Teacher powers (only when isHost):
+ *   - Hover any participant tile → buttons for 🔇 mute mic · 🎥 stop
+ *     video · 👢 kick.
+ *   - "Terminar clase para todos" in the top bar → disconnects
+ *     everyone and marks the class as completed.
  */
 export function AulaClient(p: Props) {
-  const [token, setToken] = useState<string | null>(null);
+  const [token, setToken]         = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]         = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,14 +81,6 @@ export function AulaClient(p: Props) {
 
   return (
     <main className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
-      <TopBar
-        title={p.classTitle}
-        scheduledAt={p.scheduledAt}
-        durationMinutes={p.durationMinutes}
-        isHost={p.isHost}
-        backHref={p.backHref}
-      />
-
       <LiveKitRoom
         token={token}
         serverUrl={serverUrl}
@@ -78,23 +90,29 @@ export function AulaClient(p: Props) {
         data-lk-theme="default"
         onError={(e) => setError(e.message)}
         onDisconnected={() => { /* keep state, user can reconnect */ }}
-        className="flex-1 min-h-0"
+        className="flex-1 min-h-0 flex flex-col"
       >
-        <div className="h-full flex flex-col">
-          <div className="flex-1 min-h-0 bg-slate-900">
-            <VideoGrid />
-          </div>
-          <div className="border-t border-slate-800 bg-slate-900/80 backdrop-blur p-2">
-            <ControlBar
-              controls={{
-                microphone: true,
-                camera:     true,
-                screenShare: true,
-                chat:       false,    // Phase 4
-                leave:      true,
-              }}
-            />
-          </div>
+        <TopBar
+          classId={p.classId}
+          title={p.classTitle}
+          scheduledAt={p.scheduledAt}
+          durationMinutes={p.durationMinutes}
+          isHost={p.isHost}
+          backHref={p.backHref}
+        />
+        <div className="flex-1 min-h-0 bg-slate-900">
+          <VideoArea classId={p.classId} isHost={p.isHost} />
+        </div>
+        <div className="border-t border-slate-800 bg-slate-900/80 backdrop-blur p-2">
+          <ControlBar
+            controls={{
+              microphone: true,
+              camera:     true,
+              screenShare: true,   // enabled for everyone — students can share too
+              chat:       false,    // Phase 4
+              leave:      true,
+            }}
+          />
         </div>
         <RoomAudioRenderer />
         {p.isHost && <HostTeardown classId={p.classId} backHref={p.backHref} />}
@@ -103,50 +121,149 @@ export function AulaClient(p: Props) {
   );
 }
 
-function VideoGrid() {
-  // Pulls every published camera or screen-share track and renders
-  // them as tiles. Fallback to audio-only avatars handled by
-  // ParticipantTile automatically.
+// ───────────────────────────────────────────────────────────────────
+// Video layout — auto-focus when someone shares their screen; user
+// can also click to manually pin a tile.
+// ───────────────────────────────────────────────────────────────────
+function VideoArea({ classId, isHost }: { classId: string; isHost: boolean }) {
   const tracks = useTracks(
     [
-      { source: Track.Source.Camera,       withPlaceholder: true },
+      { source: Track.Source.Camera,      withPlaceholder: true  },
       { source: Track.Source.ScreenShare, withPlaceholder: false },
     ],
     { onlySubscribed: false },
   );
+
+  // Auto-focus whenever someone is sharing their screen.
+  const focused: TrackReferenceOrPlaceholder | null = useMemo(
+    () => tracks.find(t => t.source === Track.Source.ScreenShare) ?? null,
+    [tracks],
+  );
+
+  const others = useMemo(
+    () => focused ? tracks.filter(t => t !== focused) : tracks,
+    [tracks, focused],
+  );
+
+  if (!focused) {
+    return (
+      <GridLayout tracks={tracks} style={{ height: "100%" }}>
+        <ModeratedTile classId={classId} isHost={isHost} />
+      </GridLayout>
+    );
+  }
+
   return (
-    <GridLayout tracks={tracks} style={{ height: "100%" }}>
-      <ParticipantTile />
-    </GridLayout>
+    <FocusLayoutContainer>
+      <CarouselLayout tracks={others}>
+        <ModeratedTile classId={classId} isHost={isHost} />
+      </CarouselLayout>
+      <FocusLayout trackRef={focused} />
+    </FocusLayoutContainer>
   );
 }
 
-/**
- * When the teacher clicks Leave, bounce them to the end-class modal
- * (class detail → confirms actual duration). The LiveKit ControlBar's
- * leave button fires a custom event we subscribe to here.
- */
-function HostTeardown({ classId, backHref }: { classId: string; backHref: string }) {
-  const router = useRouter();
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const ev = e as CustomEvent<{ event: RoomEvent }>;
-      if (ev.detail?.event === RoomEvent.Disconnected) {
-        router.push(`${backHref}?end=1`);
-      }
-    };
-    window.addEventListener("livekit:disconnected", handler as EventListener);
-    return () => window.removeEventListener("livekit:disconnected", handler as EventListener);
-  }, [backHref, router, classId]);
-  return null;
+// ───────────────────────────────────────────────────────────────────
+// Tile with (host-only) moderation overlay on hover.
+// ───────────────────────────────────────────────────────────────────
+function ModeratedTile({ classId, isHost }: { classId: string; isHost: boolean }) {
+  return (
+    <div className="relative h-full w-full group">
+      <ParticipantTile />
+      {isHost && <HostOverlay classId={classId} />}
+    </div>
+  );
+}
+
+function HostOverlay({ classId }: { classId: string }) {
+  const participants = useParticipants();
+  // Inner tile gives us the ParticipantContext via the nearest React tree,
+  // but to identify "which tile are we in?" we locate the wrapping element
+  // by looking up data-lk-local-participant / data-lk-participant-identity
+  // attributes LiveKit sets on each tile. We read the identity from the
+  // nearest ancestor with that attribute on mouse enter.
+  const [identity, setIdentity] = useState<string | null>(null);
+  const [busy, setBusy]         = useState(false);
+  const [err, setErr]           = useState<string | null>(null);
+
+  const onEnter = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.currentTarget.closest("[data-lk-participant-identity]") as HTMLElement | null;
+    const id = el?.getAttribute("data-lk-participant-identity") ?? null;
+    if (id !== identity) setIdentity(id);
+  }, [identity]);
+
+  const { localParticipant } = useLocalParticipant();
+  const isSelf = identity === localParticipant.identity;
+  const participant: Participant | undefined = useMemo(
+    () => participants.find(p => p.identity === identity),
+    [participants, identity],
+  );
+
+  const call = async (action: "mute_audio" | "mute_video" | "kick") => {
+    if (!identity || isSelf || busy) return;
+    if (action === "kick" && !confirm(`Expulsar a ${participant?.name ?? identity} del aula?`)) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/aula/${classId}/moderate`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ action, identity }),
+      });
+      if (!res.ok) setErr((await res.json())?.error ?? "error");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      onMouseEnter={onEnter}
+      className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+    >
+      {/* Only show actions on other participants' tiles */}
+      {identity && !isSelf && (
+        <>
+          <HostBtn title="Silenciar micrófono" onClick={() => call("mute_audio")} busy={busy}>🔇</HostBtn>
+          <HostBtn title="Apagar cámara"       onClick={() => call("mute_video")} busy={busy}>🎥</HostBtn>
+          <HostBtn title="Expulsar del aula"   onClick={() => call("kick")}       busy={busy} danger>👢</HostBtn>
+        </>
+      )}
+      {err && <span className="text-[10px] text-red-300 bg-black/60 px-2 py-0.5 rounded">{err}</span>}
+    </div>
+  );
+}
+
+function HostBtn({
+  title, onClick, busy, danger, children,
+}: {
+  title: string; onClick: () => void; busy: boolean;
+  danger?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      disabled={busy}
+      className={`h-7 w-7 inline-flex items-center justify-center rounded-full text-sm shadow-md transition-colors
+        ${danger
+          ? "bg-red-500/90 hover:bg-red-500 text-white"
+          : "bg-slate-800/90 hover:bg-slate-700 text-white"}
+        disabled:opacity-50`}
+    >
+      {children}
+    </button>
+  );
 }
 
 // ───────────────────────────────────────────────────────────────────
-// Top bar + fallbacks
+// Top bar + teacher "end class" button + teardown hook
 // ───────────────────────────────────────────────────────────────────
-
-function TopBar({ title, scheduledAt, durationMinutes, isHost, backHref }: {
-  title: string; scheduledAt: string; durationMinutes: number;
+function TopBar({ classId, title, scheduledAt, durationMinutes, isHost, backHref }: {
+  classId: string; title: string; scheduledAt: string; durationMinutes: number;
   isHost: boolean; backHref: string;
 }) {
   const [elapsed, setElapsed] = useState(() =>
@@ -158,6 +275,30 @@ function TopBar({ title, scheduledAt, durationMinutes, isHost, backHref }: {
     }, 1000);
     return () => clearInterval(t);
   }, [scheduledAt]);
+
+  const router = useRouter();
+  const [ending, setEnding] = useState(false);
+
+  const endClass = async () => {
+    if (!confirm("¿Terminar clase para TODOS? Se desconectarán profesor y estudiantes.")) return;
+    setEnding(true);
+    try {
+      const res = await fetch(`/api/aula/${classId}/moderate`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ action: "end_class" }),
+      });
+      if (!res.ok) {
+        alert("No se pudo terminar la clase — inténtalo otra vez.");
+        setEnding(false);
+        return;
+      }
+      // Redirect the teacher to the end-class confirmation flow
+      router.push(`${backHref}?end=1`);
+    } catch {
+      setEnding(false);
+    }
+  };
 
   return (
     <header className="flex items-center justify-between gap-3 px-4 sm:px-6 h-14 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border-b border-slate-800 shrink-0">
@@ -177,11 +318,44 @@ function TopBar({ title, scheduledAt, durationMinutes, isHost, backHref }: {
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
           {isHost ? "Eres profesor" : "Participante"}
         </span>
+        {isHost && (
+          <button
+            type="button"
+            onClick={endClass}
+            disabled={ending}
+            className="text-xs font-semibold rounded-full bg-red-500/90 hover:bg-red-500 text-white px-3 py-1.5 transition-colors disabled:opacity-50"
+            title="Terminar clase para todos"
+          >
+            {ending ? "Terminando…" : "Terminar clase"}
+          </button>
+        )}
       </div>
     </header>
   );
 }
 
+/**
+ * When the teacher clicks Leave (or the room ends), bounce them to the
+ * end-class confirmation flow.
+ */
+function HostTeardown({ classId, backHref }: { classId: string; backHref: string }) {
+  const router = useRouter();
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<{ event: RoomEvent }>;
+      if (ev.detail?.event === RoomEvent.Disconnected) {
+        router.push(`${backHref}?end=1`);
+      }
+    };
+    window.addEventListener("livekit:disconnected", handler as EventListener);
+    return () => window.removeEventListener("livekit:disconnected", handler as EventListener);
+  }, [backHref, router, classId]);
+  return null;
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Helpers + loading / error screens
+// ───────────────────────────────────────────────────────────────────
 function formatElapsed(sec: number): string {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
