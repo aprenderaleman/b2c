@@ -3,6 +3,8 @@ import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { getTeacherUpcomingClasses, type ClassWithPeople, classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { NextClassCard } from "@/components/classes/NextClassCard";
+import { getUserIcalToken, icalUrlFor } from "@/lib/user-extras";
+import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +37,7 @@ export default async function TeacherHome() {
   }
 
   const all = await getTeacherUpcomingClasses(teacher.id, new Date(), 30);
+  const icalToken = await getUserIcalToken(session.user.id);
   const [next, ...rest] = all;
 
   const todayEnd = endOfTodayBerlin();
@@ -48,13 +51,16 @@ export default async function TeacherHome() {
 
   return (
     <main className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
-          Hola, {firstName} 👋
-        </h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm">
-          Esto es lo que tienes agendado.
-        </p>
+      <header className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
+            Hola, {firstName} 👋
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 text-sm">
+            Esto es lo que tienes agendado.
+          </p>
+        </div>
+        {icalToken && <CalendarSyncButton icalUrl={icalUrlFor(icalToken)} />}
       </header>
 
       {next ? (

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
+import { getUserIcalToken, icalUrlFor } from "@/lib/user-extras";
+import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
 import { getStudentUpcomingClasses, type ClassWithPeople, classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { NextClassCard } from "@/components/classes/NextClassCard";
 import { getStudentProgress } from "@/lib/teacher-notes";
@@ -33,6 +35,7 @@ export default async function StudentHome() {
 
   const upcoming = await getStudentUpcomingClasses(student.id, new Date(), 60);
   const progress = await getStudentProgress(student.id);
+  const icalToken = await getUserIcalToken(session.user.id);
   const [next, ...rest] = upcoming;
 
   return (
@@ -113,16 +116,21 @@ export default async function StudentHome() {
       </section>
 
       <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Tu plan
-        </h2>
-        <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">
-          Nivel actual: <strong>{student.current_level}</strong>
-          {student.subscription_type === "monthly_subscription"
-            ? <> · {student.classes_per_month ?? "?"} clases/mes (suscripción mensual)</>
-            : <> · {student.classes_remaining} clases restantes</>
-          }
-        </p>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+              Tu plan
+            </h2>
+            <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">
+              Nivel actual: <strong>{student.current_level}</strong>
+              {student.subscription_type === "monthly_subscription"
+                ? <> · {student.classes_per_month ?? "?"} clases/mes (suscripción mensual)</>
+                : <> · {student.classes_remaining} clases restantes</>
+              }
+            </p>
+          </div>
+          {icalToken && <CalendarSyncButton icalUrl={icalUrlFor(icalToken)} />}
+        </div>
       </section>
     </main>
   );

@@ -76,12 +76,45 @@ export async function GET() {
     },
   };
 
+  // --- LMS-specific health (feeds the blue dot in the admin header) ----
+  // The blue dot is blue when everything the LMS needs is green:
+  //   - DB reachable (implicit — we're already here)
+  //   - LiveKit configured
+  //   - At least 1 upcoming scheduled class in the next 7 days
+  //   - No class stuck in 'live' status for >3 hours (would mean a
+  //     teacher forgot to end it)
+  const [
+    { count: upcomingCount },
+    { count: stuckCount },
+  ] = await Promise.all([
+    sb.from("classes")
+      .select("id", { head: true, count: "exact" })
+      .eq("status", "scheduled")
+      .gte("scheduled_at", new Date().toISOString())
+      .lte("scheduled_at", new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString()),
+    sb.from("classes")
+      .select("id", { head: true, count: "exact" })
+      .eq("status", "live")
+      .lt("started_at", new Date(Date.now() - 3 * 3600 * 1000).toISOString()),
+  ]);
+  const lms = {
+    livekit_configured: livekitConfigured(),
+    db_ok:              true,
+    upcoming_7d:        upcomingCount ?? 0,
+    stuck_live_classes: stuckCount ?? 0,
+    ok:
+      livekitConfigured() &&
+      (upcomingCount ?? 0) > 0 &&
+      (stuckCount ?? 0) === 0,
+  };
+
   return NextResponse.json(
     {
       status:   rollup,
       critical: critical || null,
       services,
       infra,
+      lms,
     },
     {
       // No client-side HTTP cache; we want the dot to reflect live state.

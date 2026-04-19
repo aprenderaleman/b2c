@@ -7,6 +7,8 @@ import { Logo } from "@/components/Logo";
 import { SidebarDesktop } from "./SidebarDesktop";
 import { BottomNavMobile } from "./BottomNavMobile";
 import { ImpersonatePicker } from "./ImpersonatePicker";
+import { SystemHealthDot } from "@/components/admin/SystemHealthDot";
+import { LmsHealthDot } from "@/components/admin/LmsHealthDot";
 import { bottomNavItems, drawerExtras, type NavItem } from "@/lib/nav-items";
 import type { Role } from "@/lib/rbac";
 
@@ -49,11 +51,17 @@ export function AppShell({
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top header — minimal on desktop, compact on mobile */}
-        <header className="sticky top-0 z-30 h-14 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur flex items-center px-4 sm:px-6 gap-3">
+        <header className="sticky top-0 z-30 h-14 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur flex items-center px-4 sm:px-6 gap-2">
           <div className="lg:hidden">
             <Logo variant="compact" href={defaultHome(role)} size={32} />
           </div>
           <div className="flex-1" />
+          {(role === "admin" || role === "superadmin") && (
+            <>
+              <SystemHealthDot />
+              <LmsHealthDot />
+            </>
+          )}
           <NotificationsBell />
           <ThemeToggle />
           <span

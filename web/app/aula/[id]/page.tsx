@@ -22,14 +22,21 @@ export default async function AulaPage({
   const session = await requireRole(["superadmin", "admin", "teacher", "student"]);
   const { id } = await params;
 
+  // Every fallback screen needs a "back home" button that respects the
+  // user's role (admin → /admin, teacher → /profesor, student → /estudiante).
+  const homeHref =
+    session.user.role === "teacher" ? "/profesor"   :
+    session.user.role === "student" ? "/estudiante" :
+                                      "/admin";
+
   const cls = await getClassById(id);
   if (!cls) notFound();
 
   const access = await authorizeAulaAccess(id, session.user.id, session.user.role);
   if (!access.ok) {
-    if (access.reason === "cancelled") return <CancelledScreen />;
-    if (access.reason === "not_authorized") redirect("/"); // bounced
-    return <NotFoundScreen />;
+    if (access.reason === "cancelled") return <CancelledScreen homeHref={homeHref} />;
+    if (access.reason === "not_authorized") redirect(homeHref);
+    return <NotFoundScreen homeHref={homeHref} />;
   }
 
   if (!access.canEnterNow) {
@@ -38,12 +45,13 @@ export default async function AulaPage({
         opensAt={access.opensAt}
         closesAt={access.closesAt}
         classTitle={cls.title}
+        homeHref={homeHref}
       />
     );
   }
 
   if (!livekitConfigured()) {
-    return <NotConfiguredScreen classTitle={cls.title} />;
+    return <NotConfiguredScreen classTitle={cls.title} homeHref={homeHref} />;
   }
 
   return (
@@ -77,8 +85,8 @@ function Frame({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ClosedScreen({ opensAt, closesAt, classTitle }: {
-  opensAt: Date; closesAt: Date; classTitle: string;
+function ClosedScreen({ opensAt, closesAt, classTitle, homeHref }: {
+  opensAt: Date; closesAt: Date; classTitle: string; homeHref: string;
 }) {
   const now = new Date();
   const isBefore = now < opensAt;
@@ -94,35 +102,35 @@ function ClosedScreen({ opensAt, closesAt, classTitle }: {
       <p className="mt-6 text-xs text-slate-400">
         Cierre total: {formatClassTimeEs(closesAt)} (Berlín)
       </p>
-      <Link href="/" className="btn-primary mt-8 inline-flex">
+      <Link href={homeHref} className="btn-primary mt-8 inline-flex">
         Volver al inicio
       </Link>
     </Frame>
   );
 }
 
-function CancelledScreen() {
+function CancelledScreen({ homeHref }: { homeHref: string }) {
   return (
     <Frame>
       <div className="text-5xl mb-4" aria-hidden>❌</div>
       <h1 className="text-2xl font-bold">Clase cancelada</h1>
       <p className="mt-3 text-slate-300">Esta clase ha sido cancelada. Si crees que es un error, contacta con el equipo.</p>
-      <Link href="/" className="btn-primary mt-8 inline-flex">Volver al inicio</Link>
+      <Link href={homeHref} className="btn-primary mt-8 inline-flex">Volver al inicio</Link>
     </Frame>
   );
 }
 
-function NotFoundScreen() {
+function NotFoundScreen({ homeHref }: { homeHref: string }) {
   return (
     <Frame>
       <div className="text-5xl mb-4" aria-hidden>🔍</div>
       <h1 className="text-2xl font-bold">Clase no encontrada</h1>
-      <Link href="/" className="btn-primary mt-8 inline-flex">Volver al inicio</Link>
+      <Link href={homeHref} className="btn-primary mt-8 inline-flex">Volver al inicio</Link>
     </Frame>
   );
 }
 
-function NotConfiguredScreen({ classTitle }: { classTitle: string }) {
+function NotConfiguredScreen({ classTitle, homeHref }: { classTitle: string; homeHref: string }) {
   return (
     <Frame>
       <div className="text-5xl mb-4" aria-hidden>🛠️</div>
@@ -132,7 +140,7 @@ function NotConfiguredScreen({ classTitle }: { classTitle: string }) {
         configurada en el servidor. Avisaremos a los participantes en cuanto
         esté lista.
       </p>
-      <Link href="/" className="btn-primary mt-8 inline-flex">Volver al inicio</Link>
+      <Link href={homeHref} className="btn-primary mt-8 inline-flex">Volver al inicio</Link>
     </Frame>
   );
 }
