@@ -13,22 +13,34 @@ export function OpenSchuleButton() {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const openSchule = () => start(async () => {
-    setError(null);
-    try {
-      const res = await fetch("/api/entitlements/schule-link", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok || !data?.url) {
-        setError(data?.message ?? data?.error ?? "No se pudo abrir Schule.");
-        return;
+  const openSchule = () => {
+    // Open the blank tab SYNCHRONOUSLY inside the click handler so
+    // popup blockers don't swallow it. Then kick off the async fetch
+    // and point the tab at Schule once the SSO URL arrives. Fallback
+    // to same-tab navigation if the popup was blocked.
+    const newTab = window.open("about:blank", "_blank", "noopener,noreferrer");
+
+    start(async () => {
+      setError(null);
+      try {
+        const res = await fetch("/api/entitlements/schule-link", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok || !data?.url) {
+          setError(data?.message ?? data?.error ?? "No se pudo abrir Schule.");
+          if (newTab && !newTab.closed) newTab.close();
+          return;
+        }
+        if (newTab && !newTab.closed) {
+          newTab.location.href = data.url;
+        } else {
+          window.location.href = data.url;
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Error de red.");
+        if (newTab && !newTab.closed) newTab.close();
       }
-      // Redirect (top-level navigation, not new tab — SSO flow depends
-      // on the token landing in Schule's /auto-login page).
-      window.location.href = data.url;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error de red.");
-    }
-  });
+    });
+  };
 
   return (
     <button
