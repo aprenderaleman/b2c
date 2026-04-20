@@ -87,6 +87,12 @@ export type LiveClassInfo = {
   startedAt:   string;
 };
 
+// Safety cap: if a class has been flagged live for longer than this,
+// the teacher almost certainly closed the tab without hitting "end".
+// Don't haunt the student with a ghost CTA — pretend it's not live.
+// Any legitimate class longer than 4 hours is extremely unusual.
+const STALE_LIVE_CUTOFF_MS = 4 * 60 * 60 * 1000;
+
 export async function getLiveClassForStudent(
   studentId: string,
 ): Promise<LiveClassInfo | null> {
@@ -122,6 +128,16 @@ export async function getLiveClassForStudent(
   if (rows.length === 0) return null;
   const c = Array.isArray(rows[0].class) ? rows[0].class[0] : rows[0].class;
   if (!c) return null;
+
+  // Stale-live guard: if the class has been flagged 'live' for more than
+  // STALE_LIVE_CUTOFF_MS, the teacher almost certainly closed the tab
+  // without hitting "Terminar". Treat as not live so the student doesn't
+  // chase a ghost CTA into an empty room.
+  const startedAt = (c as { started_at: string | null; scheduled_at: string }).started_at
+                 ?? (c as { scheduled_at: string }).scheduled_at;
+  const ageMs = Date.now() - new Date(startedAt).getTime();
+  if (ageMs > STALE_LIVE_CUTOFF_MS) return null;
+
   const t  = (c as { teachers: unknown }).teachers;
   const tt = (Array.isArray(t) ? t[0] : t) as { users: unknown } | undefined;
   const u  = tt?.users;
@@ -131,8 +147,7 @@ export async function getLiveClassForStudent(
     classId:     (c as { id: string }).id,
     title:       (c as { title: string }).title,
     teacherName: uu?.full_name ?? uu?.email ?? "Tu profesor",
-    startedAt:   (c as { started_at: string | null; scheduled_at: string }).started_at
-              ?? (c as { scheduled_at: string }).scheduled_at,
+    startedAt,
   };
 }
 
