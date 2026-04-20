@@ -6,6 +6,7 @@ import { RecordPaymentButton } from "@/components/admin/RecordPaymentButton";
 import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 import { AdjustClassesButton } from "@/components/admin/AdjustClassesButton";
+import { EditPackButton } from "@/components/admin/EditPackButton";
 import { listStudentCertificates } from "@/lib/certificates";
 import { supabaseAdmin } from "@/lib/supabase";
 
@@ -75,14 +76,23 @@ export default async function StudentDetailPage({
               role="student"
             />
             {packRow && (
-              <AdjustClassesButton
-                studentId={student.id}
-                studentName={student.full_name ?? student.email}
-                currentRemaining={packRow.classes_remaining}
-                purchased={packRow.classes_purchased}
-                consumed={packRow.classes_consumed}
-                currentAdjustment={packRow.classes_adjustment}
-              />
+              <>
+                <EditPackButton
+                  studentId={student.id}
+                  studentName={student.full_name ?? student.email}
+                  currentPurchased={packRow.classes_purchased}
+                  currentAdjustment={packRow.classes_adjustment}
+                  currentConsumed={packRow.classes_consumed}
+                />
+                <AdjustClassesButton
+                  studentId={student.id}
+                  studentName={student.full_name ?? student.email}
+                  currentRemaining={packRow.classes_remaining}
+                  purchased={packRow.classes_purchased}
+                  consumed={packRow.classes_consumed}
+                  currentAdjustment={packRow.classes_adjustment}
+                />
+              </>
             )}
             <RecordPaymentButton studentId={student.id} currentLevel={student.current_level} />
             <IssueCertificateButton studentId={student.id} />
