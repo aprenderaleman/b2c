@@ -22,7 +22,7 @@ export type SchuleLinkResult = {
   status: number;
 };
 
-const SCHULE_BASE = process.env.SCHULE_API_URL ?? "https://schule.aprender-aleman.de";
+const SCHULE_BASE = process.env.SCHULE_API_URL ?? "https://api-schule.aprender-aleman.de";
 const HANS_BASE   = process.env.HANS_API_URL   ?? "https://hans-api.aprender-aleman.de/api";
 
 /**
