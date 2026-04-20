@@ -111,10 +111,28 @@ export async function POST(req: Request) {
 
   // COMPLETE / UPDATED: pull out the final file info and flip to ready.
   if (event.event === "egress_updated" || event.event === "egress_ended") {
-    const fileResult = info.file_results?.[0];
-    const fileUrl  = fileResult?.location ?? info.file?.location ?? null;
-    const fileSize = Number(fileResult?.size ?? info.file?.size ?? 0) || null;
-    const durationNs = fileResult?.duration !== undefined ? Number(fileResult.duration) : 0;
+    // LiveKit's EgressInfo has TWO ways to expose the final file, depending
+    // on the request type:
+    //   1. `file_results[0]`       — newer egress types (track composite, etc.)
+    //   2. `file`                  — legacy room composite (deprecated, still set)
+    //   3. `result.case === "file"` — oneof wrapper used by SDK-decoded objects,
+    //      often present in listEgress responses but sometimes in webhooks too.
+    // We probe all three so we don't miss the file location.
+    const fileResult  = info.file_results?.[0];
+    const oneofResult = (info as unknown as { result?: { case?: string; value?: { location?: string; size?: string | number; duration?: string | number } } })
+      .result;
+    const oneofFile = oneofResult?.case === "file" ? oneofResult.value : null;
+
+    const fileUrl =
+      fileResult?.location ??
+      info.file?.location ??
+      oneofFile?.location ??
+      null;
+    const fileSize =
+      Number(fileResult?.size ?? info.file?.size ?? oneofFile?.size ?? 0) || null;
+    const durationNsRaw =
+      fileResult?.duration ?? oneofFile?.duration ?? 0;
+    const durationNs = Number(durationNsRaw) || 0;
     const durationSeconds = durationNs > 0 ? Math.round(durationNs / 1_000_000_000) : null;
 
     const failed = info.status === "EGRESS_FAILED" || Boolean(info.error);
