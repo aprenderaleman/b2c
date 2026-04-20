@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTeacherPlatformAnnouncement } from "@/lib/email/send";
@@ -8,6 +9,11 @@ import { sendTeacherPlatformAnnouncement } from "@/lib/email/send";
  *
  * One-off broadcast: emails every active teacher the "new platform is
  * live" announcement ahead of the Zoom→B2C cutover on 2026-04-27.
+ *
+ * Body (optional):
+ *   { test_to: string } — send ONLY to this address (no DB read). Used
+ *   to verify the Resend pipeline before firing the real broadcast, or
+ *   to self-preview the email. Reuses Sabine's name as the sample.
  *
  * Admin-only. Returns a per-recipient result list so the admin page
  * can show ok/error next to each name.
@@ -20,12 +26,52 @@ const PLATFORM_URL = "https://b2c.aprender-aleman.de/login";
 const VIDEO_URL    = "https://www.youtube.com/watch?v=6-Nek-2EPp8";
 const CUTOVER_DATE = "lunes 27 de abril";
 
-export async function POST() {
+const Body = z.object({
+  test_to:    z.string().email().optional(),
+  test_name:  z.string().trim().min(1).max(100).optional(),
+});
+
+export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const role = (session.user as { role?: string }).role;
   if (role !== "admin" && role !== "superadmin") {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  // Body is optional — empty body means "real broadcast to all teachers".
+  let body: z.infer<typeof Body> = {};
+  try {
+    const raw = await req.json();
+    const parsed = Body.safeParse(raw);
+    if (parsed.success) body = parsed.data;
+  } catch {
+    // no body — treat as real broadcast
+  }
+
+  // Test mode: send ONE email to the given address, mimic the real
+  // template but with a sample name so we can spot-check rendering.
+  if (body.test_to) {
+    const res = await sendTeacherPlatformAnnouncement(body.test_to, {
+      name:        body.test_name ?? "Sabine",
+      email:       body.test_to,
+      platformUrl: PLATFORM_URL,
+      videoUrl:    VIDEO_URL,
+      cutoverDate: CUTOVER_DATE,
+    });
+    return NextResponse.json({
+      ok:      res.ok,
+      sent:    res.ok ? 1 : 0,
+      failed:  res.ok ? 0 : 1,
+      test:    true,
+      results: [{
+        name:       body.test_name ?? "Sabine",
+        email:      body.test_to,
+        ok:         res.ok,
+        error:      res.ok ? undefined : res.error,
+        message_id: res.ok ? res.id : undefined,
+      }],
+    });
   }
 
   const sb = supabaseAdmin();
