@@ -56,6 +56,42 @@ export function AulaClient(p: Props) {
   const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [error, setError]         = useState<string | null>(null);
 
+  // Detect available input devices BEFORE connecting, so a user on a
+  // laptop with no webcam (or a headless phone) doesn't get rejected by
+  // LiveKit's getUserMedia({video:true}) with "Client initiated disconnect".
+  // Null = still probing. Objects once the check finishes.
+  const [media, setMedia] = useState<{ video: boolean; audio: boolean } | null>(null);
+  const [mediaWarning, setMediaWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        // enumerateDevices() only returns non-empty labels after the user
+        // has granted permission at least once, but the TYPE count is
+        // enough for us — we just need to know "is there a camera at all?"
+        const devices = await navigator.mediaDevices?.enumerateDevices() ?? [];
+        const hasVideo = devices.some(d => d.kind === "videoinput");
+        const hasAudio = devices.some(d => d.kind === "audioinput");
+        if (cancelled) return;
+        setMedia({ video: hasVideo, audio: hasAudio });
+        if (!hasVideo && !hasAudio) {
+          setMediaWarning("Tu dispositivo no tiene micrófono ni cámara. Entrarás como espectador.");
+        } else if (!hasVideo) {
+          setMediaWarning("No se detectó cámara. Entrarás solo con audio.");
+        } else if (!hasAudio) {
+          setMediaWarning("No se detectó micrófono. Entrarás solo con vídeo.");
+        }
+      } catch {
+        // Some browsers (older Safari on iOS without permission) throw —
+        // assume both are available and let getUserMedia fail later with a
+        // clearer error rather than pre-empting.
+        if (!cancelled) setMedia({ video: true, audio: true });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -78,7 +114,7 @@ export function AulaClient(p: Props) {
   }, [p.classId]);
 
   if (error) return <ErrorScreen reason={error} backHref={p.backHref} />;
-  if (!token || !serverUrl) return <LoadingScreen classTitle={p.classTitle} />;
+  if (!token || !serverUrl || !media) return <LoadingScreen classTitle={p.classTitle} />;
 
   return (
     <main className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
@@ -86,13 +122,34 @@ export function AulaClient(p: Props) {
         token={token}
         serverUrl={serverUrl}
         connect={true}
-        video={true}
-        audio={true}
+        video={media.video}
+        audio={media.audio}
         data-lk-theme="default"
         onError={(e) => setError(e.message)}
+        onMediaDeviceFailure={(failure) => {
+          // Runtime permission denial or missing device mid-connect — keep
+          // the user in the room as a listener instead of dropping them.
+          console.warn("[aula] media device failure:", failure);
+          setMediaWarning(
+            failure === "PermissionDenied"
+              ? "No diste permiso para micrófono/cámara. Puedes usar solo escucha o recargar y aceptar."
+              : "Tu dispositivo no pudo activar cámara o micrófono. Sigues conectado como espectador.",
+          );
+        }}
         onDisconnected={() => { /* keep state, user can reconnect */ }}
         className="flex-1 min-h-0 flex flex-col"
       >
+        {mediaWarning && (
+          <div className="bg-amber-500/15 border-b border-amber-500/30 text-amber-100 text-xs px-4 py-2 flex items-center justify-between gap-3">
+            <span>⚠️ {mediaWarning}</span>
+            <button
+              type="button"
+              onClick={() => setMediaWarning(null)}
+              className="text-amber-200/80 hover:text-amber-100 text-lg leading-none"
+              aria-label="Cerrar aviso"
+            >×</button>
+          </div>
+        )}
         <TopBar
           classId={p.classId}
           title={p.classTitle}
@@ -107,11 +164,11 @@ export function AulaClient(p: Props) {
         <div className="border-t border-slate-800 bg-slate-900/80 backdrop-blur p-2">
           <ControlBar
             controls={{
-              microphone: true,
-              camera:     true,
-              screenShare: true,   // enabled for everyone — students can share too
-              chat:       false,    // Phase 4
-              leave:      true,
+              microphone:  media.audio,          // hide mic button on devices without mic
+              camera:      media.video,          // hide camera button on devices without camera
+              screenShare: true,                 // enabled for everyone — students can share too
+              chat:        false,                // Phase 4
+              leave:       true,
             }}
           />
         </div>
