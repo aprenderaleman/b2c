@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { LanguageToggle } from "./LanguageToggle";
 import { ThemeToggle } from "./ThemeToggle";
+import { RobotMark } from "./RobotMark";
 
 export function Header() {
   return (
@@ -12,15 +12,8 @@ export function Header() {
                        backdrop-blur-md
                        border-b border-slate-100 dark:border-slate-800">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5">
-          <Image
-            src="/logo.png"
-            alt="Aprender-Aleman.de"
-            width={38}
-            height={38}
-            priority
-            className="dark:drop-shadow-[0_0_8px_rgba(251,146,60,0.45)]"
-          />
+        <Link href="/" className="flex items-center gap-2.5" aria-label="Aprender-Aleman.de">
+          <RobotMark size={38} className="dark:drop-shadow-[0_0_8px_rgba(251,146,60,0.35)]" />
           <span className="font-bold text-slate-800 dark:text-slate-100 hidden sm:inline">
             Aprender-Aleman<span className="text-brand-500">.de</span>
           </span>

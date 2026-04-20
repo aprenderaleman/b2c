@@ -1,9 +1,10 @@
-import Image from "next/image";
 import Link from "next/link";
+import { RobotMark } from "./RobotMark";
 
 /**
- * Aprender-Aleman.de brand mark + wordmark. Uses /public/logo.png
- * (orange/black robot). Two layouts:
+ * Aprender-Aleman.de brand mark + wordmark. Uses the inline SVG
+ * RobotMark (adaptive to light/dark mode) instead of the old
+ * /public/logo.png. Two layouts:
  *   - full:    icon + "Aprender-Aleman.de" wordmark (sidebar open)
  *   - compact: icon only                            (sidebar collapsed / mobile)
  */
@@ -16,28 +17,19 @@ export function Logo({
   href?:    string;
   size?:    number;
 }) {
-  const img = (
-    <Image
-      src="/logo.png"
-      alt="Aprender-Aleman.de"
-      width={size}
-      height={size}
-      priority
-      className="shrink-0"
-    />
-  );
+  const mark = <RobotMark size={size} />;
 
   if (variant === "compact") {
     return (
       <Link href={href} aria-label="Aprender-Aleman.de" className="inline-flex items-center">
-        {img}
+        {mark}
       </Link>
     );
   }
 
   return (
     <Link href={href} className="inline-flex items-center gap-2.5 group">
-      {img}
+      {mark}
       <span className="flex flex-col leading-tight">
         <span className="text-[13px] font-bold text-slate-900 dark:text-slate-50 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
           Aprender-Aleman
