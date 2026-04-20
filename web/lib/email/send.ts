@@ -1,4 +1,4 @@
-import { fromAddress, getResend } from "./client";
+import { fromAddress, getResend, getSmtp, emailBackendConfigured } from "./client";
 import { renderWelcomeStudent, type WelcomeStudentVars } from "./templates/welcome-student";
 import { renderWelcomeStaff,   type WelcomeStaffVars }   from "./templates/welcome-staff";
 import { renderPasswordReset,  type PasswordResetVars }  from "./templates/password-reset";
@@ -13,9 +13,12 @@ export type SendResult =
   | { ok: false; error: string };
 
 /**
- * Low-level send that hides the fact we may not have a Resend key in dev.
- * In that case it logs the rendered email to the server console and
- * returns ok=true so the caller's happy path still runs.
+ * Low-level send. Tries Resend first (if configured), then SMTP (if
+ * configured), and finally falls back to logging the email to stdout
+ * so dev environments don't break.
+ *
+ * Returns a SendResult with either the provider's message id (or a
+ * synthesised one for SMTP) or a clear error reason.
  */
 async function sendRaw(
   to: string,
@@ -23,30 +26,42 @@ async function sendRaw(
   html: string,
   text: string,
 ): Promise<SendResult> {
-  const resend = getResend();
-  if (!resend) {
-    // Dev / CI / missing-key fallback: log instead of sending.
-    console.log("=".repeat(60));
-    console.log(`[email DEV] to=${to}`);
-    console.log(`[email DEV] subject=${subject}`);
-    console.log(`[email DEV] text=\n${text}`);
-    console.log("=".repeat(60));
-    return { ok: true, id: null };
+  const backend = emailBackendConfigured();
+
+  // --- 1. Resend ---
+  if (backend === "resend") {
+    const resend = getResend()!;
+    try {
+      const { data, error } = await resend.emails.send({
+        from: fromAddress(), to, subject, html, text,
+      });
+      if (error) return { ok: false, error: error.message ?? "resend error" };
+      return { ok: true, id: data?.id ?? null };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "unknown" };
+    }
   }
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from:    fromAddress(),
-      to,
-      subject,
-      html,
-      text,
-    });
-    if (error) return { ok: false, error: error.message ?? "resend error" };
-    return { ok: true, id: data?.id ?? null };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "unknown" };
+  // --- 2. SMTP (nodemailer) ---
+  if (backend === "smtp") {
+    const smtp = getSmtp()!;
+    try {
+      const info = await smtp.sendMail({
+        from: fromAddress(), to, subject, html, text,
+      });
+      return { ok: true, id: info.messageId ?? null };
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : "smtp error" };
+    }
   }
+
+  // --- 3. No backend configured: log + pretend-success so dev keeps flowing. ---
+  console.log("=".repeat(60));
+  console.log(`[email DEV] to=${to}`);
+  console.log(`[email DEV] subject=${subject}`);
+  console.log(`[email DEV] text=\n${text}`);
+  console.log("=".repeat(60));
+  return { ok: true, id: null };
 }
 
 /**

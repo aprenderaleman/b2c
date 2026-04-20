@@ -1,30 +1,76 @@
 import { Resend } from "resend";
+import nodemailer, { type Transporter } from "nodemailer";
 
 /**
- * Resend client singleton. Must only be imported from server code.
- * If RESEND_API_KEY isn't set (local dev without email, CI, etc.) we
- * return null and callers should gracefully log the intended email
- * instead of sending.
+ * Email senders used by lib/email/send.ts.
+ *
+ * Two backends are supported — whichever is configured wins, Resend
+ * takes precedence if both are set. If neither is configured the
+ * caller logs the email to console and returns ok=true so local/dev
+ * doesn't break.
+ *
+ *   (1) Resend         — set RESEND_API_KEY
+ *   (2) SMTP (Hostinger, Gmail, anything) — set SMTP_HOST, SMTP_USER,
+ *                        SMTP_PASS, optional SMTP_PORT (default 465),
+ *                        optional SMTP_SECURE ("true"/"false",
+ *                        default "true" for port 465, "false" else).
+ *
+ * The project used to be Resend-only; SMTP was added because the
+ * production Resend key wasn't provisioned and Hostinger SMTP was
+ * already available on the domain.
  */
+
+// ---------------------------------------------------------------------------
+// Resend — kept for parity with the previous setup / as a fallback option.
+// ---------------------------------------------------------------------------
 let _resend: Resend | null = null;
-let _checked = false;
+let _resendChecked = false;
 
 export function getResend(): Resend | null {
-  if (_checked) return _resend;
-  _checked = true;
+  if (_resendChecked) return _resend;
+  _resendChecked = true;
   const key = process.env.RESEND_API_KEY;
-  if (!key) {
-    console.warn("[email] RESEND_API_KEY is not set — emails will be logged only.");
-    return null;
-  }
+  if (!key) return null;
   _resend = new Resend(key);
   return _resend;
 }
 
-/**
- * Address we send FROM. Must match a verified sender / domain on Resend.
- * Configured via env (EMAIL_FROM) so we don't hardcode branding.
- */
+// ---------------------------------------------------------------------------
+// SMTP — nodemailer transporter, lazily constructed. One transporter per
+// process because connections pool nicely.
+// ---------------------------------------------------------------------------
+let _smtp: Transporter | null = null;
+let _smtpChecked = false;
+
+export function getSmtp(): Transporter | null {
+  if (_smtpChecked) return _smtp;
+  _smtpChecked = true;
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  if (!host || !user || !pass) return null;
+  const port = Number(process.env.SMTP_PORT ?? 465);
+  const secureEnv = process.env.SMTP_SECURE;
+  const secure = secureEnv ? secureEnv === "true" : port === 465;
+  _smtp = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+  });
+  return _smtp;
+}
+
+export function emailBackendConfigured(): "resend" | "smtp" | null {
+  if (process.env.RESEND_API_KEY)                                        return "resend";
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) return "smtp";
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Shared: the From address. Must match a verified sender / domain on
+// whichever backend is in use.
+// ---------------------------------------------------------------------------
 export function fromAddress(): string {
   return (
     process.env.EMAIL_FROM ??

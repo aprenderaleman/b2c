@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { emailBackendConfigured } from "@/lib/email/client";
 
 /**
- * GET /api/admin/broadcast/_diagnostic
+ * GET /api/admin/broadcast/diagnostic
  *
- * Admin-only. Returns whether the email env is actually usable in this
- * Vercel deployment. Lets Gelfis confirm at a glance whether Resend is
- * wired up, without having to trawl logs.
- *
- * NEVER returns the API key itself — only whether it's present.
+ * Admin-only. Reports whether the email pipeline is actually usable in
+ * this deployment — checks both Resend (RESEND_API_KEY) and SMTP
+ * (SMTP_HOST + SMTP_USER + SMTP_PASS). NEVER leaks secrets; only
+ * presence flags + safe prefixes.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,21 +21,34 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const hasResendKey = Boolean(process.env.RESEND_API_KEY);
-  const resendKeyPrefix = process.env.RESEND_API_KEY?.slice(0, 4) ?? null;  // "re_" prefix visible, no more
-  const fromAddress = process.env.EMAIL_FROM ?? "(default) Aprender-Aleman.de <info@aprender-aleman.de>";
+  const backend   = emailBackendConfigured();
+  const hasResend = Boolean(process.env.RESEND_API_KEY);
+  const hasSmtp   = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+  const fromAddr  = process.env.EMAIL_FROM ?? "(default) Aprender-Aleman.de <info@aprender-aleman.de>";
 
   return NextResponse.json({
-    node_env:     process.env.NODE_ENV,
-    vercel_env:   process.env.VERCEL_ENV ?? null,
+    node_env:       process.env.NODE_ENV,
+    vercel_env:     process.env.VERCEL_ENV ?? null,
+    active_backend: backend,                       // "resend" | "smtp" | null
     email: {
-      has_resend_api_key: hasResendKey,
-      resend_key_prefix:  resendKeyPrefix,
-      from_address:       fromAddress,
-      ready_to_send:      hasResendKey,
+      from_address:  fromAddr,
+      ready_to_send: backend !== null,
+      resend: {
+        has_api_key: hasResend,
+        key_prefix:  process.env.RESEND_API_KEY?.slice(0, 4) ?? null,
+      },
+      smtp: {
+        configured: hasSmtp,
+        host:       process.env.SMTP_HOST ?? null,
+        port:       Number(process.env.SMTP_PORT ?? 465),
+        user:       process.env.SMTP_USER ?? null,
+        secure:     process.env.SMTP_SECURE ?? "(auto: true si puerto=465, si no false)",
+      },
     },
-    notes: hasResendKey
-      ? "Email pipeline parece configurado. Los envíos deberían llegar realmente."
-      : "FALTA RESEND_API_KEY en Vercel. Los envíos están en modo dev: se loguean a consola y la API devuelve ok:true sin enviar nada real.",
+    notes: backend === "resend"
+      ? "Usando Resend — envíos reales vía API."
+      : backend === "smtp"
+        ? "Usando SMTP (nodemailer) — envíos reales vía tu servidor SMTP."
+        : "FALTA configuración. Ni RESEND_API_KEY ni (SMTP_HOST + SMTP_USER + SMTP_PASS) están definidas. Los envíos se loguean a consola en vez de mandarse.",
   });
 }
