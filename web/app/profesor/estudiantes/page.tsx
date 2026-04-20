@@ -29,14 +29,25 @@ export default async function TeacherStudentsPage() {
   }
 
   const sb = supabaseAdmin();
-  const { data } = await sb
-    .from("class_participants")
-    .select(`
-      student_id,
-      students!inner(current_level, users!inner(full_name, email)),
-      classes!inner(teacher_id)
-    `)
-    .eq("classes.teacher_id", me.id);
+  // Two sources: (1) past/future classes I teach, (2) students in a
+  // group I'm assigned to. Union so a brand-new student-group pairing
+  // shows up even before the first scheduled class.
+  const [viaClasses, viaGroups] = await Promise.all([
+    sb.from("class_participants")
+      .select(`
+        student_id,
+        students!inner(current_level, users!inner(full_name, email)),
+        classes!inner(teacher_id)
+      `)
+      .eq("classes.teacher_id", me.id),
+    sb.from("student_group_members")
+      .select(`
+        student_id,
+        students!inner(current_level, users!inner(full_name, email)),
+        group:student_groups!inner(teacher_id)
+      `)
+      .eq("group.teacher_id", me.id),
+  ]);
 
   type R = {
     student_id: string;
@@ -50,18 +61,22 @@ export default async function TeacherStudentsPage() {
   };
 
   const seen = new Map<string, { id: string; name: string | null; email: string; level: string }>();
-  for (const r of (data ?? []) as R[]) {
-    if (seen.has(r.student_id)) continue;
-    const s = Array.isArray(r.students) ? r.students[0] : r.students;
-    if (!s) continue;
-    const u = Array.isArray(s.users) ? s.users[0] : s.users;
-    seen.set(r.student_id, {
-      id:    r.student_id,
-      name:  u?.full_name ?? null,
-      email: u?.email ?? "",
-      level: s.current_level,
-    });
-  }
+  const ingest = (rows: R[]) => {
+    for (const r of rows) {
+      if (seen.has(r.student_id)) continue;
+      const s = Array.isArray(r.students) ? r.students[0] : r.students;
+      if (!s) continue;
+      const u = Array.isArray(s.users) ? s.users[0] : s.users;
+      seen.set(r.student_id, {
+        id:    r.student_id,
+        name:  u?.full_name ?? null,
+        email: u?.email ?? "",
+        level: s.current_level,
+      });
+    }
+  };
+  ingest((viaClasses.data ?? []) as R[]);
+  ingest((viaGroups.data   ?? []) as R[]);
   const list = Array.from(seen.values()).sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email));
 
   return (
