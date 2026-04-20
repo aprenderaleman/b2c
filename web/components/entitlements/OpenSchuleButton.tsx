@@ -47,14 +47,16 @@ export function OpenSchuleButton() {
       type="button"
       onClick={openSchule}
       disabled={pending}
-      className="group relative rounded-3xl bg-white dark:bg-slate-900
-                 border border-slate-200 dark:border-slate-800 p-5 block w-full text-left
-                 transition-all hover:-translate-y-0.5 hover:shadow-brand
+      className="group relative rounded-3xl
+                 bg-gradient-to-br from-brand-50 via-white to-white
+                 dark:from-brand-500/15 dark:via-slate-900 dark:to-slate-900
+                 border border-brand-200 dark:border-brand-500/30 p-5 block w-full text-left
+                 transition-all hover:-translate-y-1 hover:shadow-brand
                  hover:border-brand-400 dark:hover:border-brand-500
                  disabled:opacity-60 disabled:cursor-wait"
     >
       <div className="flex items-start gap-4">
-        <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-50 dark:bg-brand-500/10 text-2xl" aria-hidden>
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500 text-white text-2xl shadow-md" aria-hidden>
           🎓
         </span>
         <div className="flex-1 min-w-0">
