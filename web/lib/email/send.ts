@@ -3,6 +3,10 @@ import { renderWelcomeStudent, type WelcomeStudentVars } from "./templates/welco
 import { renderWelcomeStaff,   type WelcomeStaffVars }   from "./templates/welcome-staff";
 import { renderPasswordReset,  type PasswordResetVars }  from "./templates/password-reset";
 import { renderDailyDigest,    type DailyDigestVars }    from "./templates/daily-digest";
+import {
+  renderTeacherPlatformAnnouncement,
+  type PlatformAnnouncementVars,
+} from "./templates/teacher-platform-announcement";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -87,5 +91,17 @@ export async function sendDailyDigestEmail(
   vars: DailyDigestVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderDailyDigest(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * One-off: "the new platform is live" announcement to a teacher.
+ * Triggered from /admin/broadcast the week of the Zoom cutover.
+ */
+export async function sendTeacherPlatformAnnouncement(
+  to: string,
+  vars: PlatformAnnouncementVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTeacherPlatformAnnouncement(vars);
   return sendRaw(to, subject, html, text);
 }
