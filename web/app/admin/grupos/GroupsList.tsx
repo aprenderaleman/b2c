@@ -5,19 +5,45 @@ import { useRouter } from "next/navigation";
 
 type Teacher = { id: string; full_name: string | null; email: string };
 
+type Member = {
+  student_id: string;
+  full_name:  string | null;
+  email:      string;
+  level:      string | null;
+};
+
+type UpcomingClass = {
+  id:               string;
+  scheduled_at:     string;
+  duration_minutes: number;
+  title:            string;
+  status:           string;
+};
+
+type Recording = {
+  id:           string;
+  class_id:     string;
+  class_title:  string;
+  class_date:   string;
+  file_url:     string | null;
+  duration_sec: number | null;
+};
+
 type Group = {
-  id:            string;
-  name:          string;
-  class_type:    "group" | "individual";
-  level:         string | null;
-  teacher_id:    string | null;
-  start_date:    string | null;
-  end_date:      string | null;
-  meet_link:     string | null;
-  document_url:  string | null;
-  active:        boolean;
-  teacher_name:  string | null;
-  member_count:  number;
+  id:               string;
+  name:             string;
+  class_type:       "group" | "individual";
+  level:            string | null;
+  teacher_id:       string | null;
+  start_date:       string | null;
+  end_date:         string | null;
+  meet_link:        string | null;
+  document_url:     string | null;
+  active:           boolean;
+  teacher_name:     string | null;
+  members:          Member[];
+  upcoming_classes: UpcomingClass[];
+  latest_recording: Recording | null;
 };
 
 /**
@@ -90,7 +116,7 @@ export function GroupsList({
 
 function GroupCard({ group, onEdit }: { group: Group; onEdit: () => void }) {
   return (
-    <article className={`rounded-3xl border bg-white dark:bg-slate-900 p-4 space-y-3
+    <article className={`rounded-3xl border bg-white dark:bg-slate-900 p-4 space-y-4
       ${group.active ? "border-slate-200 dark:border-slate-800" : "border-slate-200/50 dark:border-slate-800/50 border-dashed"}`}>
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -99,7 +125,7 @@ function GroupCard({ group, onEdit }: { group: Group; onEdit: () => void }) {
             <span className="capitalize">{group.class_type === "individual" ? "Individual" : "Grupal"}</span>
             {group.level && <><span>·</span><span>{group.level}</span></>}
             <span>·</span>
-            <span>{group.member_count} alumno{group.member_count === 1 ? "" : "s"}</span>
+            <span>{group.members.length} alumno{group.members.length === 1 ? "" : "s"}</span>
             <span>·</span>
             <span>{group.teacher_name ?? "sin profe"}</span>
           </div>
@@ -112,16 +138,87 @@ function GroupCard({ group, onEdit }: { group: Group; onEdit: () => void }) {
           Editar
         </button>
       </header>
-      <div className="flex items-center gap-2 flex-wrap text-xs">
+
+      {/* ── Upcoming schedule ── */}
+      {group.upcoming_classes.length > 0 ? (
+        <div>
+          <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+            Próximas clases
+          </h4>
+          <ul className="space-y-1">
+            {group.upcoming_classes.map(c => (
+              <li key={c.id} className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
+                <span className="inline-flex h-1.5 w-1.5 rounded-full bg-brand-500 shrink-0" aria-hidden />
+                <span className="capitalize">{formatShortDate(c.scheduled_at)}</span>
+                <span className="text-slate-400">·</span>
+                <span className="font-mono">{formatTime(c.scheduled_at)}</span>
+                <span className="text-slate-400">·</span>
+                <span className="text-slate-500 dark:text-slate-400">{c.duration_minutes} min</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500 dark:text-slate-400 italic">Sin clases agendadas</p>
+      )}
+
+      {/* ── Members ── */}
+      {group.members.length > 0 && (
+        <div>
+          <h4 className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+            Miembros
+          </h4>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {group.members.map(m => (
+              <span
+                key={m.student_id}
+                title={m.email}
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[11px] text-slate-700 dark:text-slate-200"
+              >
+                {m.full_name ?? m.email}
+                {m.level && <span className="text-[9px] text-slate-500">· {m.level}</span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Footer: doc / meet / latest recording ── */}
+      <div className="flex items-center gap-2 flex-wrap text-xs pt-2 border-t border-slate-100 dark:border-slate-800">
         {group.document_url
-          ? <a href={group.document_url} target="_blank" rel="noopener" className="text-brand-600 dark:text-brand-400 hover:underline">📄 Google Doc</a>
+          ? <a href={group.document_url} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-brand-600 dark:text-brand-400 hover:underline">📄 Google Doc</a>
           : <span className="text-slate-400 dark:text-slate-600">📄 sin doc</span>}
-        {group.meet_link
-          ? <a href={group.meet_link} target="_blank" rel="noopener" className="text-slate-500 dark:text-slate-400 hover:underline">🔗 meet legacy</a>
-          : null}
+        {group.latest_recording?.file_url && (
+          <a
+            href={group.latest_recording.file_url}
+            target="_blank"
+            rel="noopener"
+            className="inline-flex items-center gap-1 rounded-full bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 hover:bg-red-100 px-2.5 py-1 font-medium"
+            title={`Grabación de "${group.latest_recording.class_title}" del ${formatShortDate(group.latest_recording.class_date)}`}
+          >
+            🎬 Última grabación
+            <span className="text-[10px] opacity-70">· {formatShortDate(group.latest_recording.class_date)}</span>
+          </a>
+        )}
+        {group.meet_link && (
+          <a href={group.meet_link} target="_blank" rel="noopener" className="text-slate-500 dark:text-slate-400 hover:underline">🔗 meet legacy</a>
+        )}
       </div>
     </article>
   );
+}
+
+function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-ES", {
+    weekday: "short", day: "2-digit", month: "short",
+    timeZone: "Europe/Berlin",
+  }).replace(/\./g, "");
+}
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString("es-ES", {
+    hour: "2-digit", minute: "2-digit",
+    timeZone: "Europe/Berlin",
+  });
 }
 
 function GroupModal({
