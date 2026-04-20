@@ -66,27 +66,55 @@ export function AulaClient(p: Props) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        // enumerateDevices() only returns non-empty labels after the user
-        // has granted permission at least once, but the TYPE count is
-        // enough for us — we just need to know "is there a camera at all?"
-        const devices = await navigator.mediaDevices?.enumerateDevices() ?? [];
-        const hasVideo = devices.some(d => d.kind === "videoinput");
-        const hasAudio = devices.some(d => d.kind === "audioinput");
-        if (cancelled) return;
-        setMedia({ video: hasVideo, audio: hasAudio });
-        if (!hasVideo && !hasAudio) {
-          setMediaWarning("Tu dispositivo no tiene micrófono ni cámara. Entrarás como espectador.");
-        } else if (!hasVideo) {
-          setMediaWarning("No se detectó cámara. Entrarás solo con audio.");
-        } else if (!hasAudio) {
-          setMediaWarning("No se detectó micrófono. Entrarás solo con vídeo.");
+      // Real probe: actually try to acquire each track and immediately
+      // stop it. enumerateDevices lies in the "camera listed but OS
+      // permission denied / hardware busy" case — the only reliable
+      // signal is a getUserMedia round-trip.
+      //
+      // Sequence: (video+audio) → (audio only) → (video only) → none.
+      // Tracks are stopped right after acquisition so we don't hold the
+      // hardware open during the LiveKit handshake.
+      async function probe(constraints: MediaStreamConstraints): Promise<boolean> {
+        try {
+          const s = await navigator.mediaDevices.getUserMedia(constraints);
+          s.getTracks().forEach(t => t.stop());
+          return true;
+        } catch (e) {
+          console.warn(`[aula] getUserMedia failed for ${JSON.stringify(constraints)}:`, e);
+          return false;
         }
-      } catch {
-        // Some browsers (older Safari on iOS without permission) throw —
-        // assume both are available and let getUserMedia fail later with a
-        // clearer error rather than pre-empting.
-        if (!cancelled) setMedia({ video: true, audio: true });
+      }
+
+      // Small helper: keep last failure message to show the user.
+      let lastError: string | null = null;
+
+      const bothOk = await probe({ video: true, audio: true });
+      if (cancelled) return;
+      if (bothOk) { setMedia({ video: true, audio: true }); return; }
+
+      const audioOk = await probe({ audio: true });
+      if (cancelled) return;
+      if (audioOk) {
+        setMedia({ video: false, audio: true });
+        setMediaWarning("No se pudo activar la cámara. Entrarás solo con audio.");
+        return;
+      }
+
+      const videoOk = await probe({ video: true });
+      if (cancelled) return;
+      if (videoOk) {
+        setMedia({ video: true, audio: false });
+        setMediaWarning("No se pudo activar el micrófono. Entrarás solo con vídeo.");
+        return;
+      }
+
+      if (!cancelled) {
+        setMedia({ video: false, audio: false });
+        setMediaWarning(
+          lastError ??
+          "Tu navegador no permitió usar cámara ni micrófono. Entrarás como espectador (ves y escuchas a los demás). " +
+          "Si es un problema de permisos, recarga la página y pulsa 'Permitir'.",
+        );
       }
     })();
     return () => { cancelled = true; };
