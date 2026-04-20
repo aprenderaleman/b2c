@@ -9,6 +9,8 @@ import { OpenSchuleButton } from "@/components/entitlements/OpenSchuleButton";
 import { OpenHansButton } from "@/components/entitlements/OpenHansButton";
 import { getStudentUpcomingClasses, type ClassWithPeople, classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { NextClassCard } from "@/components/classes/NextClassCard";
+import { LiveClassCta } from "@/components/classes/LiveClassCta";
+import { getLiveClassForStudent } from "@/lib/imminent-class";
 import { getStudentProgress } from "@/lib/teacher-notes";
 import { ProgressBars } from "@/components/teacher/ProgressBars";
 
@@ -37,10 +39,13 @@ export default async function StudentHome() {
     );
   }
 
-  const upcoming = await getStudentUpcomingClasses(student.id, new Date(), 60);
-  const progress = await getStudentProgress(student.id);
-  const icalToken = await getUserIcalToken(session.user.id);
-  const streak    = await getAttendanceStreakForStudent(student.id);
+  const [upcoming, progress, icalToken, streak, live] = await Promise.all([
+    getStudentUpcomingClasses(student.id, new Date(), 60),
+    getStudentProgress(student.id),
+    getUserIcalToken(session.user.id),
+    getAttendanceStreakForStudent(student.id),
+    getLiveClassForStudent(student.id),
+  ]);
   const [next, ...rest] = upcoming;
 
   return (
@@ -51,6 +56,9 @@ export default async function StudentHome() {
           Bienvenido a tu plataforma. Aquí está lo próximo.
         </p>
       </header>
+
+      {/* Live-now CTA — auto-polls every 15s, auto-hides when class ends */}
+      <LiveClassCta initial={live} />
 
       {next ? (
         <NextClassCard

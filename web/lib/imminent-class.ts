@@ -70,6 +70,72 @@ export async function getImminentClassForTeacher(
   } : null;
 }
 
+/**
+ * The OTHER thing the student dashboard cares about: is any class the
+ * student is a participant of CURRENTLY live? This powers the big green
+ * "Entrar ahora" CTA that appears as soon as the teacher clicks
+ * "Iniciar clase ahora", without the student having to reload.
+ *
+ * Only status='live' — we ignore scheduled_at/duration_minutes so that
+ * on-demand classes (started before their scheduled time, or with a
+ * placeholder duration) still surface.
+ */
+export type LiveClassInfo = {
+  classId:     string;
+  title:       string;
+  teacherName: string;
+  startedAt:   string;
+};
+
+export async function getLiveClassForStudent(
+  studentId: string,
+): Promise<LiveClassInfo | null> {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("class_participants")
+    .select(`
+      class:classes!inner(
+        id, title, status, started_at, scheduled_at,
+        teachers!inner(users!inner(full_name, email))
+      )
+    `)
+    .eq("student_id", studentId)
+    .eq("class.status", "live")
+    .order("class(started_at)", { ascending: false })
+    .limit(1);
+
+  type Row = {
+    class: {
+      id: string; title: string; status: string;
+      started_at: string | null; scheduled_at: string;
+      teachers: { users: { full_name: string | null; email: string } |
+                  Array<{ full_name: string | null; email: string }> } |
+                Array<{ users: { full_name: string | null; email: string } |
+                        Array<{ full_name: string | null; email: string }> }>;
+    } | Array<{
+      id: string; title: string; status: string;
+      started_at: string | null; scheduled_at: string;
+      teachers: unknown;
+    }>;
+  };
+  const rows = (data ?? []) as Row[];
+  if (rows.length === 0) return null;
+  const c = Array.isArray(rows[0].class) ? rows[0].class[0] : rows[0].class;
+  if (!c) return null;
+  const t  = (c as { teachers: unknown }).teachers;
+  const tt = (Array.isArray(t) ? t[0] : t) as { users: unknown } | undefined;
+  const u  = tt?.users;
+  const uu = (Array.isArray(u) ? u[0] : u) as
+    | { full_name: string | null; email: string } | undefined;
+  return {
+    classId:     (c as { id: string }).id,
+    title:       (c as { title: string }).title,
+    teacherName: uu?.full_name ?? uu?.email ?? "Tu profesor",
+    startedAt:   (c as { started_at: string | null; scheduled_at: string }).started_at
+              ?? (c as { scheduled_at: string }).scheduled_at,
+  };
+}
+
 function extractFirst(data: unknown): ImminentClass | null {
   const rows = (data ?? []) as Array<{ class: unknown }>;
   if (rows.length === 0) return null;
