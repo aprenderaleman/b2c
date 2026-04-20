@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
+import { resolveEffectiveUser } from "@/lib/impersonation";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
 
@@ -10,15 +11,21 @@ import { createNotification } from "@/lib/notifications";
  *
  * On-demand class start. Teacher clicks "Iniciar clase ahora" on a
  * student's profile. We:
- *   1. Validate ownership (teacher must already teach this student).
- *   2. Refuse if the teacher has ANY class already in status='live' —
- *      double-booking yourself into parallel live rooms is a mess.
- *   3. Create a class row with status='live', scheduled_at=NOW(),
+ *   1. Validate ownership (teacher must already teach this student —
+ *      either via an existing class OR via a student_group assignment).
+ *   2. Create a class row with status='live', scheduled_at=NOW(),
  *      started_at=NOW(), duration_minutes=60 (placeholder — the real
  *      duration is written to actual_duration_minutes when the
  *      teacher ends the class through the existing end-class flow).
- *   4. Insert class_participants for the student.
- *   5. Fire an in-app notification linking the student to /aula/{id}.
+ *   3. Insert class_participants for the student.
+ *   4. Fire an in-app notification linking the student to /aula/{id}.
+ *
+ * Multiple parallel live classes are ALLOWED (Gelfis: a teacher may
+ * run several live rooms at once if needed). The aula itself shows a
+ * warning when the teacher already has another live session open.
+ *
+ * Honors admin impersonation: if the caller is an admin "viewing as"
+ * a teacher, the class is created under THAT teacher's identity.
  *
  * Returns { classId } — the client navigates to /aula/{classId}.
  */
@@ -37,7 +44,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const me = await getTeacherByUserId((session.user as { id: string }).id);
+  // Honor admin impersonation: when Gelfis "views as Sabine", the class
+  // must be created under Sabine's teacher_id, not Gelfis's user id.
+  const eff = await resolveEffectiveUser({
+    fallbackUserId: (session.user as { id: string }).id,
+    fallbackRole:   role as "teacher" | "admin" | "superadmin",
+    expectRole:     "teacher",
+  });
+  const me = await getTeacherByUserId(eff.userId);
   if (!me) {
     return NextResponse.json(
       { error: "no_teacher_profile", message: "Tu usuario no tiene perfil de profesor." },
@@ -58,8 +72,10 @@ export async function POST(req: Request) {
 
   // Ownership: teacher must either (a) share a past/future class with
   // the student OR (b) be the teacher of a student_group that the
-  // student belongs to. Admins skip the check.
-  const isAdmin = role === "admin" || role === "superadmin";
+  // student belongs to. Admins acting as themselves skip the check —
+  // but when impersonating a teacher we DO enforce it so we don't
+  // accidentally create a class nobody else would've been allowed to.
+  const isAdmin = (role === "admin" || role === "superadmin") && !eff.impersonated;
   if (!isAdmin) {
     const [classOwn, groupOwn] = await Promise.all([
       sb.from("classes")
@@ -94,20 +110,9 @@ export async function POST(req: Request) {
   const studentUserId = (st as { user_id: string }).user_id;
   const studentName   = uu.full_name ?? uu.email;
 
-  // Don't allow two parallel live classes for the same teacher.
-  const { data: alreadyLive } = await sb
-    .from("classes")
-    .select("id, title")
-    .eq("teacher_id", me.id)
-    .eq("status", "live")
-    .limit(1);
-  if (alreadyLive && alreadyLive.length > 0) {
-    return NextResponse.json({
-      error:   "already_live",
-      message: `Ya tienes otra clase en curso: "${(alreadyLive[0] as { title: string }).title}". Termínala antes de empezar otra.`,
-      existingClassId: (alreadyLive[0] as { id: string }).id,
-    }, { status: 409 });
-  }
+  // NOTE: Parallel live classes are explicitly allowed (per Gelfis) —
+  // a teacher may legitimately have multiple live rooms at once, e.g.
+  // one with a colleague covering attendance. No guard here.
 
   // Create the class. scheduled_at=NOW(), started_at=NOW(), status=live.
   // duration_minutes is a placeholder — the real number lands in

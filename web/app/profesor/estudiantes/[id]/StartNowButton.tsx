@@ -33,17 +33,11 @@ export function StartNowButton({ studentId, studentName }: {
       });
       const data = await res.json();
       if (!res.ok || !data?.classId) {
-        // Specific handling for "another class already live"
-        if (data?.error === "already_live" && data?.existingClassId) {
-          if (confirm(`${data.message}\n\n¿Quieres ir a esa clase?`)) {
-            router.push(`/aula/${data.existingClassId}`);
-          }
-          return;
-        }
         setError(data?.message ?? data?.error ?? "No se pudo iniciar la clase.");
         return;
       }
       // Straight into the aula — class is already status='live'.
+      // Parallel live classes are allowed; no gating here.
       router.push(`/aula/${data.classId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red.");

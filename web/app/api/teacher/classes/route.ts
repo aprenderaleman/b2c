@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
+import { resolveEffectiveUser } from "@/lib/impersonation";
 import { createClass } from "@/lib/classes";
 import { supabaseAdmin } from "@/lib/supabase";
 import { wireChatsForClass } from "@/lib/chat";
@@ -41,7 +42,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const me = await getTeacherByUserId((session.user as { id: string }).id);
+  // Honor admin impersonation: when "viewing as Sabine" the class is
+  // created under Sabine's teacher_id, not the admin's user.
+  const eff = await resolveEffectiveUser({
+    fallbackUserId: (session.user as { id: string }).id,
+    fallbackRole:   role as "teacher" | "admin" | "superadmin",
+    expectRole:     "teacher",
+  });
+  const me = await getTeacherByUserId(eff.userId);
   if (!me) {
     return NextResponse.json(
       { error: "no_teacher_profile", message: "Tu usuario no tiene perfil de profesor." },
@@ -75,17 +83,26 @@ export async function POST(req: Request) {
     );
   }
 
-  // Ownership check: each studentId must already be tied to me via
-  // class_participants in at least one class I teach.
+  // Ownership check: each studentId must be tied to me via (a) an
+  // existing class_participants row OR (b) a student_group I'm the
+  // assigned teacher of. Group-based ownership lets a teacher schedule
+  // the very first class with a newly-assigned student.
   const sb = supabaseAdmin();
-  const { data: mineRows } = await sb
-    .from("classes")
-    .select("class_participants!inner(student_id)")
-    .eq("teacher_id", me.id);
-  const myStudentIds = new Set(
-    ((mineRows ?? []) as Array<{ class_participants: Array<{ student_id: string }> }>)
-      .flatMap(r => r.class_participants.map(cp => cp.student_id)),
-  );
+  const [mineRows, groupRows] = await Promise.all([
+    sb.from("classes")
+      .select("class_participants!inner(student_id)")
+      .eq("teacher_id", me.id),
+    sb.from("student_group_members")
+      .select("student_id, group:student_groups!inner(teacher_id)")
+      .eq("group.teacher_id", me.id),
+  ]);
+  const myStudentIds = new Set<string>();
+  for (const r of (mineRows.data ?? []) as Array<{ class_participants: Array<{ student_id: string }> }>) {
+    for (const cp of r.class_participants) myStudentIds.add(cp.student_id);
+  }
+  for (const r of (groupRows.data ?? []) as Array<{ student_id: string }>) {
+    myStudentIds.add(r.student_id);
+  }
   const outsiders = body.studentIds.filter(id => !myStudentIds.has(id));
   if (outsiders.length > 0) {
     return NextResponse.json(
