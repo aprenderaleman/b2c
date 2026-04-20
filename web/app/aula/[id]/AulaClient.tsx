@@ -18,7 +18,7 @@ import {
   useLocalParticipant,
   type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
-import { RoomEvent, Track, type Participant } from "livekit-client";
+import { RoomEvent, Track, ParticipantEvent, type Participant } from "livekit-client";
 import { Reactions } from "./Reactions";
 
 type Props = {
@@ -55,6 +55,7 @@ export function AulaClient(p: Props) {
   const [token, setToken]         = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [error, setError]         = useState<string | null>(null);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   // Detect available input devices BEFORE connecting, so a user on a
   // laptop with no webcam (or a headless phone) doesn't get rejected by
@@ -185,9 +186,16 @@ export function AulaClient(p: Props) {
           durationMinutes={p.durationMinutes}
           isHost={p.isHost}
           backHref={p.backHref}
+          panelOpen={panelOpen}
+          onToggleParticipants={() => setPanelOpen(o => !o)}
         />
-        <div className="flex-1 min-h-0 bg-slate-900">
-          <VideoArea classId={p.classId} isHost={p.isHost} />
+        <div className="flex-1 min-h-0 flex bg-slate-900">
+          <div className="flex-1 min-w-0">
+            <VideoArea classId={p.classId} isHost={p.isHost} />
+          </div>
+          {panelOpen && (
+            <ParticipantsPanel onClose={() => setPanelOpen(false)} />
+          )}
         </div>
         <div className="border-t border-slate-800 bg-slate-900/80 backdrop-blur p-2">
           <ControlBar
@@ -350,10 +358,16 @@ function HostBtn({
 // ───────────────────────────────────────────────────────────────────
 // Top bar + teacher "end class" button + teardown hook
 // ───────────────────────────────────────────────────────────────────
-function TopBar({ classId, title, scheduledAt, durationMinutes, isHost, backHref }: {
+function TopBar({
+  classId, title, scheduledAt, durationMinutes, isHost, backHref,
+  panelOpen, onToggleParticipants,
+}: {
   classId: string; title: string; scheduledAt: string; durationMinutes: number;
   isHost: boolean; backHref: string;
+  panelOpen: boolean; onToggleParticipants: () => void;
 }) {
+  const participants = useParticipants();
+  const speaking = participants.find(p => p.isSpeaking) ?? null;
   const [elapsed, setElapsed] = useState(() =>
     Math.max(0, Math.floor((Date.now() - new Date(scheduledAt).getTime()) / 1000)));
 
@@ -402,6 +416,32 @@ function TopBar({ classId, title, scheduledAt, durationMinutes, isHost, backHref
         </div>
       </div>
       <div className="flex items-center gap-2 shrink-0">
+        {speaking && (
+          <span
+            className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-brand-500/20 ring-1 ring-brand-400/40 px-2.5 py-0.5 text-xs font-medium text-brand-200 max-w-[180px] truncate"
+            title={`${speaking.name || speaking.identity} está hablando`}
+          >
+            🎙️ <span className="truncate">{speaking.name || speaking.identity}</span>
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={onToggleParticipants}
+          className={`inline-flex items-center gap-1.5 rounded-full text-xs font-medium px-2.5 py-0.5 transition-colors
+                      ${panelOpen
+                        ? "bg-brand-500 text-white"
+                        : "bg-slate-700/80 hover:bg-slate-600/80 text-slate-200"}`}
+          title="Ver participantes"
+          aria-pressed={panelOpen}
+        >
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          {participants.length}
+        </button>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-300">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
           {isHost ? "Eres profesor" : "Participante"}
@@ -498,6 +538,136 @@ function HostTeardown({ classId, backHref }: { classId: string; backHref: string
     return () => window.removeEventListener("livekit:disconnected", handler as EventListener);
   }, [backHref, router, classId]);
   return null;
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Participants side panel — name, mic status, live "speaking" ring.
+// Solves the "student with no camera is invisible in the grid" gap.
+// ───────────────────────────────────────────────────────────────────
+function ParticipantsPanel({ onClose }: { onClose: () => void }) {
+  const participants = useParticipants();
+  const { localParticipant } = useLocalParticipant();
+
+  // Sort: local participant first (so you see yourself at the top), then
+  // others alphabetically by display name / identity.
+  const sorted = useMemo(() => {
+    const localId = localParticipant.identity;
+    return [...participants].sort((a, b) => {
+      if (a.identity === localId) return -1;
+      if (b.identity === localId) return 1;
+      const an = a.name || a.identity;
+      const bn = b.name || b.identity;
+      return an.localeCompare(bn);
+    });
+  }, [participants, localParticipant.identity]);
+
+  return (
+    <aside className="w-72 shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col">
+      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+        <h2 className="text-sm font-semibold text-slate-100">
+          Participantes · <span className="text-slate-400 font-normal">{participants.length}</span>
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-slate-400 hover:text-slate-200 text-xl leading-none"
+          aria-label="Cerrar panel de participantes"
+        >×</button>
+      </header>
+      <ul className="flex-1 overflow-y-auto">
+        {sorted.map(p => (
+          <ParticipantRow
+            key={p.identity}
+            participant={p}
+            isMe={p.identity === localParticipant.identity}
+          />
+        ))}
+      </ul>
+      <footer className="px-4 py-2 text-[11px] text-slate-500 border-t border-slate-800">
+        El borde naranja señala quién está hablando ahora.
+      </footer>
+    </aside>
+  );
+}
+
+function ParticipantRow({
+  participant, isMe,
+}: { participant: Participant; isMe: boolean }) {
+  // isSpeaking + mic-muted state come from LiveKit client events.
+  const [speaking, setSpeaking] = useState(participant.isSpeaking);
+  const [micOn,    setMicOn]    = useState(participant.isMicrophoneEnabled);
+  const [camOn,    setCamOn]    = useState(participant.isCameraEnabled);
+
+  useEffect(() => {
+    const onSpeakingChange = () => setSpeaking(participant.isSpeaking);
+    const onTrackChange    = () => {
+      setMicOn(participant.isMicrophoneEnabled);
+      setCamOn(participant.isCameraEnabled);
+    };
+    participant.on(ParticipantEvent.IsSpeakingChanged,   onSpeakingChange);
+    participant.on(ParticipantEvent.TrackMuted,          onTrackChange);
+    participant.on(ParticipantEvent.TrackUnmuted,        onTrackChange);
+    participant.on(ParticipantEvent.TrackPublished,      onTrackChange);
+    participant.on(ParticipantEvent.TrackUnpublished,    onTrackChange);
+    participant.on(ParticipantEvent.LocalTrackPublished, onTrackChange);
+    return () => {
+      participant.off(ParticipantEvent.IsSpeakingChanged,   onSpeakingChange);
+      participant.off(ParticipantEvent.TrackMuted,          onTrackChange);
+      participant.off(ParticipantEvent.TrackUnmuted,        onTrackChange);
+      participant.off(ParticipantEvent.TrackPublished,      onTrackChange);
+      participant.off(ParticipantEvent.TrackUnpublished,    onTrackChange);
+      participant.off(ParticipantEvent.LocalTrackPublished, onTrackChange);
+    };
+  }, [participant]);
+
+  const name    = participant.name || participant.identity;
+  const initial = (name || "?").trim().charAt(0).toUpperCase();
+
+  return (
+    <li className={`flex items-center gap-3 px-4 py-2.5 border-b border-slate-800/60
+                    ${speaking ? "bg-brand-500/10" : "hover:bg-slate-900/60"}`}>
+      <div className={`relative h-9 w-9 shrink-0 rounded-full bg-slate-700 flex items-center justify-center font-semibold text-sm text-slate-100
+                       ${speaking ? "ring-2 ring-brand-400 ring-offset-2 ring-offset-slate-950" : ""}`}>
+        {initial}
+        {speaking && (
+          <span className="absolute -inset-1 rounded-full border-2 border-brand-400/60 animate-ping" aria-hidden />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-medium text-slate-100 truncate">
+          {name}
+          {isMe && <span className="ml-1.5 text-[10px] font-normal text-slate-400">(tú)</span>}
+        </div>
+        <div className="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+          {micOn ? (
+            <span className="inline-flex items-center gap-1 text-emerald-400">
+              <MicIcon on />
+              {speaking ? "hablando" : "mic on"}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-slate-500">
+              <MicIcon on={false} />
+              mic off
+            </span>
+          )}
+          <span className={camOn ? "text-slate-300" : "text-slate-500"}>
+            {camOn ? "📹 cam on" : "📷 sin cam"}
+          </span>
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function MicIcon({ on }: { on: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="9" y="2" width="6" height="11" rx="3" />
+      <path d="M19 10v1a7 7 0 0 1-14 0v-1" />
+      <line x1="12" y1="18" x2="12" y2="22" />
+      {!on && <line x1="3" y1="3" x2="21" y2="21" />}
+    </svg>
+  );
 }
 
 // ───────────────────────────────────────────────────────────────────
