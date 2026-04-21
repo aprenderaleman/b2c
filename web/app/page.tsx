@@ -114,18 +114,59 @@ export default function HomePage() {
 // Building blocks
 // ─────────────────────────────────────────────────────────
 
+/**
+ * Stripe/Raycast-style hero backdrop.
+ *
+ *   1. Fine grid of 1px lines at 4-5% opacity, radially masked so it
+ *      fades out near the edges — prevents the "graph paper" look and
+ *      keeps the eye on the centre.
+ *   2. A big soft brand-orange spotlight behind the H1 for warmth.
+ *   3. A secondary peach accent bottom-right to add depth.
+ *   4. An SVG feTurbulence noise layer at ~3-5% opacity, mixed with
+ *      the rest via overlay — gives the backdrop a tactile, "material"
+ *      feel so it doesn't look flat-digital.
+ *
+ * All CSS-only; no images, no JS, no runtime cost.
+ */
 function BackgroundBlobs() {
+  const noiseSvg =
+    "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>\")";
   return (
     <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-      <div className="absolute -top-24 left-1/2 -translate-x-1/2 w-[90%] max-w-[900px] h-[500px]
-                      rounded-full
-                      bg-[radial-gradient(closest-side,rgba(251,146,60,0.35),transparent)]
-                      dark:bg-[radial-gradient(closest-side,rgba(251,146,60,0.25),transparent)]
-                      blur-2xl"/>
-      <div className="absolute top-[40%] -right-20 w-[300px] h-[300px] rounded-full
-                      bg-[radial-gradient(closest-side,rgba(249,115,22,0.22),transparent)]
-                      dark:bg-[radial-gradient(closest-side,rgba(249,115,22,0.15),transparent)]
-                      blur-3xl"/>
+      {/* 1 — fine grid with radial fade mask */}
+      <div
+        className="absolute inset-0
+                   [background-image:linear-gradient(to_right,rgba(15,23,42,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.05)_1px,transparent_1px)]
+                   dark:[background-image:linear-gradient(to_right,rgba(248,250,252,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(248,250,252,0.06)_1px,transparent_1px)]
+                   [background-size:44px_44px]
+                   [mask-image:radial-gradient(ellipse_70%_60%_at_50%_30%,black_0%,transparent_80%)]
+                   [-webkit-mask-image:radial-gradient(ellipse_70%_60%_at_50%_30%,black_0%,transparent_80%)]"
+      />
+
+      {/* 2 — main orange spotlight behind the H1 */}
+      <div
+        className="absolute -top-32 left-1/2 -translate-x-1/2
+                   w-[110%] max-w-[1100px] h-[640px] rounded-full
+                   bg-[radial-gradient(closest-side,rgba(251,146,60,0.42),rgba(251,146,60,0.15)_45%,transparent)]
+                   dark:bg-[radial-gradient(closest-side,rgba(251,146,60,0.32),rgba(251,146,60,0.10)_45%,transparent)]
+                   blur-3xl"
+      />
+
+      {/* 3 — warm peach accent for depth */}
+      <div
+        className="absolute top-[50%] -right-24
+                   w-[440px] h-[440px] rounded-full
+                   bg-[radial-gradient(closest-side,rgba(254,215,170,0.40),transparent)]
+                   dark:bg-[radial-gradient(closest-side,rgba(249,115,22,0.14),transparent)]
+                   blur-3xl"
+      />
+
+      {/* 4 — noise layer, kept subtle so it reads as "texture", not grain */}
+      <div
+        aria-hidden
+        className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08] mix-blend-overlay"
+        style={{ backgroundImage: noiseSvg, backgroundSize: "240px 240px" }}
+      />
     </div>
   );
 }
