@@ -8,9 +8,9 @@ export const translations = {
     },
     home: {
       tagline: "Cursos Intensivos Online · Niveles A1 a C1",
-      title: "Clases Particulares de Alemán Online",
+      title: "Clases Particulares de **Alemán** Online",
       subtitle:
-        "Con **profesor nativo que habla español**. Certificado oficial, horario flexible, **desde 17€/hora**.",
+        "Con profesor nativo que habla español. Certificado oficial, horario flexible, **desde 17€/hora**.",
       advantage1Title: "Profesores nativos",
       advantage1Body:
         "Certificados, de Alemania y Suiza, que también hablan español.",
@@ -159,9 +159,9 @@ export const translations = {
     },
     home: {
       tagline: "Intensivkurse Online · Niveaus A1 bis C1",
-      title: "Privater Deutschunterricht Online",
+      title: "Privater **Deutsch**unterricht Online",
       subtitle:
-        "Mit **muttersprachlichem Lehrer, der Spanisch spricht**. Offizielles Zertifikat, flexible Zeiten, **ab 17 €/Stunde**.",
+        "Mit muttersprachlichem Lehrer, der Spanisch spricht. Offizielles Zertifikat, flexible Zeiten, **ab 17 €/Stunde**.",
       advantage1Title: "Muttersprachliche Lehrer",
       advantage1Body:
         "Zertifiziert, aus Deutschland und der Schweiz, sprechen auch Spanisch.",
