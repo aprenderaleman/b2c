@@ -114,13 +114,40 @@ def _check_evolution() -> None:
         with httpx.Client(timeout=8.0) as c:
             r = c.get(f"{base}/instance/connectionState/{inst}",
                       headers={"apikey": key})
-        if r.status_code != 200:
-            log.info("Evolution connectionState HTTP %s — skipping", r.status_code)
-            return
+    except Exception as e:
+        log.warning("Evolution state probe failed: %s", e)
+        note_critical(
+            f"No puedo conectar con Evolution API ({e!s:.80}). "
+            f"Sin WhatsApp saliente hasta arreglarlo."
+        )
+        return
+
+    # 401/403 = API key inválida. Antes esto se ignoraba silenciosamente
+    # y los leads quedaban sin contacto durante horas sin alerta. Ahora
+    # lo levantamos como crítico para que el banner del admin lo muestre.
+    if r.status_code in (401, 403):
+        note_critical(
+            f"Evolution API rechaza nuestras llamadas (HTTP {r.status_code}). "
+            f"EVOLUTION_API_KEY está mal, o alguien regeneró la key de la "
+            f"instancia '{inst}'. Revisa https://evolution.aprender-aleman.de/manager "
+            f"y actualiza la key en /opt/b2c/.env. Todos los envíos están pausados."
+        )
+        return
+    if r.status_code == 404:
+        note_critical(
+            f"La instancia '{inst}' ya NO existe en Evolution (HTTP 404). "
+            f"Hay que recrearla desde el manager y re-escanear el QR."
+        )
+        return
+    if r.status_code != 200:
+        log.info("Evolution connectionState HTTP %s — skipping", r.status_code)
+        return
+
+    try:
         state = (r.json() or {}).get("instance", {}).get("state") \
              or (r.json() or {}).get("state") or ""
     except Exception as e:
-        log.warning("Evolution state probe failed: %s", e)
+        log.warning("Evolution state parse failed: %s", e)
         return
 
     if state in ("open", "connecting"):
@@ -224,7 +251,43 @@ def _check_stuck_leads() -> None:
 
 
 # ---------------------------------------------------------------------------
-# (5) Our own heartbeat — last so we mark ourselves alive even if one of
+# (5) Recent-send health — catches the case where Evolution's
+#     connectionState returns 200 but actual sendText calls fail (wrong
+#     per-instance apikey, rate limit, etc.). If 3+ of the last 5 sends
+#     in the last hour failed, raise a critical alert.
+# ---------------------------------------------------------------------------
+def _check_recent_sends() -> None:
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT success, error_message
+                  FROM message_send_log
+                 WHERE sent_at > now() - interval '1 hour'
+                   AND to_number <> '(deferred)'
+                 ORDER BY sent_at DESC
+                 LIMIT 5
+                """
+            )
+            rows = list(cur.fetchall())
+        if len(rows) < 3:
+            return                               # too little signal
+        failed = [r for r in rows if not r["success"]]
+        if len(failed) < 3:
+            return                               # majority succeeded — healthy
+
+        sample_err = (failed[0]["error_message"] or "").strip()[:150]
+        note_critical(
+            f"WhatsApp sends están fallando: {len(failed)}/{len(rows)} "
+            f"de los últimos intentos fallaron. Último error: {sample_err}. "
+            f"Revisa /admin/mantenimiento y Evolution."
+        )
+    except Exception as e:
+        log.warning("recent-sends health check failed: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# (6) Our own heartbeat — last so we mark ourselves alive even if one of
 #     the checks above bailed on an exception.
 # ---------------------------------------------------------------------------
 def _self_beat() -> None:
@@ -239,6 +302,7 @@ def run() -> None:
     log.info("janitor cycle start")
     _check_scheduler_freshness()
     _check_evolution()
+    _check_recent_sends()
     _check_sunday_skip_anomaly()
     _check_stuck_leads()
     _self_beat()

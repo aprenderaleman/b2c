@@ -61,6 +61,20 @@ def _is_invalid_number_error(err: str) -> bool:
     return '"exists":false' in err or '"exists": false' in err
 
 
+def _is_auth_error(err: str) -> bool:
+    """401/403 from Evolution means our API key is wrong or the instance
+    was regenerated. This is a CONFIG problem, not a per-lead problem —
+    every send will fail until an admin fixes it. We do NOT postpone
+    next_contact_date in this case so that the second a human fixes
+    Evolution, Agent 0 picks up every affected lead on the next tick."""
+    e = err.lower()
+    return (
+        "[401]" in e or "[403]" in e
+        or '"status":401' in e or '"status":403' in e
+        or "unauthorized" in e or "forbidden" in e
+    )
+
+
 def send_approved(
     lead: dict,
     text: str,
@@ -125,8 +139,24 @@ def send_approved(
         # Without this, Agent 0 would re-attempt every 15 min forever
         # (because next_contact_date is only advanced on successful sends).
         _mark_lead_invalid_phone(lead["id"])
+    elif _is_auth_error(err):
+        # Global config problem — Evolution API key is invalid. Every
+        # send will fail until a human fixes it. Do NOT push the lead's
+        # next_contact_date forward: once Evolution is fixed we want
+        # Agent 0's very next tick to pick this lead up. Also raise a
+        # critical alert so the admin banner fires even if the janitor
+        # hasn't run yet.
+        try:
+            from agents.shared.heartbeat import note_critical
+            note_critical(
+                f"Evolution rechazó el envío ({err[:80]}). "
+                "Revisa la API key en /opt/b2c/.env y el manager de Evolution."
+            )
+        except Exception:
+            pass
+        _alert_gelfis_send_failed(lead, err)
     else:
-        # Transient error (5xx, timeout, Evolution down…). Push the next
+        # Transient error (5xx, timeout, network blip…). Push the next
         # contact date into the future so we don't hot-loop, and alert
         # Gelfis once (notifications.py has its own 6h dedup).
         _postpone_next_contact(lead["id"], hours=_TRANSIENT_BACKOFF_HOURS)
