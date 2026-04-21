@@ -56,7 +56,18 @@ export default function HomePage() {
             </p>
 
             <div className="mt-2 flex flex-col items-center gap-3 w-full sm:w-auto">
-              <Link href="/funnel" className="btn-primary w-full sm:w-auto animate-pulse-glow">
+              <Link
+                href="/funnel"
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2
+                           rounded-2xl px-8 py-4 text-base font-bold text-white
+                           bg-gradient-to-r from-emerald-500 to-emerald-600
+                           hover:from-emerald-600 hover:to-emerald-700
+                           shadow-lg shadow-emerald-500/30
+                           ring-1 ring-emerald-400/40
+                           transition-all hover:-translate-y-0.5
+                           animate-pulse-glow
+                           tracking-wide"
+              >
                 {t.home.cta}
                 <span aria-hidden="true" className="ml-1">→</span>
               </Link>

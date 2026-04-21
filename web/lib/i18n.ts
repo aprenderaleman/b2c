@@ -7,10 +7,10 @@ export const translations = {
       whatsappLabel: "WhatsApp",
     },
     home: {
-      tagline: "Academia Premium Online",
-      title: "Aprender Alemán Online",
+      tagline: "Cursos Intensivos Online · Niveles A1 a C1",
+      title: "Clases Particulares de Alemán Online",
       subtitle:
-        "Cursos intensivos con **profesores nativos certificados**. Prepárate para tu visa, estudios o trabajo en Alemania y Suiza con **clases personalizadas**.",
+        "Con **profesor nativo que habla español**. Certificado oficial, horario flexible, **desde 17€/hora**.",
       advantage1Title: "Profesores nativos",
       advantage1Body:
         "Certificados, de Alemania y Suiza, que también hablan español.",
@@ -20,7 +20,7 @@ export const translations = {
       advantage3Title: "Resultados garantizados",
       advantage3Body:
         "Plan personalizado para visa, trabajo, estudios o exámenes oficiales.",
-      cta: "Comenzar ahora",
+      cta: "COMENZAR AHORA",
       ctaHint: "Gratis · 2 minutos · sin tarjeta",
       trust1Title: "Certificado Oficial",
       trust1Body:  "Marco Común Europeo",
@@ -158,10 +158,10 @@ export const translations = {
       whatsappLabel: "WhatsApp",
     },
     home: {
-      tagline: "Premium Online-Akademie",
-      title: "Deutsch online lernen",
+      tagline: "Intensivkurse Online · Niveaus A1 bis C1",
+      title: "Privater Deutschunterricht Online",
       subtitle:
-        "Intensive Kurse mit **zertifizierten muttersprachlichen Lehrern**. Bereite dich auf Visum, Studium oder Job in Deutschland und der Schweiz vor — mit **persönlichen Plänen**.",
+        "Mit **muttersprachlichem Lehrer, der Spanisch spricht**. Offizielles Zertifikat, flexible Zeiten, **ab 17 €/Stunde**.",
       advantage1Title: "Muttersprachliche Lehrer",
       advantage1Body:
         "Zertifiziert, aus Deutschland und der Schweiz, sprechen auch Spanisch.",
@@ -171,7 +171,7 @@ export const translations = {
       advantage3Title: "Garantierte Ergebnisse",
       advantage3Body:
         "Persönlicher Plan für Visum, Job, Studium oder offizielle Prüfungen.",
-      cta: "Jetzt starten",
+      cta: "JETZT STARTEN",
       ctaHint: "Kostenlos · 2 Minuten · ohne Karte",
       trust1Title: "Offizielles Zertifikat",
       trust1Body:  "Gemeinsamer Europäischer Referenzrahmen",
