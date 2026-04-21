@@ -78,7 +78,7 @@ async function runDigest(req: Request) {
     .filter(e => !e.paid)
     .reduce((s, e) => s + e.amount_cents, 0);
 
-  const platformUrl = process.env.PLATFORM_URL ?? "https://live.aprender-aleman.de";
+  const platformUrl = process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de";
 
   const result = await sendDailyDigestEmail(recipient, {
     date:                  now.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),

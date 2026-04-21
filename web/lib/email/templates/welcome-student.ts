@@ -4,7 +4,7 @@ export type WelcomeStudentVars = {
   name: string;
   email: string;
   tempPassword: string;
-  platformUrl: string;          // e.g. https://live.aprender-aleman.de
+  platformUrl: string;          // e.g. https://b2c.aprender-aleman.de
   hansUrl: string;              // https://hans.aprender-aleman.de
   schuleUrl: string;            // https://schule.aprender-aleman.de
   subscriptionLabel: string;    // "Paquete de 20 clases" / "Suscripción mensual", rendered already in the caller's language

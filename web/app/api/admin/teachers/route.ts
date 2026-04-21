@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "create_failed", message: msg }, { status: 500 });
   }
 
-  const platformUrl = process.env.PLATFORM_URL ?? "https://live.aprender-aleman.de";
+  const platformUrl = process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de";
   const emailResult = await sendWelcomeStaffEmail(body.email, {
     name:          body.fullName.split(/\s+/)[0] || body.fullName,
     email:         body.email,

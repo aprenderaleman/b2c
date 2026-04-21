@@ -151,7 +151,7 @@ export async function POST(
   });
 
   // ── Welcome email (awaited so we can log failures in the timeline).
-  const platformUrl = process.env.PLATFORM_URL ?? "https://live.aprender-aleman.de";
+  const platformUrl = process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de";
   const hansUrl     = process.env.HANS_URL     ?? "https://hans.aprender-aleman.de";
   const schuleUrl   = process.env.SCHULE_URL   ?? "https://schule.aprender-aleman.de";
 
