@@ -257,6 +257,31 @@ def _check_stuck_leads() -> None:
 #     in the last hour failed, raise a critical alert.
 # ---------------------------------------------------------------------------
 def _check_recent_sends() -> None:
+    """
+    Catches the case where Evolution's connectionState returns 200 but
+    actual sendText calls fail (wrong per-instance apikey, rate limit,
+    etc.). Only alerts on SYSTEMIC failures — per-lead issues like
+    "number doesn't have WhatsApp" don't count.
+
+    Guards against false positives:
+      (a) Ignore {"exists":false} errors — those are dead phones, not
+          system outages. Evolution is healthy even if the lead is not.
+      (b) If the most recent send SUCCEEDED, the system just recovered;
+          don't haunt the admin with old failures.
+      (c) If the banner is already set for a sends issue and conditions
+          are now healthy, clear it automatically.
+    """
+    def _is_per_lead_error(err: str | None) -> bool:
+        if not err:
+            return False
+        e = err.lower()
+        return '"exists":false' in e or '"exists": false' in e
+
+    def _clear_sends_banner_if_set() -> None:
+        current = (get_config("last_critical_issue") or "").lower()
+        if "sends están fallando" in current or "whatsapp sends" in current:
+            clear_critical()
+
     try:
         with get_conn() as conn, conn.cursor() as cur:
             cur.execute(
@@ -270,11 +295,25 @@ def _check_recent_sends() -> None:
                 """
             )
             rows = list(cur.fetchall())
+
         if len(rows) < 3:
+            _clear_sends_banner_if_set()
             return                               # too little signal
-        failed = [r for r in rows if not r["success"]]
+
+        # Guard (b): the most recent send succeeded → healthy, don't alert.
+        if rows[0]["success"]:
+            _clear_sends_banner_if_set()
+            return
+
+        # Count only SYSTEMIC failures. Per-lead permanent errors don't
+        # indicate a problem with the pipeline.
+        failed = [
+            r for r in rows
+            if not r["success"] and not _is_per_lead_error(r["error_message"])
+        ]
         if len(failed) < 3:
-            return                               # majority succeeded — healthy
+            _clear_sends_banner_if_set()
+            return
 
         sample_err = (failed[0]["error_message"] or "").strip()[:150]
         note_critical(
