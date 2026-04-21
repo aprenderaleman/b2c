@@ -52,6 +52,12 @@ export default async function BroadcastPage() {
 
   return (
     <main className="space-y-5">
+      <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700/50 p-4 text-sm text-amber-900 dark:text-amber-200">
+        <strong>Esta página es un broadcast puntual del cutover Zoom→B2C.</strong>{" "}
+        Para cualquier otro comunicado usa la nueva página{" "}
+        <a href="/admin/comunicados" className="underline font-semibold">/admin/comunicados</a>.
+      </div>
+
       <header>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
           Broadcast a profesores — plataforma lista

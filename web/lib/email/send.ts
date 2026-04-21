@@ -20,7 +20,7 @@ export type SendResult =
  * Returns a SendResult with either the provider's message id (or a
  * synthesised one for SMTP) or a clear error reason.
  */
-async function sendRaw(
+export async function sendRaw(
   to: string,
   subject: string,
   html: string,

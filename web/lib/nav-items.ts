@@ -64,7 +64,8 @@ function adminItems(): NavItem[] {
     { label: "Leads",       href: "/admin/leads",       icon: "users",         priority: 6 },
     { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 7 },
     { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
-    { label: "Chat",        href: "/chat",               icon: "messageCircle", priority: 9 },
+    { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
+    { label: "Chat",        href: "/chat",               icon: "messageCircle", priority: 10 },
   ];
 }
 
