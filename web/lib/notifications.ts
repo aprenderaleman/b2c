@@ -2,9 +2,13 @@ import { supabaseAdmin } from "./supabase";
 
 export type NotificationType =
   | "class_scheduled"
+  // Legacy reminder windows — kept for backwards compatibility with
+  // historical rows; new traffic uses class_reminder_30m only.
   | "class_reminder_24h"
   | "class_reminder_1h"
   | "class_reminder_15m"
+  // Single consolidated pre-class reminder (email + in-app, ~30 min before).
+  | "class_reminder_30m"
   | "class_cancelled"
   | "class_updated"
   | "class_starting"

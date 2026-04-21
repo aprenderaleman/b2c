@@ -7,6 +7,10 @@ import {
   renderTeacherPlatformAnnouncement,
   type PlatformAnnouncementVars,
 } from "./templates/teacher-platform-announcement";
+import {
+  renderClassReminder30m,
+  type ClassReminder30mVars,
+} from "./templates/class-reminder-30m";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -118,5 +122,18 @@ export async function sendTeacherPlatformAnnouncement(
   vars: PlatformAnnouncementVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderTeacherPlatformAnnouncement(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Pre-class reminder, ~30 min before start. Single notification per
+ * class (no WhatsApp, no second window) — used by the
+ * /api/cron/class-reminders job.
+ */
+export async function sendClassReminder30mEmail(
+  to: string,
+  vars: ClassReminder30mVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderClassReminder30m(vars);
   return sendRaw(to, subject, html, text);
 }
