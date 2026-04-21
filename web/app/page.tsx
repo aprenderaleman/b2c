@@ -115,58 +115,73 @@ export default function HomePage() {
 // ─────────────────────────────────────────────────────────
 
 /**
- * Stripe/Raycast-style hero backdrop.
+ * Mesh-aurora hero backdrop.
  *
- *   1. Fine grid of 1px lines at 4-5% opacity, radially masked so it
- *      fades out near the edges — prevents the "graph paper" look and
- *      keeps the eye on the centre.
- *   2. A big soft brand-orange spotlight behind the H1 for warmth.
- *   3. A secondary peach accent bottom-right to add depth.
- *   4. An SVG feTurbulence noise layer at ~3-5% opacity, mixed with
- *      the rest via overlay — gives the backdrop a tactile, "material"
- *      feel so it doesn't look flat-digital.
+ * Five overlapping color blobs (brand-orange, coral, amber, peach,
+ * deep orange) with strong blur and blend modes so they melt into
+ * each other like northern lights. Each blob drifts on its own slow
+ * keyframe (18-26s) so the composition is constantly shifting without
+ * being distracting.
  *
- * All CSS-only; no images, no JS, no runtime cost.
+ * Blend modes per scheme:
+ *   - light: mix-blend-multiply  → blobs darken on overlap, warm "sunset"
+ *   - dark:  mix-blend-screen    → blobs brighten on overlap, glowing
+ *
+ * A super-subtle SVG noise layer kills the "plastic gradient" look.
+ *
+ * All CSS, no images, no JS. Performance-safe (transform-only animations).
  */
 function BackgroundBlobs() {
   const noiseSvg =
     "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>\")";
   return (
     <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-      {/* 1 — fine grid with radial fade mask */}
-      <div
-        className="absolute inset-0
-                   [background-image:linear-gradient(to_right,rgba(15,23,42,0.05)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.05)_1px,transparent_1px)]
-                   dark:[background-image:linear-gradient(to_right,rgba(248,250,252,0.06)_1px,transparent_1px),linear-gradient(to_bottom,rgba(248,250,252,0.06)_1px,transparent_1px)]
-                   [background-size:44px_44px]
-                   [mask-image:radial-gradient(ellipse_70%_60%_at_50%_30%,black_0%,transparent_80%)]
-                   [-webkit-mask-image:radial-gradient(ellipse_70%_60%_at_50%_30%,black_0%,transparent_80%)]"
-      />
+      {/* Soft base wash so blobs have something to blend against */}
+      <div className="absolute inset-0
+                      bg-gradient-to-br from-orange-50/60 via-white to-amber-50/40
+                      dark:from-slate-950 dark:via-slate-950 dark:to-slate-900" />
 
-      {/* 2 — main orange spotlight behind the H1 */}
-      <div
-        className="absolute -top-32 left-1/2 -translate-x-1/2
-                   w-[110%] max-w-[1100px] h-[640px] rounded-full
-                   bg-[radial-gradient(closest-side,rgba(251,146,60,0.42),rgba(251,146,60,0.15)_45%,transparent)]
-                   dark:bg-[radial-gradient(closest-side,rgba(251,146,60,0.32),rgba(251,146,60,0.10)_45%,transparent)]
-                   blur-3xl"
-      />
+      {/* Brand orange — top-left of the title area */}
+      <div className="absolute -top-32 left-[15%] w-[640px] h-[640px] rounded-full
+                      bg-brand-500/45 dark:bg-brand-500/35
+                      blur-[110px]
+                      mix-blend-multiply dark:mix-blend-screen
+                      animate-aurora-a will-change-transform" />
 
-      {/* 3 — warm peach accent for depth */}
-      <div
-        className="absolute top-[50%] -right-24
-                   w-[440px] h-[440px] rounded-full
-                   bg-[radial-gradient(closest-side,rgba(254,215,170,0.40),transparent)]
-                   dark:bg-[radial-gradient(closest-side,rgba(249,115,22,0.14),transparent)]
-                   blur-3xl"
-      />
+      {/* Coral / rose — top-right */}
+      <div className="absolute -top-20 right-[5%] w-[520px] h-[520px] rounded-full
+                      bg-rose-400/40 dark:bg-rose-500/30
+                      blur-[110px]
+                      mix-blend-multiply dark:mix-blend-screen
+                      animate-aurora-b will-change-transform" />
 
-      {/* 4 — noise layer, kept subtle so it reads as "texture", not grain */}
-      <div
-        aria-hidden
-        className="absolute inset-0 opacity-[0.04] dark:opacity-[0.08] mix-blend-overlay"
-        style={{ backgroundImage: noiseSvg, backgroundSize: "240px 240px" }}
-      />
+      {/* Amber — mid-left */}
+      <div className="absolute top-32 -left-28 w-[480px] h-[480px] rounded-full
+                      bg-amber-400/40 dark:bg-amber-500/25
+                      blur-[110px]
+                      mix-blend-multiply dark:mix-blend-screen
+                      animate-aurora-c will-change-transform" />
+
+      {/* Peach — lower-center */}
+      <div className="absolute top-[55%] left-[35%] w-[500px] h-[500px] rounded-full
+                      bg-orange-300/45 dark:bg-orange-400/28
+                      blur-[110px]
+                      mix-blend-multiply dark:mix-blend-screen
+                      animate-aurora-b will-change-transform"
+           style={{ animationDelay: "-7s" }} />
+
+      {/* Deep orange — lower-right */}
+      <div className="absolute top-[60%] right-[8%] w-[440px] h-[440px] rounded-full
+                      bg-orange-600/35 dark:bg-orange-600/25
+                      blur-[110px]
+                      mix-blend-multiply dark:mix-blend-screen
+                      animate-aurora-a will-change-transform"
+           style={{ animationDelay: "-9s" }} />
+
+      {/* Noise: ~3% so the gradient doesn't read as plasticky */}
+      <div aria-hidden
+           className="absolute inset-0 opacity-[0.03] dark:opacity-[0.06] mix-blend-overlay"
+           style={{ backgroundImage: noiseSvg, backgroundSize: "240px 240px" }} />
     </div>
   );
 }

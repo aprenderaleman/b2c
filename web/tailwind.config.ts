@@ -49,11 +49,30 @@ const config: Config = {
           "0%,100%": { boxShadow: "0 8px 24px -8px rgba(249,115,22,0.45)" },
           "50%":     { boxShadow: "0 12px 40px -8px rgba(249,115,22,0.75)" },
         },
+        // Slow drifts for the hero mesh-gradient blobs. Three phases with
+        // distinct paths so the layered colours never line up the same
+        // way twice in a single cycle — gives the "aurora" feel.
+        auroraA: {
+          "0%,100%": { transform: "translate3d(0,0,0) scale(1)" },
+          "50%":     { transform: "translate3d(60px,40px,0) scale(1.08)" },
+        },
+        auroraB: {
+          "0%,100%": { transform: "translate3d(0,0,0) scale(1)" },
+          "33%":     { transform: "translate3d(-50px,30px,0) scale(0.95)" },
+          "66%":     { transform: "translate3d(40px,-30px,0) scale(1.05)" },
+        },
+        auroraC: {
+          "0%,100%": { transform: "translate3d(0,0,0) scale(1)" },
+          "50%":     { transform: "translate3d(-40px,-50px,0) scale(1.1)" },
+        },
       },
       animation: {
         "fade-in":    "fadeIn 0.4s ease-out",
         "float":      "float 6s ease-in-out infinite",
         "pulse-glow": "pulseGlow 2.5s ease-in-out infinite",
+        "aurora-a":   "auroraA 18s ease-in-out infinite",
+        "aurora-b":   "auroraB 22s ease-in-out infinite",
+        "aurora-c":   "auroraC 26s ease-in-out infinite",
       },
     },
   },
