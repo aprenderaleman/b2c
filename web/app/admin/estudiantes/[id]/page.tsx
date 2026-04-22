@@ -7,7 +7,10 @@ import { IssueCertificateButton } from "@/components/admin/IssueCertificateButto
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 import { AdjustClassesButton } from "@/components/admin/AdjustClassesButton";
 import { EditPackButton } from "@/components/admin/EditPackButton";
+import { NotesCard } from "@/components/admin/NotesCard";
 import { listStudentCertificates } from "@/lib/certificates";
+import { listAdminNotes } from "@/lib/admin-notes";
+import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +20,14 @@ export default async function StudentDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await requireRole(["admin", "superadmin"]);
   const { id } = await params;
   const student = await getStudentById(id);
   if (!student) notFound();
 
   const payments = await listStudentPayments(id);
   const certs    = await listStudentCertificates(id);
+  const notes    = await listAdminNotes("student", id);
   const waDigits = student.phone?.replace(/\D/g, "") ?? "";
 
   // Pull the pack numbers from the view so we can show + adjust them.
@@ -222,6 +227,14 @@ export default async function StudentDetailPage({
           </Panel>
         </div>
       </div>
+
+      <NotesCard
+        targetType="student"
+        targetId={id}
+        initialNotes={notes}
+        currentUserId={session.user.id}
+        currentRole={session.user.role === "superadmin" ? "superadmin" : "admin"}
+      />
     </main>
   );
 }

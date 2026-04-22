@@ -2,6 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTeacherById } from "@/lib/academy";
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
+import { requireRole } from "@/lib/rbac";
+import { listAdminNotes } from "@/lib/admin-notes";
+import { NotesCard } from "@/components/admin/NotesCard";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +13,12 @@ export default async function TeacherDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const session = await requireRole(["admin", "superadmin"]);
   const { id } = await params;
   const teacher = await getTeacherById(id);
   if (!teacher) notFound();
+
+  const notes = await listAdminNotes("teacher", id);
 
   const waDigits = teacher.phone?.replace(/\D/g, "") ?? "";
 
@@ -68,6 +74,14 @@ export default async function TeacherDetailPage({
           <Kv k="Notas"           v={teacher.notes ?? "—"} />
         </Panel>
       </div>
+
+      <NotesCard
+        targetType="teacher"
+        targetId={id}
+        initialNotes={notes}
+        currentUserId={session.user.id}
+        currentRole={session.user.role === "superadmin" ? "superadmin" : "admin"}
+      />
     </main>
   );
 }

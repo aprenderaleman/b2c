@@ -255,22 +255,22 @@ def _handle_price_request(lead: dict, wa: WhatsAppService | None) -> HandleResul
         body = (
             f"Hallo {name}! 👋\n\n"
             f"Unsere Kurse liegen zwischen 285 € und über 3 000 €, je nach "
-            f"Niveau und Intensität.\n\n"
+            f"Niveau, Intensität und Dauer.\n\n"
             f"Am besten buchst du eine kostenlose Probestunde: wir bewerten "
             f"dein Niveau und erstellen einen Plan (mit genauem Preis) "
             f"nach Maß.\n\n"
-            f"Sag Bescheid, dann schicke ich dir den Termin-Link.\n\n"
+            f"Soll ich dir den Link zum Buchen schicken?\n\n"
             f"Stiv, Aprender-Aleman.de"
         )
     else:
         body = (
             f"¡Hola {name}! 👋\n\n"
             f"Nuestras formaciones van desde 285 € hasta más de 3 000 €, "
-            f"según el nivel y la intensidad que necesites.\n\n"
+            f"según el nivel, la intensidad y duración que necesites.\n\n"
             f"Lo mejor es que agendes una clase de prueba gratuita: así tu "
             f"profesor evalúa tu nivel y te hace un plan (con precio exacto) "
             f"a medida.\n\n"
-            f"Dime y te paso el enlace para reservarla.\n\n"
+            f"¿Quieres que te envíe el enlace para reservarla?\n\n"
             f"Stiv, Aprender-Aleman.de"
         )
     if lead.get("status") in ("new", "contacted_1", "contacted_2", "contacted_3",
