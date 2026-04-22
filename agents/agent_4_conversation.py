@@ -80,19 +80,35 @@ NEGATIVE_WORDS = {
     ],
 }
 
+# "Price request" — any signal that the lead specifically wants prices.
+# Handled separately from broad-info because the answer is a concrete
+# price range + trial-class suggestion, not "see the website".
+PRICE_WORDS = {
+    "es": [
+        "precios", "precio", "cuanto cuesta", "cuánto cuesta",
+        "cuanto vale", "cuánto vale", "cuanto sale", "cuánto sale",
+        "cuanto pagar", "cuánto pagar", "coste", "costo", "tarifa",
+        "tarifas", "que precio", "qué precio", "cuánto es", "cuanto es",
+    ],
+    "de": [
+        "preis", "preise", "was kostet", "wie teuer", "kosten",
+        "tarif", "tarife", "wieviel kostet", "wie viel kostet",
+    ],
+}
+
 # "Broad info request" — when the lead wants details beyond what we'd send
-# conversationally (prices, curriculum, teachers…). We reply with the
+# conversationally (curriculum, teachers, methodology…). We reply with the
 # public website URL in one short message.
 INFO_WORDS = {
     "es": [
         "más info", "mas info", "más información", "mas informacion",
-        "informacion", "información", "detalles", "precios", "precio",
-        "cuanto cuesta", "cuánto cuesta", "pagina web", "página web",
+        "informacion", "información", "detalles",
+        "pagina web", "página web",
         "sitio web", "la web", "ver web", "ver la web",
     ],
     "de": [
         "mehr info", "mehr infos", "mehr informationen", "details",
-        "preis", "preise", "webseite", "website", "homepage",
+        "webseite", "website", "homepage",
     ],
 }
 
@@ -126,7 +142,8 @@ def _has_phrase(text_norm: str, phrases: list[str]) -> str | None:
 
 
 Intent = Literal[
-    "booking", "human_request", "negative", "info_request", "ai_reply",
+    "booking", "human_request", "negative",
+    "price_request", "info_request", "ai_reply",
     "already_converted_ignore", "needs_human_already_paused_ignore",
 ]
 
@@ -181,6 +198,12 @@ def handle_incoming_message(
     if _has_phrase(text_norm, BOOKING_WORDS[lang]):
         return _handle_booking(lead, wa)
 
+    # Price questions get a concrete answer BEFORE the generic info bucket
+    # — both banks contain overlapping keywords and we want the specific
+    # response to win.
+    if _has_phrase(text_norm, PRICE_WORDS[lang] + PRICE_WORDS[other_lang]):
+        return _handle_price_request(lead, wa)
+
     if _has_phrase(text_norm, INFO_WORDS[lang] + INFO_WORDS[other_lang]):
         return _handle_info_request(lead, wa)
 
@@ -215,6 +238,47 @@ def _handle_booking(lead: dict, wa: WhatsAppService | None) -> HandleResult:
     update_status(lead["id"], "link_sent", author="agent_4")
     result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
     return HandleResult("booking", sent=result.success, message_sent=body)
+
+
+def _handle_price_request(lead: dict, wa: WhatsAppService | None) -> HandleResult:
+    """Specific answer to "how much does it cost".
+
+    We don't dump the whole catalog — per Gelfis, the honest line is:
+    "we have formations from 285 € to 3 000+ €, depending on level and
+    intensity; the right move is a trial class so we can price your
+    exact plan". Keep it warm, end with a soft CTA for the trial class
+    (don't auto-send the Calendly link yet — wait for them to say yes).
+    """
+    lang = lead.get("language", "es")
+    name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
+    if lang == "de":
+        body = (
+            f"Hallo {name}! 👋\n\n"
+            f"Unsere Kurse liegen zwischen 285 € und über 3 000 €, je nach "
+            f"Niveau und Intensität.\n\n"
+            f"Am besten buchst du eine kostenlose Probestunde: wir bewerten "
+            f"dein Niveau und erstellen einen Plan (mit genauem Preis) "
+            f"nach Maß.\n\n"
+            f"Sag Bescheid, dann schicke ich dir den Termin-Link.\n\n"
+            f"Stiv, Aprender-Aleman.de"
+        )
+    else:
+        body = (
+            f"¡Hola {name}! 👋\n\n"
+            f"Nuestras formaciones van desde 285 € hasta más de 3 000 €, "
+            f"según el nivel y la intensidad que necesites.\n\n"
+            f"Lo mejor es que agendes una clase de prueba gratuita: así tu "
+            f"profesor evalúa tu nivel y te hace un plan (con precio exacto) "
+            f"a medida.\n\n"
+            f"Dime y te paso el enlace para reservarla.\n\n"
+            f"Stiv, Aprender-Aleman.de"
+        )
+    if lead.get("status") in ("new", "contacted_1", "contacted_2", "contacted_3",
+                              "contacted_4", "contacted_5"):
+        update_status(lead["id"], "in_conversation", author="agent_4")
+    result = send_approved(lead, body, is_new_conversation=False,
+                           advance_followup=False, wa=wa)
+    return HandleResult("price_request", sent=result.success, message_sent=body)
 
 
 def _handle_info_request(lead: dict, wa: WhatsAppService | None) -> HandleResult:
