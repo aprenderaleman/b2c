@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 import { formatBytes, formatDurationHms } from "@/lib/recordings";
+import { RecordingRow } from "./RecordingRow";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Grabaciones · Admin" };
@@ -115,47 +116,20 @@ export default async function AdminRecordingsPage() {
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {items.map(it => (
-              <li key={it.recording_id}>
-                <Link
-                  href={it.status === "ready" ? `/grabacion/${it.recording_id}` : `/admin/clases/${it.class_id}`}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 px-5 py-4
-                             hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                      <StatusDot status={it.status} />
-                      <span className="truncate">{it.class_title}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400 flex flex-wrap gap-x-2 gap-y-0.5">
-                      <span>{fmtDate(it.class_date)}</span>
-                      <span>·</span>
-                      <span>Con <strong className="text-slate-700 dark:text-slate-200">{it.teacher_name}</strong></span>
-                      {it.students.length > 0 && (
-                        <>
-                          <span>·</span>
-                          <span className="truncate">
-                            {it.students.slice(0, 3).map(s => (s.full_name || s.email).split(/\s+/)[0]).join(", ")}
-                            {it.students.length > 3 && ` +${it.students.length - 3}`}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 shrink-0 text-xs text-slate-500 dark:text-slate-400 font-mono">
-                    <span>{it.duration ? formatDurationHms(it.duration) : "—"}</span>
-                    <span className="hidden sm:inline">{formatBytes(it.size)}</span>
-                    <span className={
-                      it.status === "ready" ? "text-emerald-600 dark:text-emerald-400" :
-                      it.status === "processing" ? "text-amber-600 dark:text-amber-400" :
-                                                   "text-red-600 dark:text-red-400"
-                    }>
-                      {it.status === "ready" ? "Ver →" :
-                       it.status === "processing" ? "Procesando…" :
-                                                    "Error"}
-                    </span>
-                  </div>
-                </Link>
-              </li>
+              <RecordingRow
+                key={it.recording_id}
+                item={{
+                  recording_id:   it.recording_id,
+                  status:         it.status,
+                  class_id:       it.class_id,
+                  class_title:    it.class_title,
+                  teacher_name:   it.teacher_name,
+                  student_names:  it.students.map(s => (s.full_name || s.email).split(/\s+/)[0]),
+                  duration_label: it.duration ? formatDurationHms(it.duration) : "—",
+                  size_label:     formatBytes(it.size),
+                  date_label:     fmtDate(it.class_date),
+                }}
+              />
             ))}
           </ul>
         )}
@@ -175,13 +149,6 @@ function Chip({ tone, label }: {
       {label}
     </span>
   );
-}
-
-function StatusDot({ status }: { status: "processing" | "ready" | "failed" }) {
-  const cls = status === "ready"      ? "bg-emerald-500" :
-              status === "processing" ? "bg-amber-400 animate-pulse" :
-                                        "bg-red-500";
-  return <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${cls}`} aria-hidden />;
 }
 
 function fmtDate(iso: string): string {

@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
@@ -72,5 +72,32 @@ export async function signRecordingUrl(
   } catch (e) {
     console.error("[r2] sign failed:", e);
     return fileUrl;
+  }
+}
+
+/**
+ * Hard-delete the object from R2. Best-effort — returns true if the
+ * delete succeeded OR if R2 isn't configured (dev fallback). Returns
+ * false only when R2 is configured but the delete errored, so the
+ * caller can decide whether to also drop the DB row.
+ */
+export async function deleteRecordingObject(fileUrl: string): Promise<boolean> {
+  const c = client();
+  if (!c) {
+    console.warn("[r2] not configured — skipping object delete, treating as success");
+    return true;
+  }
+  const parts = keyFromFileUrl(fileUrl);
+  if (!parts) return true;                                // unparseable URL, nothing to delete
+  const cmd = new DeleteObjectCommand({
+    Bucket: process.env.R2_BUCKET || parts.bucket || DEFAULT_BUCKET,
+    Key:    parts.key,
+  });
+  try {
+    await c.send(cmd);
+    return true;
+  } catch (e) {
+    console.error("[r2] delete failed:", e);
+    return false;
   }
 }
