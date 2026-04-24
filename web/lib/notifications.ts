@@ -44,6 +44,19 @@ export async function createNotification(input: {
   class_id?: string | null;
 }): Promise<string | null> {
   const sb = supabaseAdmin();
+
+  // Global opt-out gate — users.notifications_opt_out=TRUE means we
+  // skip ALL programmatic pushes (bell + any email triggered alongside).
+  // Caller can still check ok=null and move on.
+  const { data: u } = await sb
+    .from("users")
+    .select("notifications_opt_out")
+    .eq("id", input.user_id)
+    .maybeSingle();
+  if ((u as { notifications_opt_out?: boolean } | null)?.notifications_opt_out) {
+    return null;
+  }
+
   const { data, error } = await sb.from("notifications").insert({
     user_id:   input.user_id,
     type:      input.type,
@@ -59,6 +72,21 @@ export async function createNotification(input: {
     return null;
   }
   return (data?.id as string) ?? null;
+}
+
+/**
+ * Check if a user is opted out of all programmatic pushes. Exposed for
+ * senders (cron, broadcasts) that need to decide whether to send an
+ * email even without going through createNotification.
+ */
+export async function isNotificationsOptOut(userId: string): Promise<boolean> {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("users")
+    .select("notifications_opt_out")
+    .eq("id", userId)
+    .maybeSingle();
+  return Boolean((data as { notifications_opt_out?: boolean } | null)?.notifications_opt_out);
 }
 
 /**

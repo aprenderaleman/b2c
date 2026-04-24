@@ -66,13 +66,13 @@ async function runCron(req: Request) {
       id, scheduled_at, duration_minutes, title, teacher_id,
       teacher:teachers!inner(
         user_id,
-        users!inner(email, full_name, language_preference)
+        users!inner(email, full_name, language_preference, notifications_opt_out)
       ),
       class_participants(
         student_id,
         student:students!inner(
           user_id,
-          users!inner(email, full_name, language_preference)
+          users!inner(email, full_name, language_preference, notifications_opt_out)
         )
       )
     `)
@@ -84,7 +84,7 @@ async function runCron(req: Request) {
     return NextResponse.json({ ok: true, classesChecked: 0, remindersSent: 0 });
   }
 
-  type UserRow = { email: string; full_name: string | null; language_preference: "es" | "de" };
+  type UserRow = { email: string; full_name: string | null; language_preference: "es" | "de"; notifications_opt_out?: boolean };
   type TeacherShape = {
     user_id: string;
     users: UserRow | UserRow[];
@@ -110,7 +110,9 @@ async function runCron(req: Request) {
     const teacherFirst = (teacherName.split(/\s+/)[0]) || teacherName;
 
     // Students of this class — used both as recipients AND to build the
-    // teacher's "partner" line ("Con Maria, Juan").
+    // teacher's "partner" line ("Con Maria, Juan"). Opt-out users are
+    // excluded from the recipient list but still shown in the partner
+    // label (the teacher should still see who the class is with).
     const participants = (c.class_participants as ParticipantShape[]) ?? [];
     const studentEntries = participants.map(p => {
       const sw = flat(p.student);
@@ -121,6 +123,7 @@ async function runCron(req: Request) {
         name:   su.full_name?.trim() || su.email,
         first:  (su.full_name?.trim() || su.email).split(/\s+/)[0] || su.email,
         lang:   su.language_preference,
+        optOut: Boolean(su.notifications_opt_out),
       } : null;
     }).filter((x): x is NonNullable<typeof x> => x !== null);
     const studentLabel = studentEntries.map(s => s.first).join(", ") || "tus estudiantes";
@@ -135,8 +138,9 @@ async function runCron(req: Request) {
     const classUrl = `${PLATFORM_URL.replace(/\/$/, "")}/aula/${c.id}`;
     const classTitle = (c.title as string | null) ?? "Tu clase";
 
-    // ── Teacher email
-    if (teacherWrap && teacherUser?.email) {
+    // ── Teacher email (skipped entirely if teacher is opted out)
+    const teacherOptOut = Boolean(teacherUser?.notifications_opt_out);
+    if (teacherWrap && teacherUser?.email && !teacherOptOut) {
       const already = await reminderAlreadySent(teacherWrap.user_id, c.id as string, REMINDER_TYPE);
       if (!already) {
         // In-app notification doubles as the dedup record.
@@ -160,8 +164,9 @@ async function runCron(req: Request) {
       }
     }
 
-    // ── Student emails
+    // ── Student emails (opt-out users are silently skipped)
     for (const s of studentEntries) {
+      if (s.optOut) continue;
       const already = await reminderAlreadySent(s.userId, c.id as string, REMINDER_TYPE);
       if (already) continue;
 

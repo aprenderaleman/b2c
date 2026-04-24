@@ -8,6 +8,7 @@ import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 import { AdjustClassesButton } from "@/components/admin/AdjustClassesButton";
 import { EditPackButton } from "@/components/admin/EditPackButton";
 import { NotesCard } from "@/components/admin/NotesCard";
+import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOutToggle";
 import { listStudentCertificates } from "@/lib/certificates";
 import { listAdminNotes } from "@/lib/admin-notes";
 import { requireRole } from "@/lib/rbac";
@@ -29,6 +30,15 @@ export default async function StudentDetailPage({
   const certs    = await listStudentCertificates(id);
   const notes    = await listAdminNotes("student", id);
   const waDigits = student.phone?.replace(/\D/g, "") ?? "";
+
+  const { data: optOutRow } = await supabaseAdmin()
+    .from("users")
+    .select("notifications_opt_out")
+    .eq("id", student.user_id)
+    .maybeSingle();
+  const optOut = Boolean(
+    (optOutRow as { notifications_opt_out?: boolean } | null)?.notifications_opt_out,
+  );
 
   // Pull the pack numbers from the view so we can show + adjust them.
   const { data: pack } = await supabaseAdmin()
@@ -227,6 +237,12 @@ export default async function StudentDetailPage({
           </Panel>
         </div>
       </div>
+
+      <NotificationsOptOutToggle
+        userId={student.user_id}
+        initialOptOut={optOut}
+        personLabel={student.full_name || student.email}
+      />
 
       <NotesCard
         targetType="student"

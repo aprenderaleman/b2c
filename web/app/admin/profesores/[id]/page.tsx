@@ -5,6 +5,8 @@ import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 import { requireRole } from "@/lib/rbac";
 import { listAdminNotes } from "@/lib/admin-notes";
 import { NotesCard } from "@/components/admin/NotesCard";
+import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOutToggle";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +20,17 @@ export default async function TeacherDetailPage({
   const teacher = await getTeacherById(id);
   if (!teacher) notFound();
 
-  const notes = await listAdminNotes("teacher", id);
+  const [notes, optOutRow] = await Promise.all([
+    listAdminNotes("teacher", id),
+    supabaseAdmin()
+      .from("users")
+      .select("notifications_opt_out")
+      .eq("id", teacher.user_id)
+      .maybeSingle(),
+  ]);
+  const optOut = Boolean(
+    (optOutRow.data as { notifications_opt_out?: boolean } | null)?.notifications_opt_out,
+  );
 
   const waDigits = teacher.phone?.replace(/\D/g, "") ?? "";
 
@@ -74,6 +86,12 @@ export default async function TeacherDetailPage({
           <Kv k="Notas"           v={teacher.notes ?? "—"} />
         </Panel>
       </div>
+
+      <NotificationsOptOutToggle
+        userId={teacher.user_id}
+        initialOptOut={optOut}
+        personLabel={teacher.full_name || teacher.email}
+      />
 
       <NotesCard
         targetType="teacher"
