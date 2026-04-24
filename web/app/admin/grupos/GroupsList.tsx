@@ -2,8 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { GroupEditModal } from "@/components/admin/GroupEditModal";
 
 type Teacher = { id: string; full_name: string | null; email: string };
+
+type Level = "A0" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 
 type Member = {
   student_id: string;
@@ -34,6 +37,9 @@ type Group = {
   name:             string;
   class_type:       "group" | "individual";
   level:            string | null;
+  levels:           Level[];
+  capacity:         number | null;
+  notes:            string | null;
   teacher_id:       string | null;
   start_date:       string | null;
   end_date:         string | null;
@@ -102,12 +108,31 @@ export function GroupsList({
         </details>
       )}
 
-      {(editing || creating) && (
+      {/* CREATE flow — old modal (handles teacher assignment, class_type, etc.) */}
+      {creating && (
         <GroupModal
-          group={editing}
+          group={null}
           teachers={teachers}
-          onClose={() => { setEditing(null); setCreating(false); }}
-          onSaved={() => { setEditing(null); setCreating(false); router.refresh(); }}
+          onClose={() => setCreating(false)}
+          onSaved={() => { setCreating(false); router.refresh(); }}
+        />
+      )}
+
+      {/* EDIT flow — new modal with multi-level + members management */}
+      {editing && (
+        <GroupEditModal
+          open={true}
+          mode="admin"
+          group={{
+            id:       editing.id,
+            name:     editing.name,
+            levels:   editing.levels,
+            capacity: editing.capacity,
+            notes:    editing.notes,
+            members:  editing.members,
+          }}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); router.refresh(); }}
         />
       )}
     </div>
@@ -123,7 +148,9 @@ function GroupCard({ group, onEdit }: { group: Group; onEdit: () => void }) {
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">{group.name}</h3>
           <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 flex-wrap">
             <span className="capitalize">{group.class_type === "individual" ? "Individual" : "Grupal"}</span>
-            {group.level && <><span>·</span><span>{group.level}</span></>}
+            {(group.levels.length > 0 || group.level) && (
+              <><span>·</span><span>{group.levels.length > 0 ? group.levels.join(", ") : group.level}</span></>
+            )}
             <span>·</span>
             <span>{group.members.length} alumno{group.members.length === 1 ? "" : "s"}</span>
             <span>·</span>

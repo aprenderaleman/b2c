@@ -10,10 +10,15 @@ import { supabaseAdmin } from "@/lib/supabase";
  */
 export const runtime = "nodejs";
 
+const CEFR = z.enum(["A0","A1","A2","B1","B2","C1","C2"]);
+
 const Body = z.object({
   name:         z.string().trim().min(2).max(200).optional(),
   class_type:   z.enum(["group", "individual"]).optional(),
-  level:        z.enum(["A0","A1","A2","B1","B2","C1","C2"]).nullable().optional(),
+  level:        CEFR.nullable().optional(),
+  /** Multi-level support. Source of truth; legacy `level` is kept in
+   *  sync to the first array element so older queries still work. */
+  levels:       z.array(CEFR).max(7).optional(),
   teacher_id:   z.string().uuid().nullable().optional(),
   meet_link:    z.string().url().nullable().optional().or(z.literal("")),
   document_url: z.string().url().nullable().optional().or(z.literal("")),
@@ -54,6 +59,13 @@ export async function PATCH(
   const update: Record<string, unknown> = { ...b };
   if (update.meet_link    === "") update.meet_link    = null;
   if (update.document_url === "") update.document_url = null;
+
+  // If `levels` is provided, keep the legacy single-column `level` in sync
+  // with the first array element (or null if the array is empty) so older
+  // UI / SQL that still reads `level` doesn't lie.
+  if (Array.isArray(b.levels)) {
+    update.level = b.levels[0] ?? null;
+  }
 
   const sb = supabaseAdmin();
   const { error } = await sb.from("student_groups").update(update).eq("id", id);

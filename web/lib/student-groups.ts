@@ -1,13 +1,20 @@
 import { supabaseAdmin } from "./supabase";
 
+export type CefrLevel = "A0" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
+export const ALL_CEFR_LEVELS: CefrLevel[] = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"];
+
 export type StudentGroupRow = {
   id:            string;
   name:          string;
   class_type:    "group" | "individual";
+  /** Legacy single-level field. Kept for back-compat; source of truth is `levels`. */
   level:         string | null;
+  /** CEFR levels this group spans. Groups can straddle multiple levels. */
+  levels:        CefrLevel[];
   teacher_id:    string | null;
   start_date:    string | null;
   end_date:      string | null;
+  capacity:      number | null;
   meet_link:     string | null;
   document_url:  string | null;
   active:        boolean;
@@ -26,8 +33,8 @@ export async function getGroupForClass(classId: string): Promise<StudentGroupRow
     .select(`
       group_id,
       group:student_groups(
-        id, name, class_type, level, teacher_id, start_date, end_date,
-        meet_link, document_url, active, notes, created_at
+        id, name, class_type, level, levels, teacher_id, start_date, end_date,
+        capacity, meet_link, document_url, active, notes, created_at
       )
     `)
     .eq("id", classId)
@@ -81,8 +88,8 @@ export async function listAllStudentGroups(): Promise<GroupListRow[]> {
   const { data: groups } = await sb
     .from("student_groups")
     .select(`
-      id, name, class_type, level, teacher_id, start_date, end_date,
-      meet_link, document_url, active, notes, created_at,
+      id, name, class_type, level, levels, teacher_id, start_date, end_date,
+      capacity, meet_link, document_url, active, notes, created_at,
       teacher:teachers(users(full_name)),
       student_group_members(
         student:students(
@@ -188,14 +195,20 @@ export async function listAllStudentGroups(): Promise<GroupListRow[]> {
     }).sort((a, b) => (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email));
 
     const groupId = r.id as string;
+    const levelsRaw = r.levels;
+    const levels: CefrLevel[] = Array.isArray(levelsRaw)
+      ? (levelsRaw as CefrLevel[])
+      : (r.level ? [r.level as CefrLevel] : []);
     return {
       id:           groupId,
       name:         r.name as string,
       class_type:   (r.class_type as "group" | "individual"),
       level:        (r.level as string | null) ?? null,
+      levels,
       teacher_id:   (r.teacher_id as string | null) ?? null,
       start_date:   (r.start_date as string | null) ?? null,
       end_date:     (r.end_date as string | null) ?? null,
+      capacity:     (r.capacity as number | null) ?? null,
       meet_link:    (r.meet_link as string | null) ?? null,
       document_url: (r.document_url as string | null) ?? null,
       active:       Boolean(r.active),
@@ -207,4 +220,42 @@ export async function listAllStudentGroups(): Promise<GroupListRow[]> {
       latest_recording: latestByGroup.get(groupId) ?? null,
     };
   });
+}
+
+/**
+ * Lookup a single group by id. Same shape as StudentGroupRow. Used by
+ * edit modals to avoid re-hydrating the full admin listing.
+ */
+export async function getStudentGroupById(id: string): Promise<StudentGroupRow | null> {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("student_groups")
+    .select(`
+      id, name, class_type, level, levels, teacher_id, start_date, end_date,
+      capacity, meet_link, document_url, active, notes, created_at
+    `)
+    .eq("id", id)
+    .maybeSingle();
+  if (!data) return null;
+  const r = data as Record<string, unknown>;
+  const levelsRaw = r.levels;
+  const levels: CefrLevel[] = Array.isArray(levelsRaw)
+    ? (levelsRaw as CefrLevel[])
+    : (r.level ? [r.level as CefrLevel] : []);
+  return {
+    id:           r.id as string,
+    name:         r.name as string,
+    class_type:   r.class_type as "group" | "individual",
+    level:        (r.level as string | null) ?? null,
+    levels,
+    teacher_id:   (r.teacher_id as string | null) ?? null,
+    start_date:   (r.start_date as string | null) ?? null,
+    end_date:     (r.end_date as string | null) ?? null,
+    capacity:     (r.capacity as number | null) ?? null,
+    meet_link:    (r.meet_link as string | null) ?? null,
+    document_url: (r.document_url as string | null) ?? null,
+    active:       Boolean(r.active),
+    notes:        (r.notes as string | null) ?? null,
+    created_at:   r.created_at as string,
+  };
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs, getClassById } from "@/lib/classes";
 import { CancelClassButton } from "./CancelClassButton";
+import { EditClassButton } from "./EditClassButton";
 import { AttendanceEditor } from "@/components/classes/AttendanceEditor";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,17 @@ export default async function ClassDetailPage({
           </div>
           <div className="flex items-center gap-2">
             {cls.status === "scheduled" && (
-              <CancelClassButton classId={cls.id} isSeries={Boolean(cls.parent_class_id) && cls.parent_class_id !== cls.id} />
+              <>
+                <EditClassButton
+                  classId={cls.id}
+                  title={cls.title}
+                  topic={cls.topic ?? null}
+                  scheduledAt={cls.scheduled_at}
+                  durationMinutes={cls.duration_minutes}
+                  hasSeries={Boolean(cls.parent_class_id)}
+                />
+                <CancelClassButton classId={cls.id} isSeries={Boolean(cls.parent_class_id) && cls.parent_class_id !== cls.id} />
+              </>
             )}
           </div>
         </div>
