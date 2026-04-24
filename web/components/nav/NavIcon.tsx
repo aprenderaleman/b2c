@@ -95,6 +95,12 @@ const PATHS: Record<NavIconKey, React.ReactNode> = {
       <path d="M7 20.7a7 7 0 0 1 10 0" />
     </>
   ),
+  video: (
+    <>
+      <rect x="2" y="6" width="14" height="12" rx="2" />
+      <path d="m22 8-6 4 6 4Z" />
+    </>
+  ),
 };
 
 export function NavIcon({ name, className = "h-5 w-5" }: { name: NavIconKey; className?: string }) {

@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/rbac";
 import { canViewRecording } from "@/lib/aula";
 import { formatBytes, formatDurationHms, getRecordingById } from "@/lib/recordings";
 import { getClassById, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
+import { signRecordingUrl } from "@/lib/r2";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Grabación · Aprender-Aleman.de" };
@@ -24,6 +25,12 @@ export default async function RecordingPage({
 
   const cls = await getClassById(rec.class_id);
   if (!cls) notFound();
+
+  // The R2 bucket is private — raw file_url won't play in the browser.
+  // Sign a short-lived presigned URL here (server-side, never exposing keys).
+  const playbackUrl = rec.status === "ready" && rec.file_url
+    ? await signRecordingUrl(rec.file_url)
+    : null;
 
   const backHref =
     session.user.role === "student" ? `/estudiante/clases/${cls.id}` :
@@ -55,10 +62,10 @@ export default async function RecordingPage({
           />
         )}
 
-        {rec.status === "ready" && rec.file_url && (
+        {rec.status === "ready" && playbackUrl && (
           <div className="rounded-2xl overflow-hidden bg-black ring-1 ring-slate-800">
             <video
-              src={rec.file_url}
+              src={playbackUrl}
               controls
               playsInline
               preload="metadata"
