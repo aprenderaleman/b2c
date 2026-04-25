@@ -278,26 +278,32 @@ export async function POST(req: Request) {
       b.language === "de"
         ? `✅ ${leadFirst}, deine Probestunde ist bestätigt.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 Min\n🔗 ${shortLinkUrl}\n\nKannst du mir mit "Sí" oder "Ja" bestätigen, dass du dabei bist? 🙌\n\n— Aprender-Aleman.de`
         : `✅ ${leadFirst}, tu clase de prueba está confirmada.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 min\n🔗 ${shortLinkUrl}\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`;
-    // NOTE: success is logged by the agents server itself in
+    // Success is logged by the agents server itself in
     // webhook_server.py /internal/send-text (right after the
-    // Evolution API call). Logging it here too would duplicate.
-    // We only log a FAILURE row when we get a definitive error
-    // back — never on timeout, because the agents may still
-    // deliver the WhatsApp and log it themselves.
+    // Evolution API call), so we never log success on web side.
+    // For failures we ALWAYS log — including timeouts, with a
+    // clearer message that flags delivery as uncertain (the agents
+    // may still deliver after our fetch aborts, in which case
+    // we'd see a second `system_message_sent` row from the agents).
     sendWhatsappText(b.whatsapp_e164, waText)
       .then(async (res) => {
         if (res.ok) return;
         const isTimeoutOrNetwork = /timeout|abort|fetch failed|ECONNRESET/i.test(res.reason);
-        if (isTimeoutOrNetwork) {
-          console.warn(`[book-trial] whatsapp slow/timeout for ${leadId} — agents will log success on actual delivery: ${res.reason}`);
-          return;
-        }
+        const content = isTimeoutOrNetwork
+          ? `💬 WhatsApp de confirmación: tiempo de espera al contactar con el VPS de agentes (${res.reason}). El mensaje puede haber llegado igualmente — confirma con el lead.`
+          : `💬 Falló el WhatsApp de confirmación: ${res.reason}`;
         await sb.from("lead_timeline").insert({
           lead_id: leadId,
           type:    "send_failed",
           author:  "system",
-          content: `💬 Falló el WhatsApp de confirmación: ${res.reason}`,
-          metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: classId },
+          content,
+          metadata: {
+            channel: "whatsapp",
+            kind:    "trial_confirmation",
+            class_id: classId,
+            uncertain: isTimeoutOrNetwork,
+            reason:   res.reason,
+          },
         });
       })
       .catch(e => console.error("[book-trial] whatsapp failed:", e));
