@@ -235,78 +235,82 @@ export async function POST(req: Request) {
     minute:   "2-digit",
   }) + (b.language === "de" ? " (Berlin)" : " (Berlín)");
 
-  // Email + WhatsApp use the SHORT URL so they look trustworthy. The
-  // short link routes server-side to the same magic-link cookie flow.
-  // Each successful send writes a `system_message_sent` row to
-  // lead_timeline so admin can confirm at a glance which channels
-  // actually delivered (and which didn't).
-  sendTrialConfirmationEmail(b.email, {
-    leadName:    b.name.split(/\s+/)[0] || b.name,
-    classTitle,
-    startDate,
-    durationMin: TRIAL_DURATION_MIN,
-    teacherName: match.teacherName,
-    joinUrl:     shortLinkUrl,
-    language:    b.language,
-  }).then(async (res) => {
-    if (res.ok) {
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "system_message_sent",
-        author:  "system",
-        content: `📧 Email de confirmación enviado a ${b.email}`,
-        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
-      });
+  // Email + WhatsApp — AWAITED in parallel. Earlier we tried
+  // fire-and-forget so the response would return faster, but on
+  // Vercel serverless the function gets terminated as soon as the
+  // response is sent, killing the SMTP/HTTP handshakes mid-flight.
+  // Awaiting is what every other email-sending endpoint in this
+  // codebase already does (convert, password-reset, daily-digest)
+  // and it's the only pattern that reliably delivers.
+  const leadFirst = b.name.split(/\s+/)[0] || b.name;
+  const waText = b.whatsapp_e164
+    ? (b.language === "de"
+        ? `✅ ${leadFirst}, deine Probestunde ist bestätigt.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 Min\n🔗 ${shortLinkUrl}\n\nKannst du mir mit "Sí" oder "Ja" bestätigen, dass du dabei bist? 🙌\n\n— Aprender-Aleman.de`
+        : `✅ ${leadFirst}, tu clase de prueba está confirmada.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 min\n🔗 ${shortLinkUrl}\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`)
+    : null;
+
+  const [emailResult, waResult] = await Promise.allSettled([
+    sendTrialConfirmationEmail(b.email, {
+      leadName:    leadFirst,
+      classTitle,
+      startDate,
+      durationMin: TRIAL_DURATION_MIN,
+      teacherName: match.teacherName,
+      joinUrl:     shortLinkUrl,
+      language:    b.language,
+    }),
+    waText && b.whatsapp_e164
+      ? sendWhatsappText(b.whatsapp_e164, waText)
+      : Promise.resolve(null),
+  ]);
+
+  // ── Email timeline log ──
+  if (emailResult.status === "fulfilled" && emailResult.value.ok) {
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    "system_message_sent",
+      author:  "system",
+      content: `📧 Email de confirmación enviado a ${b.email}`,
+      metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
+    });
+  } else {
+    const reason = emailResult.status === "fulfilled"
+      ? (!emailResult.value.ok ? emailResult.value.error : "unknown")
+      : (emailResult.reason instanceof Error ? emailResult.reason.message : String(emailResult.reason));
+    console.error("[book-trial] email failed:", reason);
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    "send_failed",
+      author:  "system",
+      content: `📧 Falló el envío del email de confirmación: ${reason}`,
+      metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
+    });
+  }
+
+  // ── WhatsApp timeline log (only if the lead gave us a number) ──
+  if (b.whatsapp_e164) {
+    if (waResult.status === "fulfilled" && waResult.value && waResult.value.ok) {
+      // Agents server already logged a `system_message_sent` from
+      // its /internal/send-text handler — don't duplicate here.
     } else {
+      const reason = waResult.status === "fulfilled"
+        ? (waResult.value && !waResult.value.ok ? waResult.value.reason : "unknown")
+        : (waResult.reason instanceof Error ? waResult.reason.message : String(waResult.reason));
+      const isTimeoutOrNetwork = /timeout|abort|fetch failed|ECONNRESET/i.test(reason);
+      console.error("[book-trial] whatsapp failed:", reason);
       await sb.from("lead_timeline").insert({
         lead_id: leadId,
         type:    "send_failed",
         author:  "system",
-        content: `📧 Falló el envío del email de confirmación: ${res.error}`,
-        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
+        content: isTimeoutOrNetwork
+          ? `💬 WhatsApp de confirmación: tiempo de espera al contactar con el VPS de agentes (${reason}). El mensaje puede haber llegado igualmente — confirma con el lead.`
+          : `💬 Falló el WhatsApp de confirmación: ${reason}`,
+        metadata: {
+          channel: "whatsapp", kind: "trial_confirmation", class_id: classId,
+          uncertain: isTimeoutOrNetwork, reason,
+        },
       });
     }
-  }).catch(e => console.error("[book-trial] email failed:", e));
-
-  // WhatsApp — only if the lead provided their number. Kept short
-  // intentionally: full details live in the email; here we only need
-  // the join link + a soft ask to confirm attendance so the lead
-  // engages and we know to expect them.
-  if (b.whatsapp_e164) {
-    const leadFirst = b.name.split(/\s+/)[0] || b.name;
-    const waText =
-      b.language === "de"
-        ? `✅ ${leadFirst}, deine Probestunde ist bestätigt.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 Min\n🔗 ${shortLinkUrl}\n\nKannst du mir mit "Sí" oder "Ja" bestätigen, dass du dabei bist? 🙌\n\n— Aprender-Aleman.de`
-        : `✅ ${leadFirst}, tu clase de prueba está confirmada.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 min\n🔗 ${shortLinkUrl}\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`;
-    // Success is logged by the agents server itself in
-    // webhook_server.py /internal/send-text (right after the
-    // Evolution API call), so we never log success on web side.
-    // For failures we ALWAYS log — including timeouts, with a
-    // clearer message that flags delivery as uncertain (the agents
-    // may still deliver after our fetch aborts, in which case
-    // we'd see a second `system_message_sent` row from the agents).
-    sendWhatsappText(b.whatsapp_e164, waText)
-      .then(async (res) => {
-        if (res.ok) return;
-        const isTimeoutOrNetwork = /timeout|abort|fetch failed|ECONNRESET/i.test(res.reason);
-        const content = isTimeoutOrNetwork
-          ? `💬 WhatsApp de confirmación: tiempo de espera al contactar con el VPS de agentes (${res.reason}). El mensaje puede haber llegado igualmente — confirma con el lead.`
-          : `💬 Falló el WhatsApp de confirmación: ${res.reason}`;
-        await sb.from("lead_timeline").insert({
-          lead_id: leadId,
-          type:    "send_failed",
-          author:  "system",
-          content,
-          metadata: {
-            channel: "whatsapp",
-            kind:    "trial_confirmation",
-            class_id: classId,
-            uncertain: isTimeoutOrNetwork,
-            reason:   res.reason,
-          },
-        });
-      })
-      .catch(e => console.error("[book-trial] whatsapp failed:", e));
   }
 
   return NextResponse.json({

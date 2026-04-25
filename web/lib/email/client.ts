@@ -52,22 +52,20 @@ export function getSmtp(): Transporter | null {
   const port = Number(process.env.SMTP_PORT ?? 465);
   const secureEnv = process.env.SMTP_SECURE;
   const secure = secureEnv ? secureEnv === "true" : port === 465;
-  // Aggressive timeouts because we run on Vercel serverless: a
-  // hanging SMTP connection costs us a function-execution slot and
-  // the user a slow page. Defaults (10 min socket, 60s connection)
-  // are way too lenient for our environment. Hostinger SMTP in
-  // particular has been observed to return 421 timeout when held
-  // open for >5s during peak hours.
+  // Modest timeout caps so a wedged SMTP doesn't pin a Vercel
+  // function for 10 minutes (nodemailer's default socket timeout),
+  // but generous enough to ride out a normal Hostinger handshake
+  // without aborting on the first slow packet.
   _smtp = nodemailer.createTransport({
     host,
     port,
     secure,
     auth: { user, pass },
-    connectionTimeout: 8_000,   // 8s to open the TCP+TLS handshake
-    greetingTimeout:   5_000,   // 5s for the initial 220 banner
-    socketTimeout:    15_000,   // 15s for the whole conversation
-    pool:             true,     // reuse connections across calls
-    maxConnections:   3,
+    connectionTimeout: 30_000,  // 30s for the TCP+TLS handshake
+    greetingTimeout:   20_000,  // 20s for the initial 220 banner
+    socketTimeout:     60_000,  // 60s for the whole conversation
+    pool:              true,    // reuse connections across calls
+    maxConnections:    3,
   });
   return _smtp;
 }
