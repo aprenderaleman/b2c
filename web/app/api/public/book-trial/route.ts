@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -235,13 +235,18 @@ export async function POST(req: Request) {
     minute:   "2-digit",
   }) + (b.language === "de" ? " (Berlin)" : " (Berlín)");
 
-  // Email + WhatsApp — AWAITED in parallel. Earlier we tried
-  // fire-and-forget so the response would return faster, but on
-  // Vercel serverless the function gets terminated as soon as the
-  // response is sent, killing the SMTP/HTTP handshakes mid-flight.
-  // Awaiting is what every other email-sending endpoint in this
-  // codebase already does (convert, password-reset, daily-digest)
-  // and it's the only pattern that reliably delivers.
+  // Email + WhatsApp run AFTER the response is sent.
+  //
+  // We tried two earlier approaches that didn't work:
+  //   * fire-and-forget (no await): Vercel terminates the worker
+  //     when the response is flushed, killing in-flight SMTP/HTTP.
+  //   * blocking await: response was reliable but took 5-10s
+  //     because the user waited for both deliveries to complete.
+  //
+  // Next.js 15's `after()` is the proper primitive: the worker
+  // stays alive until the callback finishes, but the response
+  // goes out immediately. Result: lead lands on /confirmacion in
+  // ~500ms while email + WhatsApp send in the background.
   const leadFirst = b.name.split(/\s+/)[0] || b.name;
   const waText = b.whatsapp_e164
     ? (b.language === "de"
@@ -249,69 +254,71 @@ export async function POST(req: Request) {
         : `✅ ${leadFirst}, tu clase de prueba está confirmada.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 min\n🔗 ${shortLinkUrl}\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`)
     : null;
 
-  const [emailResult, waResult] = await Promise.allSettled([
-    sendTrialConfirmationEmail(b.email, {
-      leadName:    leadFirst,
-      classTitle,
-      startDate,
-      durationMin: TRIAL_DURATION_MIN,
-      teacherName: match.teacherName,
-      joinUrl:     shortLinkUrl,
-      language:    b.language,
-    }),
-    waText && b.whatsapp_e164
-      ? sendWhatsappText(b.whatsapp_e164, waText)
-      : Promise.resolve(null),
-  ]);
+  after(async () => {
+    const [emailResult, waResult] = await Promise.allSettled([
+      sendTrialConfirmationEmail(b.email, {
+        leadName:    leadFirst,
+        classTitle,
+        startDate,
+        durationMin: TRIAL_DURATION_MIN,
+        teacherName: match.teacherName,
+        joinUrl:     shortLinkUrl,
+        language:    b.language,
+      }),
+      waText && b.whatsapp_e164
+        ? sendWhatsappText(b.whatsapp_e164, waText)
+        : Promise.resolve(null),
+    ]);
 
-  // ── Email timeline log ──
-  if (emailResult.status === "fulfilled" && emailResult.value.ok) {
-    await sb.from("lead_timeline").insert({
-      lead_id: leadId,
-      type:    "system_message_sent",
-      author:  "system",
-      content: `📧 Email de confirmación enviado a ${b.email}`,
-      metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
-    });
-  } else {
-    const reason = emailResult.status === "fulfilled"
-      ? (!emailResult.value.ok ? emailResult.value.error : "unknown")
-      : (emailResult.reason instanceof Error ? emailResult.reason.message : String(emailResult.reason));
-    console.error("[book-trial] email failed:", reason);
-    await sb.from("lead_timeline").insert({
-      lead_id: leadId,
-      type:    "send_failed",
-      author:  "system",
-      content: `📧 Falló el envío del email de confirmación: ${reason}`,
-      metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
-    });
-  }
-
-  // ── WhatsApp timeline log (only if the lead gave us a number) ──
-  if (b.whatsapp_e164) {
-    if (waResult.status === "fulfilled" && waResult.value && waResult.value.ok) {
-      // Agents server already logged a `system_message_sent` from
-      // its /internal/send-text handler — don't duplicate here.
+    // ── Email timeline log ──
+    if (emailResult.status === "fulfilled" && emailResult.value.ok) {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "system_message_sent",
+        author:  "system",
+        content: `📧 Email de confirmación enviado a ${b.email}`,
+        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
+      });
     } else {
-      const reason = waResult.status === "fulfilled"
-        ? (waResult.value && !waResult.value.ok ? waResult.value.reason : "unknown")
-        : (waResult.reason instanceof Error ? waResult.reason.message : String(waResult.reason));
-      const isTimeoutOrNetwork = /timeout|abort|fetch failed|ECONNRESET/i.test(reason);
-      console.error("[book-trial] whatsapp failed:", reason);
+      const reason = emailResult.status === "fulfilled"
+        ? (!emailResult.value.ok ? emailResult.value.error : "unknown")
+        : (emailResult.reason instanceof Error ? emailResult.reason.message : String(emailResult.reason));
+      console.error("[book-trial] email failed:", reason);
       await sb.from("lead_timeline").insert({
         lead_id: leadId,
         type:    "send_failed",
         author:  "system",
-        content: isTimeoutOrNetwork
-          ? `💬 WhatsApp de confirmación: tiempo de espera al contactar con el VPS de agentes (${reason}). El mensaje puede haber llegado igualmente — confirma con el lead.`
-          : `💬 Falló el WhatsApp de confirmación: ${reason}`,
-        metadata: {
-          channel: "whatsapp", kind: "trial_confirmation", class_id: classId,
-          uncertain: isTimeoutOrNetwork, reason,
-        },
+        content: `📧 Falló el envío del email de confirmación: ${reason}`,
+        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
       });
     }
-  }
+
+    // ── WhatsApp timeline log (only if the lead gave us a number) ──
+    if (b.whatsapp_e164) {
+      if (waResult.status === "fulfilled" && waResult.value && waResult.value.ok) {
+        // Agents server already logged a `system_message_sent` from
+        // its /internal/send-text handler — don't duplicate here.
+      } else {
+        const reason = waResult.status === "fulfilled"
+          ? (waResult.value && !waResult.value.ok ? waResult.value.reason : "unknown")
+          : (waResult.reason instanceof Error ? waResult.reason.message : String(waResult.reason));
+        const isTimeoutOrNetwork = /timeout|abort|fetch failed|ECONNRESET/i.test(reason);
+        console.error("[book-trial] whatsapp failed:", reason);
+        await sb.from("lead_timeline").insert({
+          lead_id: leadId,
+          type:    "send_failed",
+          author:  "system",
+          content: isTimeoutOrNetwork
+            ? `💬 WhatsApp de confirmación: tiempo de espera al contactar con el VPS de agentes (${reason}). El mensaje puede haber llegado igualmente — confirma con el lead.`
+            : `💬 Falló el WhatsApp de confirmación: ${reason}`,
+          metadata: {
+            channel: "whatsapp", kind: "trial_confirmation", class_id: classId,
+            uncertain: isTimeoutOrNetwork, reason,
+          },
+        });
+      }
+    }
+  });
 
   return NextResponse.json({
     ok:        true,
