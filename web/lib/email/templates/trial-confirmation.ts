@@ -20,10 +20,10 @@ export function renderTrialConfirmation(v: TrialConfirmationVars): RenderedEmail
 }
 
 function renderES(v: TrialConfirmationVars): RenderedEmail {
-  const subject = `✅ Tu clase de prueba está agendada — ${v.startDate}`;
+  const subject = `✅ Tu clase de prueba de alemán está agendada — ${v.startDate}`;
   const body = `
     ${h2(`¡Hola ${escapeHtml(v.leadName)}! 👋`)}
-    ${p(`Tu <strong>clase de prueba</strong> está confirmada. Apúntala en tu calendario y nos vemos en el aula online.`)}
+    ${p(`Tu <strong>clase de prueba gratuita de alemán</strong> está confirmada. Apúntala en tu calendario y nos vemos en el aula online.`)}
     ${kvBlock([
       ["📅 Fecha",     escapeHtml(v.startDate)],
       ["⏱ Duración",   `${v.durationMin} minutos`],
@@ -46,7 +46,7 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
     "Recibes este correo porque acabas de agendar una clase de prueba en Aprender-Aleman.de.";
   const text = [
     `¡Hola ${v.leadName}!`, ``,
-    `Tu clase de prueba está confirmada.`,
+    `Tu clase de prueba gratuita de alemán está confirmada.`,
     `Fecha: ${v.startDate}`,
     `Duración: ${v.durationMin} min`,
     `Con: ${v.teacherName}`, ``,
@@ -66,10 +66,10 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
 }
 
 function renderDE(v: TrialConfirmationVars): RenderedEmail {
-  const subject = `✅ Deine Probestunde ist gebucht — ${v.startDate}`;
+  const subject = `✅ Deine kostenlose Deutsch-Probestunde ist gebucht — ${v.startDate}`;
   const body = `
     ${h2(`Hallo ${escapeHtml(v.leadName)}! 👋`)}
-    ${p(`Deine <strong>Probestunde</strong> ist bestätigt. Trag sie in deinen Kalender ein und wir sehen uns im Online-Klassenzimmer.`)}
+    ${p(`Deine <strong>kostenlose Probestunde Deutsch</strong> ist bestätigt. Trag sie in deinen Kalender ein und wir sehen uns im Online-Klassenzimmer.`)}
     ${kvBlock([
       ["📅 Datum",     escapeHtml(v.startDate)],
       ["⏱ Dauer",      `${v.durationMin} Minuten`],
@@ -92,7 +92,7 @@ function renderDE(v: TrialConfirmationVars): RenderedEmail {
     "Du erhältst diese E-Mail, weil du gerade eine Probestunde auf Aprender-Aleman.de gebucht hast.";
   const text = [
     `Hallo ${v.leadName}!`, ``,
-    `Deine Probestunde ist bestätigt.`,
+    `Deine kostenlose Probestunde Deutsch ist bestätigt.`,
     `Datum: ${v.startDate}`,
     `Dauer: ${v.durationMin} Min`,
     `Mit: ${v.teacherName}`, ``,

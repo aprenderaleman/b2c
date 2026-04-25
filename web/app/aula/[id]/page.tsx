@@ -33,6 +33,13 @@ export default async function AulaPage({
   const cls = await getClassById(id);
   if (!cls) notFound();
 
+  // Trial classes drop the auto-generated "Clase de prueba — Test
+  // (Gelfis)" title in favour of a clean public-facing label and
+  // pivot the fallback CTA to SCHULE (the lead has nowhere else
+  // useful to go from here).
+  const isTrial   = cls.is_trial;
+  const aulaTitle = isTrial ? "Clase de prueba de alemán" : cls.title;
+
   let access;
   let displayName: string;
   let backHref:    string;
@@ -62,8 +69,9 @@ export default async function AulaPage({
         <ClosedScreen
           opensAt={access.opensAt}
           closesAt={access.closesAt}
-          classTitle={cls.title}
+          classTitle={aulaTitle}
           homeHref={homeHref}
+          isTrial={isTrial}
         />
       );
     }
@@ -86,21 +94,22 @@ export default async function AulaPage({
         <ClosedScreen
           opensAt={access.opensAt}
           closesAt={access.closesAt}
-          classTitle={cls.title}
+          classTitle={aulaTitle}
           homeHref="/"
+          isTrial={isTrial}
         />
       );
     }
   }
 
   if (!livekitConfigured()) {
-    return <NotConfiguredScreen classTitle={cls.title} homeHref={backHref} />;
+    return <NotConfiguredScreen classTitle={aulaTitle} homeHref={backHref} />;
   }
 
   return (
     <AulaClient
       classId={cls.id}
-      classTitle={cls.title}
+      classTitle={aulaTitle}
       scheduledAt={cls.scheduled_at}
       durationMinutes={cls.duration_minutes}
       isHost={access.role === "host"}
@@ -124,8 +133,11 @@ function Frame({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ClosedScreen({ opensAt, closesAt, classTitle, homeHref }: {
-  opensAt: Date; closesAt: Date; classTitle: string; homeHref: string;
+function ClosedScreen({
+  opensAt, closesAt, classTitle, homeHref, isTrial,
+}: {
+  opensAt: Date; closesAt: Date; classTitle: string;
+  homeHref: string; isTrial?: boolean;
 }) {
   const now = new Date();
   const isBefore = now < opensAt;
@@ -141,9 +153,29 @@ function ClosedScreen({ opensAt, closesAt, classTitle, homeHref }: {
       <p className="mt-6 text-xs text-slate-400">
         Cierre total: {formatClassTimeEs(closesAt)} (Berlín)
       </p>
-      <Link href={homeHref} className="btn-primary mt-8 inline-flex">
-        Volver al inicio
-      </Link>
+
+      {isTrial ? (
+        // The lead is just sitting on /aula/{id} too early. Send them to
+        // SCHULE so they can start practising while they wait, instead
+        // of bouncing them back to the marketing home.
+        <>
+          <a
+            href="https://schule.aprender-aleman.de"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary mt-8 inline-flex"
+          >
+            🎓 Empezar ahora con SCHULE
+          </a>
+          <p className="mt-3 text-xs text-slate-400">
+            Practica gratis con Hans (IA) y los cursos online mientras esperas tu clase.
+          </p>
+        </>
+      ) : (
+        <Link href={homeHref} className="btn-primary mt-8 inline-flex">
+          Volver al inicio
+        </Link>
+      )}
     </Frame>
   );
 }

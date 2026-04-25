@@ -25,23 +25,23 @@ export function renderTrialReminder(v: TrialReminderVars): RenderedEmail {
 
 function leadSubjectES(tone: TrialReminderVars["tone"], when: string): string {
   return tone === "24h_before"
-    ? `🔔 Mañana es tu clase de prueba — ${when}`
-    : `🔔 Hoy es tu clase de prueba — ${when}`;
+    ? `🔔 Mañana es tu clase de prueba de alemán — ${when}`
+    : `🔔 Hoy es tu clase de prueba de alemán — ${when}`;
 }
 function leadSubjectDE(tone: TrialReminderVars["tone"], when: string): string {
   return tone === "24h_before"
-    ? `🔔 Morgen ist deine Probestunde — ${when}`
-    : `🔔 Heute ist deine Probestunde — ${when}`;
+    ? `🔔 Morgen ist deine Deutsch-Probestunde — ${when}`
+    : `🔔 Heute ist deine Deutsch-Probestunde — ${when}`;
 }
 function teacherSubjectES(tone: TrialReminderVars["tone"], lead: string): string {
   return tone === "24h_before"
-    ? `📚 Mañana: clase de prueba con ${lead}`
-    : `📚 Hoy: clase de prueba con ${lead}`;
+    ? `📚 Mañana: clase de prueba de alemán con ${lead}`
+    : `📚 Hoy: clase de prueba de alemán con ${lead}`;
 }
 function teacherSubjectDE(tone: TrialReminderVars["tone"], lead: string): string {
   return tone === "24h_before"
-    ? `📚 Morgen: Probestunde mit ${lead}`
-    : `📚 Heute: Probestunde mit ${lead}`;
+    ? `📚 Morgen: Deutsch-Probestunde mit ${lead}`
+    : `📚 Heute: Deutsch-Probestunde mit ${lead}`;
 }
 
 function renderES(v: TrialReminderVars): RenderedEmail {
@@ -52,11 +52,11 @@ function renderES(v: TrialReminderVars): RenderedEmail {
 
   const opener = isLead
     ? (v.tone === "24h_before"
-        ? `Mañana tienes tu <strong>clase de prueba</strong> con ${escapeHtml(v.counterpartName)}. Aquí van los detalles para que la tengas a mano.`
-        : `Hoy es el día — tu <strong>clase de prueba</strong> con ${escapeHtml(v.counterpartName)}. Te dejamos los detalles para que entres directo.`)
+        ? `Mañana tienes tu <strong>clase de prueba de alemán</strong> con ${escapeHtml(v.counterpartName)}. Aquí van los detalles para que la tengas a mano.`
+        : `Hoy es el día — tu <strong>clase de prueba de alemán</strong> con ${escapeHtml(v.counterpartName)}. Te dejamos los detalles para que entres directo.`)
     : (v.tone === "24h_before"
-        ? `Recordatorio: <strong>mañana</strong> tienes una clase de prueba con ${escapeHtml(v.counterpartName)}. Toda la info abajo.`
-        : `Recordatorio: <strong>hoy</strong> tienes una clase de prueba con ${escapeHtml(v.counterpartName)}. Toda la info abajo.`);
+        ? `Recordatorio: <strong>mañana</strong> tienes una clase de prueba de alemán con ${escapeHtml(v.counterpartName)}. Toda la info abajo.`
+        : `Recordatorio: <strong>hoy</strong> tienes una clase de prueba de alemán con ${escapeHtml(v.counterpartName)}. Toda la info abajo.`);
 
   const body = `
     ${h2(`¡Hola ${escapeHtml(v.recipientName)}! 👋`)}
@@ -100,8 +100,8 @@ function renderDE(v: TrialReminderVars): RenderedEmail {
 
   const opener = isLead
     ? (v.tone === "24h_before"
-        ? `Morgen hast du deine <strong>Probestunde</strong> mit ${escapeHtml(v.counterpartName)}. Hier sind die Details.`
-        : `Heute ist es so weit — deine <strong>Probestunde</strong> mit ${escapeHtml(v.counterpartName)}. Alle Infos findest du unten.`)
+        ? `Morgen hast du deine <strong>Deutsch-Probestunde</strong> mit ${escapeHtml(v.counterpartName)}. Hier sind die Details.`
+        : `Heute ist es so weit — deine <strong>Deutsch-Probestunde</strong> mit ${escapeHtml(v.counterpartName)}. Alle Infos findest du unten.`)
     : (v.tone === "24h_before"
         ? `Erinnerung: <strong>morgen</strong> hast du eine Probestunde mit ${escapeHtml(v.counterpartName)}.`
         : `Erinnerung: <strong>heute</strong> hast du eine Probestunde mit ${escapeHtml(v.counterpartName)}.`);

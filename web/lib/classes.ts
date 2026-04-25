@@ -21,6 +21,7 @@ export type ClassRow = {
   topic:                   string | null;
   status:                  ClassStatus;
   livekit_room_id:         string;
+  is_trial:                boolean;
   started_at:              string | null;
   ended_at:                string | null;
   actual_duration_minutes: number | null;
@@ -212,7 +213,7 @@ export async function getClassesInRange(
     .select(`
       id, type, teacher_id, scheduled_at, duration_minutes,
       recurrence_pattern, recurrence_end_date, parent_class_id,
-      title, topic, status, livekit_room_id,
+      title, topic, status, livekit_room_id, is_trial,
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
       teacher:teachers!inner(
         users!inner(email, full_name)
@@ -247,7 +248,7 @@ export async function getTeacherUpcomingClasses(
     .select(`
       id, type, teacher_id, scheduled_at, duration_minutes,
       recurrence_pattern, recurrence_end_date, parent_class_id,
-      title, topic, status, livekit_room_id,
+      title, topic, status, livekit_room_id, is_trial,
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
       teacher:teachers!inner(
         users!inner(email, full_name)
@@ -285,7 +286,7 @@ export async function getStudentUpcomingClasses(
       class:classes!inner(
         id, type, teacher_id, scheduled_at, duration_minutes,
         recurrence_pattern, recurrence_end_date, parent_class_id,
-        title, topic, status, livekit_room_id,
+        title, topic, status, livekit_room_id, is_trial,
         started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
         teacher:teachers!inner(
           users!inner(email, full_name)
@@ -324,7 +325,7 @@ export async function getClassById(id: string): Promise<ClassWithPeople | null> 
     .select(`
       id, type, teacher_id, scheduled_at, duration_minutes,
       recurrence_pattern, recurrence_end_date, parent_class_id,
-      title, topic, status, livekit_room_id,
+      title, topic, status, livekit_room_id, is_trial,
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
       teacher:teachers!inner(
         users!inner(email, full_name)
@@ -428,6 +429,7 @@ function normaliseClassRow(r: RawClass): ClassWithPeople {
     topic:                    (r.topic as string | null) ?? null,
     status:                   r.status as ClassStatus,
     livekit_room_id:          r.livekit_room_id as string,
+    is_trial:                 (r.is_trial as boolean | null) ?? false,
     started_at:               (r.started_at as string | null) ?? null,
     ended_at:                 (r.ended_at as string | null) ?? null,
     actual_duration_minutes:  (r.actual_duration_minutes as number | null) ?? null,
