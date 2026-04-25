@@ -37,14 +37,15 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
   superadmin: adminItems(),
   admin:      adminItems(),
   teacher: [
-    { label: "Hoy",            href: "/profesor",                 icon: "home",           priority: 1 },
-    { label: "Mis clases",     href: "/profesor/clases",          icon: "calendarDays",   priority: 2 },
-    { label: "Estudiantes",    href: "/profesor/estudiantes",     icon: "graduationCap",  priority: 3 },
-    { label: "Mis grupos",     href: "/profesor/grupos",          icon: "folder",         priority: 3.5 },
-    { label: "Ganancias",      href: "/profesor/ganancias",       icon: "wallet",         priority: 4 },
-    { label: "Disponibilidad", href: "/profesor/disponibilidad",  icon: "clock",          priority: 5 },
-    { label: "Materiales",     href: "/profesor/materiales",      icon: "folder",         priority: 6 },
-    { label: "Chat",           href: "/chat",                      icon: "messageCircle",  priority: 7 },
+    { label: "Hoy",              href: "/profesor",                 icon: "home",           priority: 1 },
+    { label: "Mis clases",       href: "/profesor/clases",          icon: "calendarDays",   priority: 2 },
+    { label: "Clases de prueba", href: "/profesor/clasedeprueba",   icon: "userCheck",      priority: 2.5 },
+    { label: "Estudiantes",      href: "/profesor/estudiantes",     icon: "graduationCap",  priority: 3 },
+    { label: "Mis grupos",       href: "/profesor/grupos",          icon: "folder",         priority: 3.5 },
+    { label: "Ganancias",        href: "/profesor/ganancias",       icon: "wallet",         priority: 4 },
+    { label: "Disponibilidad",   href: "/profesor/disponibilidad",  icon: "clock",          priority: 5 },
+    { label: "Materiales",       href: "/profesor/materiales",      icon: "folder",         priority: 6 },
+    { label: "Chat",             href: "/chat",                      icon: "messageCircle",  priority: 7 },
   ],
   student: [
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
@@ -58,9 +59,10 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
 
 function adminItems(): NavItem[] {
   return [
-    { label: "Hoy",         href: "/admin",             icon: "home",          priority: 1 },
-    { label: "Clases",      href: "/admin/clases",      icon: "calendarDays",  priority: 2 },
-    { label: "Grabaciones", href: "/admin/grabaciones", icon: "video",         priority: 2.5 },
+    { label: "Hoy",              href: "/admin",                icon: "home",          priority: 1 },
+    { label: "Clases",           href: "/admin/clases",         icon: "calendarDays",  priority: 2 },
+    { label: "Clases de prueba", href: "/admin/clasedeprueba",  icon: "userCheck",     priority: 2.3 },
+    { label: "Grabaciones",      href: "/admin/grabaciones",    icon: "video",         priority: 2.5 },
     { label: "Estudiantes", href: "/admin/estudiantes", icon: "graduationCap", priority: 3 },
     { label: "Finanzas",    href: "/admin/finanzas",    icon: "wallet",        priority: 4 },
     { label: "Grupos",      href: "/admin/grupos",      icon: "folder",        priority: 5 },

@@ -21,10 +21,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .maybeSingle();
   if (!lead) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  // Use the GDPR helper if it exists. Falls back to a plain DELETE
+  // if the RPC isn't installed (migration 002 hasn't run, etc.).
+  // Surface DB errors instead of silently swallowing them — the
+  // previous version would redirect "successfully" while the lead
+  // remained in the table (e.g. when the helper bailed on null
+  // whatsapp_normalized before migration 037 fixed it).
   const { error: rpcError } = await sb.rpc("gdpr_delete_lead", { p_lead_id: id });
   if (rpcError) {
-    // Helper function isn't installed yet — fall back to plain DELETE.
-    await sb.from("leads").delete().eq("id", id);
+    console.warn(`[delete-lead] RPC failed, falling back to plain DELETE: ${rpcError.message}`);
+    const { error: deleteError } = await sb.from("leads").delete().eq("id", id);
+    if (deleteError) {
+      return NextResponse.json(
+        { error: "delete_failed", message: deleteError.message },
+        { status: 500 },
+      );
+    }
+  }
+
+  // Verify the row is actually gone — defends against an RPC that
+  // returns NULL without performing the delete (the bug we just fixed).
+  const { data: stillThere } = await sb
+    .from("leads")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (stillThere) {
+    return NextResponse.json(
+      { error: "delete_did_not_persist", message: "El lead sigue en la base de datos tras llamar al RPC. Revisa la función gdpr_delete_lead." },
+      { status: 500 },
+    );
   }
 
   return NextResponse.redirect(new URL("/admin/leads", req.url), { status: 303 });
