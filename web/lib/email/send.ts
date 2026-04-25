@@ -11,6 +11,14 @@ import {
   renderClassReminder30m,
   type ClassReminder30mVars,
 } from "./templates/class-reminder-30m";
+import {
+  renderTrialConfirmation,
+  type TrialConfirmationVars,
+} from "./templates/trial-confirmation";
+import {
+  renderTrialReminder,
+  type TrialReminderVars,
+} from "./templates/trial-reminder";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -135,5 +143,30 @@ export async function sendClassReminder30mEmail(
   vars: ClassReminder30mVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderClassReminder30m(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Trial-class booking confirmation. Sent the moment the lead picks
+ * a slot in the public funnel. Includes the magic-link aula URL.
+ */
+export async function sendTrialConfirmationEmail(
+  to: string,
+  vars: TrialConfirmationVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTrialConfirmation(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Pre-class reminder for a trial. Used by both the 24h-before and 8 AM
+ * same-day Vercel cron jobs, for both the lead and the teacher (the
+ * `audience` field on `vars` flips the copy/subject accordingly).
+ */
+export async function sendTrialReminderEmail(
+  to: string,
+  vars: TrialReminderVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTrialReminder(vars);
   return sendRaw(to, subject, html, text);
 }

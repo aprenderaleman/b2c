@@ -3,13 +3,15 @@ import { supabaseAdmin } from "./supabase";
 export type LeadRow = {
   id: string;
   created_at: string;
-  name: string;
-  whatsapp_normalized: string;
+  name: string | null;
+  // Now nullable: leads from the self-book trial funnel may give us
+  // only an email. The legacy WhatsApp funnel still populates it.
+  whatsapp_normalized: string | null;
   email: string | null;
-  language: "es" | "de";
-  german_level: "A0" | "A1-A2" | "B1" | "B2+";
-  goal: string;
-  urgency: string;
+  language: "es" | "de" | null;
+  german_level: "A0" | "A1-A2" | "B1" | "B2+" | null;
+  goal: string | null;
+  urgency: string | null;
   budget: string | null;
   status: string;
   current_followup_number: number;

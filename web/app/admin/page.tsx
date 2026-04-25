@@ -141,10 +141,10 @@ function LeadList({ leads }: { leads: LeadRow[] }) {
         <li key={l.id} className="py-3 flex items-center justify-between gap-4">
           <div className="min-w-0">
             <Link href={`/admin/leads/${l.id}`} className="font-medium text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400">
-              {l.name || l.whatsapp_normalized}
+              {l.name || l.whatsapp_normalized || l.email || "—"}
             </Link>
             <div className="text-xs text-slate-500 dark:text-slate-400">
-              {l.whatsapp_normalized} · {l.german_level} · {l.goal} · {l.language}
+              {l.whatsapp_normalized ?? l.email ?? "—"} · {l.german_level ?? "—"} · {l.goal ?? "—"} · {l.language ?? "—"}
             </div>
           </div>
           <StatusBadge status={l.status} />
@@ -168,12 +168,12 @@ function TrialList({ leads }: { leads: LeadRow[] }) {
               <div className="flex items-center gap-3">
                 <span className="font-mono text-sm text-slate-600 dark:text-slate-300">{timeLabel}</span>
                 <Link href={`/admin/leads/${l.id}`} className="font-medium text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400">
-                  {l.name || l.whatsapp_normalized}
+                  {l.name || l.whatsapp_normalized || l.email || "—"}
                 </Link>
                 <StatusBadge status={l.status} />
               </div>
               <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                {l.whatsapp_normalized} · {l.goal}
+                {(l.whatsapp_normalized ?? l.email ?? "—")} · {l.goal ?? "—"}
               </div>
             </div>
             <TrialActions leadId={l.id} />

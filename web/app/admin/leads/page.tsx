@@ -156,12 +156,12 @@ export default async function AllLeadsPage({
                     {l.name || "—"}
                   </Link>
                 </Td>
-                <Td><code className="text-xs">{l.whatsapp_normalized}</code></Td>
+                <Td><code className="text-xs">{l.whatsapp_normalized ?? l.email ?? "—"}</code></Td>
                 <Td><StatusBadge status={l.status} /></Td>
-                <Td>{l.german_level}</Td>
-                <Td>{GOAL_LABELS[l.goal] ?? l.goal}</Td>
-                <Td>{URGENCY_LABELS[l.urgency] ?? l.urgency}</Td>
-                <Td>{l.language}</Td>
+                <Td>{l.german_level ?? "—"}</Td>
+                <Td>{l.goal ? (GOAL_LABELS[l.goal] ?? l.goal) : "—"}</Td>
+                <Td>{l.urgency ? (URGENCY_LABELS[l.urgency] ?? l.urgency) : "—"}</Td>
+                <Td>{l.language ?? "—"}</Td>
                 <Td>{l.current_followup_number}</Td>
                 <Td>
                   {l.next_contact_date

@@ -1,134 +1,188 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
-import { WhatsAppFloat } from "@/components/WhatsAppFloat";
-import { useLang } from "@/lib/lang-context";
-import { interpolate } from "@/lib/i18n";
+import { supabaseAdmin } from "@/lib/supabase";
+import { verifyTrialToken } from "@/lib/trial-token";
 
-const CALENDLY_URL = "https://calendly.com/aprenderaleman2026/sesion-de-prueba-de-aleman";
+/**
+ * GET /confirmacion?c={classId}&t={token}
+ *
+ * Standalone confirmation page the funnel redirects to after a
+ * successful self-service booking. We don't render the success state
+ * inline anymore — the lead lands on its own URL so the page is
+ * bookmarkable and shareable, and so the homepage can stay focused
+ * on the booking flow.
+ *
+ * The token is the same HMAC-signed magic-link token used to enter
+ * the aula on the day of the class. We verify it server-side and
+ * refuse to render anything sensitive if it's missing or invalid.
+ *
+ * The PRIMARY CTA points the lead to SCHULE so they can start
+ * learning German immediately while waiting for the trial day.
+ */
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-export default function ConfirmationPage() {
-  const { t } = useLang();
-  const [name, setName] = useState("");
+const SCHULE_URL = "https://schule.aprender-aleman.de";
 
-  useEffect(() => {
-    const n = sessionStorage.getItem("aa_lead_name") ?? "";
-    setName(n);
-    sessionStorage.removeItem("aa_lead_name");
-  }, []);
+type Search = { c?: string; t?: string };
+
+export default async function ConfirmacionPage({
+  searchParams,
+}: {
+  searchParams: Promise<Search>;
+}) {
+  const { c: classId, t: token } = await searchParams;
+  if (!classId || !token) redirect("/");
+
+  const payload = verifyTrialToken(token);
+  if (!payload || payload.class_id !== classId) redirect("/");
+
+  // Pull the booking — name, date, teacher.
+  const sb = supabaseAdmin();
+  const { data: cls } = await sb
+    .from("classes")
+    .select(`
+      id, scheduled_at, duration_minutes, lead_id, is_trial,
+      teacher:teachers!inner(users!inner(full_name, email)),
+      lead:leads!inner(name)
+    `)
+    .eq("id", classId)
+    .maybeSingle();
+
+  if (!cls || !(cls as { is_trial: boolean }).is_trial) redirect("/");
+
+  type Row = {
+    scheduled_at: string;
+    duration_minutes: number;
+    lead_id: string;
+    teacher: { users: { full_name: string | null; email: string } |
+                       Array<{ full_name: string | null; email: string }> } |
+             Array<{ users: { full_name: string | null; email: string } |
+                            Array<{ full_name: string | null; email: string }> }>;
+    lead: { name: string | null } | Array<{ name: string | null }>;
+  };
+  const flat = <T,>(x: T | T[] | null | undefined): T | null =>
+    !x ? null : Array.isArray(x) ? x[0] ?? null : x;
+
+  const r = cls as Row;
+  const teacherWrap = flat(r.teacher);
+  const tu = teacherWrap ? flat(teacherWrap.users) : null;
+  const teacherName = tu?.full_name ?? tu?.email ?? "tu profesor/a";
+  const leadName    = flat(r.lead)?.name ?? "";
+  const firstName   = leadName.trim().split(/\s+/)[0] || "";
+
+  const startDate = new Date(r.scheduled_at).toLocaleString("es-ES", {
+    timeZone: "Europe/Berlin",
+    weekday:  "long",
+    day:      "numeric",
+    month:    "long",
+    hour:     "2-digit",
+    minute:   "2-digit",
+  });
+
+  // The same magic-link URL the email contains — kept as a secondary
+  // link on this screen so the SCHULE CTA dominates.
+  const magicLinkUrl = `/trial/${classId}?t=${encodeURIComponent(token)}`;
 
   return (
-    <>
+    <div className="theme-light bg-white text-foreground min-h-screen">
       <Header />
-      <main className="mx-auto max-w-2xl px-5 sm:px-6 pt-14 pb-24">
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="flex flex-col items-center gap-6 text-center"
-        >
-          {/* Success icon */}
-          <div className="h-20 w-20 rounded-full
-                          bg-gradient-to-br from-brand-400 to-brand-600
-                          shadow-brand-lg
-                          flex items-center justify-center text-4xl">
-            🎉
+
+      {/* ── HERO (light): confirmation header + booking summary ── */}
+      <section className="bg-white">
+        <div className="container-x pt-12 sm:pt-16 pb-8 text-center max-w-2xl">
+          <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-warm/15 text-[#B4651F] mb-5">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
           </div>
-
-          <h1 className="text-3xl sm:text-4xl font-extrabold
-                         text-slate-900 dark:text-slate-50">
-            {interpolate(t.confirmation.title, { name: name.split(/\s+/)[0] || "" })}
+          <span className="eyebrow">Reserva confirmada</span>
+          <h1 className="mt-3 text-[36px] sm:text-5xl font-bold tracking-tight text-foreground leading-[1.05]">
+            ¡Listo{firstName ? `, ${firstName}` : ""}!
+            <br className="hidden sm:block"/>
+            Tu clase está agendada.
           </h1>
-
-          <p className="max-w-xl text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed">
-            {t.confirmation.body}
+          <p className="mt-4 text-lg text-muted-foreground leading-relaxed">
+            Te enviamos los detalles a tu correo y a tu WhatsApp. El día de la
+            clase entrarás directamente con el enlace que te llegó — sin contraseña.
           </p>
 
-          {/* ────────── PRIMARY CTA — self-service booking ────────── */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.15 }}
-            className="w-full rounded-3xl
-                       bg-white dark:bg-slate-900
-                       border border-slate-200 dark:border-slate-800
-                       p-6 sm:p-8 shadow-sm"
-          >
-            <div className="flex flex-col items-center gap-3 text-center">
-              <span className="inline-flex h-11 w-11 items-center justify-center
-                               rounded-xl bg-brand-50 dark:bg-brand-500/15
-                               text-brand-600 dark:text-brand-400"
-                    aria-hidden>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="4" width="18" height="18" rx="2" />
-                  <line x1="16" y1="2"  x2="16" y2="6" />
-                  <line x1="8"  y1="2"  x2="8"  y2="6" />
-                  <line x1="3"  y1="10" x2="21" y2="10" />
-                </svg>
-              </span>
+          {/* Booking summary card */}
+          <div className="mt-8 rounded-2xl bg-white border border-border shadow-sm p-6 text-left space-y-3">
+            <SummaryRow k="Fecha"     v={startDate} cap />
+            <SummaryRow k="Profesor"  v={teacherName} />
+            <SummaryRow k="Duración"  v={`${r.duration_minutes ?? 45} minutos`} />
+          </div>
+        </div>
+      </section>
 
-              <h2 className="text-lg sm:text-xl font-bold tracking-tight
-                             text-slate-900 dark:text-slate-50">
-                {t.confirmation.bookCtaTitle}
-              </h2>
-              <p className="max-w-md text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                {t.confirmation.bookCtaBody}
-              </p>
-
-              <a
-                href={CALENDLY_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-primary mt-2"
-              >
-                {t.confirmation.bookCtaButton}
-              </a>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                {t.confirmation.bookCtaHint}
-              </span>
-            </div>
-          </motion.div>
-
-          {/* ────────── SECONDARY — SCHULE while they wait ────────── */}
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.25 }}
-            className="w-full rounded-3xl border border-slate-200 dark:border-slate-700
-                       bg-white/70 dark:bg-slate-900/50 backdrop-blur-sm
-                       px-6 py-5 flex flex-col sm:flex-row items-center justify-between
-                       gap-4 text-left"
-          >
-            <div className="flex items-start gap-3 flex-1 min-w-0">
-              <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center
-                               rounded-xl bg-brand-50 dark:bg-brand-500/15 text-xl"
-                    aria-hidden>
-                🎓
-              </span>
-              <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
-                {t.confirmation.schuleHint}
-              </p>
-            </div>
+      {/* ── NAVY: PRIMARY CTA — start learning with SCHULE ── */}
+      <section className="section-navy section-pad">
+        <div className="container-x text-center max-w-3xl">
+          <span className="eyebrow-on-navy">Mientras esperas tu clase</span>
+          <h2 className="mt-3 text-[30px] md:text-[42px] font-bold tracking-tight text-white leading-[1.1]">
+            Empieza a aprender alemán hoy mismo
+          </h2>
+          <p className="mt-4 text-base md:text-lg text-white/75 leading-relaxed">
+            Entra a <strong className="text-white">SCHULE</strong>, nuestra plataforma
+            online: clases interactivas, ejercicios por nivel y tu profesor IA Hans
+            disponible 24/7 para practicar por voz o por texto.
+          </p>
+          <div className="mt-8">
             <a
-              href="https://schule.aprender-aleman.de"
+              href={SCHULE_URL}
               target="_blank"
               rel="noopener noreferrer"
-              className="shrink-0 inline-flex items-center gap-1.5 rounded-xl
-                         border border-brand-200 dark:border-brand-500/40
-                         bg-brand-50/60 dark:bg-brand-500/10
-                         px-4 py-2 text-sm font-semibold
-                         text-brand-700 dark:text-brand-300
-                         hover:bg-brand-100 dark:hover:bg-brand-500/20 transition-colors"
+              className="btn-primary-lg"
             >
-              {t.confirmation.schuleCta}
+              Empezar ahora con SCHULE
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
             </a>
-          </motion.div>
-        </motion.div>
-      </main>
-      <WhatsAppFloat />
-    </>
+          </div>
+        </div>
+      </section>
+
+      {/* ── MUTED: secondary actions ── */}
+      <section className="section-muted-bg section-pad">
+        <div className="container-x text-center max-w-2xl">
+          <a
+            href={magicLinkUrl}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-foreground hover:text-warm transition-colors underline-offset-4 hover:underline"
+          >
+            Guardar enlace de la clase
+          </a>
+          <p className="mt-2 text-xs text-muted-foreground">
+            El aula abre 15 minutos antes. Recibirás recordatorios por email y
+            WhatsApp antes de la clase.
+          </p>
+
+          <Link
+            href="/"
+            className="mt-10 inline-block text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            ← Volver al inicio
+          </Link>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SummaryRow({ k, v, cap = false }: { k: string; v: string; cap?: boolean }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-20 shrink-0">
+        {k}
+      </span>
+      <span className={`text-sm font-medium text-foreground ${cap ? "capitalize" : ""}`}>
+        {v}
+      </span>
+    </div>
   );
 }

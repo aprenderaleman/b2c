@@ -3,12 +3,14 @@ Scheduler — the one process that drives every periodic job.
 
 Jobs registered:
 
-  * Agent 0 tick                         — every 15 min, 08:00–18:45 Berlin
-  * Trial reminders for today            — 08:00 Berlin
-  * T-30min pings to Gelfis              — every 5 min
-  * Escalation scan → notify Gelfis      — every 5 min
-  * Absent-follow-up tick                — hourly, within send window
-  * Daily summary → Gelfis               — 19:00 Berlin
+  * Agent 0 tick                          — every 15 min, 08:00–18:45 Berlin
+  * T-30min pre-class WhatsApp            — every 5 min (sends to lead AND teacher)
+  * Escalation scan → notify Gelfis       — every 5 min
+  * Absent-follow-up tick                 — hourly, within send window
+  * Daily summary → Gelfis                — 19:00 Berlin
+
+24h-before and 8 AM same-day reminders are EMAIL — owned by Vercel cron
+on the web side (/api/cron/trial-reminders-24h, /api/cron/trial-reminders-morning).
 
 Run:  python -m agents.scheduler
 
@@ -24,12 +26,14 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from agents.agent_0_watcher import tick as agent_0_tick
-from agents.agent_5_guardian import send_trial_reminders_for_today, tick_absent_followups
+from agents.agent_5_guardian import tick_absent_followups
 from agents.janitor import run as janitor_run
-from agents.notifications import notify_daily_summary, notify_trial_30min, scan_escalations_and_notify
+from agents.notifications import notify_daily_summary, scan_escalations_and_notify
 from agents.shared.db import get_conn
 from agents.shared.heartbeat import beat
+from agents.shared.leads import log_timeline
 from agents.shared.rate_limits import BERLIN
+from agents.whatsapp_service import WhatsAppError, WhatsAppService
 
 log = logging.getLogger("scheduler")
 logging.basicConfig(
@@ -38,24 +42,127 @@ logging.basicConfig(
 )
 
 
+_PRE_CLASS_30M_TAG = "[pre_class_30m_sent]"
+
+
+def _format_class_time_30m(scheduled_at: datetime, lang: str) -> str:
+    """E.g. '17:30' — short label used in the 30-min reminder."""
+    local = scheduled_at.astimezone(BERLIN) if scheduled_at.tzinfo else BERLIN.localize(scheduled_at)
+    return local.strftime("%H:%M")
+
+
 def _notify_trials_30min() -> None:
-    """Ping Gelfis when a trial is ~30 minutes away."""
+    """Send a SHORT WhatsApp 30 min before each upcoming trial.
+
+    Recipients:
+      * Lead   — only if they gave us their WhatsApp number.
+      * Teacher — always (their WhatsApp is required to be a teacher).
+
+    Idempotency:
+      * `classes.notes_admin` carries the `_PRE_CLASS_30M_TAG` once we've
+        fired this reminder for that class. The cron runs every 5 min so
+        without the tag we'd spam.
+    """
     now_utc = datetime.utcnow()
     lo = now_utc + timedelta(minutes=25)
     hi = now_utc + timedelta(minutes=35)
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, name, whatsapp_normalized, trial_scheduled_at, trial_zoom_link
-              FROM leads
-             WHERE status IN ('trial_scheduled','trial_reminded')
-               AND trial_scheduled_at BETWEEN %s AND %s
+            SELECT
+                c.id              AS class_id,
+                c.scheduled_at,
+                c.duration_minutes,
+                c.notes_admin,
+                l.id              AS lead_id,
+                l.name            AS lead_name,
+                l.language        AS lead_language,
+                l.whatsapp_normalized AS lead_whatsapp,
+                tu.full_name      AS teacher_name,
+                tu.email          AS teacher_email,
+                tu.whatsapp_e164  AS teacher_whatsapp
+              FROM classes c
+              JOIN leads     l  ON l.id  = c.lead_id
+              JOIN teachers  t  ON t.id  = c.teacher_id
+              JOIN users     tu ON tu.id = t.user_id
+             WHERE c.is_trial = TRUE
+               AND c.status   = 'scheduled'
+               AND c.scheduled_at BETWEEN %s AND %s
             """,
             (lo, hi),
         )
-        leads = list(cur.fetchall())
-    for lead in leads:
-        notify_trial_30min(lead)
+        rows = list(cur.fetchall())
+
+    wa: WhatsAppService | None = None
+    for r in rows:
+        if (r.get("notes_admin") or "").find(_PRE_CLASS_30M_TAG) >= 0:
+            continue
+
+        scheduled_at = r["scheduled_at"]
+        time_label = _format_class_time_30m(scheduled_at, r["lead_language"])
+        join_url_lead    = f"https://b2c.aprender-aleman.de/aula/{r['class_id']}"
+        join_url_teacher = join_url_lead
+
+        # ── Lead message (short) ──
+        lang = r["lead_language"] or "es"
+        lead_first = (r["lead_name"] or "").split()[0] or ""
+        if lang == "de":
+            lead_text = (
+                f"⏰ {lead_first}, deine Probestunde startet um {time_label} (Berlin).\n\n"
+                f"Klick hier um beizutreten:\n{join_url_lead}\n\n"
+                f"— Aprender-Aleman.de"
+            )
+        else:
+            lead_text = (
+                f"⏰ {lead_first}, tu clase de prueba empieza a las {time_label} (Berlín).\n\n"
+                f"Únete aquí:\n{join_url_lead}\n\n"
+                f"— Aprender-Aleman.de"
+            )
+
+        # ── Teacher message ──
+        teacher_first = (r.get("teacher_name") or "").split()[0] or ""
+        teacher_text = (
+            f"⏰ {teacher_first}, clase de prueba a las {time_label} (Berlín) "
+            f"con {r.get('lead_name') or 'lead'}.\n\n"
+            f"Aula: {join_url_teacher}\n\n"
+            f"— Aprender-Aleman.de"
+        )
+
+        if wa is None:
+            try:
+                wa = WhatsAppService()
+            except Exception as e:  # noqa: BLE001
+                log.exception("WhatsAppService init failed: %s", e)
+                continue
+
+        # Send to lead (only if they gave a number)
+        if r.get("lead_whatsapp"):
+            try:
+                wa.send_text(r["lead_whatsapp"], lead_text)
+                log_timeline(
+                    r["lead_id"], type="trial_reminder", author="agent_5",
+                    content="30-min pre-class WhatsApp sent to lead.",
+                )
+            except WhatsAppError as e:
+                log.warning("30-min lead reminder failed for %s: %s", r["lead_id"], e)
+
+        # Send to teacher
+        if r.get("teacher_whatsapp"):
+            try:
+                wa.send_text(r["teacher_whatsapp"], teacher_text)
+            except WhatsAppError as e:
+                log.warning("30-min teacher reminder failed for class %s: %s", r["class_id"], e)
+
+        # Mark fired so we don't repeat in the next 5-min cycle.
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE classes
+                   SET notes_admin = COALESCE(notes_admin || E'\n', '') || %s
+                 WHERE id = %s
+                """,
+                (_PRE_CLASS_30M_TAG, r["class_id"]),
+            )
 
 
 def _agent_0_tick_with_beat() -> None:
@@ -120,19 +227,13 @@ def main() -> int:
         max_instances=1, coalesce=True,
     )
 
-    # Trial reminders for the day (08:00 Berlin)
-    sched.add_job(
-        send_trial_reminders_for_today,
-        CronTrigger(hour=8, minute=0, timezone=BERLIN),
-        id="trial_reminders_morning",
-        max_instances=1, coalesce=True,
-    )
-
-    # T-30min pings to Gelfis
+    # 30-min pre-class WhatsApp to lead AND teacher.
+    # Email reminders (24h-before, 8 AM same-day) live on the web side
+    # as Vercel cron jobs.
     sched.add_job(
         _notify_trials_30min,
         IntervalTrigger(minutes=5, timezone=BERLIN),
-        id="notify_trials_30min",
+        id="trial_30min_whatsapp",
         max_instances=1, coalesce=True,
     )
 

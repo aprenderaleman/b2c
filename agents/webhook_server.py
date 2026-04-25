@@ -17,7 +17,6 @@ Runs in production as systemd unit `aa-agents.service` (see deploy_vps.sh).
 """
 from __future__ import annotations
 
-import hashlib
 import hmac
 import logging
 import os
@@ -29,10 +28,6 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from agents.agent_4_conversation import handle_incoming_message
-from agents.agent_5_guardian import (
-    on_calendly_invitee_canceled,
-    on_calendly_invitee_created,
-)
 from agents.shared.db import get_conn
 from agents.shared.leads import get_lead_by_phone, log_timeline
 from agents.shared.phone import normalize_phone
@@ -105,57 +100,15 @@ async def qr_html(instance: str, token: str = ""):
 
 
 # ──────────────────────────────────────────────────────────
-# Calendly
+# Calendly — DEPRECATED. The self-book funnel replaced Calendly
+# entirely. We respond 410 Gone to any residual webhook traffic
+# so Calendly retries don't hammer a real handler.
 # ──────────────────────────────────────────────────────────
 
-_CALENDLY_SIGNING_KEY = os.environ.get("CALENDLY_WEBHOOK_SIGNING_KEY", "")
-
-
-def _verify_calendly_signature(raw_body: bytes, header: str) -> bool:
-    """
-    Calendly v2 signature header looks like:
-        t=1234567890,v1=<hex>
-    The signed payload is `<t>.<raw_body>`.
-    """
-    if not _CALENDLY_SIGNING_KEY:
-        log.warning("CALENDLY_WEBHOOK_SIGNING_KEY not set — skipping signature check.")
-        return True
-    if not header:
-        return False
-    parts = dict(part.split("=", 1) for part in header.split(",") if "=" in part)
-    t = parts.get("t")
-    v1 = parts.get("v1")
-    if not t or not v1:
-        return False
-    signed = f"{t}.".encode() + raw_body
-    digest = hmac.new(_CALENDLY_SIGNING_KEY.encode(), signed, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(digest, v1)
-
-
 @app.post("/webhook/calendly")
-async def calendly_webhook(
-    request: Request,
-    calendly_webhook_signature: str | None = Header(default=None),
-):
-    raw = await request.body()
-    if not _verify_calendly_signature(raw, calendly_webhook_signature or ""):
-        raise HTTPException(status_code=401, detail="invalid signature")
-
-    payload = await request.json()
-    event = payload.get("event") or ""
-    try:
-        if event == "invitee.created":
-            lead_id = on_calendly_invitee_created(payload)
-        elif event == "invitee.canceled":
-            lead_id = on_calendly_invitee_canceled(payload)
-        else:
-            log.info("Ignoring Calendly event: %s", event)
-            return JSONResponse({"ok": True, "ignored": event})
-    except Exception:
-        log.exception("Calendly handler failed")
-        raise HTTPException(status_code=500, detail="handler error")
-
-    return JSONResponse({"ok": True, "lead_id": str(lead_id) if lead_id else None})
+async def calendly_webhook_deprecated():
+    log.warning("Calendly webhook hit but Calendly is deprecated. Returning 410.")
+    raise HTTPException(status_code=410, detail="calendly_deprecated")
 
 
 # ──────────────────────────────────────────────────────────

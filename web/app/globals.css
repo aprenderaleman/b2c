@@ -3,30 +3,69 @@
 @tailwind utilities;
 
 /* ─────────────────────────────────────────────────────────────
-   DESIGN TOKENS — semantic colours flip with the .dark class.
+   DESIGN TOKENS — Aprender-Aleman.de design system.
    Stored as space-separated RGB triplets so Tailwind's
    `rgb(var(--x) / <alpha-value>)` resolves opacity utilities.
+
+   Strict palette:
+     navy            #0F2847   (immersive bgs, headlines, primary CTAs in DACH-only screens)
+     navy-800        #15315A   (cards over navy)
+     warm            #F4A261   (accent — CTAs, eyebrows, badges, highlights)
+     foreground      #1A1D29   (text on light bg)
+     muted-fg        #64748B   (secondary text on light bg)
+     card            #FFFFFF   (cards over light)
+     border          #E2E8F0   (subtle borders)
+     section-muted   #F5F6FA   (gris muy sutil — alternancia con navy)
    ───────────────────────────────────────────────────────────── */
 :root {
-  /* Light theme */
-  --bg:             248 249 251;     /* #F8F9FB */
+  --bg:             255 255 255;     /* #FFFFFF — white base */
   --fg:              26  29  41;     /* #1A1D29 */
-  --card:           255 255 255;
-  --muted:          241 242 246;     /* #F1F2F6 */
+  --card:           255 255 255;     /* #FFFFFF */
+  --muted:          245 246 250;     /* #F5F6FA */
   --muted-fg:       100 116 139;     /* #64748B */
   --border:         226 232 240;     /* #E2E8F0 */
   --section-muted:  245 246 250;     /* #F5F6FA */
 }
 
 .dark {
-  /* Dark theme — deep navy */
-  --bg:              14  27  46;     /* #0E1B2E */
-  --fg:             240 243 247;     /* #F0F3F7 */
-  --card:            21  38  63;     /* #15263F */
-  --muted:           27  45  73;     /* #1B2D49 */
-  --muted-fg:       143 163 188;     /* #8FA3BC */
-  --border:          40  57  90;     /* #28395A */
-  --section-muted:   16  32  58;     /* #10203A */
+  /* Dark theme uses the brand navy as the immersive base. */
+  --bg:              15  40  71;     /* #0F2847 navy */
+  --fg:             255 255 255;
+  --card:            21  49  90;     /* #15315A navy-800 */
+  --muted:           21  49  90;
+  --muted-fg:       180 198 222;
+  --border:          43  72 110;
+  --section-muted:   18  46  82;
+}
+
+/* Subtree-scoped theme overrides — used by the marketing page so
+   navy ↔ white sections can host content that adapts on the fly.
+   `theme-light` pins semantic tokens to their light values; useful
+   when we hardcode #FFFFFF / #F5F6FA backgrounds and need
+   `bg-card`, `text-foreground`, etc. to stay coherent.
+   `theme-dark` does the inverse: pins them to dark values so a
+   panel sitting on a navy background can use `text-foreground`,
+   `bg-card`, `border-border`, etc. and look right in BOTH global
+   modes (admin dashboard's dark toggle still applies elsewhere). */
+.theme-light {
+  --bg:             255 255 255;
+  --fg:              26  29  41;
+  --card:           255 255 255;
+  --muted:          245 246 250;
+  --muted-fg:       100 116 139;
+  --border:         226 232 240;
+  --section-muted:  245 246 250;
+  color-scheme:     light;
+}
+.theme-dark {
+  --bg:              15  40  71;
+  --fg:             255 255 255;
+  --card:            21  49  90;
+  --muted:           21  49  90;
+  --muted-fg:       180 198 222;
+  --border:          43  72 110;
+  --section-muted:   18  46  82;
+  color-scheme:     dark;
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -59,51 +98,93 @@
    Components — design-system primitives.
    ───────────────────────────────────────────────────────────── */
 @layer components {
-  /* "NUESTRO ENFOQUE" mini-label sitting above each H2. */
+  /* Eyebrow ("CÓMO FUNCIONA" mini-label sitting above each H2). */
   .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.2em] text-warm;
+  }
+  .eyebrow-on-navy {
     @apply text-xs font-semibold uppercase tracking-[0.2em] text-warm;
   }
   .eyebrow-muted {
     @apply text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground;
   }
 
-  /* Standard vertical rhythm for full-bleed sections. */
-  .section-pad   { @apply py-20 md:py-32; }
+  /* Standard vertical rhythm for full-bleed sections (80px mobile, 128px desktop). */
+  .section-pad { @apply py-20 md:py-32; }
 
-  /* Primary CTA — warm/orange-y accent for conversion moments. */
-  .btn-primary {
-    @apply relative inline-flex items-center justify-center gap-2
-           rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600
-           px-7 py-4 text-base font-bold text-white
-           shadow-brand-lg
-           transition-all duration-200
-           hover:from-brand-500 hover:to-brand-700
-           hover:-translate-y-0.5 hover:shadow-glow
-           active:translate-y-0
-           disabled:opacity-40 disabled:cursor-not-allowed
-           disabled:hover:translate-y-0 disabled:hover:shadow-brand-lg
-           focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-500/35;
-    min-height: 52px;
+  /* Section bg helpers — enforce the navy ↔ muted alternation rule. */
+  .section-navy {
+    background-color: #0F2847;
+    color: #FFFFFF;
+  }
+  .section-navy h1, .section-navy h2, .section-navy h3, .section-navy h4 { color: #FFFFFF; }
+  .section-light {
+    background-color: #FFFFFF;
+    color: #1A1D29;
+  }
+  .section-muted-bg {
+    background-color: #F5F6FA;
+    color: #1A1D29;
   }
 
-  .btn-secondary {
+  /* Container — max 1280px, centered, 24/32px horizontal padding. */
+  .container-x {
+    @apply mx-auto w-full max-w-[1280px] px-6 md:px-8;
+  }
+
+  /* ─── Buttons ─── */
+  /* Primary: solid warm + dark text. The conversion CTA. */
+  .btn-primary {
     @apply inline-flex items-center justify-center gap-2
-           rounded-2xl bg-card text-foreground
-           px-6 py-3 text-sm font-semibold
+           rounded-xl bg-warm text-warm-foreground
+           px-5 py-3 text-base font-semibold
+           transition-all duration-150
+           hover:brightness-105 hover:-translate-y-px
+           active:translate-y-0
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warm focus-visible:ring-offset-2;
+    min-height: 48px;
+  }
+  .btn-primary-lg {
+    @apply btn-primary px-8;
+    min-height: 56px;
+    font-size: 16px;
+  }
+
+  /* Outline: 1px border, transparent bg, foreground text. */
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2
+           rounded-xl bg-transparent text-foreground
+           px-5 py-3 text-base font-semibold
            border border-border
            transition-all duration-150
-           hover:border-warm hover:text-warm
-           disabled:opacity-40 disabled:cursor-not-allowed;
-    min-height: 44px;
+           hover:border-foreground/40
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    min-height: 48px;
   }
+
+  /* Ghost dark — for sections over navy. */
+  .btn-ghost-dark {
+    @apply inline-flex items-center justify-center gap-2
+           rounded-xl text-white
+           px-5 py-3 text-base font-semibold
+           border border-white/20
+           transition-all duration-150
+           hover:bg-white/5 hover:border-white/40
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    min-height: 48px;
+  }
+
+  /* Backwards-compat: legacy `btn-secondary` aliases to `btn-outline`. */
+  .btn-secondary { @apply btn-outline; }
 
   /* Option cards (funnel) */
   .option-card {
     @apply flex items-center gap-3 w-full text-left
-           rounded-2xl border bg-card border-border
+           rounded-xl border bg-card border-border
            px-5 py-4 text-foreground
            transition-all duration-150 cursor-pointer
-           hover:border-warm hover:bg-muted
+           hover:border-warm hover:bg-warm/5
            active:scale-[0.99];
     min-height: 56px;
   }
@@ -122,9 +203,20 @@
     min-height: 48px;
   }
 
-  /* Soft elevated card used on the homepage and many list pages. */
+  /* Soft elevated card used on light / muted sections. */
   .surface-card {
-    @apply rounded-3xl bg-card border border-border shadow-sm backdrop-blur-sm;
+    @apply rounded-2xl bg-card border border-border shadow-sm
+           transition-shadow duration-150 hover:shadow-md;
+  }
+
+  /* Cards over navy backgrounds — subtle white wash variant. */
+  .surface-card--on-navy {
+    @apply rounded-2xl border border-white/10
+           bg-white/[0.03] text-white;
+  }
+  /* Cards over navy that want to "pop" — solid white surfaces. */
+  .surface-card--pop-on-navy {
+    @apply rounded-2xl bg-white text-foreground border border-transparent shadow-sm;
   }
 }
 

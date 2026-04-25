@@ -48,7 +48,9 @@ export default async function LeadDetail({
     studentId = (data?.id as string | null) ?? null;
   }
 
-  const waNumber = lead.whatsapp_normalized.replace("+", "");
+  // Leads booked via the new self-book funnel may have NO WhatsApp.
+  // Fall back to email-only display when that's the case.
+  const waNumber = lead.whatsapp_normalized?.replace("+", "") ?? null;
 
   return (
     <main className="space-y-5">
@@ -62,16 +64,27 @@ export default async function LeadDetail({
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">{lead.name || "Lead sin nombre"}</h1>
             <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-              <a
-                href={`https://wa.me/${waNumber}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-mono text-brand-600 dark:text-brand-400 hover:underline"
-              >
-                {lead.whatsapp_normalized}
-              </a>
+              {waNumber ? (
+                <a
+                  href={`https://wa.me/${waNumber}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-brand-600 dark:text-brand-400 hover:underline"
+                >
+                  {lead.whatsapp_normalized}
+                </a>
+              ) : lead.email ? (
+                <a
+                  href={`mailto:${lead.email}`}
+                  className="font-mono text-brand-600 dark:text-brand-400 hover:underline"
+                >
+                  {lead.email}
+                </a>
+              ) : (
+                <span className="text-slate-400 dark:text-slate-500 italic">sin contacto</span>
+              )}
               <span>·</span>
-              <span>{lead.language.toUpperCase()}</span>
+              <span>{(lead.language ?? "es").toUpperCase()}</span>
               <span>·</span>
               <StatusBadge status={lead.status} />
             </div>
@@ -81,9 +94,9 @@ export default async function LeadDetail({
               id:                   lead.id,
               name:                 lead.name ?? "",
               email:                lead.email ?? null,
-              phone:                lead.whatsapp_normalized,
+              phone:                lead.whatsapp_normalized ?? "",
               language:             (lead.language as "es" | "de") ?? "es",
-              german_level:         lead.german_level,
+              german_level:         lead.german_level ?? "",
               goal:                 lead.goal ?? null,
               status:               lead.status,
               converted_to_user_id: (lead as { converted_to_user_id?: string | null }).converted_to_user_id ?? null,
@@ -98,10 +111,10 @@ export default async function LeadDetail({
         <div className="space-y-5 lg:col-span-1">
           <Panel title="Datos del funnel">
             <Kv k="Creado"             v={new Date(lead.created_at).toLocaleString("es-ES")} />
-            <Kv k="Origen"             v={lead.source} />
-            <Kv k="Nivel de alemán"    v={lead.german_level} />
-            <Kv k="Objetivo"           v={lead.goal} />
-            <Kv k="Urgencia"           v={lead.urgency} />
+            <Kv k="Origen"             v={lead.source ?? "—"} />
+            <Kv k="Nivel de alemán"    v={lead.german_level ?? "—"} />
+            <Kv k="Objetivo"           v={lead.goal ?? "—"} />
+            <Kv k="Urgencia"           v={lead.urgency ?? "—"} />
             <Kv k="Presupuesto"        v={lead.budget ?? "—"} />
             <Kv k="Correo electrónico" v={lead.email ?? "—"} />
             <Kv k="Mensajes vistos"    v={String(lead.messages_seen_count)} />

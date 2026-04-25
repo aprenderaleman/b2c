@@ -24,11 +24,14 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from datetime import datetime
+
 from agents.agent_1_writer import MessageDraft, compose_reply
 from agents.agent_2_reviewer import review_single
 from agents.agent_3_sender import send_approved
-from agents.shared.db import get_config
+from agents.shared.db import get_config, get_conn
 from agents.shared.leads import log_timeline, update_status
+from agents.shared.rate_limits import BERLIN
 from agents.whatsapp_service import WhatsAppService
 
 log = logging.getLogger("agent_4")
@@ -112,8 +115,8 @@ INFO_WORDS = {
     ],
 }
 
-CALENDLY_URL = "https://calendly.com/aprenderaleman2026/sesion-de-prueba-de-aleman"
-WEBSITE_URL  = "https://aprender-aleman.de"
+FUNNEL_URL  = "https://b2c.aprender-aleman.de/funnel"
+WEBSITE_URL = "https://aprender-aleman.de"
 
 
 def _norm(text: str) -> str:
@@ -145,6 +148,7 @@ Intent = Literal[
     "booking", "human_request", "negative",
     "price_request", "info_request", "ai_reply",
     "already_converted_ignore", "needs_human_already_paused_ignore",
+    "trial_already_booked",
 ]
 
 
@@ -186,15 +190,25 @@ def handle_incoming_message(
     text_norm = _norm(text)
     other_lang = "es" if lang == "de" else "de"
 
-    # LAYER 1 — keywords (zero AI cost).  Order matters: negative first so
-    # "no quiero más info" wins over the "info" keyword; human request next;
-    # then booking; then broad-info request.
+    # NEGATIVE / HUMAN-request still win over the trial-already-booked branch:
+    # someone who asks to unsubscribe or asks for a human deserves the right
+    # response regardless of their booking state.
     if _has_phrase(text_norm, NEGATIVE_WORDS[lang] + NEGATIVE_WORDS[other_lang]):
         return _handle_negative(lead, wa)
 
     if _has_phrase(text_norm, HUMAN_WORDS[lang] + HUMAN_WORDS[other_lang]):
         return _handle_human_request(lead, wa)
 
+    # TRIAL ALREADY BOOKED — if the lead already has a scheduled trial,
+    # NEVER push them to book again. Recognise the state and respond with
+    # the booking details, plus a soft prompt asking what they need. This
+    # catches both the self-book funnel path AND the legacy WhatsApp path
+    # once the lead has reserved.
+    if status in ("trial_scheduled", "trial_reminded"):
+        return _handle_trial_already_booked(lead, text, wa)
+
+    # LAYER 1 — keywords (zero AI cost). Order matters: booking next, then
+    # broad-info request.
     if _has_phrase(text_norm, BOOKING_WORDS[lang]):
         return _handle_booking(lead, wa)
 
@@ -216,23 +230,137 @@ def handle_incoming_message(
 # ──────────────────────────────────────────────────────────
 
 
+def _trial_class_details(lead_id: str) -> tuple[datetime | None, str | None]:
+    """Look up the lead's upcoming trial class (date, teacher name).
+
+    The funnel writes its booking into the `classes` table with `is_trial=true`
+    and `lead_id`. We pull the soonest one in the future. Falls back to the
+    legacy `leads.trial_scheduled_at` (Calendly-era) if no class row exists.
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT c.scheduled_at,
+                   COALESCE(u.full_name, u.email) AS teacher_name
+              FROM classes c
+              JOIN teachers t ON t.id = c.teacher_id
+              JOIN users    u ON u.id = t.user_id
+             WHERE c.lead_id = %s
+               AND c.is_trial = TRUE
+               AND c.status IN ('scheduled', 'live')
+               AND c.scheduled_at >= NOW() - INTERVAL '1 hour'
+             ORDER BY c.scheduled_at ASC
+             LIMIT 1
+            """,
+            (lead_id,),
+        )
+        row = cur.fetchone()
+    if row:
+        return row["scheduled_at"], row["teacher_name"]
+
+    # Legacy fallback — lead.trial_scheduled_at without a classes row.
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT trial_scheduled_at FROM leads WHERE id = %s",
+            (lead_id,),
+        )
+        r = cur.fetchone()
+    return (r["trial_scheduled_at"] if r else None), None
+
+
+def _format_trial_when(dt: datetime | None, lang: str) -> str:
+    if not dt:
+        return "pronto" if lang == "es" else "bald"
+    local = dt.astimezone(BERLIN) if dt.tzinfo else BERLIN.localize(dt)
+    if lang == "de":
+        return local.strftime("%A, %d.%m.%Y um %H:%M") + " (Berlin)"
+    # Spanish — capitalise weekday so it reads naturally mid-sentence.
+    weekdays_es = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+    months_es   = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
+                   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    return (
+        f"{weekdays_es[local.weekday()]} {local.day} de {months_es[local.month - 1]} "
+        f"a las {local.strftime('%H:%M')} (Berlín)"
+    )
+
+
+def _handle_trial_already_booked(
+    lead: dict, incoming: str, wa: WhatsAppService | None,
+) -> HandleResult:
+    """Lead already has a trial scheduled. Don't push booking — surface the
+    details and offer to help. We let the AI handle the substantive reply
+    (so the lead's actual question gets answered), but anchor it with the
+    booking facts so the model never invents a different time/teacher.
+    """
+    name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
+    lang = lead.get("language", "es")
+    when_dt, teacher_name = _trial_class_details(lead["id"])
+    when_str = _format_trial_when(when_dt, lang)
+
+    # Compose a reply through Agent 1 + Agent 2 with the booking facts as
+    # extra context. If the AI can't produce a good reply, fall back to a
+    # static acknowledgement with the booking details.
+    facts_es = (
+        f"[CONTEXTO INTERNO — NO REPETIR LITERAL]\n"
+        f"Este lead YA TIENE clase de prueba reservada: {when_str}"
+        f"{' con ' + teacher_name if teacher_name else ''}.\n"
+        f"NO le ofrezcas reservar otra clase. Si pregunta por la fecha o el profesor, "
+        f"confírmaselos. Responde brevemente a su mensaje actual."
+    )
+    facts_de = (
+        f"[INTERNER KONTEXT — NICHT WÖRTLICH WIEDERHOLEN]\n"
+        f"Dieser Lead hat BEREITS eine Probestunde gebucht: {when_str}"
+        f"{' mit ' + teacher_name if teacher_name else ''}.\n"
+        f"BIETE KEINE neue Buchung an. Wenn er nach Datum/Lehrer fragt, "
+        f"bestätige sie. Antworte kurz auf seine aktuelle Nachricht."
+    )
+    facts = facts_de if lang == "de" else facts_es
+    augmented = f"{facts}\n\n[MENSAJE DEL LEAD]\n{incoming}"
+
+    draft = compose_reply(lead, augmented)
+    if draft is None or not review_single(lead, draft).approved:
+        # Static fallback — confirms the class without sounding like a bot.
+        if lang == "de":
+            body = (
+                f"Hallo {name}! 👋\n\n"
+                f"Du hast deine Probestunde am {when_str}"
+                f"{' mit ' + teacher_name if teacher_name else ''}.\n\n"
+                f"Wie kann ich dir helfen?\n\n"
+                f"Stiv, Aprender-Aleman.de"
+            )
+        else:
+            body = (
+                f"¡Hola {name}! 👋\n\n"
+                f"Tu clase de prueba es el {when_str}"
+                f"{' con ' + teacher_name if teacher_name else ''}.\n\n"
+                f"¿En qué te puedo ayudar?\n\n"
+                f"Stiv, Aprender-Aleman.de"
+            )
+    else:
+        body = draft.text
+
+    result = send_approved(lead, body, is_new_conversation=False,
+                           advance_followup=False, wa=wa)
+    return HandleResult("trial_already_booked", sent=result.success, message_sent=body)
+
+
 def _handle_booking(lead: dict, wa: WhatsAppService | None) -> HandleResult:
     lang = lead.get("language", "es")
     name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
     if lang == "de":
         body = (
             f"Super, {name}! 🎉\n\n"
-            f"Hier ist der Link, um deinen Termin für die kostenlose Probestunde "
-            f"zu wählen:\n{CALENDLY_URL}\n\n"
-            f"Sag mir Bescheid, wenn du Hilfe brauchst.\n\n"
+            f"Hier kannst du in 2 Minuten Tag und Uhrzeit deiner kostenlosen "
+            f"Probestunde wählen:\n{FUNNEL_URL}\n\n"
+            f"Wir bestätigen es per E-Mail. Sag mir Bescheid, wenn du Hilfe brauchst.\n\n"
             f"Stiv, Aprender-Aleman.de"
         )
     else:
         body = (
             f"¡Genial, {name}! 🎉\n\n"
-            f"Aquí tienes el enlace para elegir el horario de tu clase de prueba "
-            f"gratuita:\n{CALENDLY_URL}\n\n"
-            f"Dime si necesitas ayuda para elegir el horario.\n\n"
+            f"Aquí puedes elegir el día y la hora de tu clase de prueba gratuita "
+            f"en 2 minutos:\n{FUNNEL_URL}\n\n"
+            f"Te llega la confirmación por email. Dime si necesitas ayuda.\n\n"
             f"Stiv, Aprender-Aleman.de"
         )
     update_status(lead["id"], "link_sent", author="agent_4")

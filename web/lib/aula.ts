@@ -15,6 +15,43 @@ export type AulaAccess =
   | { ok: false; reason: "not_found" | "not_authorized" | "cancelled" };
 
 /**
+ * Variant for trial-class leads — they don't have a user row yet, so
+ * the standard role-based gate doesn't apply. Caller has already
+ * validated the magic-link cookie before invoking this.
+ */
+export async function authorizeTrialAulaAccess(
+  classId: string,
+  leadId:  string,
+  now = new Date(),
+): Promise<AulaAccess> {
+  const sb = supabaseAdmin();
+  const { data: cls } = await sb
+    .from("classes")
+    .select("id, status, scheduled_at, duration_minutes, livekit_room_id, is_trial, lead_id")
+    .eq("id", classId)
+    .maybeSingle();
+  if (!cls) return { ok: false, reason: "not_found" };
+  const c = cls as {
+    status: string; scheduled_at: string; duration_minutes: number;
+    livekit_room_id: string; is_trial: boolean; lead_id: string | null;
+  };
+  if (c.status === "cancelled")          return { ok: false, reason: "cancelled" };
+  if (!c.is_trial || c.lead_id !== leadId) return { ok: false, reason: "not_authorized" };
+
+  const scheduled = new Date(c.scheduled_at);
+  const opensAt   = new Date(scheduled.getTime() - 15 * 60_000);
+  const closesAt  = new Date(scheduled.getTime() + (c.duration_minutes + 30) * 60_000);
+  return {
+    ok:           true,
+    role:         "participant",     // lead is never host
+    roomName:     c.livekit_room_id,
+    canEnterNow:  now >= opensAt && now <= closesAt,
+    opensAt,
+    closesAt,
+  };
+}
+
+/**
  * Decide whether `userId` may enter the live classroom for `classId` right now.
  * Returns the LiveKit room id the caller should connect to, and when the room
  * window opens/closes, so the UI can render a countdown or a "closed" banner.

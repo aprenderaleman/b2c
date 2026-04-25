@@ -46,6 +46,8 @@ export type TeacherRow = {
   currency:              string;
   payment_method:        string | null;
   notes:                 string | null;
+  /** Whether this teacher is in the trial-class rotation pool. */
+  accepts_trials:        boolean;
   created_at:            string;
 };
 
@@ -63,7 +65,7 @@ export async function getTeacherByUserId(userId: string): Promise<TeacherRow | n
     .from("teachers")
     .select(`
       id, user_id, bio, languages_spoken, specialties,
-      hourly_rate, currency, payment_method, notes, active, created_at,
+      hourly_rate, currency, payment_method, notes, active, accepts_trials, created_at,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("user_id", userId)
@@ -90,6 +92,7 @@ export async function getTeacherByUserId(userId: string): Promise<TeacherRow | n
     currency:             (data.currency as string) ?? "EUR",
     payment_method:       (data.payment_method as string | null) ?? null,
     notes:                (data.notes as string | null) ?? null,
+    accepts_trials:       Boolean(data.accepts_trials),
     created_at:           data.created_at as string,
   };
 }
@@ -290,7 +293,7 @@ export async function getTeachers(): Promise<TeacherRow[]> {
     .from("teachers")
     .select(`
       id, user_id, bio, languages_spoken, specialties,
-      hourly_rate, currency, payment_method, notes, active, created_at,
+      hourly_rate, currency, payment_method, notes, active, accepts_trials, created_at,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .order("created_at", { ascending: false });
@@ -317,6 +320,7 @@ export async function getTeachers(): Promise<TeacherRow[]> {
       currency:             (r.currency as string) ?? "EUR",
       payment_method:       (r.payment_method as string | null) ?? null,
       notes:                (r.notes as string | null) ?? null,
+      accepts_trials:       Boolean(r.accepts_trials),
       created_at:           r.created_at as string,
     };
   });
@@ -328,7 +332,7 @@ export async function getTeacherById(id: string): Promise<TeacherRow | null> {
     .from("teachers")
     .select(`
       id, user_id, bio, languages_spoken, specialties,
-      hourly_rate, currency, payment_method, notes, active, created_at,
+      hourly_rate, currency, payment_method, notes, active, accepts_trials, created_at,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("id", id)
@@ -355,6 +359,7 @@ export async function getTeacherById(id: string): Promise<TeacherRow | null> {
     currency:             (data.currency as string) ?? "EUR",
     payment_method:       (data.payment_method as string | null) ?? null,
     notes:                (data.notes as string | null) ?? null,
+    accepts_trials:       Boolean(data.accepts_trials),
     created_at:           data.created_at as string,
   };
 }

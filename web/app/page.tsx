@@ -5,104 +5,140 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Header } from "@/components/Header";
 import { WhatsAppFloat } from "@/components/WhatsAppFloat";
+import { Funnel } from "@/components/Funnel";
 import { useLang } from "@/lib/lang-context";
 import { interpolate } from "@/lib/i18n";
 
+/**
+ * Aprender-Aleman.de — public landing.
+ *
+ * Background alternation, fixed in BOTH global modes:
+ *   hero       → navy
+ *   funnel     → white (light) / near-black (dark)
+ *   funnel card→ navy   (always — the booking modal stays navy on top)
+ *   FAQ        → white (light) / near-black (dark)
+ *   footer     → navy
+ *
+ * Navy sections always render with white text. White/black sections
+ * use the global semantic tokens so dark mode flips them. The funnel
+ * card uses `theme-dark` to pin its inner semantic tokens to dark
+ * values, so `text-foreground`, `bg-card`, etc. inside the Funnel
+ * stay legible against the navy without per-component overrides.
+ */
 export default function HomePage() {
   const { t } = useLang();
+
+  // The funnel starts at step 1 (calendar). The moment the lead picks
+  // a slot and clicks "Siguiente", we collapse the hero + FAQ so the
+  // form owns the whole viewport — fewer distractions, higher
+  // completion rate. Going "Atrás" back to step 1 restores everything.
+  const [funnelStep, setFunnelStep] = useState(1);
+  const expanded = funnelStep > 1;
 
   return (
     <>
       <Header />
-      <main className="relative overflow-hidden">
-        {/* Decorative background blobs (behind everything) */}
-        <BackgroundBlobs />
-
-        {/* ────────── HERO ────────── */}
-        <section className="relative mx-auto max-w-5xl px-5 sm:px-6 pt-16 sm:pt-24 pb-10 sm:pb-14 text-center">
-          <motion.div
+      <main>
+        {/* ────────── HERO — navy ────────── */}
+        {!expanded && (
+          <motion.section
+            key="hero"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="flex flex-col items-center gap-5"
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="bg-navy-900 text-white"
           >
-            <span className="inline-flex items-center gap-2 rounded-full
-                             bg-warm/10 ring-1 ring-warm/30
-                             px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-warm">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warm opacity-75"/>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-warm"/>
-              </span>
-              {t.home.tagline}
-            </span>
+            <div className="mx-auto max-w-5xl px-5 sm:px-6 pt-16 sm:pt-24 pb-14 sm:pb-20 text-center">
+              <div className="flex flex-col items-center gap-5">
+                <span className="inline-flex items-center gap-2 rounded-full
+                                 bg-warm/15 ring-1 ring-warm/40
+                                 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-warm">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warm opacity-75"/>
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-warm"/>
+                  </span>
+                  {t.home.tagline}
+                </span>
 
-            <h1 className="font-bold tracking-tight text-foreground
-                           text-4xl md:text-[56px] lg:text-[60px] leading-[1.05]
-                           max-w-3xl">
-              {renderBold(t.home.title)}
-            </h1>
+                <h1 className="font-bold tracking-tight text-white
+                               text-4xl md:text-[56px] lg:text-[60px] leading-[1.05]
+                               max-w-3xl">
+                  {renderBold(t.home.title)}
+                </h1>
 
-            <p className="max-w-2xl text-lg md:text-xl
-                          font-medium
-                          text-muted-foreground
-                          leading-relaxed">
-              {renderBold(t.home.subtitle)}
-            </p>
+                <p className="max-w-2xl text-lg md:text-xl
+                              font-medium text-white/75 leading-relaxed">
+                  {renderBold(t.home.subtitle)}
+                </p>
+              </div>
+            </div>
+          </motion.section>
+        )}
 
-            <div className="mt-2 flex flex-col items-center gap-3 w-full sm:w-auto">
-              <Link
-                href="/funnel"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2
-                           rounded-2xl px-8 py-4 text-base font-bold text-white
-                           bg-gradient-to-r from-emerald-500 to-emerald-600
-                           hover:from-emerald-600 hover:to-emerald-700
-                           shadow-lg shadow-emerald-500/30
-                           ring-1 ring-emerald-400/40
-                           transition-all hover:-translate-y-0.5
-                           animate-pulse-glow
-                           tracking-wide"
-              >
-                {t.home.cta}
-                <span aria-hidden="true" className="ml-1">→</span>
-              </Link>
-              <span className="text-xs text-muted-foreground">
+        {/* ────────── FUNNEL section — white / near-black ────────── */}
+        <section
+          id="reservar"
+          className="bg-white dark:bg-slate-950"
+        >
+          <div
+            className={`mx-auto px-4 sm:px-6 transition-[max-width,padding] duration-300 ease-out ${
+              expanded
+                ? "max-w-3xl pt-12 sm:pt-16 pb-16 sm:pb-24 min-h-[calc(100vh-4rem)]"
+                : "max-w-2xl py-12 sm:py-16"
+            }`}
+          >
+            {/* Booking modal — navy in BOTH modes. `theme-dark` pins the
+                inner semantic tokens to dark so `bg-card`, `text-foreground`,
+                `border-border` etc. inside the Funnel are coherent. */}
+            <div className="theme-dark rounded-3xl bg-navy-900 text-white border border-navy-700 shadow-lg p-5 sm:p-7">
+              <Funnel embedded onStepChange={setFunnelStep} />
+            </div>
+            {!expanded && (
+              <p className="mt-4 text-center text-xs text-muted-foreground">
                 {t.home.ctaHint}
-              </span>
-            </div>
-
-            {/* Trust badges under CTA (title + body) */}
-            <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 w-full max-w-3xl">
-              <TrustBadge title={t.home.trust1Title} body={t.home.trust1Body} />
-              <TrustBadge title={t.home.trust2Title} body={t.home.trust2Body} />
-              <TrustBadge title={t.home.trust3Title} body={t.home.trust3Body} />
-            </div>
-          </motion.div>
-        </section>
-
-        {/* ────────── FAQ ────────── */}
-        <section className="relative mx-auto max-w-3xl px-5 sm:px-6 py-14 sm:py-20">
-          <SectionHeader title={t.home.faqTitle} />
-          <div className="mt-8 flex flex-col gap-3">
-            <FaqItem q={t.home.faq1Q} a={t.home.faq1A} />
-            <FaqItem q={t.home.faq2Q} a={t.home.faq2A} />
-            <FaqItem q={t.home.faq3Q} a={t.home.faq3A} />
-            <FaqItem q={t.home.faq4Q} a={t.home.faq4A} />
-            <FaqItem q={t.home.faq5Q} a={t.home.faq5A} />
+              </p>
+            )}
           </div>
         </section>
 
-        {/* ────────── FOOTER ────────── */}
-        <footer className="relative border-t border-border py-8 text-center text-sm text-muted-foreground">
-          <div className="mx-auto max-w-6xl px-5 sm:px-6 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
-            <span>{interpolate(t.home.footer, { year: new Date().getFullYear() })}</span>
-            <span className="hidden sm:inline">·</span>
-            <Link href="/privacy" className="hover:text-warm underline-offset-4 hover:underline">
-              {t.step4.gdprLink}
-            </Link>
-          </div>
-        </footer>
+        {/* ────────── FAQ — white / near-black ────────── */}
+        {!expanded && (
+          <motion.section
+            key="faq"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="bg-white dark:bg-slate-950"
+          >
+            <div className="mx-auto max-w-3xl px-5 sm:px-6 py-14 sm:py-20">
+              <SectionHeader title={t.home.faqTitle} />
+              <div className="mt-8 flex flex-col gap-3">
+                <FaqItem q={t.home.faq1Q} a={t.home.faq1A} />
+                <FaqItem q={t.home.faq2Q} a={t.home.faq2A} />
+                <FaqItem q={t.home.faq3Q} a={t.home.faq3A} />
+                <FaqItem q={t.home.faq4Q} a={t.home.faq4A} />
+                <FaqItem q={t.home.faq5Q} a={t.home.faq5A} />
+              </div>
+            </div>
+          </motion.section>
+        )}
+
+        {/* ────────── FOOTER — navy ────────── */}
+        {!expanded && (
+          <footer className="bg-navy-900 text-white border-t border-navy-700">
+            <div className="mx-auto max-w-6xl px-5 sm:px-6 py-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6 text-sm text-white/70">
+              <span>{interpolate(t.home.footer, { year: new Date().getFullYear() })}</span>
+              <span className="hidden sm:inline">·</span>
+              <Link href="/privacy" className="hover:text-warm underline-offset-4 hover:underline transition-colors">
+                {t.step4.gdprLink}
+              </Link>
+            </div>
+          </footer>
+        )}
       </main>
-      <WhatsAppFloat />
+      {!expanded && <WhatsAppFloat />}
     </>
   );
 }
@@ -110,78 +146,6 @@ export default function HomePage() {
 // ─────────────────────────────────────────────────────────
 // Building blocks
 // ─────────────────────────────────────────────────────────
-
-/**
- * Mesh-aurora hero backdrop.
- *
- * Five overlapping color blobs (brand-orange, coral, amber, peach,
- * deep orange) with strong blur and blend modes so they melt into
- * each other like northern lights. Each blob drifts on its own slow
- * keyframe (18-26s) so the composition is constantly shifting without
- * being distracting.
- *
- * Blend modes per scheme:
- *   - light: mix-blend-multiply  → blobs darken on overlap, warm "sunset"
- *   - dark:  mix-blend-screen    → blobs brighten on overlap, glowing
- *
- * A super-subtle SVG noise layer kills the "plastic gradient" look.
- *
- * All CSS, no images, no JS. Performance-safe (transform-only animations).
- */
-function BackgroundBlobs() {
-  const noiseSvg =
-    "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>\")";
-  return (
-    <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-      {/* Soft base wash so blobs have something to blend against */}
-      <div className="absolute inset-0
-                      bg-gradient-to-br from-orange-50/60 via-white to-amber-50/40
-                      dark:from-slate-950 dark:via-slate-950 dark:to-slate-900" />
-
-      {/* Brand orange — top-left of the title area */}
-      <div className="absolute -top-32 left-[15%] w-[640px] h-[640px] rounded-full
-                      bg-brand-500/45 dark:bg-brand-500/35
-                      blur-[110px]
-                      mix-blend-multiply dark:mix-blend-screen
-                      animate-aurora-a will-change-transform" />
-
-      {/* Coral / rose — top-right */}
-      <div className="absolute -top-20 right-[5%] w-[520px] h-[520px] rounded-full
-                      bg-rose-400/40 dark:bg-rose-500/30
-                      blur-[110px]
-                      mix-blend-multiply dark:mix-blend-screen
-                      animate-aurora-b will-change-transform" />
-
-      {/* Amber — mid-left */}
-      <div className="absolute top-32 -left-28 w-[480px] h-[480px] rounded-full
-                      bg-amber-400/40 dark:bg-amber-500/25
-                      blur-[110px]
-                      mix-blend-multiply dark:mix-blend-screen
-                      animate-aurora-c will-change-transform" />
-
-      {/* Peach — lower-center */}
-      <div className="absolute top-[55%] left-[35%] w-[500px] h-[500px] rounded-full
-                      bg-orange-300/45 dark:bg-orange-400/28
-                      blur-[110px]
-                      mix-blend-multiply dark:mix-blend-screen
-                      animate-aurora-b will-change-transform"
-           style={{ animationDelay: "-7s" }} />
-
-      {/* Deep orange — lower-right */}
-      <div className="absolute top-[60%] right-[8%] w-[440px] h-[440px] rounded-full
-                      bg-orange-600/35 dark:bg-orange-600/25
-                      blur-[110px]
-                      mix-blend-multiply dark:mix-blend-screen
-                      animate-aurora-a will-change-transform"
-           style={{ animationDelay: "-9s" }} />
-
-      {/* Noise: ~3% so the gradient doesn't read as plasticky */}
-      <div aria-hidden
-           className="absolute inset-0 opacity-[0.03] dark:opacity-[0.06] mix-blend-overlay"
-           style={{ backgroundImage: noiseSvg, backgroundSize: "240px 240px" }} />
-    </div>
-  );
-}
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -194,25 +158,6 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }
           {subtitle}
         </p>
       )}
-    </div>
-  );
-}
-
-function TrustBadge({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="flex items-start gap-3 text-left">
-      <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center
-                       rounded-full bg-success/10 text-success ring-1 ring-success/20">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-             aria-hidden>
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      </span>
-      <span className="flex flex-col">
-        <span className="text-sm font-semibold text-foreground">{title}</span>
-        <span className="text-xs text-muted-foreground">{body}</span>
-      </span>
     </div>
   );
 }

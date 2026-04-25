@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTeacherById } from "@/lib/academy";
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
+import { AcceptsTrialsToggle } from "./AcceptsTrialsToggle";
 import { requireRole } from "@/lib/rbac";
 import { listAdminNotes } from "@/lib/admin-notes";
 import { NotesCard } from "@/components/admin/NotesCard";
@@ -86,6 +87,11 @@ export default async function TeacherDetailPage({
           <Kv k="Notas"           v={teacher.notes ?? "—"} />
         </Panel>
       </div>
+
+      <AcceptsTrialsToggle
+        teacherId={teacher.id}
+        initialValue={teacher.accepts_trials}
+      />
 
       <NotificationsOptOutToggle
         userId={teacher.user_id}

@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { requireRole } from "@/lib/rbac";
-import { authorizeAulaAccess } from "@/lib/aula";
+import { auth } from "@/lib/auth";
+import { authorizeAulaAccess, authorizeTrialAulaAccess } from "@/lib/aula";
 import { getClassById, formatClassTimeEs } from "@/lib/classes";
 import { livekitConfigured } from "@/lib/livekit";
+import { getTrialSession } from "@/lib/trial-token";
+import { supabaseAdmin } from "@/lib/supabase";
 import { AulaClient } from "./AulaClient";
 
 export const dynamic = "force-dynamic";
@@ -19,39 +21,80 @@ export default async function AulaPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireRole(["superadmin", "admin", "teacher", "student"]);
   const { id } = await params;
+  const session = await auth();
+  const trial   = !session?.user ? await getTrialSession() : null;
 
-  // Every fallback screen needs a "back home" button that respects the
-  // user's role (admin → /admin, teacher → /profesor, student → /estudiante).
-  const homeHref =
-    session.user.role === "teacher" ? "/profesor"   :
-    session.user.role === "student" ? "/estudiante" :
-                                      "/admin";
+  // Two paths into the aula:
+  //   - logged-in user (admin / teacher / student)
+  //   - trial-magic-link lead (no user row, cookie-based)
+  if (!session?.user && !trial) redirect("/login");
 
   const cls = await getClassById(id);
   if (!cls) notFound();
 
-  const access = await authorizeAulaAccess(id, session.user.id, session.user.role);
-  if (!access.ok) {
-    if (access.reason === "cancelled") return <CancelledScreen homeHref={homeHref} />;
-    if (access.reason === "not_authorized") redirect(homeHref);
-    return <NotFoundScreen homeHref={homeHref} />;
-  }
+  let access;
+  let displayName: string;
+  let backHref:    string;
 
-  if (!access.canEnterNow) {
-    return (
-      <ClosedScreen
-        opensAt={access.opensAt}
-        closesAt={access.closesAt}
-        classTitle={cls.title}
-        homeHref={homeHref}
-      />
-    );
+  if (session?.user) {
+    const role   = (session.user as { role: "superadmin" | "admin" | "teacher" | "student" }).role;
+    const userId = (session.user as { id: string }).id;
+    const homeHref =
+      role === "teacher" ? "/profesor"   :
+      role === "student" ? "/estudiante" :
+                           "/admin";
+
+    access = await authorizeAulaAccess(id, userId, role);
+    if (!access.ok) {
+      if (access.reason === "cancelled")    return <CancelledScreen homeHref={homeHref} />;
+      if (access.reason === "not_authorized") redirect(homeHref);
+      return <NotFoundScreen homeHref={homeHref} />;
+    }
+    displayName = session.user.name ?? session.user.email ?? "Participante";
+    backHref =
+      role === "student"  ? `/estudiante/clases/${cls.id}` :
+      role === "teacher"  ? `/profesor/clases/${cls.id}`   :
+                            `/admin/clases/${cls.id}`;
+
+    if (!access.canEnterNow) {
+      return (
+        <ClosedScreen
+          opensAt={access.opensAt}
+          closesAt={access.closesAt}
+          classTitle={cls.title}
+          homeHref={homeHref}
+        />
+      );
+    }
+  } else {
+    // Lead path: validate trial cookie targets THIS class, look up
+    // their lead name for the LiveKit display label.
+    if (!trial || trial.class_id !== id) redirect("/funnel");
+    access = await authorizeTrialAulaAccess(id, trial!.lead_id);
+    if (!access.ok) {
+      if (access.reason === "cancelled") return <CancelledScreen homeHref="/funnel" />;
+      redirect("/funnel");
+    }
+    const sb = supabaseAdmin();
+    const { data: lead } = await sb.from("leads").select("name").eq("id", trial!.lead_id).maybeSingle();
+    displayName = (lead as { name: string | null } | null)?.name ?? "Invitado";
+    backHref = "/funnel";
+
+    if (!access.canEnterNow) {
+      return (
+        <ClosedScreen
+          opensAt={access.opensAt}
+          closesAt={access.closesAt}
+          classTitle={cls.title}
+          homeHref="/"
+        />
+      );
+    }
   }
 
   if (!livekitConfigured()) {
-    return <NotConfiguredScreen classTitle={cls.title} homeHref={homeHref} />;
+    return <NotConfiguredScreen classTitle={cls.title} homeHref={backHref} />;
   }
 
   return (
@@ -61,12 +104,8 @@ export default async function AulaPage({
       scheduledAt={cls.scheduled_at}
       durationMinutes={cls.duration_minutes}
       isHost={access.role === "host"}
-      displayName={session.user.name ?? session.user.email ?? "Participante"}
-      backHref={
-        session.user.role === "student"  ? `/estudiante/clases/${cls.id}` :
-        session.user.role === "teacher"  ? `/profesor/clases/${cls.id}`   :
-                                           `/admin/clases/${cls.id}`
-      }
+      displayName={displayName}
+      backHref={backHref}
     />
   );
 }
