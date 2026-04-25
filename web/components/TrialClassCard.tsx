@@ -3,6 +3,7 @@ import {
   formatBerlinDate, formatBerlinTime, formatGoalEs, formatStatusEs,
   type TrialClassRow,
 } from "@/lib/trial-classes";
+import { DeleteTrialClassButton } from "./DeleteTrialClassButton";
 
 /**
  * Card used by /admin/clasedeprueba and /profesor/clasedeprueba to show
@@ -125,6 +126,11 @@ export function TrialClassCard({
               👤 Lead
             </Link>
           )}
+
+          <DeleteTrialClassButton
+            classId={row.classId}
+            scheduledAtIso={row.scheduledAt}
+          />
         </div>
       </div>
 
