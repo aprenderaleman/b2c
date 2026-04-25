@@ -45,9 +45,12 @@ export async function sendWhatsappText(
         "X-Internal-Secret":   secret,
       },
       body: JSON.stringify({ phone: phoneE164, text }),
-      // Short-circuit if the VPS is slow; the caller's happy path should
-      // not hang on WhatsApp.
-      signal: AbortSignal.timeout(10_000),
+      // 60s ceiling — long enough that a slow Evolution API call
+      // doesn't cause a false-negative `send_failed` timeline log
+      // when the message actually delivered. The caller's response
+      // path no longer waits on this (book-trial uses `after()`),
+      // so there's no UX pressure to fail fast.
+      signal: AbortSignal.timeout(60_000),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
