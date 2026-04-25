@@ -394,18 +394,21 @@ async def internal_send_text(request: Request):
 
     # Best-effort timeline log (so the message shows up under the lead's
     # history if it matches). If there's no lead row this silently skips.
+    # Author MUST be one of the timeline_author enum values — using "web"
+    # here used to silently violate the enum and the broad except below
+    # would swallow it, leaving no WhatsApp row in /admin/leads/{id}.
     try:
         lead = get_lead_by_phone(normalized)
         if lead:
             log_timeline(
                 lead["id"],
                 type="system_message_sent",
-                author="web",
-                content=text,
+                author="system",
+                content=f"💬 WhatsApp enviado: {text[:200]}",
                 metadata={"trigger": "internal_send_text", "message_id": message_id},
             )
     except Exception as e:
-        log.debug("timeline log on /internal/send-text failed: %s", e)
+        log.warning("timeline log on /internal/send-text failed: %s", e)
 
     return {"ok": True, "messageId": message_id}
 
