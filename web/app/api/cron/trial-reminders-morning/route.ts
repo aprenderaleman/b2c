@@ -98,6 +98,7 @@ async function run(req: Request) {
     const leadJoinUrl    = `${PLATFORM_URL}/aula/${r.id}`;
     const teacherJoinUrl = `${PLATFORM_URL}/aula/${r.id}`;
 
+    let leadDelivered = false;
     if (lead.email) {
       const res = await sendTrialReminderEmail(lead.email, {
         audience:        "lead",
@@ -109,10 +110,11 @@ async function run(req: Request) {
         joinUrl:         leadJoinUrl,
         language:        lead.language,
       });
-      if (res.ok) sentLead++;
+      if (res.ok) { sentLead++; leadDelivered = true; }
       else console.error(`[trial-reminders-morning] lead email failed for ${r.id}: ${res.error}`);
     }
 
+    let teacherDelivered = false;
     if (tu?.email) {
       const res = await sendTrialReminderEmail(tu.email, {
         audience:        "teacher",
@@ -124,8 +126,30 @@ async function run(req: Request) {
         joinUrl:         teacherJoinUrl,
         language:        "es",
       });
-      if (res.ok) sentTeacher++;
+      if (res.ok) { sentTeacher++; teacherDelivered = true; }
       else console.error(`[trial-reminders-morning] teacher email failed for ${r.id}: ${res.error}`);
+    }
+
+    // ── Timeline entry for /admin/leads/{id}
+    if (leadDelivered || teacherDelivered) {
+      const recipients: string[] = [];
+      if (leadDelivered)    recipients.push(`lead (${lead.email})`);
+      if (teacherDelivered) recipients.push(`profesor (${tu?.email})`);
+      await sb.from("lead_timeline").insert({
+        lead_id: lead.id,
+        type:    "trial_reminder",
+        author:  "system",
+        content: `📧 Recordatorio email mañana del día → ${recipients.join(" + ")}`,
+        metadata: { channel: "email", kind: "morning_of", class_id: r.id },
+      });
+    } else if (lead.email || tu?.email) {
+      await sb.from("lead_timeline").insert({
+        lead_id: lead.id,
+        type:    "send_failed",
+        author:  "system",
+        content: `📧 Falló el envío del recordatorio email de la mañana`,
+        metadata: { channel: "email", kind: "morning_of", class_id: r.id },
+      });
     }
 
     await sb.from("classes")

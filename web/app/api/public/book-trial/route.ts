@@ -237,6 +237,9 @@ export async function POST(req: Request) {
 
   // Email + WhatsApp use the SHORT URL so they look trustworthy. The
   // short link routes server-side to the same magic-link cookie flow.
+  // Each successful send writes a `system_message_sent` row to
+  // lead_timeline so admin can confirm at a glance which channels
+  // actually delivered (and which didn't).
   sendTrialConfirmationEmail(b.email, {
     leadName:    b.name.split(/\s+/)[0] || b.name,
     classTitle,
@@ -245,6 +248,24 @@ export async function POST(req: Request) {
     teacherName: match.teacherName,
     joinUrl:     shortLinkUrl,
     language:    b.language,
+  }).then(async (res) => {
+    if (res.ok) {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "system_message_sent",
+        author:  "system",
+        content: `📧 Email de confirmación enviado a ${b.email}`,
+        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
+      });
+    } else {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "send_failed",
+        author:  "system",
+        content: `📧 Falló el envío del email de confirmación: ${res.error}`,
+        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
+      });
+    }
   }).catch(e => console.error("[book-trial] email failed:", e));
 
   // WhatsApp — only if the lead provided their number. Kept short
@@ -258,6 +279,25 @@ export async function POST(req: Request) {
         ? `✅ ${leadFirst}, deine Probestunde ist bestätigt.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 Min\n🔗 ${shortLinkUrl}\n\nKannst du mir mit "Sí" oder "Ja" bestätigen, dass du dabei bist? 🙌\n\n— Aprender-Aleman.de`
         : `✅ ${leadFirst}, tu clase de prueba está confirmada.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 min\n🔗 ${shortLinkUrl}\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`;
     sendWhatsappText(b.whatsapp_e164, waText)
+      .then(async (res) => {
+        if (res.ok) {
+          await sb.from("lead_timeline").insert({
+            lead_id: leadId,
+            type:    "system_message_sent",
+            author:  "system",
+            content: `💬 WhatsApp de confirmación enviado a ${b.whatsapp_e164}`,
+            metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: classId },
+          });
+        } else {
+          await sb.from("lead_timeline").insert({
+            lead_id: leadId,
+            type:    "send_failed",
+            author:  "system",
+            content: `💬 Falló el WhatsApp de confirmación: ${res.reason}`,
+            metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: classId },
+          });
+        }
+      })
       .catch(e => console.error("[book-trial] whatsapp failed:", e));
   }
 

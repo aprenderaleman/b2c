@@ -93,6 +93,7 @@ async function run(req: Request) {
     const teacherJoinUrl = `${PLATFORM_URL}/aula/${r.id}`;
 
     // ── Lead email
+    let leadDelivered = false;
     if (lead.email) {
       const res = await sendTrialReminderEmail(lead.email, {
         audience:        "lead",
@@ -104,11 +105,12 @@ async function run(req: Request) {
         joinUrl:         leadJoinUrl,
         language:        lead.language,
       });
-      if (res.ok) sentLead++;
+      if (res.ok) { sentLead++; leadDelivered = true; }
       else console.error(`[trial-reminders-24h] lead email failed for ${r.id}: ${res.error}`);
     }
 
     // ── Teacher email (only if we have one)
+    let teacherDelivered = false;
     if (tu?.email) {
       const res = await sendTrialReminderEmail(tu.email, {
         audience:        "teacher",
@@ -120,8 +122,32 @@ async function run(req: Request) {
         joinUrl:         teacherJoinUrl,
         language:        "es",   // teachers see Spanish copy
       });
-      if (res.ok) sentTeacher++;
+      if (res.ok) { sentTeacher++; teacherDelivered = true; }
       else console.error(`[trial-reminders-24h] teacher email failed for ${r.id}: ${res.error}`);
+    }
+
+    // ── Timeline entry — admin sees in /admin/leads/{id} that this
+    // reminder fired (and to whom). One row per cron tick that
+    // delivered something; failures land as `send_failed`.
+    if (leadDelivered || teacherDelivered) {
+      const recipients: string[] = [];
+      if (leadDelivered)    recipients.push(`lead (${lead.email})`);
+      if (teacherDelivered) recipients.push(`profesor (${tu?.email})`);
+      await sb.from("lead_timeline").insert({
+        lead_id: lead.id,
+        type:    "trial_reminder",
+        author:  "system",
+        content: `📧 Recordatorio email 24h antes → ${recipients.join(" + ")}`,
+        metadata: { channel: "email", kind: "24h_before", class_id: r.id },
+      });
+    } else if (lead.email || tu?.email) {
+      await sb.from("lead_timeline").insert({
+        lead_id: lead.id,
+        type:    "send_failed",
+        author:  "system",
+        content: `📧 Falló el envío del recordatorio email 24h antes`,
+        metadata: { channel: "email", kind: "24h_before", class_id: r.id },
+      });
     }
 
     await sb.from("classes")
