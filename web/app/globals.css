@@ -2,56 +2,75 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────────────────────────────────────────
+   DESIGN TOKENS — semantic colours flip with the .dark class.
+   Stored as space-separated RGB triplets so Tailwind's
+   `rgb(var(--x) / <alpha-value>)` resolves opacity utilities.
+   ───────────────────────────────────────────────────────────── */
 :root {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-               "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-
-  /* Light theme — warm off-white, not sterile */
-  --bg-base:    #FFFBF5;       /* warm cream */
-  --bg-card:    #FFFFFF;
-  --bg-muted:   #FAF5EC;
-  --fg-base:    #0F172A;       /* slate-900 */
-  --fg-muted:   #475569;       /* slate-600 */
-  --fg-soft:    #64748B;       /* slate-500 */
-  --border:     #EADFCE;       /* warm border */
-  --border-hi:  #F9A875;       /* orange-ish */
+  /* Light theme */
+  --bg:             248 249 251;     /* #F8F9FB */
+  --fg:              26  29  41;     /* #1A1D29 */
+  --card:           255 255 255;
+  --muted:          241 242 246;     /* #F1F2F6 */
+  --muted-fg:       100 116 139;     /* #64748B */
+  --border:         226 232 240;     /* #E2E8F0 */
+  --section-muted:  245 246 250;     /* #F5F6FA */
 }
 
 .dark {
-  /* Dark theme — deep near-black with warm undertone */
-  --bg-base:    #0A0A0F;
-  --bg-card:    #141420;
-  --bg-muted:   #1C1C2A;
-  --fg-base:    #F1F5F9;
-  --fg-muted:   #94A3B8;
-  --fg-soft:    #64748B;
-  --border:     #27272F;
-  --border-hi:  #3F3F4A;
+  /* Dark theme — deep navy */
+  --bg:              14  27  46;     /* #0E1B2E */
+  --fg:             240 243 247;     /* #F0F3F7 */
+  --card:            21  38  63;     /* #15263F */
+  --muted:           27  45  73;     /* #1B2D49 */
+  --muted-fg:       143 163 188;     /* #8FA3BC */
+  --border:          40  57  90;     /* #28395A */
+  --section-muted:   16  32  58;     /* #10203A */
 }
 
-html, body {
-  background: var(--bg-base);
-  color: var(--fg-base);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  transition: background-color 0.3s ease, color 0.3s ease;
+/* ─────────────────────────────────────────────────────────────
+   Base — body uses semantic tokens; headings get tracking-tight
+   so every H1-H4 looks like display type without manual class.
+   ───────────────────────────────────────────────────────────── */
+@layer base {
+  /* Direct var() resolution (no @apply) so the cascade definitely
+     re-paints when .dark flips the underlying token. Some Tailwind
+     v3 builds bake @apply bg-background into a literal colour at
+     compile time, which broke dark mode. */
+  html, body {
+    background-color: rgb(var(--bg));
+    color:            rgb(var(--fg));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  body {
+    min-height: 100vh;
+    /* OpenType character variants ship with Inter and improve i/l/a/g. */
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  h1, h2, h3, h4 {
+    @apply tracking-tight;
+  }
 }
 
-body {
-  background-image:
-    radial-gradient(ellipse 100% 60% at 50% 0%, rgba(249, 115, 22, 0.09), transparent 60%),
-    radial-gradient(ellipse 80% 50% at 100% 100%, rgba(251, 146, 60, 0.06), transparent 55%);
-  min-height: 100vh;
-}
-
-.dark body {
-  background-image:
-    radial-gradient(ellipse 110% 60% at 50% 0%, rgba(251, 146, 60, 0.13), transparent 60%),
-    radial-gradient(ellipse 90% 60% at 0% 100%, rgba(249, 115, 22, 0.08), transparent 55%);
-}
-
+/* ─────────────────────────────────────────────────────────────
+   Components — design-system primitives.
+   ───────────────────────────────────────────────────────────── */
 @layer components {
-  /* Primary CTA — bold, glowy, modern */
+  /* "NUESTRO ENFOQUE" mini-label sitting above each H2. */
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.2em] text-warm;
+  }
+  .eyebrow-muted {
+    @apply text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground;
+  }
+
+  /* Standard vertical rhythm for full-bleed sections. */
+  .section-pad   { @apply py-20 md:py-32; }
+
+  /* Primary CTA — warm/orange-y accent for conversion moments. */
   .btn-primary {
     @apply relative inline-flex items-center justify-center gap-2
            rounded-2xl bg-gradient-to-br from-brand-400 to-brand-600
@@ -69,53 +88,43 @@ body {
 
   .btn-secondary {
     @apply inline-flex items-center justify-center gap-2
-           rounded-2xl bg-white dark:bg-slate-800
+           rounded-2xl bg-card text-foreground
            px-6 py-3 text-sm font-semibold
-           text-slate-700 dark:text-slate-200
-           border border-slate-200 dark:border-slate-700
+           border border-border
            transition-all duration-150
-           hover:border-brand-400 hover:text-brand-600
-           dark:hover:text-brand-400 dark:hover:border-brand-500
+           hover:border-warm hover:text-warm
            disabled:opacity-40 disabled:cursor-not-allowed;
     min-height: 44px;
   }
 
-  /* Option cards (funnel) — refreshed */
+  /* Option cards (funnel) */
   .option-card {
     @apply flex items-center gap-3 w-full text-left
-           rounded-2xl border bg-white dark:bg-slate-800
-           border-slate-200 dark:border-slate-700
-           px-5 py-4
-           text-slate-800 dark:text-slate-100
+           rounded-2xl border bg-card border-border
+           px-5 py-4 text-foreground
            transition-all duration-150 cursor-pointer
-           hover:border-brand-400 hover:bg-brand-50/60
-           dark:hover:bg-slate-700/60 dark:hover:border-brand-500
+           hover:border-warm hover:bg-muted
            active:scale-[0.99];
     min-height: 56px;
   }
   .option-card--selected {
-    @apply border-brand-500 bg-brand-50 dark:bg-brand-500/10
-           text-brand-900 dark:text-brand-200
-           ring-2 ring-brand-500/25;
+    @apply border-warm bg-warm/10 text-foreground
+           ring-2 ring-warm/25;
   }
 
   .input-text {
-    @apply w-full rounded-xl border
-           border-slate-200 dark:border-slate-700
-           bg-white dark:bg-slate-800
+    @apply w-full rounded-xl border border-border
+           bg-card text-foreground
            px-4 py-3.5
-           text-slate-800 dark:text-slate-100
-           placeholder-slate-400 dark:placeholder-slate-500
-           focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500
+           placeholder:text-muted-foreground
+           focus:outline-none focus:ring-2 focus:ring-warm focus:border-warm
            transition-all;
     min-height: 48px;
   }
 
-  /* Soft elevated card used on the homepage */
+  /* Soft elevated card used on the homepage and many list pages. */
   .surface-card {
-    @apply rounded-3xl bg-white dark:bg-slate-800/60
-           border border-slate-200 dark:border-slate-700
-           shadow-sm backdrop-blur-sm;
+    @apply rounded-3xl bg-card border border-border shadow-sm backdrop-blur-sm;
   }
 }
 
@@ -126,7 +135,8 @@ body {
 
 /* Ensure inputs and text are 16px+ on mobile to avoid iOS auto-zoom */
 @media (max-width: 480px) {
-  input[type="text"], input[type="tel"], input[type="email"], input[type="password"], textarea, select {
+  input[type="text"], input[type="tel"], input[type="email"],
+  input[type="password"], textarea, select {
     font-size: 16px !important;
   }
 }

@@ -1,8 +1,19 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Inter } from "next/font/google";
 import { LangProvider } from "@/lib/lang-context";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/lib/theme-context";
 import "./globals.css";
+
+// Single typeface across the whole app. `display: swap` so the page
+// renders immediately with the system fallback while Inter loads,
+// avoiding the FOIT/FOUT flicker. The variable is consumed in
+// tailwind.config.ts where fontFamily.sans is wired to it.
+const inter = Inter({
+  subsets:  ["latin"],
+  variable: "--font-inter",
+  display:  "swap",
+});
 
 // Google Ads tag (tracks conversions from paid campaigns across every page).
 // Lives at the root layout so it's injected exactly once per navigation.
@@ -15,15 +26,17 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
+  // Mobile browsers paint the chrome with these. Match the new
+  // background tokens so the system UI blends instead of clashing.
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#FFFBF5" },
-    { media: "(prefers-color-scheme: dark)",  color: "#0A0A0F" },
+    { media: "(prefers-color-scheme: light)", color: "#F8F9FB" },
+    { media: "(prefers-color-scheme: dark)",  color: "#0E1B2E" },
   ],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" suppressHydrationWarning>
+    <html lang="es" className={inter.variable} suppressHydrationWarning>
       <head>
         {/* Avoid flash of light content on dark-preference users. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />

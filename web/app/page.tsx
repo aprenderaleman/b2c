@@ -27,27 +27,25 @@ export default function HomePage() {
             className="flex flex-col items-center gap-5"
           >
             <span className="inline-flex items-center gap-2 rounded-full
-                             bg-brand-50 dark:bg-brand-500/10
-                             text-brand-700 dark:text-brand-300
-                             px-4 py-1.5 text-sm font-medium
-                             ring-1 ring-brand-500/20 dark:ring-brand-500/30">
+                             bg-warm/10 ring-1 ring-warm/30
+                             px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-warm">
               <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75"/>
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-500"/>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warm opacity-75"/>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-warm"/>
               </span>
               {t.home.tagline}
             </span>
 
-            <h1 className="font-extrabold tracking-tight text-slate-900 dark:text-slate-50
-                           text-5xl sm:text-6xl md:text-7xl leading-[1.02]
+            <h1 className="font-bold tracking-tight text-foreground
+                           text-4xl md:text-[56px] lg:text-[60px] leading-[1.05]
                            max-w-3xl">
               {renderBold(t.home.title)}
             </h1>
 
-            <p className="max-w-2xl text-lg sm:text-xl md:text-2xl
-                          font-semibold
-                          text-slate-700 dark:text-slate-200
-                          leading-relaxed sm:leading-snug">
+            <p className="max-w-2xl text-lg md:text-xl
+                          font-medium
+                          text-muted-foreground
+                          leading-relaxed">
               {renderBold(t.home.subtitle)}
             </p>
 
@@ -67,7 +65,7 @@ export default function HomePage() {
                 {t.home.cta}
                 <span aria-hidden="true" className="ml-1">→</span>
               </Link>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
+              <span className="text-xs text-muted-foreground">
                 {t.home.ctaHint}
               </span>
             </div>
@@ -94,12 +92,11 @@ export default function HomePage() {
         </section>
 
         {/* ────────── FOOTER ────────── */}
-        <footer className="relative border-t border-slate-200 dark:border-slate-800
-                           py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+        <footer className="relative border-t border-border py-8 text-center text-sm text-muted-foreground">
           <div className="mx-auto max-w-6xl px-5 sm:px-6 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
             <span>{interpolate(t.home.footer, { year: new Date().getFullYear() })}</span>
             <span className="hidden sm:inline">·</span>
-            <Link href="/privacy" className="hover:text-brand-600 dark:hover:text-brand-400 underline-offset-4 hover:underline">
+            <Link href="/privacy" className="hover:text-warm underline-offset-4 hover:underline">
               {t.step4.gdprLink}
             </Link>
           </div>
@@ -189,11 +186,11 @@ function BackgroundBlobs() {
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="text-center">
-      <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-slate-50">
+      <h2 className="text-3xl md:text-[42px] font-bold tracking-tight text-foreground">
         {title}
       </h2>
       {subtitle && (
-        <p className="mt-2 text-sm sm:text-base text-slate-600 dark:text-slate-400">
+        <p className="mt-2 text-sm sm:text-base text-muted-foreground">
           {subtitle}
         </p>
       )}
@@ -205,9 +202,7 @@ function TrustBadge({ title, body }: { title: string; body: string }) {
   return (
     <div className="flex items-start gap-3 text-left">
       <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center
-                       rounded-full bg-brand-50 dark:bg-brand-500/15
-                       text-brand-600 dark:text-brand-400
-                       ring-1 ring-brand-500/20">
+                       rounded-full bg-success/10 text-success ring-1 ring-success/20">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
              aria-hidden>
@@ -215,12 +210,8 @@ function TrustBadge({ title, body }: { title: string; body: string }) {
         </svg>
       </span>
       <span className="flex flex-col">
-        <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
-          {title}
-        </span>
-        <span className="text-xs text-slate-500 dark:text-slate-400">
-          {body}
-        </span>
+        <span className="text-sm font-semibold text-foreground">{title}</span>
+        <span className="text-xs text-muted-foreground">{body}</span>
       </span>
     </div>
   );
@@ -235,14 +226,14 @@ function FaqItem({ q, a }: { q: string; a: string }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left
-                   hover:bg-brand-50/40 dark:hover:bg-slate-800/40 transition-colors"
+                   hover:bg-muted transition-colors"
       >
-        <span className="text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+        <span className="text-sm sm:text-base font-semibold text-foreground">
           {q}
         </span>
         <span
           className={`ml-2 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full
-                      bg-brand-50 dark:bg-brand-500/15 text-brand-600 dark:text-brand-300
+                      bg-warm/15 text-warm
                       transition-transform ${open ? "rotate-45" : ""}`}
           aria-hidden
         >
@@ -254,7 +245,7 @@ function FaqItem({ q, a }: { q: string; a: string }) {
         </span>
       </button>
       {open && (
-        <div className="px-5 pb-4 text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+        <div className="px-5 pb-4 text-sm text-muted-foreground leading-relaxed">
           {a}
         </div>
       )}
@@ -262,12 +253,12 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   );
 }
 
-/** Render markdown-style **bold** segments with brand colour. */
+/** Render markdown-style **bold** segments with the warm accent colour. */
 function renderBold(text: string) {
   return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
     part.startsWith("**") && part.endsWith("**")
       ? (
-        <strong key={i} className="text-brand-600 dark:text-brand-400 font-extrabold">
+        <strong key={i} className="text-warm font-bold">
           {part.slice(2, -2)}
         </strong>
       )

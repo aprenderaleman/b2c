@@ -10,6 +10,36 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // ── Brand-stable palette (never flips with the theme).
+        navy: {
+          DEFAULT: "#0F2847",
+          50:  "#F4F6FA",
+          100: "#E2E8F0",
+          700: "#1E3A66",
+          800: "#15315A",
+          900: "#0F2847",
+        },
+        warm: {
+          DEFAULT:    "#F4A261",
+          foreground: "#1A1D29",     // text colour on top of warm fills
+        },
+        success: {
+          DEFAULT: "#2D6A4F",
+        },
+
+        // ── Semantic tokens — flip with `.dark` via CSS variables in
+        // globals.css. Use these in product UI, not hard-coded slate-*.
+        background:         "rgb(var(--bg) / <alpha-value>)",
+        foreground:         "rgb(var(--fg) / <alpha-value>)",
+        card:               "rgb(var(--card) / <alpha-value>)",
+        "card-foreground":  "rgb(var(--fg) / <alpha-value>)",
+        muted:              "rgb(var(--muted) / <alpha-value>)",
+        "muted-foreground": "rgb(var(--muted-fg) / <alpha-value>)",
+        border:             "rgb(var(--border) / <alpha-value>)",
+        "section-muted":    "rgb(var(--section-muted) / <alpha-value>)",
+
+        // ── Legacy brand orange. Kept for backwards-compat with existing
+        // pages — new code should reach for `warm` / `navy` instead.
         brand: {
           50:  "#FFF7ED",
           100: "#FFEDD5",
@@ -24,8 +54,15 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
-        display: ["var(--font-sans)", "system-ui", "sans-serif"],
+        // Inter loaded from layout.tsx via next/font; the variable
+        // is exposed as --font-inter. Falls back to system-ui.
+        sans:    ["var(--font-inter)", "system-ui", "sans-serif"],
+        display: ["var(--font-inter)", "system-ui", "sans-serif"],
+      },
+      fontSize: {
+        "display-xl": ["3.75rem", { lineHeight: "1.05", letterSpacing: "-0.02em" }],
+        "display-lg": ["3rem",    { lineHeight: "1.1",  letterSpacing: "-0.02em" }],
+        "display-md": ["2.25rem", { lineHeight: "1.15", letterSpacing: "-0.01em" }],
       },
       boxShadow: {
         brand:       "0 8px 24px -8px rgba(249, 115, 22, 0.45)",
