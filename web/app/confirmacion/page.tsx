@@ -38,12 +38,12 @@ export default async function ConfirmacionPage({
   const payload = verifyTrialToken(token);
   if (!payload || payload.class_id !== classId) redirect("/");
 
-  // Pull the booking — name, date, teacher.
+  // Pull the booking — name, date, teacher, short_code.
   const sb = supabaseAdmin();
   const { data: cls } = await sb
     .from("classes")
     .select(`
-      id, scheduled_at, duration_minutes, lead_id, is_trial,
+      id, scheduled_at, duration_minutes, lead_id, is_trial, short_code,
       teacher:teachers!inner(users!inner(full_name, email)),
       lead:leads!inner(name)
     `)
@@ -56,6 +56,7 @@ export default async function ConfirmacionPage({
     scheduled_at: string;
     duration_minutes: number;
     lead_id: string;
+    short_code: string | null;
     teacher: { users: { full_name: string | null; email: string } |
                        Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } |
@@ -81,9 +82,12 @@ export default async function ConfirmacionPage({
     minute:   "2-digit",
   });
 
-  // The same magic-link URL the email contains — kept as a secondary
-  // link on this screen so the SCHULE CTA dominates.
-  const magicLinkUrl = `/trial/${classId}?t=${encodeURIComponent(token)}`;
+  // Prefer the short URL (matches what we sent over email/WhatsApp).
+  // Falls back to the long signed-token URL if the class somehow lacks
+  // a short_code (older bookings made before migration 036).
+  const magicLinkUrl = r.short_code
+    ? `/c/${r.short_code}`
+    : `/trial/${classId}?t=${encodeURIComponent(token)}`;
 
   return (
     <div className="theme-light bg-white text-foreground min-h-screen">

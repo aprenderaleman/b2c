@@ -1,10 +1,17 @@
 import { NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
 import { listTrialSlots } from "@/lib/trial-slots";
 import { buildTrialToken } from "@/lib/trial-token";
 import { sendTrialConfirmationEmail } from "@/lib/email/send";
 import { sendWhatsappText } from "@/lib/whatsapp";
+
+/** Random URL-safe 8-char code, used as the magic-link short ID. */
+function generateShortCode(): string {
+  // base36 → 26 letters + 10 digits, lowercase, friendly to type/share.
+  return randomBytes(6).toString("base64url").replace(/[_-]/g, "").slice(0, 8).toLowerCase();
+}
 
 /**
  * POST /api/public/book-trial
@@ -185,6 +192,10 @@ export async function POST(req: Request) {
   // ── 4. Create the trial class.
   const teacherFirst = (match.teacherName.split(/\s+/)[0]) || match.teacherName;
   const classTitle = `Clase de prueba — ${b.name.split(/\s+/)[0]} (${teacherFirst})`;
+  // Pre-generate a short code now so we don't need a follow-up update.
+  // Collision is astronomically unlikely (8 base36 chars ≈ 2.8 trillion
+  // values, and the unique index would catch one if it ever happened).
+  const shortCode = generateShortCode();
   const { data: cls, error: classErr } = await sb.from("classes").insert({
     type:               "individual",
     teacher_id:         b.teacher_id,
@@ -195,6 +206,7 @@ export async function POST(req: Request) {
     status:             "scheduled",
     is_trial:           true,
     lead_id:            leadId,
+    short_code:         shortCode,
     notes_admin:        `auto-booked via funnel · level=${b.german_level ?? "?"}`,
   }).select("id").single();
   if (classErr || !cls) {
@@ -205,9 +217,14 @@ export async function POST(req: Request) {
   }
   const classId = (cls as { id: string }).id;
 
-  // ── 5. Magic-link URL + side-channel notifications.
+  // ── 5. Magic-link URLs.
+  // Long URL (still issued for the email + the /confirmacion deep-link
+  // — backwards compatible with leads who already received it).
   const token = buildTrialToken(leadId, classId);
   const magicLinkUrl = `${PLATFORM_URL}/trial/${classId}?t=${encodeURIComponent(token)}`;
+  // Short URL — used in WhatsApp + email so messages don't carry a
+  // 250-char signed token that looks like phishing.
+  const shortLinkUrl = `${PLATFORM_URL}/c/${shortCode}`;
 
   const startDate = new Date(b.slot_iso).toLocaleString(b.language === "de" ? "de-DE" : "es-ES", {
     timeZone: "Europe/Berlin",
@@ -218,16 +235,15 @@ export async function POST(req: Request) {
     minute:   "2-digit",
   }) + (b.language === "de" ? " (Berlin)" : " (Berlín)");
 
-  // Email — wait for it to land so the user sees a friendlier error if
-  // it fails (we still keep the booking, but tell them the email might
-  // be late so they bookmark the magic-link page).
+  // Email + WhatsApp use the SHORT URL so they look trustworthy. The
+  // short link routes server-side to the same magic-link cookie flow.
   sendTrialConfirmationEmail(b.email, {
     leadName:    b.name.split(/\s+/)[0] || b.name,
     classTitle,
     startDate,
     durationMin: TRIAL_DURATION_MIN,
     teacherName: match.teacherName,
-    joinUrl:     magicLinkUrl,
+    joinUrl:     shortLinkUrl,
     language:    b.language,
   }).catch(e => console.error("[book-trial] email failed:", e));
 
@@ -239,8 +255,8 @@ export async function POST(req: Request) {
     const leadFirst = b.name.split(/\s+/)[0] || b.name;
     const waText =
       b.language === "de"
-        ? `✅ ${leadFirst}, deine Probestunde ist bestätigt.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 Min\n🔗 ${magicLinkUrl}\n\nKannst du mir mit "Sí" oder "Ja" bestätigen, dass du dabei bist? 🙌\n\n— Aprender-Aleman.de`
-        : `✅ ${leadFirst}, tu clase de prueba está confirmada.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 min\n🔗 ${magicLinkUrl}\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`;
+        ? `✅ ${leadFirst}, deine Probestunde ist bestätigt.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 Min\n🔗 ${shortLinkUrl}\n\nKannst du mir mit "Sí" oder "Ja" bestätigen, dass du dabei bist? 🙌\n\n— Aprender-Aleman.de`
+        : `✅ ${leadFirst}, tu clase de prueba está confirmada.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 min\n🔗 ${shortLinkUrl}\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`;
     sendWhatsappText(b.whatsapp_e164, waText)
       .catch(e => console.error("[book-trial] whatsapp failed:", e));
   }
