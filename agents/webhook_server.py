@@ -392,23 +392,13 @@ async def internal_send_text(request: Request):
         log.warning("internal/send-text failed: %s", e)
         raise HTTPException(status_code=502, detail=f"whatsapp_error:{e}")
 
-    # Best-effort timeline log (so the message shows up under the lead's
-    # history if it matches). If there's no lead row this silently skips.
-    # Author MUST be one of the timeline_author enum values — using "web"
-    # here used to silently violate the enum and the broad except below
-    # would swallow it, leaving no WhatsApp row in /admin/leads/{id}.
-    try:
-        lead = get_lead_by_phone(normalized)
-        if lead:
-            log_timeline(
-                lead["id"],
-                type="system_message_sent",
-                author="system",
-                content=f"💬 WhatsApp enviado: {text[:200]}",
-                metadata={"trigger": "internal_send_text", "message_id": message_id},
-            )
-    except Exception as e:
-        log.warning("timeline log on /internal/send-text failed: %s", e)
+    # NOTE: timeline logging happens on the WEB side now. The caller
+    # (e.g. /api/public/book-trial) writes the `system_message_sent`
+    # row using the result of this call, so we don't need to also
+    # write one here. Keeping this server stateless avoids the
+    # duplicate-row problem we had when both sides logged, and the
+    # silent-enum-violation problem we had when this side wrote
+    # author='web' (which isn't in the timeline_author enum).
 
     return {"ok": True, "messageId": message_id}
 

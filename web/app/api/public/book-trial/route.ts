@@ -294,10 +294,25 @@ export async function POST(req: Request) {
     }
 
     // ── WhatsApp timeline log (only if the lead gave us a number) ──
+    // The web side is the single source of truth for this row.
+    // We used to skip on success because the agents VPS' own
+    // /internal/send-text wrote a duplicate row, but that path
+    // had a silent enum violation (author='web' isn't in
+    // timeline_author) that left the row missing for everyone
+    // running the un-updated VPS code. Logging here always
+    // guarantees the row appears.
     if (b.whatsapp_e164) {
       if (waResult.status === "fulfilled" && waResult.value && waResult.value.ok) {
-        // Agents server already logged a `system_message_sent` from
-        // its /internal/send-text handler — don't duplicate here.
+        await sb.from("lead_timeline").insert({
+          lead_id: leadId,
+          type:    "system_message_sent",
+          author:  "system",
+          content: `💬 WhatsApp de confirmación enviado a ${b.whatsapp_e164}`,
+          metadata: {
+            channel: "whatsapp", kind: "trial_confirmation", class_id: classId,
+            message_id: waResult.value.messageId ?? null,
+          },
+        });
       } else {
         const reason = waResult.status === "fulfilled"
           ? (waResult.value && !waResult.value.ok ? waResult.value.reason : "unknown")
