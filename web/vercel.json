@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/trial-reminders-morning",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/comunicados-dispatch",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
