@@ -71,6 +71,8 @@ export default function HomePage() {
                               font-medium text-white/75 leading-relaxed">
                   {renderBold(t.home.subtitle)}
                 </p>
+
+                <RatingBadge />
               </div>
             </div>
           </motion.section>
@@ -146,6 +148,36 @@ export default function HomePage() {
 // ─────────────────────────────────────────────────────────
 // Building blocks
 // ─────────────────────────────────────────────────────────
+
+/**
+ * 5-star rating + "Academia de Alemán" — sits below the hero subtitle.
+ * Stars use a soft amber-300 fill with a glow; the "Alemán" word picks
+ * up the warm accent so it ties to the rest of the brand palette.
+ */
+function RatingBadge() {
+  return (
+    <div className="mt-1 inline-flex items-center gap-3 rounded-full
+                    bg-white/[0.04] ring-1 ring-white/10
+                    px-5 py-2.5 backdrop-blur-sm">
+      <span className="flex items-center gap-0.5" aria-label="5 de 5 estrellas">
+        {[0, 1, 2, 3, 4].map((i) => (
+          <svg
+            key={i}
+            width="18" height="18" viewBox="0 0 24 24"
+            className="text-amber-300 drop-shadow-[0_0_8px_rgba(252,211,77,0.45)]"
+            fill="currentColor" aria-hidden
+          >
+            <path d="M12 2.5l2.83 6.49 7.07.62-5.36 4.7 1.6 6.92L12 17.6l-6.14 3.63 1.6-6.92L2.1 9.61l7.07-.62L12 2.5z" />
+          </svg>
+        ))}
+      </span>
+      <span className="h-4 w-px bg-white/15" aria-hidden />
+      <span className="text-sm font-semibold tracking-wide text-white">
+        Academia de <span className="text-warm">Alemán</span>
+      </span>
+    </div>
+  );
+}
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
