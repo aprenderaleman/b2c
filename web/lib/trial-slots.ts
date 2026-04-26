@@ -27,12 +27,18 @@ import { supabaseAdmin } from "./supabase";
  */
 
 const BERLIN_TZ = "Europe/Berlin";
-const DEFAULT_HORIZON_DAYS = 14;
+const DEFAULT_HORIZON_DAYS = 15;
 const EXTENDED_HORIZON_DAYS = 30;
 const TRIAL_MINUTES = 45;
 const SLOT_GRANULARITY_MIN = 15;            // start times every :00 :15 :30 :45
-const MIN_LEAD_TIME_HOURS = 2;              // can't book within 2h of now
-const MAX_RESULTS = 60;
+const MIN_LEAD_TIME_HOURS = 4;              // can't book within 4h of now
+// Generous cap so all 15 days fit even with Gelfis's wide
+// 12-hour weekday windows. Worst-case math is 15 days × ~45
+// slots/day ≈ 675; bumping to 800 leaves headroom for slightly
+// wider windows and multi-teacher rotation. The Calendly-style
+// picker only shows the slots for the day the lead clicks, so
+// the rendering cost is independent of total returned count.
+const MAX_RESULTS = 800;
 
 export type TrialSlot = {
   startIso:    string;            // exact UTC ISO start
