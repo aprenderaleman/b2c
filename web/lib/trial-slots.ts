@@ -9,10 +9,12 @@ import { supabaseAdmin } from "./supabase";
  *   2. For each pool teacher, fetch their weekly `teacher_availability`
  *      windows + every `scheduled` / `live` class in the lookahead
  *      horizon (45 min apart from `now`).
- *   3. For each Berlin-day in the horizon (skip Sundays — Gelfis's
- *      `skip_sundays` rule applies to trials too), walk each
- *      teacher's availability windows for that weekday and carve out
- *      45-min blocks that don't overlap any of their existing classes.
+ *   3. For each Berlin-day in the horizon, walk each teacher's
+ *      availability windows for that weekday and carve out 45-min
+ *      blocks that don't overlap any of their existing classes.
+ *      Days with no availability simply produce no slots; weekend
+ *      days appear iff at least one trial-eligible teacher has a
+ *      Sat/Sun window in `teacher_availability`.
  *   4. Aggregate the resulting candidate slots across teachers and
  *      bucket by exact ISO timestamp. Each timestamp picks the
  *      "rotation winner" — the eligible teacher with the FEWEST
@@ -167,7 +169,6 @@ async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
     // Get the Berlin date `i` days from now.
     const dayDate = new Date(now.getTime() + i * 24 * 3600_000);
     const berlinDow = berlinDayOfWeek(dayDate);
-    if (berlinDow === 0) continue;                // skip Sundays
 
     for (const teacher of teachers) {
       const windows = (availByTeacher.get(teacher.id) ?? [])

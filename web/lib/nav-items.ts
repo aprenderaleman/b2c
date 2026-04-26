@@ -59,9 +59,10 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
 
 function adminItems(): NavItem[] {
   return [
-    { label: "Hoy",              href: "/admin",                icon: "home",          priority: 1 },
-    { label: "Clases",           href: "/admin/clases",         icon: "calendarDays",  priority: 2 },
-    { label: "Clases de prueba", href: "/admin/clasedeprueba",  icon: "userCheck",     priority: 2.3 },
+    { label: "Hoy",                href: "/admin",                icon: "home",          priority: 1 },
+    { label: "Clases",             href: "/admin/clases",         icon: "calendarDays",  priority: 2 },
+    { label: "Clases de prueba",   href: "/admin/clasedeprueba",  icon: "userCheck",     priority: 2.3 },
+    { label: "Mi disponibilidad",  href: "/admin/disponibilidad", icon: "clock",         priority: 2.4 },
     { label: "Grabaciones",      href: "/admin/grabaciones",    icon: "video",         priority: 2.5 },
     { label: "Estudiantes", href: "/admin/estudiantes", icon: "graduationCap", priority: 3 },
     { label: "Finanzas",    href: "/admin/finanzas",    icon: "wallet",        priority: 4 },

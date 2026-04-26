@@ -16,8 +16,19 @@ type Block = {
  * blocks per day without needing to understand the model.
  *
  * Monday-first display order (WEEK_ORDER). Times in 15-min buckets.
+ *
+ * `targetTeacherId` is provided when an admin edits a teacher's
+ * availability from /admin/disponibilidad — the API requires the
+ * teacherId in the query string for admin callers (a teacher's own
+ * call doesn't need it because the route resolves them via session).
  */
-export function AvailabilityEditor({ initialBlocks }: { initialBlocks: Block[] }) {
+export function AvailabilityEditor({
+  initialBlocks,
+  targetTeacherId,
+}: {
+  initialBlocks: Block[];
+  targetTeacherId?: string;
+}) {
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
   const [pending, startTransition] = useTransition();
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -57,7 +68,10 @@ export function AvailabilityEditor({ initialBlocks }: { initialBlocks: Block[] }
       }
     }
     startTransition(async () => {
-      const res = await fetch("/api/teacher/availability", {
+      const apiUrl = targetTeacherId
+        ? `/api/teacher/availability?teacherId=${encodeURIComponent(targetTeacherId)}`
+        : `/api/teacher/availability`;
+      const res = await fetch(apiUrl, {
         method:  "PUT",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ blocks }),
