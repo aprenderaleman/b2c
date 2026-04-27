@@ -34,12 +34,13 @@ export function GroupEditModal({
   onClose: () => void;
   mode:    Mode;
   group: {
-    id:        string;
-    name:      string;
-    levels:    Level[];
-    capacity:  number | null;
-    notes:     string | null;
-    members:   GroupMember[];
+    id:             string;
+    name:           string;
+    levels:         Level[];
+    capacity:       number | null;
+    notes:          string | null;
+    total_sessions: number | null;
+    members:        GroupMember[];
   };
   onSaved?: () => void;
 }) {
@@ -47,6 +48,7 @@ export function GroupEditModal({
   const [name,     setName]     = useState(group.name);
   const [levels,   setLevels]   = useState<Level[]>(group.levels);
   const [capacity, setCapacity] = useState<number | "">(group.capacity ?? "");
+  const [totalSessions, setTotalSessions] = useState<number | "">(group.total_sessions ?? "");
   const [notes,    setNotes]    = useState(group.notes ?? "");
   const [members,  setMembers]  = useState<GroupMember[]>(group.members);
 
@@ -63,6 +65,7 @@ export function GroupEditModal({
     setName(group.name);
     setLevels(group.levels);
     setCapacity(group.capacity ?? "");
+    setTotalSessions(group.total_sessions ?? "");
     setNotes(group.notes ?? "");
     setMembers(group.members);
     setError(null);
@@ -147,7 +150,8 @@ export function GroupEditModal({
       levels,
       notes:    notes.trim() || null,
     };
-    if (capacity !== "") payload.capacity = Number(capacity);
+    if (capacity !== "")        payload.capacity        = Number(capacity);
+    payload.total_sessions = totalSessions === "" ? null : Number(totalSessions);
 
     start(async () => {
       const res = await fetch(apiBase, {
@@ -209,16 +213,31 @@ export function GroupEditModal({
             </div>
           </Field>
 
-          {/* Capacity */}
-          <Field label="Capacidad máxima (estudiantes)">
-            <input
-              type="number" min={1} max={50}
-              value={capacity}
-              onChange={e => setCapacity(e.target.value === "" ? "" : Number(e.target.value))}
-              className="input-text w-32"
-              placeholder="—"
-            />
-          </Field>
+          {/* Capacity + total sessions */}
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Capacidad máxima (estudiantes)">
+              <input
+                type="number" min={1} max={50}
+                value={capacity}
+                onChange={e => setCapacity(e.target.value === "" ? "" : Number(e.target.value))}
+                className="input-text w-32"
+                placeholder="—"
+              />
+            </Field>
+            <Field label="Clases totales hasta finalizar">
+              <input
+                type="number" min={1} max={500}
+                value={totalSessions}
+                onChange={e => setTotalSessions(e.target.value === "" ? "" : Number(e.target.value))}
+                className="input-text w-32"
+                placeholder="ej. 50"
+              />
+              <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                El número de sesiones que el grupo va a tener en total. Sirve
+                para mostrar el progreso "X de Y dadas".
+              </p>
+            </Field>
+          </div>
 
           {/* Notes */}
           <Field label="Notas (internas)">

@@ -6,13 +6,14 @@ import { GroupEditModal, type GroupMember } from "@/components/admin/GroupEditMo
 type Level = "A0" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 
 export type TeacherGroup = {
-  id:         string;
-  name:       string;
-  class_type: "group" | "individual";
-  levels:     Level[];
-  capacity:   number | null;
-  notes:      string | null;
-  members:    GroupMember[];
+  id:             string;
+  name:           string;
+  class_type:     "group" | "individual";
+  levels:         Level[];
+  capacity:       number | null;
+  notes:          string | null;
+  total_sessions: number | null;
+  members:        GroupMember[];
 };
 
 export function TeacherGroupsList({ groups }: { groups: TeacherGroup[] }) {
@@ -77,12 +78,13 @@ export function TeacherGroupsList({ groups }: { groups: TeacherGroup[] }) {
           open={true}
           mode="teacher"
           group={{
-            id:       editing.id,
-            name:     editing.name,
-            levels:   editing.levels,
-            capacity: editing.capacity,
-            notes:    editing.notes,
-            members:  editing.members,
+            id:             editing.id,
+            name:           editing.name,
+            levels:         editing.levels,
+            capacity:       editing.capacity,
+            notes:          editing.notes,
+            total_sessions: editing.total_sessions,
+            members:        editing.members,
           }}
           onClose={() => setEditing(null)}
           onSaved={() => setEditing(null)}

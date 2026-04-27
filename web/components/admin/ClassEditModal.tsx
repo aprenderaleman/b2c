@@ -32,7 +32,8 @@ type ClassInfo = {
   topic:              string | null;
   scheduledAt:        string;     // ISO
   durationMinutes:    number;
-  hasSeries:          boolean;
+  /** Total classes in the series (this + siblings). 1 = one-off. */
+  seriesSize:         number;
   teacherId:          string;
   groupId:            string | null;
   groupName:          string | null;
@@ -331,11 +332,13 @@ export function ClassEditModal({
             )}
           </fieldset>
 
-          {/* Series scope */}
-          {classInfo.hasSeries && (
+          {/* Series scope — shown whenever the class is part of a chain
+              (parent or child) so editing the FIRST class of a series
+              still gets the radio. seriesSize=1 means a one-off. */}
+          {classInfo.seriesSize > 1 && (
             <fieldset className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
               <legend className="px-2 text-xs font-semibold text-slate-700 dark:text-slate-200 uppercase tracking-wide">
-                Alcance del cambio
+                Alcance del cambio · {classInfo.seriesSize} clases en la serie
               </legend>
               <div className="space-y-2 mt-2">
                 <ScopeRadio

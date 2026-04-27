@@ -4,22 +4,24 @@ export type CefrLevel = "A0" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 export const ALL_CEFR_LEVELS: CefrLevel[] = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"];
 
 export type StudentGroupRow = {
-  id:            string;
-  name:          string;
-  class_type:    "group" | "individual";
+  id:             string;
+  name:           string;
+  class_type:     "group" | "individual";
   /** Legacy single-level field. Kept for back-compat; source of truth is `levels`. */
-  level:         string | null;
+  level:          string | null;
   /** CEFR levels this group spans. Groups can straddle multiple levels. */
-  levels:        CefrLevel[];
-  teacher_id:    string | null;
-  start_date:    string | null;
-  end_date:      string | null;
-  capacity:      number | null;
-  meet_link:     string | null;
-  document_url:  string | null;
-  active:        boolean;
-  notes:         string | null;
-  created_at:    string;
+  levels:         CefrLevel[];
+  teacher_id:     string | null;
+  start_date:     string | null;
+  end_date:       string | null;
+  capacity:       number | null;
+  meet_link:      string | null;
+  document_url:   string | null;
+  active:         boolean;
+  notes:          string | null;
+  /** Target total of sessions the group commits to (e.g. 50). NULL = no target. */
+  total_sessions: number | null;
+  created_at:     string;
 };
 
 /**
@@ -34,7 +36,7 @@ export async function getGroupForClass(classId: string): Promise<StudentGroupRow
       group_id,
       group:student_groups(
         id, name, class_type, level, levels, teacher_id, start_date, end_date,
-        capacity, meet_link, document_url, active, notes, created_at
+        capacity, meet_link, document_url, active, notes, total_sessions, created_at
       )
     `)
     .eq("id", classId)
@@ -74,6 +76,8 @@ export type GroupListRow = StudentGroupRow & {
   members:           GroupMemberLite[];
   upcoming_classes:  UpcomingClassLite[];   // next 3
   latest_recording:  RecordingLite | null;
+  /** How many classes of this group have status='completed' so far. */
+  completed_classes: number;
 };
 
 /**
@@ -89,7 +93,7 @@ export async function listAllStudentGroups(): Promise<GroupListRow[]> {
     .from("student_groups")
     .select(`
       id, name, class_type, level, levels, teacher_id, start_date, end_date,
-      capacity, meet_link, document_url, active, notes, created_at,
+      capacity, meet_link, document_url, active, notes, total_sessions, created_at,
       teacher:teachers(users(full_name)),
       student_group_members(
         student:students(
@@ -131,6 +135,18 @@ export async function listAllStudentGroups(): Promise<GroupListRow[]> {
       });
       upcomingByGroup.set(c.group_id, list);
     }
+  }
+
+  // Completed-class count per group — used for the "X de Y dadas"
+  // progress chip on each GroupCard.
+  const { data: completedRows } = await sb
+    .from("classes")
+    .select("group_id")
+    .in("group_id", groupIds)
+    .eq("status", "completed");
+  const completedByGroup = new Map<string, number>();
+  for (const c of (completedRows ?? []) as Array<{ group_id: string }>) {
+    completedByGroup.set(c.group_id, (completedByGroup.get(c.group_id) ?? 0) + 1);
   }
 
   // Latest recording per group: join recordings → classes → group, only
@@ -200,24 +216,26 @@ export async function listAllStudentGroups(): Promise<GroupListRow[]> {
       ? (levelsRaw as CefrLevel[])
       : (r.level ? [r.level as CefrLevel] : []);
     return {
-      id:           groupId,
-      name:         r.name as string,
-      class_type:   (r.class_type as "group" | "individual"),
-      level:        (r.level as string | null) ?? null,
+      id:             groupId,
+      name:           r.name as string,
+      class_type:     (r.class_type as "group" | "individual"),
+      level:          (r.level as string | null) ?? null,
       levels,
-      teacher_id:   (r.teacher_id as string | null) ?? null,
-      start_date:   (r.start_date as string | null) ?? null,
-      end_date:     (r.end_date as string | null) ?? null,
-      capacity:     (r.capacity as number | null) ?? null,
-      meet_link:    (r.meet_link as string | null) ?? null,
-      document_url: (r.document_url as string | null) ?? null,
-      active:       Boolean(r.active),
-      notes:        (r.notes as string | null) ?? null,
-      created_at:   r.created_at as string,
-      teacher_name: (uf?.full_name as string | null) ?? null,
+      teacher_id:     (r.teacher_id as string | null) ?? null,
+      start_date:     (r.start_date as string | null) ?? null,
+      end_date:       (r.end_date as string | null) ?? null,
+      capacity:       (r.capacity as number | null) ?? null,
+      meet_link:      (r.meet_link as string | null) ?? null,
+      document_url:   (r.document_url as string | null) ?? null,
+      active:         Boolean(r.active),
+      notes:          (r.notes as string | null) ?? null,
+      total_sessions: (r.total_sessions as number | null) ?? null,
+      created_at:     r.created_at as string,
+      teacher_name:   (uf?.full_name as string | null) ?? null,
       members,
       upcoming_classes: upcomingByGroup.get(groupId) ?? [],
       latest_recording: latestByGroup.get(groupId) ?? null,
+      completed_classes: completedByGroup.get(groupId) ?? 0,
     };
   });
 }
@@ -232,7 +250,7 @@ export async function getStudentGroupById(id: string): Promise<StudentGroupRow |
     .from("student_groups")
     .select(`
       id, name, class_type, level, levels, teacher_id, start_date, end_date,
-      capacity, meet_link, document_url, active, notes, created_at
+      capacity, meet_link, document_url, active, notes, total_sessions, created_at
     `)
     .eq("id", id)
     .maybeSingle();
@@ -254,8 +272,9 @@ export async function getStudentGroupById(id: string): Promise<StudentGroupRow |
     capacity:     (r.capacity as number | null) ?? null,
     meet_link:    (r.meet_link as string | null) ?? null,
     document_url: (r.document_url as string | null) ?? null,
-    active:       Boolean(r.active),
-    notes:        (r.notes as string | null) ?? null,
-    created_at:   r.created_at as string,
+    active:         Boolean(r.active),
+    notes:          (r.notes as string | null) ?? null,
+    total_sessions: (r.total_sessions as number | null) ?? null,
+    created_at:     r.created_at as string,
   };
 }

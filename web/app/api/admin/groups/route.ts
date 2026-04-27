@@ -18,6 +18,7 @@ const Body = z.object({
   document_url: z.string().url().nullable().optional(),
   capacity:     z.coerce.number().int().min(1).max(50).default(10),
   notes:        z.string().trim().max(2000).nullable().optional(),
+  total_sessions: z.coerce.number().int().min(1).max(500).nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -48,6 +49,7 @@ export async function POST(req: Request) {
     document_url: b.document_url ?? null,
     capacity:     b.capacity,
     notes:        b.notes ?? null,
+    total_sessions: b.total_sessions ?? null,
     active:       true,
   }).select("id").single();
   if (error) return NextResponse.json({ error: "insert_failed", message: error.message }, { status: 500 });

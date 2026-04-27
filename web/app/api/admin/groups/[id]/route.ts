@@ -25,6 +25,9 @@ const Body = z.object({
   capacity:     z.coerce.number().int().min(1).max(50).optional(),
   notes:        z.string().trim().max(2000).nullable().optional(),
   active:       z.boolean().optional(),
+  /** Target total of sessions the group commits to (e.g. 50). NULL clears
+   *  it. Bumped automatically by the extend-series endpoint. */
+  total_sessions: z.coerce.number().int().min(1).max(500).nullable().optional(),
 }).refine(b => Object.keys(b).length > 0, { message: "no_changes" });
 
 async function requireAdmin() {

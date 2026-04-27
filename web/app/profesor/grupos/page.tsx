@@ -35,7 +35,7 @@ export default async function TeacherGroupsPage() {
   const { data: groups } = await sb
     .from("student_groups")
     .select(`
-      id, name, class_type, level, levels, capacity, notes, active,
+      id, name, class_type, level, levels, capacity, notes, active, total_sessions,
       student_group_members(
         student:students!inner(
           id, current_level,
@@ -51,6 +51,7 @@ export default async function TeacherGroupsPage() {
     id: string; name: string; class_type: "group" | "individual";
     level: string | null; levels: Level[] | null;
     capacity: number | null; notes: string | null; active: boolean;
+    total_sessions: number | null;
     student_group_members: Array<{
       student: { id: string; current_level: string | null;
                  users: { full_name: string | null; email: string } |
@@ -79,12 +80,13 @@ export default async function TeacherGroupsPage() {
       : (g.level ? [g.level as Level] : []);
 
     return {
-      id:         g.id,
-      name:       g.name,
-      class_type: g.class_type,
+      id:             g.id,
+      name:           g.name,
+      class_type:     g.class_type,
       levels,
-      capacity:   g.capacity,
-      notes:      g.notes,
+      capacity:       g.capacity,
+      notes:          g.notes,
+      total_sessions: g.total_sessions,
       members,
     };
   });

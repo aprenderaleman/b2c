@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs, getClassById } from "@/lib/classes";
 import { CancelClassButton } from "./CancelClassButton";
 import { EditClassButton } from "./EditClassButton";
+import { ExtendSeriesButton } from "./ExtendSeriesButton";
 import { AttendanceEditor } from "@/components/classes/AttendanceEditor";
 
 export const dynamic = "force-dynamic";
@@ -52,12 +53,18 @@ export default async function ClassDetailPage({
                   topic={cls.topic ?? null}
                   scheduledAt={cls.scheduled_at}
                   durationMinutes={cls.duration_minutes}
-                  hasSeries={Boolean(cls.parent_class_id)}
+                  seriesSize={cls.series_size ?? 1}
                   teacherId={cls.teacher_id}
                   groupId={cls.group_id}
                   groupName={cls.group_name}
                   participantIds={cls.participants.map(p => p.student_id)}
                 />
+                {(cls.series_size ?? 1) > 1 && (
+                  <ExtendSeriesButton
+                    classId={cls.id}
+                    currentSize={cls.series_size ?? 1}
+                  />
+                )}
                 <CancelClassButton classId={cls.id} isSeries={Boolean(cls.parent_class_id) && cls.parent_class_id !== cls.id} />
               </>
             )}

@@ -13,7 +13,7 @@ export function EditClassButton(props: {
   topic:           string | null;
   scheduledAt:     string;
   durationMinutes: number;
-  hasSeries:       boolean;
+  seriesSize:      number;          // 1 = one-off; >1 = part of a series
   teacherId:       string;
   groupId:         string | null;
   groupName:       string | null;
@@ -38,7 +38,7 @@ export function EditClassButton(props: {
           topic:           props.topic,
           scheduledAt:     props.scheduledAt,
           durationMinutes: props.durationMinutes,
-          hasSeries:       props.hasSeries,
+          seriesSize:      props.seriesSize,
           teacherId:       props.teacherId,
           groupId:         props.groupId,
           groupName:       props.groupName,

@@ -41,6 +41,17 @@ export type ClassWithPeople = ClassRow & {
     student_phone: string | null;
     attended:     boolean | null;
   }>;
+  /**
+   * How many classes are in this series (this row + all siblings sharing
+   * the same `parent_class_id ?? id`). 1 means a one-off class.
+   * ONLY populated by getClassById — list loaders skip the extra count
+   * query (expensive per-row). Optional so list views compile cleanly.
+   * Used by the edit modal to decide whether to show the "this class /
+   * this and following" scope radio — relying on `parent_class_id`
+   * alone misses the case where the user is editing the first (anchor)
+   * class of a series.
+   */
+  series_size?:     number;
 };
 
 export type CreateClassInput = {
@@ -347,7 +358,16 @@ export async function getClassById(id: string): Promise<ClassWithPeople | null> 
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
-  return normaliseClassRow(data);
+  const base = normaliseClassRow(data);
+
+  // Series-size lookup. parent_class_id ?? id is the anchor; siblings
+  // are every row with parent_class_id = anchor PLUS the anchor itself.
+  const anchorId = base.parent_class_id ?? base.id;
+  const { count } = await sb
+    .from("classes")
+    .select("id", { count: "exact", head: true })
+    .or(`id.eq.${anchorId},parent_class_id.eq.${anchorId}`);
+  return { ...base, series_size: count ?? 1 };
 }
 
 // =============================================================================

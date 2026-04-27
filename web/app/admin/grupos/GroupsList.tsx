@@ -33,23 +33,25 @@ type Recording = {
 };
 
 type Group = {
-  id:               string;
-  name:             string;
-  class_type:       "group" | "individual";
-  level:            string | null;
-  levels:           Level[];
-  capacity:         number | null;
-  notes:            string | null;
-  teacher_id:       string | null;
-  start_date:       string | null;
-  end_date:         string | null;
-  meet_link:        string | null;
-  document_url:     string | null;
-  active:           boolean;
-  teacher_name:     string | null;
-  members:          Member[];
-  upcoming_classes: UpcomingClass[];
-  latest_recording: Recording | null;
+  id:                string;
+  name:              string;
+  class_type:        "group" | "individual";
+  level:             string | null;
+  levels:            Level[];
+  capacity:          number | null;
+  notes:             string | null;
+  teacher_id:        string | null;
+  start_date:        string | null;
+  end_date:          string | null;
+  meet_link:         string | null;
+  document_url:      string | null;
+  active:            boolean;
+  teacher_name:      string | null;
+  members:           Member[];
+  upcoming_classes:  UpcomingClass[];
+  latest_recording:  Recording | null;
+  total_sessions:    number | null;
+  completed_classes: number;
 };
 
 /**
@@ -124,12 +126,13 @@ export function GroupsList({
           open={true}
           mode="admin"
           group={{
-            id:       editing.id,
-            name:     editing.name,
-            levels:   editing.levels,
-            capacity: editing.capacity,
-            notes:    editing.notes,
-            members:  editing.members,
+            id:             editing.id,
+            name:           editing.name,
+            levels:         editing.levels,
+            capacity:       editing.capacity,
+            notes:          editing.notes,
+            total_sessions: editing.total_sessions,
+            members:        editing.members,
           }}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); router.refresh(); }}
@@ -167,6 +170,11 @@ function GroupCard({ group, onEdit }: { group: Group; onEdit: () => void }) {
           Editar
         </button>
       </header>
+
+      <ProgressChip
+        completed={group.completed_classes}
+        total={group.total_sessions}
+      />
 
       {/* ── Upcoming schedule ── */}
       {group.upcoming_classes.length > 0 ? (
@@ -404,5 +412,52 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-xs font-medium text-slate-700 dark:text-slate-200">{label}</span>
       <div className="mt-1">{children}</div>
     </label>
+  );
+}
+
+/**
+ * Progress chip on each GroupCard. Shows "X de Y clases dadas" with a
+ * thin progress bar when the admin has set total_sessions on the
+ * group, or a softer "X clases dadas" line when no target exists.
+ */
+function ProgressChip({
+  completed,
+  total,
+}: {
+  completed: number;
+  total:     number | null;
+}) {
+  if (total == null) {
+    if (completed === 0) {
+      return (
+        <p className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+          Sin sesiones completadas todavía
+        </p>
+      );
+    }
+    return (
+      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+        {completed} clase{completed === 1 ? "" : "s"} completada{completed === 1 ? "" : "s"}
+      </p>
+    );
+  }
+
+  const pct = total > 0 ? Math.min(100, Math.round((completed / total) * 100)) : 0;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between text-[11px]">
+        <span className="font-semibold text-slate-700 dark:text-slate-200">
+          {completed} <span className="text-slate-500 dark:text-slate-400 font-normal">de</span> {total} clases dadas
+        </span>
+        <span className="text-slate-500 dark:text-slate-400 font-mono">{pct}%</span>
+      </div>
+      <div className="mt-1.5 h-1.5 w-full rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+        <div
+          className="h-full bg-brand-500 transition-[width] duration-300"
+          style={{ width: `${pct}%` }}
+          aria-label={`${completed} de ${total} clases completadas (${pct}%)`}
+        />
+      </div>
+    </div>
   );
 }
