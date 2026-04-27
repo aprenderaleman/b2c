@@ -96,21 +96,48 @@ export async function POST(req: Request) {
   }
   const classId = (cls as { id: string }).id;
 
-  // STARTED: upsert a row in processing state so the class page can surface "procesando…".
+  // STARTED: insert a row in processing state so the class page can
+  // surface "procesando…". RACE GUARD: webhooks can arrive out of order
+  // (Vercel runs each invocation independently — a cold-started
+  // egress_started can finish AFTER a fast egress_ended). If a row
+  // already exists in a terminal state, do NOT overwrite it back to
+  // 'processing' — that would silently re-bury a finished recording.
   if (event.event === "egress_started") {
-    await sb.from("recordings").upsert(
-      {
+    const { data: prior } = await sb
+      .from("recordings")
+      .select("id, status")
+      .eq("egress_id", info.egress_id)
+      .maybeSingle();
+    const priorStatus = (prior as { status: string } | null)?.status;
+
+    if (!prior) {
+      await sb.from("recordings").insert({
         egress_id: info.egress_id,
         class_id:  classId,
         status:    "processing",
-      },
-      { onConflict: "egress_id" },
-    );
-    return NextResponse.json({ ok: true, phase: "started" });
+      });
+      return NextResponse.json({ ok: true, phase: "started" });
+    }
+    if (priorStatus === "processing") {
+      // No-op: row already there, nothing to do.
+      return NextResponse.json({ ok: true, phase: "started_dedup" });
+    }
+    // priorStatus is 'ready' or 'failed' — egress_ended already won the
+    // race. Leave the terminal row alone.
+    return NextResponse.json({ ok: true, phase: "started_after_ended" });
   }
 
   // COMPLETE / UPDATED: pull out the final file info and flip to ready.
+  // GUARD: egress_updated fires repeatedly during the active phase
+  // (STARTING → ACTIVE → ENDING → COMPLETE). Without this guard we'd
+  // flip the row to status='ready' with file_url=null on the first mid-
+  // lifecycle update. Only act on terminal egress states.
   if (event.event === "egress_updated" || event.event === "egress_ended") {
+    const isComplete = info.status === "EGRESS_COMPLETE";
+    const isFailed   = info.status === "EGRESS_FAILED" || Boolean(info.error);
+    if (!isComplete && !isFailed) {
+      return NextResponse.json({ ok: true, ignored: `interim_status:${info.status ?? "unknown"}` });
+    }
     // LiveKit's EgressInfo has TWO ways to expose the final file, depending
     // on the request type:
     //   1. `file_results[0]`       — newer egress types (track composite, etc.)
@@ -135,7 +162,7 @@ export async function POST(req: Request) {
     const durationNs = Number(durationNsRaw) || 0;
     const durationSeconds = durationNs > 0 ? Math.round(durationNs / 1_000_000_000) : null;
 
-    const failed = info.status === "EGRESS_FAILED" || Boolean(info.error);
+    const failed      = isFailed;
     const finalStatus = failed ? "failed" : "ready";
 
     const { data: existing } = await sb
