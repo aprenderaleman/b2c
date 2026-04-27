@@ -3,13 +3,15 @@ import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { resolveEffectiveUser } from "@/lib/impersonation";
 import { supabaseAdmin } from "@/lib/supabase";
+import { removeStudentFromGroup } from "@/lib/group-membership";
 
 /**
  * DELETE /api/teacher/groups/[id]/members/[studentId]
  *
  * Remove a student from one of MY groups. Ownership-gated to the
- * calling teacher's group only. Does NOT touch past class_participants
- * (already-scheduled classes keep the student attached).
+ * calling teacher's group only. Propagates: also un-enrolls the
+ * student from every future scheduled class of the group. Past +
+ * cancelled classes stay (audit / attendance history).
  */
 export const runtime = "nodejs";
 
@@ -46,13 +48,9 @@ export async function DELETE(
     return NextResponse.json({ error: "not_your_group" }, { status: 403 });
   }
 
-  const { error } = await sb
-    .from("student_group_members")
-    .delete()
-    .eq("group_id",   groupId)
-    .eq("student_id", studentId);
-  if (error) {
-    return NextResponse.json({ error: "delete_failed", message: error.message }, { status: 500 });
+  const result = await removeStudentFromGroup(groupId, studentId);
+  if (!result.ok) {
+    return NextResponse.json({ error: "delete_failed", message: result.reason }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, classesAffected: result.classesAffected });
 }

@@ -2,18 +2,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
+import { addStudentToGroup } from "@/lib/group-membership";
 
 /**
  * POST /api/admin/groups/[id]/members
  * Body: { student_id: uuid }
  *
- * Add a student to a group. Idempotent — adding an already-member is a
- * no-op and returns ok:true. Admin-only.
+ * Add a student to a group. Idempotent — adding an already-member is
+ * a no-op and returns ok:true. Admin-only.
  *
- * Does NOT retro-add the student to already-scheduled classes for this
- * group (per Gelfis: only future classes should include them). Future
- * classes created from the group will include all current members via
- * the normal class-create flow.
+ * Now propagates: the student is also enrolled in every future
+ * scheduled class of the group, and gets a one-shot summary email +
+ * in-app notification. See lib/group-membership.ts.
  */
 export const runtime = "nodejs";
 
@@ -47,7 +47,7 @@ export async function POST(
 
   const sb = supabaseAdmin();
 
-  // Sanity: group and student must both exist.
+  // Sanity: group and student must both exist before we go propagating.
   const [{ data: group }, { data: student }] = await Promise.all([
     sb.from("student_groups").select("id").eq("id", groupId).maybeSingle(),
     sb.from("students").select("id").eq("id", parsed.data.student_id).maybeSingle(),
@@ -55,13 +55,9 @@ export async function POST(
   if (!group)   return NextResponse.json({ error: "group_not_found"   }, { status: 404 });
   if (!student) return NextResponse.json({ error: "student_not_found" }, { status: 404 });
 
-  // Upsert — PK is (group_id, student_id) so duplicates just no-op.
-  const { error } = await sb
-    .from("student_group_members")
-    .upsert({ group_id: groupId, student_id: parsed.data.student_id },
-            { onConflict: "group_id,student_id" });
-  if (error) {
-    return NextResponse.json({ error: "insert_failed", message: error.message }, { status: 500 });
+  const result = await addStudentToGroup(groupId, parsed.data.student_id);
+  if (!result.ok) {
+    return NextResponse.json({ error: "add_failed", message: result.reason }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, classesAffected: result.classesAffected });
 }

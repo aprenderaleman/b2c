@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase";
+import { removeStudentFromGroup } from "@/lib/group-membership";
 
 /**
  * DELETE /api/admin/groups/[id]/members/[studentId]
@@ -8,9 +8,8 @@ import { supabaseAdmin } from "@/lib/supabase";
  * Remove a student from a group. Admin-only. Idempotent: if the
  * student isn't actually in the group, returns ok:true with no-op.
  *
- * Does NOT unenroll them from classes they're already on — those
- * stay attached via class_participants. This only affects future
- * classes (which pull from current group membership).
+ * Propagates: the student is also un-enrolled from every future
+ * scheduled class of the group. Past + cancelled classes stay (audit).
  */
 export const runtime = "nodejs";
 
@@ -26,15 +25,9 @@ export async function DELETE(
   }
 
   const { id: groupId, studentId } = await params;
-
-  const sb = supabaseAdmin();
-  const { error } = await sb
-    .from("student_group_members")
-    .delete()
-    .eq("group_id",   groupId)
-    .eq("student_id", studentId);
-  if (error) {
-    return NextResponse.json({ error: "delete_failed", message: error.message }, { status: 500 });
+  const result = await removeStudentFromGroup(groupId, studentId);
+  if (!result.ok) {
+    return NextResponse.json({ error: "delete_failed", message: result.reason }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, classesAffected: result.classesAffected });
 }

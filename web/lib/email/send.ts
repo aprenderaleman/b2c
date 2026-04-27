@@ -23,6 +23,10 @@ import {
   renderClassLifecycle,
   type ClassLifecycleVars,
 } from "./templates/class-lifecycle";
+import {
+  renderGroupAdded,
+  type GroupAddedVars,
+} from "./templates/group-added";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -186,5 +190,18 @@ export async function sendClassLifecycleEmail(
   vars: ClassLifecycleVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderClassLifecycle(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * One-shot summary email when a student is added to a class group.
+ * Says "you got N upcoming classes, here's the next one" so the
+ * student doesn't get spammed with N inheritance emails.
+ */
+export async function sendGroupAddedEmail(
+  to: string,
+  vars: GroupAddedVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderGroupAdded(vars);
   return sendRaw(to, subject, html, text);
 }

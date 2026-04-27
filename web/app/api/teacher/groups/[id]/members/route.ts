@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { resolveEffectiveUser } from "@/lib/impersonation";
 import { supabaseAdmin } from "@/lib/supabase";
+import { addStudentToGroup } from "@/lib/group-membership";
 
 /**
  * POST /api/teacher/groups/[id]/members
@@ -87,12 +88,12 @@ export async function POST(
     }
   }
 
-  const { error } = await sb
-    .from("student_group_members")
-    .upsert({ group_id: groupId, student_id: studentId },
-            { onConflict: "group_id,student_id" });
-  if (error) {
-    return NextResponse.json({ error: "insert_failed", message: error.message }, { status: 500 });
+  // Centralised add: upserts the membership AND enrolls the student
+  // in every future scheduled class of the group + summary email +
+  // in-app notification.
+  const result = await addStudentToGroup(groupId, studentId);
+  if (!result.ok) {
+    return NextResponse.json({ error: "insert_failed", message: result.reason }, { status: 500 });
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, classesAffected: result.classesAffected });
 }
