@@ -30,6 +30,7 @@ export function LeadActions({ lead }: { lead: Lead }) {
   const canConvert       = !alreadyConverted && lead.status !== "lost";
   const canReactivate    = lead.status === "needs_human";
   const canMarkLost      = lead.status !== "lost" && !alreadyConverted;
+  const canMarkAttendance = lead.status === "trial_scheduled" || lead.status === "trial_reminded";
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
@@ -40,6 +41,51 @@ export function LeadActions({ lead }: { lead: Lead }) {
         >
           Ver estudiante →
         </Link>
+      )}
+
+      {canMarkAttendance && (
+        <>
+          <form
+            action={`/api/admin/leads/${lead.id}/trial/attended`}
+            method="post"
+            onSubmit={(e) => {
+              if (!confirm(
+                "Marcar el lead como ASISTIÓ a la clase de prueba.\n\n" +
+                "• Pasa a estado 'in_conversation'.\n" +
+                "• Le mandamos un WhatsApp pidiendo feedback y ofreciendo un plan personalizado.\n\n" +
+                "¿Continuar?"
+              )) e.preventDefault();
+            }}
+          >
+            <button
+              type="submit"
+              className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25"
+              title="Lead asistió a la clase de prueba"
+            >
+              ✓ Asistió
+            </button>
+          </form>
+          <form
+            action={`/api/admin/leads/${lead.id}/trial/absent`}
+            method="post"
+            onSubmit={(e) => {
+              if (!confirm(
+                "Marcar el lead como NO ASISTIÓ a la clase de prueba.\n\n" +
+                "• Pasa a estado 'trial_absent'.\n" +
+                "• En 24h, 4 días y 10 días el sistema le manda follow-ups automáticos. Si no responde, lo marca como 'lost'.\n\n" +
+                "¿Continuar?"
+              )) e.preventDefault();
+            }}
+          >
+            <button
+              type="submit"
+              className="text-xs font-semibold rounded-full border border-amber-300 dark:border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 px-3 py-1 text-amber-800 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-500/25"
+              title="Lead no se conectó a la clase de prueba"
+            >
+              ✗ No asistió
+            </button>
+          </form>
+        </>
       )}
 
       {canConvert && (

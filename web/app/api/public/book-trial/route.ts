@@ -149,6 +149,9 @@ export async function POST(req: Request) {
     // Preserve any contact info we already had — only fill blanks.
     // (e.g. legacy WhatsApp-first lead now booking with their email →
     // we want to keep both channels, not overwrite the WhatsApp.)
+    // trial_zoom_link is filled in below right after we know the
+    // class id + short code so old agent_5 reminder code (running
+    // on a not-yet-redeployed VPS) doesn't ship an empty "Enlace:".
     await sb.from("leads").update({
       name:                 b.name,
       email:                existing.email ?? b.email,
@@ -225,6 +228,14 @@ export async function POST(req: Request) {
   // Short URL — used in WhatsApp + email so messages don't carry a
   // 250-char signed token that looks like phishing.
   const shortLinkUrl = `${PLATFORM_URL}/c/${shortCode}`;
+
+  // Stash the short URL on the lead row so any code path that reads
+  // `leads.trial_zoom_link` (e.g. the legacy agent_5 reminder still
+  // running on the VPS until it's redeployed) ships a real link
+  // instead of an empty "Enlace:" line.
+  await sb.from("leads")
+    .update({ trial_zoom_link: shortLinkUrl })
+    .eq("id", leadId);
 
   const startDate = new Date(b.slot_iso).toLocaleString(b.language === "de" ? "de-DE" : "es-ES", {
     timeZone: "Europe/Berlin",
