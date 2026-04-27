@@ -15,6 +15,9 @@ import { supabaseAdmin } from "@/lib/supabase";
  *     duration_minutes?:  int 15..240
  *     title?:             string
  *     topic?:             string | null
+ *     teacher_id?:        uuid                    (reassign)
+ *     decouple_group?:    boolean                 (sets group_id=NULL)
+ *     participants_set?:  uuid[] (max 50)         (replace member list)
  *   }
  *
  * When scope === "series" AND the class is part of a recurrence chain
@@ -25,6 +28,13 @@ import { supabaseAdmin } from "@/lib/supabase";
  *
  * For scheduled_at on "series", we apply the time DELTA (new - old) to
  * every affected instance so weekly spacing is preserved.
+ *
+ * `participants_set` requires the class to have NO group link
+ * (`classes.group_id IS NULL`) — a group-driven class gets its members
+ * synced from `student_group_members`, so per-class edits would be
+ * silently overwritten on the next group update. If you also pass
+ * `decouple_group: true` in the same request the decouple runs FIRST,
+ * so the participant edit lands cleanly.
  */
 export const runtime = "nodejs";
 
@@ -34,8 +44,10 @@ const PatchBody = z.object({
   duration_minutes: z.coerce.number().int().min(15).max(240).optional(),
   title:            z.string().trim().min(1).max(200).optional(),
   topic:            z.string().trim().max(500).nullable().optional(),
+  teacher_id:       z.string().uuid().optional(),
+  decouple_group:   z.boolean().optional(),
+  participants_set: z.array(z.string().uuid()).max(50).optional(),
 }).refine(b => {
-  // Ensure at least one editable field besides `scope`.
   const keys = Object.keys(b).filter(k => k !== "scope");
   return keys.length > 0;
 }, { message: "no_changes" });
@@ -68,15 +80,20 @@ export async function PATCH(
   const sb = supabaseAdmin();
   const { data: anchor } = await sb
     .from("classes")
-    .select("id, scheduled_at, parent_class_id, status")
+    .select("id, scheduled_at, parent_class_id, status, group_id")
     .eq("id", id)
     .maybeSingle();
   if (!anchor) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // Which ids to touch?
-  const anchorId = id;
-  const anchorIso = (anchor as { scheduled_at: string }).scheduled_at;
-  const parentId  = (anchor as { parent_class_id: string | null }).parent_class_id ?? anchorId;
+  const anchorRow = anchor as {
+    id: string; scheduled_at: string;
+    parent_class_id: string | null; status: string; group_id: string | null;
+  };
+
+  // ── Resolve the target id list ──
+  const anchorId  = id;
+  const anchorIso = anchorRow.scheduled_at;
+  const parentId  = anchorRow.parent_class_id ?? anchorId;
 
   let targetIds: string[] = [anchorId];
   if (b.scope === "series") {
@@ -90,13 +107,12 @@ export async function PATCH(
     if (!targetIds.includes(anchorId)) targetIds.push(anchorId);
   }
 
-  // Compute the per-field update. For scheduled_at on a series we apply
-  // a delta so weekly spacing is preserved instead of flattening every
-  // class to the same timestamp.
+  // ── 1. Plain field updates (title / topic / duration / teacher_id) ──
   const plainUpdate: Record<string, unknown> = {};
   if (b.duration_minutes !== undefined) plainUpdate.duration_minutes = b.duration_minutes;
   if (b.title            !== undefined) plainUpdate.title            = b.title;
   if (b.topic            !== undefined) plainUpdate.topic            = b.topic;
+  if (b.teacher_id       !== undefined) plainUpdate.teacher_id       = b.teacher_id;
 
   const updatedIds: string[] = [];
 
@@ -106,6 +122,7 @@ export async function PATCH(
     updatedIds.push(...targetIds);
   }
 
+  // ── 2. scheduled_at with delta logic for series ──
   if (b.scheduled_at !== undefined) {
     const newAnchor = new Date(b.scheduled_at).getTime();
     const oldAnchor = new Date(anchorIso).getTime();
@@ -118,8 +135,6 @@ export async function PATCH(
       if (error) return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
       if (!updatedIds.includes(anchorId)) updatedIds.push(anchorId);
     } else {
-      // Apply the same delta to every target. One UPDATE per row — n is
-      // typically small (≤ 12 for a Tuesday-semester schedule).
       const { data: currents } = await sb
         .from("classes")
         .select("id, scheduled_at")
@@ -132,6 +147,71 @@ export async function PATCH(
         if (error) return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
         if (!updatedIds.includes(c.id)) updatedIds.push(c.id);
       }
+    }
+  }
+
+  // ── 3. Decouple from group (run BEFORE participants_set so the
+  //       guard below sees the post-decouple state) ──
+  if (b.decouple_group) {
+    const { error } = await sb.from("classes")
+      .update({ group_id: null })
+      .in("id", targetIds);
+    if (error) return NextResponse.json({ error: "decouple_failed", message: error.message }, { status: 500 });
+    if (!updatedIds.includes(anchorId)) updatedIds.push(anchorId);
+  }
+
+  // ── 4. participants_set — replace the participant list per target ──
+  if (b.participants_set !== undefined) {
+    // Guard: every target class must be group-decoupled. Otherwise the
+    // group's next sync would silently undo the per-class edit.
+    const { data: currentClasses } = await sb
+      .from("classes")
+      .select("id, group_id")
+      .in("id", targetIds);
+    const stillCoupled = ((currentClasses ?? []) as Array<{ id: string; group_id: string | null }>)
+      .filter(r => r.group_id !== null);
+    if (stillCoupled.length > 0) {
+      return NextResponse.json({
+        error:   "class_still_in_group",
+        message: "Para editar los miembros, primero desvincula la clase del grupo (botón 'Desvincular del grupo') o gestiona los miembros desde /admin/grupos/{id}.",
+        offending_class_ids: stillCoupled.map(c => c.id),
+      }, { status: 400 });
+    }
+
+    const desired = new Set(b.participants_set);
+    for (const classId of targetIds) {
+      // Diff against existing rows so we don't lose attendance / per-row
+      // metadata for students who stay.
+      const { data: existing } = await sb
+        .from("class_participants")
+        .select("student_id")
+        .eq("class_id", classId);
+      const existingIds = new Set(
+        ((existing ?? []) as Array<{ student_id: string }>).map(r => r.student_id),
+      );
+
+      const toRemove = [...existingIds].filter(s => !desired.has(s));
+      const toAdd    = [...desired].filter(s => !existingIds.has(s));
+
+      if (toRemove.length > 0) {
+        const { error } = await sb.from("class_participants")
+          .delete()
+          .eq("class_id", classId)
+          .in("student_id", toRemove);
+        if (error) return NextResponse.json({ error: "participants_remove_failed", message: error.message }, { status: 500 });
+      }
+      if (toAdd.length > 0) {
+        const rows = toAdd.map(sid => ({
+          class_id:   classId,
+          student_id: sid,
+          attended:   null,
+          counts_as_session: true,
+        }));
+        const { error } = await sb.from("class_participants")
+          .upsert(rows, { onConflict: "class_id,student_id" });
+        if (error) return NextResponse.json({ error: "participants_add_failed", message: error.message }, { status: 500 });
+      }
+      if (!updatedIds.includes(classId)) updatedIds.push(classId);
     }
   }
 

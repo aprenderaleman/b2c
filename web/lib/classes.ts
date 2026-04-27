@@ -22,6 +22,8 @@ export type ClassRow = {
   status:                  ClassStatus;
   livekit_room_id:         string;
   is_trial:                boolean;
+  group_id:                string | null;
+  group_name:              string | null;
   started_at:              string | null;
   ended_at:                string | null;
   actual_duration_minutes: number | null;
@@ -213,7 +215,8 @@ export async function getClassesInRange(
     .select(`
       id, type, teacher_id, scheduled_at, duration_minutes,
       recurrence_pattern, recurrence_end_date, parent_class_id,
-      title, topic, status, livekit_room_id, is_trial,
+      title, topic, status, livekit_room_id, is_trial, group_id,
+      group:student_groups(name),
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
       teacher:teachers!inner(
         users!inner(email, full_name)
@@ -248,7 +251,8 @@ export async function getTeacherUpcomingClasses(
     .select(`
       id, type, teacher_id, scheduled_at, duration_minutes,
       recurrence_pattern, recurrence_end_date, parent_class_id,
-      title, topic, status, livekit_room_id, is_trial,
+      title, topic, status, livekit_room_id, is_trial, group_id,
+      group:student_groups(name),
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
       teacher:teachers!inner(
         users!inner(email, full_name)
@@ -286,7 +290,8 @@ export async function getStudentUpcomingClasses(
       class:classes!inner(
         id, type, teacher_id, scheduled_at, duration_minutes,
         recurrence_pattern, recurrence_end_date, parent_class_id,
-        title, topic, status, livekit_room_id, is_trial,
+        title, topic, status, livekit_room_id, is_trial, group_id,
+      group:student_groups(name),
         started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
         teacher:teachers!inner(
           users!inner(email, full_name)
@@ -325,7 +330,8 @@ export async function getClassById(id: string): Promise<ClassWithPeople | null> 
     .select(`
       id, type, teacher_id, scheduled_at, duration_minutes,
       recurrence_pattern, recurrence_end_date, parent_class_id,
-      title, topic, status, livekit_room_id, is_trial,
+      title, topic, status, livekit_room_id, is_trial, group_id,
+      group:student_groups(name),
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
       teacher:teachers!inner(
         users!inner(email, full_name)
@@ -430,6 +436,8 @@ function normaliseClassRow(r: RawClass): ClassWithPeople {
     status:                   r.status as ClassStatus,
     livekit_room_id:          r.livekit_room_id as string,
     is_trial:                 (r.is_trial as boolean | null) ?? false,
+    group_id:                 (r.group_id as string | null) ?? null,
+    group_name:               flattenGroupName(r.group),
     started_at:               (r.started_at as string | null) ?? null,
     ended_at:                 (r.ended_at as string | null) ?? null,
     actual_duration_minutes:  (r.actual_duration_minutes as number | null) ?? null,
@@ -439,6 +447,12 @@ function normaliseClassRow(r: RawClass): ClassWithPeople {
     teacher_email:            (tuFlat?.email as string | undefined) ?? "",
     participants,
   };
+}
+
+function flattenGroupName(g: unknown): string | null {
+  if (!g) return null;
+  const flat = Array.isArray(g) ? g[0] : g;
+  return (flat as { name?: string | null } | undefined)?.name ?? null;
 }
 
 // =============================================================================

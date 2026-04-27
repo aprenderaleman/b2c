@@ -14,6 +14,10 @@ export function EditClassButton(props: {
   scheduledAt:     string;
   durationMinutes: number;
   hasSeries:       boolean;
+  teacherId:       string;
+  groupId:         string | null;
+  groupName:       string | null;
+  participantIds:  string[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -35,6 +39,10 @@ export function EditClassButton(props: {
           scheduledAt:     props.scheduledAt,
           durationMinutes: props.durationMinutes,
           hasSeries:       props.hasSeries,
+          teacherId:       props.teacherId,
+          groupId:         props.groupId,
+          groupName:       props.groupName,
+          participantIds:  props.participantIds,
         }}
       />
     </>

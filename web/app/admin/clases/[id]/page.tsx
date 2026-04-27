@@ -53,6 +53,10 @@ export default async function ClassDetailPage({
                   scheduledAt={cls.scheduled_at}
                   durationMinutes={cls.duration_minutes}
                   hasSeries={Boolean(cls.parent_class_id)}
+                  teacherId={cls.teacher_id}
+                  groupId={cls.group_id}
+                  groupName={cls.group_name}
+                  participantIds={cls.participants.map(p => p.student_id)}
                 />
                 <CancelClassButton classId={cls.id} isSeries={Boolean(cls.parent_class_id) && cls.parent_class_id !== cls.id} />
               </>
