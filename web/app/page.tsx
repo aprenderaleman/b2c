@@ -131,6 +131,7 @@ export default function HomePage() {
                 <FaqItem q={t.home.faq3Q} a={t.home.faq3A} />
                 <FaqItem q={t.home.faq4Q} a={t.home.faq4A} />
                 <FaqItem q={t.home.faq5Q} a={t.home.faq5A} />
+                <FaqItem q={t.home.faq6Q} a={t.home.faq6A} />
               </div>
             </div>
           </motion.section>
