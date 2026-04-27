@@ -13,6 +13,8 @@ import {
   CarouselLayout,
   ParticipantTile,
   RoomAudioRenderer,
+  Chat,
+  useChat,
   useTracks,
   useParticipants,
   useLocalParticipant,
@@ -56,6 +58,7 @@ export function AulaClient(p: Props) {
   const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [error, setError]         = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [chatOpen,  setChatOpen]  = useState(false);
 
   // Detect available input devices BEFORE connecting, so a user on a
   // laptop with no webcam (or a headless phone) doesn't get rejected by
@@ -188,6 +191,8 @@ export function AulaClient(p: Props) {
           backHref={p.backHref}
           panelOpen={panelOpen}
           onToggleParticipants={() => setPanelOpen(o => !o)}
+          chatOpen={chatOpen}
+          onToggleChat={() => setChatOpen(o => !o)}
         />
         <div className="flex-1 min-h-0 flex bg-slate-900">
           <div className="flex-1 min-w-0">
@@ -196,6 +201,7 @@ export function AulaClient(p: Props) {
           {panelOpen && (
             <ParticipantsPanel onClose={() => setPanelOpen(false)} />
           )}
+          <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
         </div>
         <div className="border-t border-slate-800 bg-slate-900/80 backdrop-blur p-2">
           <ControlBar
@@ -361,12 +367,22 @@ function HostBtn({
 function TopBar({
   classId, title, scheduledAt, durationMinutes, isHost, backHref,
   panelOpen, onToggleParticipants,
+  chatOpen, onToggleChat,
 }: {
   classId: string; title: string; scheduledAt: string; durationMinutes: number;
   isHost: boolean; backHref: string;
   panelOpen: boolean; onToggleParticipants: () => void;
+  chatOpen:  boolean; onToggleChat:         () => void;
 }) {
   const participants = useParticipants();
+  // Track unread chat messages while the panel is closed. Resets to the
+  // current count whenever the user opens the panel.
+  const { chatMessages } = useChat();
+  const [seenCount, setSeenCount] = useState(0);
+  useEffect(() => {
+    if (chatOpen) setSeenCount(chatMessages.length);
+  }, [chatOpen, chatMessages.length]);
+  const unread = chatOpen ? 0 : Math.max(0, chatMessages.length - seenCount);
   const speaking = participants.find(p => p.isSpeaking) ?? null;
   const [elapsed, setElapsed] = useState(() =>
     Math.max(0, Math.floor((Date.now() - new Date(scheduledAt).getTime()) / 1000)));
@@ -424,6 +440,26 @@ function TopBar({
             🎙️ <span className="truncate">{speaking.name || speaking.identity}</span>
           </span>
         )}
+        <button
+          type="button"
+          onClick={onToggleChat}
+          className={`relative inline-flex items-center gap-1.5 rounded-full text-xs font-medium px-2.5 py-0.5 transition-colors
+                      ${chatOpen
+                        ? "bg-brand-500 text-white"
+                        : "bg-slate-700/80 hover:bg-slate-600/80 text-slate-200"}`}
+          title="Chat de la clase"
+          aria-pressed={chatOpen}
+        >
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          Chat
+          {unread > 0 && (
+            <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none">
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </button>
         <button
           type="button"
           onClick={onToggleParticipants}
@@ -656,6 +692,38 @@ function ParticipantRow({
         </div>
       </div>
     </li>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Chat side panel — wraps LiveKit's <Chat /> component (data-channel
+// based, ephemeral; messages disappear when participants disconnect).
+// Kept mounted while the room is open so messages keep arriving even
+// when the panel is hidden — that's how the unread badge in TopBar
+// stays accurate. We just hide it with CSS when `open` is false.
+// ───────────────────────────────────────────────────────────────────
+function ChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <aside
+      className={`w-80 shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col ${open ? "" : "hidden"}`}
+      aria-hidden={!open}
+    >
+      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+        <h2 className="text-sm font-semibold text-slate-100">Chat</h2>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-slate-400 hover:text-slate-200 text-xl leading-none"
+          aria-label="Cerrar chat"
+        >×</button>
+      </header>
+      {/* LiveKit's prebuilt Chat handles its own scroll, input and
+          message-list rendering. The lk-* CSS from @livekit/components-styles
+          (already imported at the top of this file) gives it the dark theme. */}
+      <div className="flex-1 min-h-0 flex flex-col [&_.lk-chat]:flex-1 [&_.lk-chat]:min-h-0 [&_.lk-chat]:flex [&_.lk-chat]:flex-col">
+        <Chat />
+      </div>
+    </aside>
   );
 }
 
