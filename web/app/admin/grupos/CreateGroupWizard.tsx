@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   generateSchedule,
+  berlinWallClockToIso,
   type ScheduleSpec,
   type ScheduleEntry,
   type Weekday,
@@ -252,6 +253,9 @@ export function CreateGroupWizard({
               entries={previewEntries}
               onUpdate={(idx, patch) => setPreviewEntries(arr => arr.map((e, i) => i === idx ? { ...e, ...patch } : e))}
               onRemove={(idx) => setPreviewEntries(arr => arr.filter((_, i) => i !== idx))}
+              onAdd={(entry) => setPreviewEntries(arr =>
+                [...arr, entry].sort((a, b) => a.scheduledAtIso.localeCompare(b.scheduledAtIso)),
+              )}
             />
           )}
 
@@ -503,16 +507,52 @@ function Step2(p: {
 // ─────────────────────────────────────────────────────────
 
 function Step3({
-  entries, onUpdate, onRemove,
+  entries, onUpdate, onRemove, onAdd,
 }: {
   entries: ScheduleEntry[];
   onUpdate: (idx: number, patch: Partial<ScheduleEntry>) => void;
   onRemove: (idx: number) => void;
+  onAdd:    (entry: ScheduleEntry) => void;
 }) {
+  // Local state for the "add a new class" row. Defaults to the day after
+  // the last scheduled class (or today if the list is empty), same time
+  // and duration so adding consecutive sessions is fast.
+  const lastEntry = entries[entries.length - 1];
+  const defaultDate = lastEntry
+    ? addDaysIso(lastEntry.scheduledAtIso, 1)
+    : todayIsoDate();
+  const defaultTime = lastEntry
+    ? berlinTimeFromIso(lastEntry.scheduledAtIso)
+    : "19:00";
+  const defaultDuration = lastEntry?.durationMin ?? 60;
+
+  const [newDate, setNewDate] = useState(defaultDate);
+  const [newTime, setNewTime] = useState(defaultTime);
+  const [newDuration, setNewDuration] = useState<number>(defaultDuration);
+
+  // Re-sync the "add new" inputs when the list grows so the next add
+  // proposes the day after the new last entry.
+  useEffect(() => {
+    setNewDate(defaultDate);
+    setNewTime(defaultTime);
+    setNewDuration(defaultDuration);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries.length]);
+
+  const handleAdd = () => {
+    if (!newDate || !newTime) return;
+    onAdd({
+      scheduledAtIso: berlinWallClockToIso(newDate, newTime),
+      durationMin:    newDuration,
+    });
+  };
+
   return (
     <div>
       <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-        Revisa la lista. Puedes eliminar cualquier clase con el botón <code className="text-xs">×</code> antes de confirmar.
+        Revisa la lista. Puedes eliminar cualquier clase con <code className="text-xs">×</code>,
+        cambiar duraciones, o añadir más fechas con <strong>+ Añadir clase</strong> abajo
+        (ideal para estudiantes con horarios irregulares).
       </p>
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         <table className="w-full text-xs">
@@ -526,7 +566,7 @@ function Step3({
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {entries.map((e, i) => (
-              <tr key={i} className="text-slate-800 dark:text-slate-200">
+              <tr key={`${e.scheduledAtIso}-${i}`} className="text-slate-800 dark:text-slate-200">
                 <td className="px-3 py-2 font-mono text-slate-500">{i + 1}</td>
                 <td className="px-3 py-2 capitalize">{formatPreviewDate(e.scheduledAtIso)}</td>
                 <td className="px-3 py-2">
@@ -545,11 +585,81 @@ function Step3({
                 </td>
               </tr>
             ))}
+            {entries.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-4 text-center text-slate-500 dark:text-slate-400">
+                  Sin clases. Añade una abajo.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* Add-row */}
+      <div className="mt-3 rounded-2xl border border-dashed border-brand-300 dark:border-brand-500/40 bg-brand-50/40 dark:bg-brand-500/5 p-3">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-700 dark:text-brand-300 mb-2">
+          Añadir otra clase
+        </p>
+        <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+          <label className="block">
+            <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 uppercase tracking-wide">Fecha</span>
+            <input
+              type="date"
+              value={newDate}
+              onChange={e => setNewDate(e.target.value)}
+              className="input-text w-full mt-1 text-xs py-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 uppercase tracking-wide">Hora (Berlín)</span>
+            <input
+              type="time"
+              step={300}
+              value={newTime}
+              onChange={e => setNewTime(e.target.value)}
+              className="input-text w-full mt-1 text-xs py-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-medium text-slate-600 dark:text-slate-300 uppercase tracking-wide">Duración</span>
+            <select
+              value={newDuration}
+              onChange={e => setNewDuration(Number(e.target.value))}
+              className="input-text w-full mt-1 text-xs py-1"
+            >
+              {[30,45,60,75,90,105,120,150,180].map(m => <option key={m} value={m}>{m} min</option>)}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={handleAdd}
+            disabled={!newDate || !newTime}
+            className="rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2"
+          >
+            + Añadir
+          </button>
+        </div>
+      </div>
     </div>
   );
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const d = new Date(iso);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function berlinTimeFromIso(iso: string): string {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit", minute: "2-digit", hour12: false,
+    timeZone: "Europe/Berlin",
+  });
+  return fmt.format(new Date(iso));
 }
 
 // ─────────────────────────────────────────────────────────
