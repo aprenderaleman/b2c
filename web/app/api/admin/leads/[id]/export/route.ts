@@ -22,7 +22,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     exported_at: new Date().toISOString(),
     controller: {
       name: "Aprender-Aleman.de",
-      contact: process.env.ADMIN_EMAIL ?? "gelfis@aprender-aleman.de",
+      contact: process.env.ADMIN_EMAIL ?? "info@aprender-aleman.de",
     },
     lead,
     timeline,
