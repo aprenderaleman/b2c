@@ -27,10 +27,25 @@ import {
   renderGroupAdded,
   type GroupAddedVars,
 } from "./templates/group-added";
+import {
+  renderTeacherInvoicePaid,
+  type TeacherInvoicePaidVars,
+} from "./templates/teacher-invoice-paid";
 
 export type SendResult =
   | { ok: true; id: string | null }
   | { ok: false; error: string };
+
+/**
+ * Optional attachments passed to sendRaw. Resend and SMTP both accept
+ * the same shape (filename + Buffer), so we normalise on this single
+ * type and translate per-backend at the send site.
+ */
+export type EmailAttachment = {
+  filename:     string;
+  content:      Buffer;
+  contentType?: string;
+};
 
 /**
  * Master switch for lifecycle emails (group-added, class-created,
@@ -58,6 +73,7 @@ export async function sendRaw(
   subject: string,
   html: string,
   text: string,
+  attachments?: EmailAttachment[],
 ): Promise<SendResult> {
   const backend = emailBackendConfigured();
 
@@ -67,6 +83,11 @@ export async function sendRaw(
     try {
       const { data, error } = await resend.emails.send({
         from: fromAddress(), to, subject, html, text,
+        // Resend accepts { filename, content } where content can be a
+        // Buffer or base64 string. Buffer works directly.
+        ...(attachments && attachments.length > 0
+          ? { attachments: attachments.map(a => ({ filename: a.filename, content: a.content })) }
+          : {}),
       });
       if (error) return { ok: false, error: error.message ?? "resend error" };
       return { ok: true, id: data?.id ?? null };
@@ -81,6 +102,13 @@ export async function sendRaw(
     try {
       const info = await smtp.sendMail({
         from: fromAddress(), to, subject, html, text,
+        ...(attachments && attachments.length > 0
+          ? { attachments: attachments.map(a => ({
+              filename:    a.filename,
+              content:     a.content,
+              contentType: a.contentType,
+            })) }
+          : {}),
       });
       return { ok: true, id: info.messageId ?? null };
     } catch (e) {
@@ -93,6 +121,9 @@ export async function sendRaw(
   console.log(`[email DEV] to=${to}`);
   console.log(`[email DEV] subject=${subject}`);
   console.log(`[email DEV] text=\n${text}`);
+  if (attachments && attachments.length > 0) {
+    console.log(`[email DEV] attachments=${attachments.map(a => `${a.filename} (${a.content.length}B)`).join(", ")}`);
+  }
   console.log("=".repeat(60));
   return { ok: true, id: null };
 }
@@ -217,4 +248,21 @@ export async function sendGroupAddedEmail(
 ): Promise<SendResult> {
   const { subject, html, text } = renderGroupAdded(vars);
   return sendRaw(to, subject, html, text);
+}
+
+/**
+ * "Te hemos pagado X" email + the monthly invoice PDF as attachment.
+ * Triggered when admin marks a teacher_earnings row as paid on
+ * /admin/finanzas/profesores. Transactional — NOT gated by the
+ * lifecycle-emails flag (the teacher needs to know they got paid).
+ */
+export async function sendTeacherInvoicePaidEmail(
+  to: string,
+  vars: TeacherInvoicePaidVars,
+  pdf: { filename: string; content: Buffer },
+): Promise<SendResult> {
+  const { subject, html, text } = renderTeacherInvoicePaid(vars);
+  return sendRaw(to, subject, html, text, [
+    { filename: pdf.filename, content: pdf.content, contentType: "application/pdf" },
+  ]);
 }
