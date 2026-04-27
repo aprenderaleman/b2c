@@ -19,6 +19,10 @@ import {
   renderTrialReminder,
   type TrialReminderVars,
 } from "./templates/trial-reminder";
+import {
+  renderClassLifecycle,
+  type ClassLifecycleVars,
+} from "./templates/class-lifecycle";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -168,5 +172,19 @@ export async function sendTrialReminderEmail(
   vars: TrialReminderVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderTrialReminder(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Class-lifecycle event email — used when a teacher / admin creates,
+ * reschedules or cancels a class for an active account (student or
+ * teacher). Replaces the WhatsApp pings that used to fire from the
+ * /api/teacher/classes and /api/admin/classes routes.
+ */
+export async function sendClassLifecycleEmail(
+  to: string,
+  vars: ClassLifecycleVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderClassLifecycle(vars);
   return sendRaw(to, subject, html, text);
 }

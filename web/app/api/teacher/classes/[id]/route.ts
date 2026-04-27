@@ -4,7 +4,9 @@ import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
-import { sendWhatsappText } from "@/lib/whatsapp";
+import { sendClassLifecycleEmail } from "@/lib/email/send";
+
+const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 /**
  * PATCH /api/teacher/classes/{id}  — reschedule / edit a single class instance
@@ -134,47 +136,58 @@ export async function DELETE(
 }
 
 async function notifyStudents(
-  classId: string,
-  kind:    "rescheduled" | "cancelled",
-  title:   string,
-  when:    Date,
+  classId:        string,
+  kind:           "rescheduled" | "cancelled",
+  title:          string,
+  when:           Date,
+  durationMinutes = 60,
 ): Promise<void> {
   try {
     const sb = supabaseAdmin();
     const { data: participants } = await sb
       .from("class_participants")
-      .select("student_id, students!inner(user_id, users!inner(phone, language_preference))")
+      .select("student_id, students!inner(user_id, users!inner(email, full_name, language_preference))")
       .eq("class_id", classId);
 
     type Part = {
       student_id: string;
       students: {
         user_id: string;
-        users: { phone: string | null; language_preference: "es"|"de" } |
-               Array<{ phone: string | null; language_preference: "es"|"de" }>;
+        users: { email: string; full_name: string | null; language_preference: "es"|"de" } |
+               Array<{ email: string; full_name: string | null; language_preference: "es"|"de" }>;
       } | Array<{
         user_id: string;
-        users: { phone: string | null; language_preference: "es"|"de" } |
-               Array<{ phone: string | null; language_preference: "es"|"de" }>;
+        users: { email: string; full_name: string | null; language_preference: "es"|"de" } |
+               Array<{ email: string; full_name: string | null; language_preference: "es"|"de" }>;
       }>;
     };
-
-    const fmt = when.toLocaleString("es-ES", {
-      weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
-      timeZone: "Europe/Berlin",
-    });
 
     for (const p of (participants ?? []) as Part[]) {
       const s = Array.isArray(p.students) ? p.students[0] : p.students;
       if (!s) continue;
       const u = Array.isArray(s.users) ? s.users[0] : s.users;
-      const phone = u?.phone ?? null;
+      if (!u) continue;
+      const lang = u.language_preference;
 
-      const msg = kind === "rescheduled"
-        ? `Cambio de horario 📅\n\n${title}\nNueva fecha: ${fmt} (Berlín)\n\nRevisa tu panel.`
-        : `Clase cancelada ❌\n\n${title}\n(estaba agendada para ${fmt} Berlín)\n\nEl profesor contactará contigo para reagendar.`;
+      const fmt = when.toLocaleString(lang === "de" ? "de-DE" : "es-ES", {
+        weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+        timeZone: "Europe/Berlin",
+      });
 
-      if (phone) await sendWhatsappText(phone, msg);
+      if (u.email) {
+        const first = (u.full_name ?? "").trim().split(/\s+/)[0] || u.email;
+        sendClassLifecycleEmail(u.email, {
+          audience:      "student",
+          kind,
+          recipientName: first,
+          classTitle:    title,
+          startDate:     fmt + (lang === "de" ? " (Berlin)" : " (Berlín)"),
+          durationMin:   durationMinutes,
+          count:         1,
+          classUrl:      `${PLATFORM_URL}/estudiante/clases/${classId}`,
+          language:      lang,
+        }).catch(e => console.error(`[teacher/classes/${classId}] student email failed:`, e));
+      }
       await createNotification({
         user_id:  s.user_id,
         type:     kind === "rescheduled" ? "class_updated" : "class_cancelled",

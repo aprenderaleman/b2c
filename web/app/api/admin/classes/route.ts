@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { createClass } from "@/lib/classes";
-import { sendWhatsappText } from "@/lib/whatsapp";
+import { sendClassLifecycleEmail } from "@/lib/email/send";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
 import { wireChatsForClass } from "@/lib/chat";
@@ -11,8 +11,11 @@ import { wireChatsForClass } from "@/lib/chat";
  * POST /api/admin/classes
  *
  * Creates a class (single or recurring). Notifies the teacher and every
- * student via WhatsApp after successful creation (best-effort).
+ * student via EMAIL after successful creation (best-effort). WhatsApp
+ * is reserved for trial-class leads — active accounts get email only.
  */
+
+const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 const Body = z.object({
   type:              z.enum(["individual", "group"]),
@@ -107,8 +110,10 @@ export async function POST(req: Request) {
 }
 
 /**
- * After creating N classes, send a WhatsApp to each student and the
- * teacher summarising what just got scheduled. Best-effort.
+ * After creating N classes, send an EMAIL to each student and the
+ * teacher summarising what just got scheduled, plus the in-app
+ * notification. Best-effort — failures are logged and the request
+ * still returns success.
  */
 async function notifyParticipantsOnCreation(
   createdClassIds: string[],
@@ -118,8 +123,6 @@ async function notifyParticipantsOnCreation(
   if (createdClassIds.length === 0) return;
   const sb = supabaseAdmin();
 
-  // Fetch the first class (parent) for the summary line, and the teacher
-  // + students phone/name/language.
   const { data: firstClass } = await sb
     .from("classes")
     .select("scheduled_at, duration_minutes, title")
@@ -127,52 +130,71 @@ async function notifyParticipantsOnCreation(
     .maybeSingle();
   if (!firstClass) return;
 
-  const scheduledAt = new Date((firstClass as { scheduled_at: string }).scheduled_at);
+  const cls = firstClass as { scheduled_at: string; duration_minutes: number; title: string };
+  const scheduledAt = new Date(cls.scheduled_at);
   const count = createdClassIds.length;
 
-  // Teacher — WhatsApp + in-app notification
+  // Teacher — email + in-app notification
   const { data: teacher } = await sb
     .from("teachers")
-    .select("user_id, users!inner(phone, full_name, language_preference)")
+    .select("user_id, users!inner(email, full_name, language_preference)")
     .eq("id", teacherId)
     .maybeSingle();
 
   const teacherUser = (teacher as { users: unknown } | null)?.users;
   const tu = (Array.isArray(teacherUser) ? teacherUser[0] : teacherUser) as
-    | { phone: string | null; full_name: string | null; language_preference: "es" | "de" }
+    | { email: string; full_name: string | null; language_preference: "es" | "de" }
     | undefined;
   const teacherUserId = (teacher as { user_id: string } | null)?.user_id;
-  if (tu?.phone) {
-    const text = teacherMessage(tu.language_preference, scheduledAt, count, (firstClass as { title: string }).title);
-    await sendWhatsappText(tu.phone, text);
+  if (tu?.email) {
+    sendClassLifecycleEmail(tu.email, {
+      audience:      "teacher",
+      kind:          "created",
+      recipientName: firstName(tu.full_name) || tu.email,
+      classTitle:    cls.title,
+      startDate:     fmtDate(scheduledAt, tu.language_preference) + (tu.language_preference === "de" ? " (Berlin)" : " (Berlín)"),
+      durationMin:   cls.duration_minutes,
+      count,
+      classUrl:      `${PLATFORM_URL}/profesor/clases/${createdClassIds[0]}`,
+      language:      tu.language_preference,
+    }).catch(e => console.error("[admin/classes] teacher email failed:", e));
   }
   if (teacherUserId) {
     await createNotification({
       user_id: teacherUserId,
       type:    "class_scheduled",
       title:   count === 1 ? "Nueva clase agendada" : `Nueva serie (${count} clases) agendada`,
-      body:    `${(firstClass as { title: string }).title} — ${fmtDate(scheduledAt, tu?.language_preference ?? "es")}`,
+      body:    `${cls.title} — ${fmtDate(scheduledAt, tu?.language_preference ?? "es")}`,
       link:    `/profesor/clases/${createdClassIds[0]}`,
       class_id: createdClassIds[0],
     });
   }
 
-  // Students — WhatsApp + in-app notification
+  // Students — email + in-app notification
   const { data: studentRows } = await sb
     .from("students")
-    .select("id, user_id, users!inner(phone, full_name, language_preference)")
+    .select("id, user_id, users!inner(email, full_name, language_preference)")
     .in("id", studentIds);
 
   for (const s of studentRows ?? []) {
     const u = (s as { users: unknown }).users;
     const uu = (Array.isArray(u) ? u[0] : u) as
-      | { phone: string | null; full_name: string | null; language_preference: "es" | "de" }
+      | { email: string; full_name: string | null; language_preference: "es" | "de" }
       | undefined;
     const userId = (s as { user_id: string }).user_id;
 
-    if (uu?.phone) {
-      const text = studentMessage(uu.language_preference, scheduledAt, count, (firstClass as { title: string }).title);
-      await sendWhatsappText(uu.phone, text);
+    if (uu?.email) {
+      sendClassLifecycleEmail(uu.email, {
+        audience:      "student",
+        kind:          "created",
+        recipientName: firstName(uu.full_name) || uu.email,
+        classTitle:    cls.title,
+        startDate:     fmtDate(scheduledAt, uu.language_preference) + (uu.language_preference === "de" ? " (Berlin)" : " (Berlín)"),
+        durationMin:   cls.duration_minutes,
+        count,
+        classUrl:      `${PLATFORM_URL}/estudiante/clases/${createdClassIds[0]}`,
+        language:      uu.language_preference,
+      }).catch(e => console.error("[admin/classes] student email failed:", e));
     }
     if (userId) {
       const lang = uu?.language_preference ?? "es";
@@ -182,12 +204,16 @@ async function notifyParticipantsOnCreation(
         title:    lang === "de"
           ? (count === 1 ? "Neue Stunde agendiert" : `Neue Serie (${count} Stunden) agendiert`)
           : (count === 1 ? "Nueva clase agendada" : `Nueva serie (${count} clases) agendada`),
-        body:     `${(firstClass as { title: string }).title} — ${fmtDate(scheduledAt, lang)}`,
+        body:     `${cls.title} — ${fmtDate(scheduledAt, lang)}`,
         link:     `/estudiante/clases/${createdClassIds[0]}`,
         class_id: createdClassIds[0],
       });
     }
   }
+}
+
+function firstName(full: string | null | undefined): string {
+  return (full ?? "").trim().split(/\s+/)[0] ?? "";
 }
 
 function fmtDate(d: Date, lang: "es" | "de"): string {
@@ -197,82 +223,6 @@ function fmtDate(d: Date, lang: "es" | "de"): string {
   });
 }
 
-function teacherMessage(
-  lang: "es" | "de",
-  first: Date,
-  count: number,
-  title: string,
-): string {
-  if (lang === "de") {
-    if (count === 1) {
-      return `Neue Stunde agendiert 📚
-
-${title}
-${fmtDate(first, "de")} (Berlin)
-
-Du findest sie auch in deinem Bereich. Bis dann!`;
-    }
-    return `Neue Reihe agendiert 📚
-
-${title}
-Start: ${fmtDate(first, "de")} (Berlin)
-${count} Termine insgesamt.
-
-Alle Stunden stehen in deinem Bereich.`;
-  }
-  if (count === 1) {
-    return `Nueva clase agendada 📚
-
-${title}
-${fmtDate(first, "es")} (Berlín)
-
-También la tienes en tu panel. ¡Nos vemos!`;
-  }
-  return `Nueva serie agendada 📚
-
-${title}
-Inicio: ${fmtDate(first, "es")} (Berlín)
-${count} clases en total.
-
-Tienes todas en tu panel.`;
-}
-
-function studentMessage(
-  lang: "es" | "de",
-  first: Date,
-  count: number,
-  title: string,
-): string {
-  if (lang === "de") {
-    if (count === 1) {
-      return `Deine Stunde ist bereit! 🎉
-
-${title}
-${fmtDate(first, "de")} (Berlin)
-
-Du bekommst eine Erinnerung, bevor es losgeht. Bis dann!`;
-    }
-    return `Deine wiederkehrenden Stunden sind bereit! 🎉
-
-${title}
-Erste Stunde: ${fmtDate(first, "de")} (Berlin)
-${count} Stunden insgesamt.
-
-Vor jeder Stunde bekommst du eine Erinnerung.`;
-  }
-  if (count === 1) {
-    return `¡Tu clase está lista! 🎉
-
-${title}
-${fmtDate(first, "es")} (Berlín)
-
-Te enviaremos un recordatorio antes de que empiece. ¡Nos vemos!`;
-  }
-  return `¡Tus clases recurrentes están listas! 🎉
-
-${title}
-Primera clase: ${fmtDate(first, "es")} (Berlín)
-${count} clases en total.
-
-Te enviaremos un recordatorio antes de cada clase.`;
-}
+// Class-creation copy used to live as inline WhatsApp templates here
+// (teacherMessage / studentMessage). Migrated to the shared
+// class-lifecycle email template — see lib/email/templates/class-lifecycle.ts.

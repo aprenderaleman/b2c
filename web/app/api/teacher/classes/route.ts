@@ -7,7 +7,9 @@ import { createClass } from "@/lib/classes";
 import { supabaseAdmin } from "@/lib/supabase";
 import { wireChatsForClass } from "@/lib/chat";
 import { createNotification } from "@/lib/notifications";
-import { sendWhatsappText } from "@/lib/whatsapp";
+import { sendClassLifecycleEmail } from "@/lib/email/send";
+
+const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 /**
  * POST /api/teacher/classes
@@ -160,32 +162,51 @@ async function notifyStudentsOnCreation(
 ): Promise<void> {
   const sb = supabaseAdmin();
   const { data: cls } = await sb
-    .from("classes").select("scheduled_at").eq("id", firstClassId).maybeSingle();
+    .from("classes")
+    .select("scheduled_at, duration_minutes")
+    .eq("id", firstClassId)
+    .maybeSingle();
   if (!cls) return;
-  const at = new Date((cls as { scheduled_at: string }).scheduled_at);
-  const fmt = at.toLocaleString("es-ES", {
-    weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
-    timeZone: "Europe/Berlin",
-  });
+  const c = cls as { scheduled_at: string; duration_minutes: number };
+  const at = new Date(c.scheduled_at);
 
   const { data: studentRows } = await sb
     .from("students")
-    .select("id, user_id, users!inner(phone, language_preference)")
+    .select("id, user_id, users!inner(email, full_name, language_preference)")
     .in("id", studentIds);
 
   for (const s of studentRows ?? []) {
     const u = (s as { users: unknown }).users;
     const uu = (Array.isArray(u) ? u[0] : u) as
-      | { phone: string | null; language_preference: "es" | "de" } | undefined;
+      | { email: string; full_name: string | null; language_preference: "es" | "de" }
+      | undefined;
     const userId = (s as { user_id: string }).user_id;
-    if (uu?.phone) {
-      await sendWhatsappText(uu.phone, `¡Tu clase está lista! 🎉\n\n${title}\n${fmt} (Berlín)\n\nTe enviaremos un recordatorio antes de que empiece.`);
+    const lang = uu?.language_preference ?? "es";
+
+    const fmt = at.toLocaleString(lang === "de" ? "de-DE" : "es-ES", {
+      weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+      timeZone: "Europe/Berlin",
+    });
+
+    if (uu?.email) {
+      const first = (uu.full_name ?? "").trim().split(/\s+/)[0] || uu.email;
+      sendClassLifecycleEmail(uu.email, {
+        audience:      "student",
+        kind:          "created",
+        recipientName: first,
+        classTitle:    title,
+        startDate:     fmt + (lang === "de" ? " (Berlin)" : " (Berlín)"),
+        durationMin:   c.duration_minutes,
+        count:         1,
+        classUrl:      `${PLATFORM_URL}/estudiante/clases/${firstClassId}`,
+        language:      lang,
+      }).catch(e => console.error("[teacher/classes] student email failed:", e));
     }
     if (userId) {
       await createNotification({
         user_id:  userId,
         type:     "class_scheduled",
-        title:    "Nueva clase agendada",
+        title:    lang === "de" ? "Neue Stunde agendiert" : "Nueva clase agendada",
         body:     `${title} — ${fmt}`,
         link:     `/estudiante/clases/${firstClassId}`,
         class_id: firstClassId,
