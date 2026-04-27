@@ -225,6 +225,12 @@
   * { animation: none !important; transition: none !important; }
 }
 
+/* Hide native scrollbar on horizontally-scrolling strips (mobile day
+   picker, etc.). Behaviour stays scrollable; we just don't render the
+   bar. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* Ensure inputs and text are 16px+ on mobile to avoid iOS auto-zoom */
 @media (max-width: 480px) {
   input[type="text"], input[type="tel"], input[type="email"],
