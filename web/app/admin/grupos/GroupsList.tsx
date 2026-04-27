@@ -141,7 +141,9 @@ export function GroupsList({
 
 function GroupCard({ group, onEdit }: { group: Group; onEdit: () => void }) {
   return (
-    <article className={`rounded-3xl border bg-white dark:bg-slate-900 p-4 space-y-4
+    <article
+      id={`group-${group.id}`}
+      className={`rounded-3xl border bg-white dark:bg-slate-900 p-4 space-y-4 scroll-mt-24
       ${group.active ? "border-slate-200 dark:border-slate-800" : "border-slate-200/50 dark:border-slate-800/50 border-dashed"}`}>
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0">

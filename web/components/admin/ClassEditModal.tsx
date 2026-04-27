@@ -229,7 +229,7 @@ export function ClassEditModal({
                   <div className="min-w-0">
                     <p className="text-sm text-slate-800 dark:text-slate-200">
                       Vinculada al grupo:{" "}
-                      <Link href={`/admin/grupos/${classInfo.groupId}`} className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                      <Link href={`/admin/grupos#group-${classInfo.groupId}`} className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
                         {classInfo.groupName ?? "(sin nombre)"}
                       </Link>
                     </p>
@@ -281,7 +281,7 @@ export function ClassEditModal({
               <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                 Esta clase hereda los miembros del grupo. Para editarlos,{" "}
                 <Link
-                  href={`/admin/grupos/${classInfo.groupId}`}
+                  href={`/admin/grupos#group-${classInfo.groupId}`}
                   className="font-semibold text-brand-600 dark:text-brand-400 hover:underline"
                 >
                   ve al grupo →
