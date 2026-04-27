@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Header } from "@/components/Header";
 import { WhatsAppFloat } from "@/components/WhatsAppFloat";
 import { Funnel } from "@/components/Funnel";
+import { HomeFunnelMobile } from "@/components/home/HomeFunnelMobile";
 import { useLang } from "@/lib/lang-context";
 import { interpolate } from "@/lib/i18n";
 
@@ -78,43 +79,13 @@ export default function HomePage() {
           </motion.section>
         )}
 
-        {/* ────────── MOBILE CTA — only visible below md ────────── */}
-        {/*
-          Mobile visitors see a focused single-CTA card that launches
-          the new app-shell funnel at /agendar. Keeps the homepage
-          uncluttered (most traffic is mobile) and lets the funnel own
-          the full viewport once they tap. Desktop is unchanged.
+        {/* ────────── MOBILE inline funnel — below the hero ──────────
+          The visitor lands and is already INSIDE the booking flow,
+          right under the hero copy. Picking a slot reveals a
+          floating glass CTA that hands off to /agendar/tu — the
+          rest of the funnel (steps 2-4) is reused as-is.
         */}
-        <section className="md:hidden bg-white dark:bg-slate-950">
-          <div className="mx-auto max-w-2xl px-5 py-10">
-            <Link
-              href="/agendar"
-              className="block w-full rounded-3xl bg-navy-900 text-white p-6 shadow-lg
-                         active:scale-[0.99] transition border border-navy-700"
-            >
-              <div className="flex flex-col items-start gap-3">
-                <span className="inline-flex items-center gap-2 rounded-full bg-warm/15 ring-1 ring-warm/40
-                                 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-warm">
-                  Gratis · 45 min
-                </span>
-                <span className="text-2xl font-extrabold leading-tight">
-                  Reserva tu clase de prueba
-                </span>
-                <span className="text-sm text-white/70">
-                  Elige día y hora en menos de un minuto.
-                </span>
-                <span className="mt-2 inline-flex items-center gap-2 rounded-2xl
-                                 bg-warm text-warm-foreground font-semibold text-base
-                                 px-5 h-12 self-stretch justify-center shadow-md shadow-warm/20">
-                  Empezar
-                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <path d="M5 12h14M13 5l7 7-7 7" />
-                  </svg>
-                </span>
-              </div>
-            </Link>
-          </div>
-        </section>
+        <HomeFunnelMobile />
 
         {/* ────────── FUNNEL section (desktop only) ────────── */}
         <section
@@ -178,7 +149,14 @@ export default function HomePage() {
           </footer>
         )}
       </main>
-      {!expanded && <WhatsAppFloat />}
+      {/* WhatsApp float: only on desktop / where the segmented control
+          isn't already exposing it. On mobile the floating glass CTA
+          would overlap with this corner button anyway. */}
+      {!expanded && (
+        <div className="hidden md:block">
+          <WhatsAppFloat />
+        </div>
+      )}
     </>
   );
 }
