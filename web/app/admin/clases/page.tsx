@@ -26,6 +26,21 @@ export default async function ClassesListPage() {
         <ClassesPageClient />
       </header>
 
+      <aside className="rounded-2xl border border-brand-200 dark:border-brand-500/30 bg-brand-50/60 dark:bg-brand-500/5 px-4 py-3 text-xs text-slate-700 dark:text-slate-200">
+        <p className="font-semibold text-brand-700 dark:text-brand-300 mb-1">📅 ¿Clase recurrente o suelta?</p>
+        <p>
+          Si es una serie de clases para un grupo (ej. "Deutsch A1-B1
+          Abends, martes y jueves"), créala desde{" "}
+          <Link href="/admin/grupos" className="underline underline-offset-2 hover:text-brand-700 dark:hover:text-brand-300">/admin/grupos → Nuevo grupo</Link>.
+          El wizard te deja definir miembros y agendar todas las
+          sesiones de un tirón.
+        </p>
+        <p className="mt-1.5 text-slate-500 dark:text-slate-400">
+          Esta página es para casos puntuales: clases de recuperación,
+          sustituciones, sesiones extra para un solo estudiante, etc.
+        </p>
+      </aside>
+
       <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
           Próximas

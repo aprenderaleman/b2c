@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { GroupEditModal } from "@/components/admin/GroupEditModal";
+import { CreateGroupWizard } from "./CreateGroupWizard";
 
 type Teacher = { id: string; full_name: string | null; email: string };
 
@@ -70,6 +71,19 @@ export function GroupsList({
   const [creating, setCreating] = useState(false);
   const router = useRouter();
 
+  // Lazy-load the student picker (the wizard's member multi-select uses
+  // it). Lives at this level so the modal opens instantly when the
+  // admin clicks "Nuevo grupo".
+  const [pickerStudents, setPickerStudents] = useState<Array<{
+    id: string; full_name: string | null; email: string; current_level: string;
+  }>>([]);
+  useEffect(() => {
+    fetch("/api/admin/picker", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => setPickerStudents(d.students ?? []))
+      .catch(() => { /* leave empty — wizard still works */ });
+  }, []);
+
   const active = groups.filter(g => g.active);
   const archived = groups.filter(g => !g.active);
 
@@ -110,15 +124,15 @@ export function GroupsList({
         </details>
       )}
 
-      {/* CREATE flow — old modal (handles teacher assignment, class_type, etc.) */}
-      {creating && (
-        <GroupModal
-          group={null}
-          teachers={teachers}
-          onClose={() => setCreating(false)}
-          onSaved={() => { setCreating(false); router.refresh(); }}
-        />
-      )}
+      {/* CREATE flow — new 3-step wizard creates the group AND its
+          full schedule of classes in one shot. Replaces the legacy
+          two-step "create group then create classes" flow. */}
+      <CreateGroupWizard
+        open={creating}
+        onClose={() => setCreating(false)}
+        teachers={teachers}
+        students={pickerStudents}
+      />
 
       {/* EDIT flow — new modal with multi-level + members management */}
       {editing && (
