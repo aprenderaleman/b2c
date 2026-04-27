@@ -33,6 +33,19 @@ export type SendResult =
   | { ok: false; error: string };
 
 /**
+ * Master switch for lifecycle emails (group-added, class-created,
+ * class-rescheduled, class-cancelled). Off by default until the
+ * admin verifies the new flows end-to-end. Flip on by setting
+ * LIFECYCLE_EMAILS_ENABLED=true in Vercel env.
+ *
+ * Critical mailings (trial-confirmation to leads, password reset,
+ * daily digest, etc.) are NOT gated by this flag.
+ */
+export function lifecycleEmailsEnabled(): boolean {
+  return (process.env.LIFECYCLE_EMAILS_ENABLED ?? "false") === "true";
+}
+
+/**
  * Low-level send. Tries Resend first (if configured), then SMTP (if
  * configured), and finally falls back to logging the email to stdout
  * so dev environments don't break.

@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
-import { sendClassLifecycleEmail } from "@/lib/email/send";
+import { sendClassLifecycleEmail, lifecycleEmailsEnabled } from "@/lib/email/send";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -174,7 +174,7 @@ async function notifyStudents(
         timeZone: "Europe/Berlin",
       });
 
-      if (u.email) {
+      if (lifecycleEmailsEnabled() && u.email) {
         const first = (u.full_name ?? "").trim().split(/\s+/)[0] || u.email;
         sendClassLifecycleEmail(u.email, {
           audience:      "student",

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs, getClassById } from "@/lib/classes";
 import { CancelClassButton } from "./CancelClassButton";
+import { DeleteClassPermanentButton } from "./DeleteClassPermanentButton";
 import { EditClassButton } from "./EditClassButton";
 import { ExtendSeriesButton } from "./ExtendSeriesButton";
 import { AttendanceEditor } from "@/components/classes/AttendanceEditor";
@@ -44,7 +45,7 @@ export default async function ClassDetailPage({
               <StatusPill status={cls.status} />
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {cls.status === "scheduled" && (
               <>
                 <EditClassButton
@@ -67,6 +68,12 @@ export default async function ClassDetailPage({
                 )}
                 <CancelClassButton classId={cls.id} isSeries={Boolean(cls.parent_class_id) && cls.parent_class_id !== cls.id} />
               </>
+            )}
+            {cls.status !== "completed" && (
+              <DeleteClassPermanentButton
+                classId={cls.id}
+                isSeries={(cls.series_size ?? 1) > 1}
+              />
             )}
           </div>
         </div>

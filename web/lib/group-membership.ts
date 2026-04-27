@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { sendGroupAddedEmail } from "./email/send";
+import { sendGroupAddedEmail, lifecycleEmailsEnabled } from "./email/send";
 import { createNotification } from "./notifications";
 
 /**
@@ -154,8 +154,9 @@ export async function addStudentToGroup(
       });
       notificationSent = true;
 
-      // Email summary — skip if user opted out of notifications.
-      if (stuUser?.email && !stuUser.notifications_opt_out) {
+      // Email summary — skip if disabled at the env level OR if the
+      // recipient opted out.
+      if (lifecycleEmailsEnabled() && stuUser?.email && !stuUser.notifications_opt_out) {
         const teacherWrap = grp.teacher ? flat(grp.teacher) : null;
         const tu = teacherWrap ? flat(teacherWrap.users) : null;
         const teacherName = tu?.full_name ?? tu?.email ?? "tu profesor/a";

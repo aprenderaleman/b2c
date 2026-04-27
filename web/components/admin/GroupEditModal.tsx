@@ -170,6 +170,31 @@ export function GroupEditModal({
     });
   };
 
+  const purgeGroup = () => {
+    setError(null);
+    const ok = window.confirm(
+      `⚠️  Eliminación PERMANENTE\n\n` +
+      `Vas a borrar el grupo «${group.name}» y TODO lo que cuelga de él:\n` +
+      `  • Todas sus clases (pasadas, futuras y completadas).\n` +
+      `  • Asistencia, notificaciones, grabaciones y deberes de esas clases.\n` +
+      `  • La membresía de los estudiantes en este grupo.\n\n` +
+      `Esta acción NO se puede deshacer. ¿Continuar?`,
+    );
+    if (!ok) return;
+
+    start(async () => {
+      const res = await fetch(`/api/admin/groups/${group.id}/purge`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data?.message ?? data?.error ?? "No se pudo eliminar.");
+        return;
+      }
+      router.refresh();
+      onSaved?.();
+      onClose();
+    });
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -321,6 +346,28 @@ export function GroupEditModal({
           </section>
 
           {error && <p className="text-sm text-red-600 dark:text-red-400" role="alert">{error}</p>}
+
+          {mode === "admin" && (
+            <section className="pt-4 mt-4 border-t-2 border-red-200 dark:border-red-900/50">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-400">
+                Zona peligrosa
+              </h3>
+              <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400">
+                Eliminar permanentemente el grupo y todas sus clases (incluyendo
+                pasadas y completadas), asistencia, notificaciones, grabaciones
+                y deberes asociados. La membresía de estudiantes también se
+                borra. <strong>Acción irreversible.</strong>
+              </p>
+              <button
+                type="button"
+                onClick={purgeGroup}
+                disabled={pending}
+                className="mt-3 inline-flex items-center gap-2 rounded-xl border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/20 px-4 py-2 text-sm font-semibold text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-60"
+              >
+                Eliminar permanentemente
+              </button>
+            </section>
+          )}
         </div>
 
         <footer className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 sticky bottom-0 bg-white dark:bg-slate-900">

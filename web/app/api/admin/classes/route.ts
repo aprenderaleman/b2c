@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { createClass } from "@/lib/classes";
-import { sendClassLifecycleEmail } from "@/lib/email/send";
+import { sendClassLifecycleEmail, lifecycleEmailsEnabled } from "@/lib/email/send";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
 import { wireChatsForClass } from "@/lib/chat";
@@ -146,7 +146,7 @@ async function notifyParticipantsOnCreation(
     | { email: string; full_name: string | null; language_preference: "es" | "de" }
     | undefined;
   const teacherUserId = (teacher as { user_id: string } | null)?.user_id;
-  if (tu?.email) {
+  if (lifecycleEmailsEnabled() && tu?.email) {
     sendClassLifecycleEmail(tu.email, {
       audience:      "teacher",
       kind:          "created",
@@ -183,7 +183,7 @@ async function notifyParticipantsOnCreation(
       | undefined;
     const userId = (s as { user_id: string }).user_id;
 
-    if (uu?.email) {
+    if (lifecycleEmailsEnabled() && uu?.email) {
       sendClassLifecycleEmail(uu.email, {
         audience:      "student",
         kind:          "created",
