@@ -27,10 +27,6 @@ function timeIn(iso: string): string {
   });
 }
 
-function firstName(full: string): string {
-  return full.trim().split(/\s+/)[0] || full;
-}
-
 export function TimeList({ slots, selectedIso, selectedTeacherId, onSelect }: Props) {
   if (slots.length === 0) {
     return (
@@ -50,8 +46,8 @@ export function TimeList({ slots, selectedIso, selectedTeacherId, onSelect }: Pr
             type="button"
             onClick={() => onSelect(s)}
             className={[
-              "w-full h-14 px-4 rounded-2xl flex items-center justify-between",
-              "text-left transition active:scale-[0.99]",
+              "w-full h-14 px-4 rounded-2xl flex items-center justify-center",
+              "transition active:scale-[0.99]",
               selected
                 ? "bg-warm text-warm-foreground shadow-lg shadow-warm/20"
                 : "bg-white/[0.06] text-white hover:bg-white/[0.10]",
@@ -60,11 +56,6 @@ export function TimeList({ slots, selectedIso, selectedTeacherId, onSelect }: Pr
           >
             <span className="text-lg font-bold tabular-nums">
               {timeIn(s.startIso)}
-            </span>
-            <span className={`text-sm font-medium ${
-              selected ? "text-warm-foreground/85" : "text-white/65"
-            }`}>
-              con {firstName(s.teacherName)}
             </span>
           </button>
         );
