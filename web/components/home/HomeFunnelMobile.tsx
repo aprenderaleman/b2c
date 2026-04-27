@@ -151,11 +151,17 @@ export function HomeFunnelMobile() {
         {tab === "termin" && (
           <div className="pt-5">
             <div className="px-5 mb-4">
-              <h2 className="text-[22px] font-extrabold tracking-tight text-white">
-                Reserva en 30 segundos
+              <span className="inline-flex items-center gap-1.5 rounded-full
+                               bg-warm/15 ring-1 ring-warm/40 text-warm
+                               px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] mb-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-warm" aria-hidden />
+                100% gratis
+              </span>
+              <h2 className="text-[22px] font-extrabold tracking-tight text-white leading-tight">
+                Reserva tu clase de alemán de prueba
               </h2>
-              <p className="text-sm text-white/65 mt-1">
-                45 min · gratis · 100% online · zona horaria Berlín
+              <p className="text-sm text-white/65 mt-1.5">
+                45 min con un profesor nativo · online · sin compromiso
               </p>
             </div>
 

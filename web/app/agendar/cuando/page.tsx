@@ -91,8 +91,8 @@ export default function StepCuando() {
 
   return (
     <StepFrame
-      title="¿Cuándo te va bien?"
-      subtitle="45 min · gratis · 100% online · zona horaria Berlín"
+      title="Tu clase de alemán de prueba"
+      subtitle="100% gratis · 45 min con profesor nativo · online · sin compromiso"
     >
       {/* Loading skeleton — keeps the layout stable while slots load */}
       {slots === null && !loadErr && (
