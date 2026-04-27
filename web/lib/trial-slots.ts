@@ -30,7 +30,11 @@ const BERLIN_TZ = "Europe/Berlin";
 const DEFAULT_HORIZON_DAYS = 15;
 const EXTENDED_HORIZON_DAYS = 30;
 const TRIAL_MINUTES = 45;
-const SLOT_GRANULARITY_MIN = 15;            // start times every :00 :15 :30 :45
+// Trial slots are offered ONLY on the hour (09:00, 10:00, 11:00…).
+// Cadence of 15 min gave too many near-identical options and felt
+// noisy in the mobile picker; 60 min keeps the list scannable while
+// still covering the full availability window.
+const SLOT_GRANULARITY_MIN = 60;
 const MIN_LEAD_TIME_HOURS = 4;              // can't book within 4h of now
 // Generous cap so all 15 days fit even with Gelfis's wide
 // 12-hour weekday windows. Worst-case math is 15 days × ~45
