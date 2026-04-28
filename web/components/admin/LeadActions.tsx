@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ConvertLeadModal } from "./ConvertLeadModal";
 import { DeleteLeadButton } from "./DeleteLeadButton";
+import { EditLeadModal }    from "./EditLeadModal";
 
 type Lead = {
   id:    string;
@@ -26,6 +27,7 @@ type Lead = {
  */
 export function LeadActions({ lead }: { lead: Lead }) {
   const [convertOpen, setConvertOpen] = useState(false);
+  const [editOpen,    setEditOpen]    = useState(false);
 
   const alreadyConverted = Boolean(lead.converted_to_user_id);
   const canConvert       = !alreadyConverted && lead.status !== "lost";
@@ -49,6 +51,21 @@ export function LeadActions({ lead }: { lead: Lead }) {
         >
           Ver estudiante →
         </Link>
+      )}
+
+      {/* Manual editor — fixes typos in name/email/whatsapp/level/goal
+          without going through the funnel again. Most common reason
+          today: the +34 prefix double-typed by leads who paste the
+          country code into the phone field as well. */}
+      {!alreadyConverted && (
+        <button
+          type="button"
+          onClick={() => setEditOpen(true)}
+          className="text-xs font-medium rounded-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-1 text-slate-700 dark:text-slate-200"
+          title="Editar nombre, email, WhatsApp, nivel u objetivo"
+        >
+          ✎ Editar datos
+        </button>
       )}
 
       {/* Stiv takeover toggle — pauses or reactivates the AI on this
@@ -168,6 +185,21 @@ export function LeadActions({ lead }: { lead: Lead }) {
           language: lead.language,
           german_level: lead.german_level,
           goal: lead.goal,
+        }}
+      />
+
+      {/* Edit modal */}
+      <EditLeadModal
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        lead={{
+          id:                  lead.id,
+          name:                lead.name,
+          email:               lead.email,
+          whatsapp_normalized: lead.phone || null,
+          language:            lead.language,
+          german_level:        lead.german_level,
+          goal:                lead.goal,
         }}
       />
     </div>

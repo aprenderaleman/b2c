@@ -21,9 +21,17 @@ export function normalizePhone(raw: string, defaultCountry = "49"): string {
   if (!digits) throw new Error("Phone number contains no digits");
 
   if (hadPlus) {
-    // Common user mistake: selecting "+49" in the dropdown AND typing the
-    // national trunk 0 in the number field ("+49 0152…"). Strip the 0.
+    // Common user mistake A: selecting "+49" in the dropdown AND typing
+    // the national trunk 0 in the number field ("+49 0152…").
     digits = stripTrunkZeroAfterCC(digits, defaultCountry);
+    // Common user mistake B (the +3434641… class): selecting "+34" in
+    // the dropdown AND retyping "34" inside the number field. Detect
+    // when the digits start with the dropdown CC TWICE in a row and
+    // strip one copy. We only do this when the leftover number length
+    // is still plausibly a real subscriber number (>= 6 digits) so we
+    // don't mangle short legit numbers in country codes that happen
+    // to repeat.
+    digits = stripDuplicatedCC(digits, defaultCountry);
     return "+" + digits;
   }
   if (digits.startsWith("00")) return "+" + digits.slice(2);
@@ -35,6 +43,25 @@ export function normalizePhone(raw: string, defaultCountry = "49"): string {
     }
   }
   return "+" + defaultCountry + digits;
+}
+
+/**
+ * Strip the user's accidental duplicate country code, e.g.:
+ *   defaultCountry="34", digits="3434641051234" → "34641051234"
+ *
+ * Only fires when the country code appears IMMEDIATELY twice in a row.
+ * We refuse to strip if the resulting number falls below 6 digits —
+ * that would indicate a legitimate short number that just happens to
+ * start with the country code's digits.
+ */
+function stripDuplicatedCC(digits: string, defaultCountry: string): string {
+  const cc = defaultCountry.replace(/\D/g, "");
+  if (!cc) return digits;
+  const doubled = cc + cc;
+  if (digits.startsWith(doubled) && digits.length - cc.length >= cc.length + 6) {
+    return digits.slice(cc.length);
+  }
+  return digits;
 }
 
 function stripTrunkZeroAfterCC(digits: string, defaultCountry: string): string {

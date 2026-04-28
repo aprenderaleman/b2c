@@ -65,10 +65,15 @@ def normalize_phone(raw: str, default_country: str = "49") -> str:
         raise ValueError("Phone number contains no digits")
 
     if had_plus:
-        # Common user mistake: picking "+49" in the country dropdown AND typing
+        # Common user mistake A: picking "+49" in the country dropdown AND typing
         # the national trunk 0 in the number field (e.g. "+49 0152..."). Strip
         # that trailing 0 when it follows a known country code.
         digits = _strip_trunk_zero_after_cc(digits, default_country)
+        # Common user mistake B (the +3434641... class): selecting "+34" in the
+        # dropdown AND retyping "34" inside the number field. Detect when the
+        # dropdown country code appears twice in a row and strip one copy. Only
+        # if the leftover is still a plausible subscriber number.
+        digits = _strip_duplicated_cc(digits, default_country)
         return "+" + digits
 
     if digits.startswith("00"):
@@ -81,6 +86,18 @@ def normalize_phone(raw: str, default_country: str = "49") -> str:
         return "+" + digits
 
     return "+" + default_country + digits
+
+
+def _strip_duplicated_cc(digits: str, default_country: str) -> str:
+    """If digits start with the dropdown country code TWICE in a row, drop
+    one copy. Refuses to act if the result would be implausibly short."""
+    cc = re.sub(r"\D", "", default_country or "")
+    if not cc:
+        return digits
+    doubled = cc + cc
+    if digits.startswith(doubled) and len(digits) - len(cc) >= len(cc) + 6:
+        return digits[len(cc):]
+    return digits
 
 
 def _strip_trunk_zero_after_cc(digits: str, default_country: str) -> str:

@@ -49,6 +49,16 @@ export default function StepObjetivo() {
   }, [hydrated, submitting, handedOff, state, router]);
 
   const phoneDigits = state.phone_local.replace(/\D/g, "");
+  // Live warning: lead picked +34 in the dropdown AND the local digits
+  // ALSO start with "34". Most likely they pasted the country code
+  // twice. We don't auto-fix in the input (would feel surprising as
+  // they type) — we just warn so they catch it before submit. The
+  // server-side normalizer will dedupe regardless.
+  const ccBare = state.country_code.replace(/\D/g, "");
+  const looksDuplicatedCC =
+    ccBare.length >= 2 &&
+    phoneDigits.startsWith(ccBare) &&
+    phoneDigits.length - ccBare.length >= 6;
   const phoneOk = (() => {
     if (phoneDigits.length < 6) return false;
     try {
@@ -218,6 +228,12 @@ export default function StepObjetivo() {
 
           {state.phone_local.length > 0 && phoneDigits.length < 6 && (
             <p className="text-xs text-red-300 mt-2">Escribe un número de WhatsApp válido.</p>
+          )}
+          {looksDuplicatedCC && (
+            <p className="text-xs text-amber-300 mt-2">
+              Parece que escribiste el prefijo <strong>{state.country_code}</strong> dos veces.
+              Pon solo el número (sin el {state.country_code}) — el prefijo ya está seleccionado arriba.
+            </p>
           )}
         </div>
 
