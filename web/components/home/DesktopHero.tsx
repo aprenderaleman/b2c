@@ -110,10 +110,14 @@ export function DesktopHero() {
       />
 
       <div className="relative mx-auto max-w-7xl px-6 lg:px-10 pt-14 pb-20 lg:pt-20 lg:pb-28">
-        <div className="grid lg:grid-cols-[1.1fr_0.9fr] gap-10 lg:gap-14 items-start">
+        {/* Right column is fixed at ~460px (Cal.com / Calendly standard).
+            Letting it stretch as a fr-fraction made the day strip widen
+            to fit 13 tiles, which squeezed the left copy into single-
+            word lines on 1440px screens. */}
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_460px] gap-10 lg:gap-12 xl:gap-16 items-start">
 
           {/* ── LEFT: marketing copy ───────────────────────── */}
-          <div className="lg:pt-6">
+          <div className="lg:pt-6 max-w-2xl">
             <span className="inline-flex items-center gap-2 rounded-full
                              bg-warm/15 ring-1 ring-warm/40
                              px-3.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-warm">
@@ -125,12 +129,13 @@ export function DesktopHero() {
             </span>
 
             <h1 className="mt-5 font-bold tracking-tight text-white
-                           text-4xl lg:text-[54px] xl:text-[60px] leading-[1.05]">
+                           text-4xl lg:text-[44px] xl:text-[52px] leading-[1.08]
+                           text-balance">
               Aprende <span className="text-warm">alemán</span> con un
               profesor <span className="text-warm">nativo</span> que habla español.
             </h1>
 
-            <p className="mt-5 max-w-xl text-lg lg:text-xl font-medium text-white/75 leading-relaxed">
+            <p className="mt-5 text-lg lg:text-xl font-medium text-white/75 leading-relaxed text-balance">
               Certificado oficial reconocido en toda Europa según el MCER.
               Horario flexible, plan personalizado, desde <strong className="text-white">17&nbsp;€/h</strong>.
             </p>
