@@ -35,7 +35,7 @@ const STATS: Stat[] = [
     hint:    "Goethe / TELC a la primera. Plan a medida + práctica guiada.",
   },
   {
-    value:   45,
+    value:   8,
     suffix:  " países",
     label:   "estudiando con nosotros",
     hint:    "Latinoamérica, España y los hispanos ya en DACH.",
