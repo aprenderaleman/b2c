@@ -16,6 +16,7 @@ type Lead = {
   status:       string;
   converted_to_user_id: string | null;
   student_id:   string | null;   // resolved server-side if converted_to_user_id exists
+  ai_paused_until: string | null; // ISO; Stiv holds replies while > now()
 };
 
 /**
@@ -32,6 +33,13 @@ export function LeadActions({ lead }: { lead: Lead }) {
   const canMarkLost      = lead.status !== "lost" && !alreadyConverted;
   const canMarkAttendance = lead.status === "trial_scheduled" || lead.status === "trial_reminded";
 
+  // Stiv (AI) is paused for this lead while ai_paused_until is in
+  // the future. The pause does NOT change the funnel status — it
+  // just gates the agent's auto-replies.
+  const aiPaused = Boolean(
+    lead.ai_paused_until && new Date(lead.ai_paused_until).getTime() > Date.now(),
+  );
+
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {alreadyConverted && lead.student_id && (
@@ -41,6 +49,30 @@ export function LeadActions({ lead }: { lead: Lead }) {
         >
           Ver estudiante →
         </Link>
+      )}
+
+      {/* Stiv takeover toggle — pauses or reactivates the AI on this
+          single lead, without touching status or follow-up counters. */}
+      {!alreadyConverted && lead.status !== "lost" && (
+        <form
+          action={`/api/admin/leads/${lead.id}/ai-pause`}
+          method="post"
+        >
+          <input type="hidden" name="paused" value={aiPaused ? "false" : "true"} />
+          <button
+            type="submit"
+            className={`text-xs font-semibold rounded-full px-3 py-1 border transition-colors ${
+              aiPaused
+                ? "border-amber-300 dark:border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-500/25"
+                : "border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+            }`}
+            title={aiPaused
+              ? "Stiv está pausado para este lead. Pulsa para reactivarlo."
+              : "Pausa Stiv para este lead y toma la conversación tú."}
+          >
+            {aiPaused ? "▶ Reactivar Stiv" : "✋ Tomo yo desde aquí"}
+          </button>
+        </form>
       )}
 
       {canMarkAttendance && (

@@ -148,7 +148,7 @@ Intent = Literal[
     "booking", "human_request", "negative",
     "price_request", "info_request", "ai_reply",
     "already_converted_ignore", "needs_human_already_paused_ignore",
-    "trial_already_booked",
+    "trial_already_booked", "ai_paused_by_admin",
 ]
 
 
@@ -186,6 +186,27 @@ def handle_incoming_message(
     if status == "needs_human":
         log.info("Lead %s in needs_human — holding.", lead["id"])
         return HandleResult("needs_human_already_paused_ignore", sent=False)
+
+    # Per-lead admin takeover: when Gelfis presses "Tomo yo desde aquí"
+    # in /admin/leads/[id], the row gets `ai_paused_until` set into the
+    # future. Stiv stays silent until that moment passes (or admin
+    # clicks "Reactivar Stiv"). The pause does NOT change the funnel
+    # status — counters and follow-up scheduling are untouched.
+    paused_until = lead.get("ai_paused_until")
+    if paused_until:
+        try:
+            # Both naive ISO and aware ISO are tolerated.
+            until_dt = (
+                datetime.fromisoformat(paused_until.replace("Z", "+00:00"))
+                if isinstance(paused_until, str)
+                else paused_until
+            )
+            now_utc = datetime.now(BERLIN).astimezone(until_dt.tzinfo) if until_dt.tzinfo else datetime.utcnow()
+            if until_dt > now_utc:
+                log.info("Lead %s: Stiv paused by admin until %s — holding.", lead["id"], until_dt)
+                return HandleResult("ai_paused_by_admin", sent=False)
+        except (ValueError, TypeError) as e:
+            log.warning("Lead %s: could not parse ai_paused_until=%r (%s) — ignoring pause.", lead["id"], paused_until, e)
 
     text_norm = _norm(text)
     other_lang = "es" if lang == "de" else "de"
