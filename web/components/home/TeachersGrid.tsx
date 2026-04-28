@@ -17,7 +17,7 @@ type TeacherCard = {
   tagline: string;       // one-line teaching style
   flag:    string;
   country: string;
-  certs:   string[];
+  certs?:  string[];     // omit until we have verified credentials
   isAi?:   boolean;
   hue:     "warm" | "navy" | "emerald" | "violet";
 };
@@ -29,7 +29,6 @@ const TEACHERS: TeacherCard[] = [
     tagline: "Te hace hablar desde el primer minuto.",
     flag:    "🇦🇹",
     country: "Austria",
-    certs:   ["DaF", "C2 nativo"],
     hue:     "warm",
   },
   {
@@ -38,7 +37,6 @@ const TEACHERS: TeacherCard[] = [
     tagline: "Especialista en preparación Goethe.",
     flag:    "🇨🇭",
     country: "Suiza",
-    certs:   ["Goethe-Lehrwerkstatt", "DaF"],
     hue:     "navy",
   },
   {
@@ -47,7 +45,6 @@ const TEACHERS: TeacherCard[] = [
     tagline: "Gramática sin trauma, español de apoyo.",
     flag:    "🇩🇪",
     country: "Alemania",
-    certs:   ["DaF", "Filóloga"],
     hue:     "emerald",
   },
   {
@@ -133,15 +130,17 @@ export function TeachersGrid() {
                 <p className="mt-3 text-sm text-foreground/80 leading-relaxed">
                   {t.tagline}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {t.certs.map(c => (
-                    <span key={c} className="inline-flex items-center rounded-full
-                                              bg-muted px-2 py-0.5 text-[10.5px]
-                                              font-medium text-muted-foreground">
-                      {c}
-                    </span>
-                  ))}
-                </div>
+                {t.certs && t.certs.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {t.certs.map(c => (
+                      <span key={c} className="inline-flex items-center rounded-full
+                                                bg-muted px-2 py-0.5 text-[10.5px]
+                                                font-medium text-muted-foreground">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </article>
           ))}
