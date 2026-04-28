@@ -83,6 +83,26 @@ NEGATIVE_WORDS = {
     ],
 }
 
+# "Info call" — lead wants a quick phone/video chat with Gelfis BEFORE
+# committing to a trial class. We surface this as a separate path so we
+# can later route it to a 30-min Google Calendar booking. For now,
+# until the Calendar integration ships, the handler escalates to Gelfis
+# with a clear flag in the timeline.
+INFO_CALL_WORDS = {
+    "es": [
+        "una llamada", "tener una llamada", "quiero una llamada",
+        "podemos hablar", "podríamos hablar", "podriamos hablar",
+        "consulta antes", "consultar antes", "consultar contigo",
+        "asesoría", "asesoria", "orientación", "orientacion",
+        "videollamada", "video llamada", "videocall",
+    ],
+    "de": [
+        "kurzes telefonat", "telefonieren vorab", "vorab telefonieren",
+        "beratungsgespräch", "beratung vorab", "vorgespräch",
+        "kurzer call", "videocall vorab",
+    ],
+}
+
 # "Price request" — any signal that the lead specifically wants prices.
 # Handled separately from broad-info because the answer is a concrete
 # price range + trial-class suggestion, not "see the website".
@@ -115,8 +135,62 @@ INFO_WORDS = {
     ],
 }
 
-FUNNEL_URL  = "https://b2c.aprender-aleman.de/funnel"
+FUNNEL_URL  = "https://b2c.aprender-aleman.de/agendar"
 WEBSITE_URL = "https://aprender-aleman.de"
+WEB_BASE    = "https://b2c.aprender-aleman.de"
+
+# Standardised sign-off. Used everywhere outbound messages are
+# composed by Agent 4. Keep the em-dash + middle-dot exact — Gelfis
+# wants this verbatim across the system.
+SIGNATURE_ES = "— Stiv · Aprender-Aleman.de"
+SIGNATURE_DE = "— Stiv · Aprender-Aleman.de"
+
+
+def _sig(lang: str) -> str:
+    return SIGNATURE_DE if lang == "de" else SIGNATURE_ES
+
+
+# ──────────────────────────────────────────────────────────
+# Slot fetching for booking-intent replies
+# ──────────────────────────────────────────────────────────
+
+
+def _fetch_top_trial_slots(top: int = 3) -> list[dict]:
+    """Hit the public /api/public/trial-slots endpoint and return the
+    first `top` results. We pick the public endpoint over a private
+    one because there's no point gating data the funnel already
+    exposes anonymously, and it keeps the agent → web wiring trivial.
+
+    Returns an empty list on any failure — caller handles the
+    "couldn't fetch" copy gracefully.
+    """
+    import httpx
+    try:
+        r = httpx.get(f"{WEB_BASE}/api/public/trial-slots", timeout=8.0)
+        r.raise_for_status()
+        data = r.json()
+        slots = data.get("slots") or []
+        return slots[:top]
+    except Exception as e:  # noqa: BLE001
+        log.warning("Failed to fetch trial slots: %s", e)
+        return []
+
+
+def _format_slot_line(iso: str, lang: str) -> str:
+    """One bullet line per slot — '• Mié 30 abr · 13:00 (Berlín)'."""
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(BERLIN)
+    except Exception:  # noqa: BLE001
+        return f"• {iso}"
+    if lang == "de":
+        weekdays = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+        months   = ["Jan", "Feb", "Mär", "Apr", "Mai", "Jun",
+                    "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"]
+        return f"• {weekdays[dt.weekday()]} {dt.day}. {months[dt.month-1]} · {dt.strftime('%H:%M')} (Berlin)"
+    weekdays_es = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"]
+    months_es   = ["ene", "feb", "mar", "abr", "may", "jun",
+                   "jul", "ago", "sep", "oct", "nov", "dic"]
+    return f"• {weekdays_es[dt.weekday()]} {dt.day} {months_es[dt.month-1]} · {dt.strftime('%H:%M')} (Berlín)"
 
 
 def _norm(text: str) -> str:
@@ -228,8 +302,11 @@ def handle_incoming_message(
     if status in ("trial_scheduled", "trial_reminded"):
         return _handle_trial_already_booked(lead, text, wa)
 
-    # LAYER 1 — keywords (zero AI cost). Order matters: booking next, then
-    # broad-info request.
+    # LAYER 1 — keywords (zero AI cost). Order matters: info-call wins
+    # over booking ("quiero una llamada" mustn't fire booking on "quiero").
+    if _has_phrase(text_norm, INFO_CALL_WORDS[lang] + INFO_CALL_WORDS[other_lang]):
+        return _handle_info_call_request(lead, wa)
+
     if _has_phrase(text_norm, BOOKING_WORDS[lang]):
         return _handle_booking(lead, wa)
 
@@ -347,7 +424,7 @@ def _handle_trial_already_booked(
                 f"Du hast deine Probestunde am {when_str}"
                 f"{' mit ' + teacher_name if teacher_name else ''}.\n\n"
                 f"Wie kann ich dir helfen?\n\n"
-                f"Stiv, Aprender-Aleman.de"
+                f"— Stiv · Aprender-Aleman.de"
             )
         else:
             body = (
@@ -355,7 +432,7 @@ def _handle_trial_already_booked(
                 f"Tu clase de prueba es el {when_str}"
                 f"{' con ' + teacher_name if teacher_name else ''}.\n\n"
                 f"¿En qué te puedo ayudar?\n\n"
-                f"Stiv, Aprender-Aleman.de"
+                f"— Stiv · Aprender-Aleman.de"
             )
     else:
         body = draft.text
@@ -366,27 +443,97 @@ def _handle_trial_already_booked(
 
 
 def _handle_booking(lead: dict, wa: WhatsAppService | None) -> HandleResult:
+    """Lead said yes to booking. Native flow (no Calendly):
+    fetch the next 3 free trial slots and propose them inline.
+
+    The lead replies with a slot + their level + email; the actual
+    booking step happens once tool-use is wired into Stiv. For now
+    Gelfis sees a needs_human-style ping when the lead picks one and
+    closes the loop. The pivot from Calendly to native booking is the
+    point — we no longer hand them a link and lose sight of them.
+    """
+    lang = lead.get("language", "es")
+    name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
+    slots = _fetch_top_trial_slots(top=3)
+
+    if not slots:
+        # API down or no availability — soft fallback so the lead
+        # isn't left hanging. Still drops them on the funnel as a
+        # safety net.
+        if lang == "de":
+            body = (
+                f"Super, {name}! 🎉\n\n"
+                f"Im Moment habe ich keine freien Termine zur Hand — du kannst "
+                f"hier direkt einen aussuchen:\n{FUNNEL_URL}\n\n"
+                f"{_sig(lang)}"
+            )
+        else:
+            body = (
+                f"¡Genial, {name}! 🎉\n\n"
+                f"Ahora mismo no tengo huecos a mano — puedes elegir uno "
+                f"directamente aquí:\n{FUNNEL_URL}\n\n"
+                f"{_sig(lang)}"
+            )
+    else:
+        slot_lines = "\n".join(_format_slot_line(s["startIso"], lang) for s in slots)
+        if lang == "de":
+            body = (
+                f"Super, {name}! 🎉\n\n"
+                f"Die nächsten freien Probestunden (45 Min, gratis):\n\n"
+                f"{slot_lines}\n\n"
+                f"Schreib mir, welcher Termin passt, dazu dein Niveau (A0–C2) "
+                f"und deine E-Mail — und ich buche dich rein.\n\n"
+                f"{_sig(lang)}"
+            )
+        else:
+            body = (
+                f"¡Genial, {name}! 🎉\n\n"
+                f"Estos son los próximos huecos para tu clase de prueba "
+                f"(45 min, gratis):\n\n"
+                f"{slot_lines}\n\n"
+                f"Dime cuál te va, tu nivel (A0–C2) y tu email, y te lo "
+                f"reservo.\n\n"
+                f"{_sig(lang)}"
+            )
+    update_status(lead["id"], "in_conversation", author="agent_4")
+    result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
+    return HandleResult("booking", sent=result.success, message_sent=body)
+
+
+def _handle_info_call_request(lead: dict, wa: WhatsAppService | None) -> HandleResult:
+    """Lead wants a 30-min info call with Gelfis (vs a trial class).
+
+    Until the Google Calendar integration is wired (Phase B), this
+    sends a short acknowledgement and escalates to needs_human with a
+    `info_call_requested` flag in the timeline so Gelfis can offer
+    real slots from his calendar.
+    """
     lang = lead.get("language", "es")
     name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
     if lang == "de":
         body = (
-            f"Super, {name}! 🎉\n\n"
-            f"Hier kannst du in 2 Minuten Tag und Uhrzeit deiner kostenlosen "
-            f"Probestunde wählen:\n{FUNNEL_URL}\n\n"
-            f"Wir bestätigen es per E-Mail. Sag mir Bescheid, wenn du Hilfe brauchst.\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"Klar, {name}! 👋\n\n"
+            f"Gelfis (CEO) ruft dich gern für ein kurzes Gespräch (30 Min) an. "
+            f"Er meldet sich heute oder morgen mit konkreten Terminen.\n\n"
+            f"{_sig(lang)}"
         )
     else:
         body = (
-            f"¡Genial, {name}! 🎉\n\n"
-            f"Aquí puedes elegir el día y la hora de tu clase de prueba gratuita "
-            f"en 2 minutos:\n{FUNNEL_URL}\n\n"
-            f"Te llega la confirmación por email. Dime si necesitas ayuda.\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"¡Claro, {name}! 👋\n\n"
+            f"Gelfis (CEO) puede tener una llamada contigo (30 min). "
+            f"Hoy o mañana te pasa horarios concretos.\n\n"
+            f"{_sig(lang)}"
         )
-    update_status(lead["id"], "link_sent", author="agent_4")
+    update_status(lead["id"], "needs_human", author="agent_4")
+    log_timeline(
+        lead["id"],
+        type="escalation",
+        author="agent_4",
+        content="Lead requested an info call (30 min). Pending slot proposal from Gelfis.",
+        metadata={"alert_gelfis": True, "info_call_requested": True},
+    )
     result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
-    return HandleResult("booking", sent=result.success, message_sent=body)
+    return HandleResult("human_request", sent=result.success, message_sent=body)
 
 
 def _handle_price_request(lead: dict, wa: WhatsAppService | None) -> HandleResult:
@@ -409,7 +556,7 @@ def _handle_price_request(lead: dict, wa: WhatsAppService | None) -> HandleResul
             f"dein Niveau und erstellen einen Plan (mit genauem Preis) "
             f"nach Maß.\n\n"
             f"Soll ich dir den Link zum Buchen schicken?\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
     else:
         body = (
@@ -420,7 +567,7 @@ def _handle_price_request(lead: dict, wa: WhatsAppService | None) -> HandleResul
             f"profesor evalúa tu nivel y te hace un plan (con precio exacto) "
             f"a medida.\n\n"
             f"¿Quieres que te envíe el enlace para reservarla?\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
     if lead.get("status") in ("new", "contacted_1", "contacted_2", "contacted_3",
                               "contacted_4", "contacted_5"):
@@ -441,7 +588,7 @@ def _handle_info_request(lead: dict, wa: WhatsAppService | None) -> HandleResult
             f"Hier findest du alle Details zu unseren Kursen — Preise, "
             f"Methode, Lehrer:\n{WEBSITE_URL}\n\n"
             f"Wenn dir danach noch was unklar ist, frag mich einfach.\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
     else:
         body = (
@@ -449,7 +596,7 @@ def _handle_info_request(lead: dict, wa: WhatsAppService | None) -> HandleResult
             f"Aquí tienes toda la info detallada de nuestros cursos — precios, "
             f"método, profesores:\n{WEBSITE_URL}\n\n"
             f"Si te queda alguna duda después de verla, pregúntame lo que quieras.\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
     # Move to in_conversation so subsequent messages don't trigger cold outreach
     if lead.get("status") in ("new", "contacted_1", "contacted_2", "contacted_3",
@@ -461,37 +608,25 @@ def _handle_info_request(lead: dict, wa: WhatsAppService | None) -> HandleResult
 
 
 def _handle_human_request(lead: dict, wa: WhatsAppService | None) -> HandleResult:
-    """Escalate — containment message, then pause lead completely."""
-    lang = lead.get("language", "es")
-    name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
-    if lang == "de":
-        body = (
-            f"Klar, {name}! 😊\n\n"
-            f"Ich leite dich direkt an Gelfis weiter. Er meldet sich in den "
-            f"nächsten Stunden persönlich bei dir.\n\n"
-            f"In der Zwischenzeit kannst du schon kostenlos auf SCHULE üben:\n"
-            f"https://schule.aprender-aleman.de\n\n"
-            f"Stiv, Aprender-Aleman.de"
-        )
-    else:
-        body = (
-            f"¡Claro, {name}! 😊\n\n"
-            f"Voy a transferirte con Gelfis directamente. Él te contactará "
-            f"personalmente en las próximas horas.\n\n"
-            f"Mientras tanto, si quieres, practica gratis en SCHULE:\n"
-            f"https://schule.aprender-aleman.de\n\n"
-            f"Stiv, Aprender-Aleman.de"
-        )
+    """Silent escalation: lead asked for a human → flag the conversation
+    for Gelfis WITHOUT replying. Per Gelfis's spec, the lead does not
+    see a "te paso con un compañero…" containment message anymore;
+    Gelfis takes over from the inbox and the lead's next reply will
+    come from a real person.
+
+    `wa` is intentionally unused — kept in the signature to match the
+    other handler shapes (the dispatch table calls them positionally).
+    """
+    del wa  # noqa: F841 — explicit no-op for the silent path
     update_status(lead["id"], "needs_human", author="agent_4")
     log_timeline(
         lead["id"],
         type="escalation",
         author="agent_4",
-        content="Lead asked for human contact — paused for Gelfis.",
-        metadata={"alert_gelfis": True},
+        content="Lead asked for human contact — silent escalation (Gelfis to take over).",
+        metadata={"alert_gelfis": True, "silent": True},
     )
-    result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
-    return HandleResult("human_request", sent=result.success, message_sent=body)
+    return HandleResult("human_request", sent=False)
 
 
 def _handle_negative(lead: dict, wa: WhatsAppService | None) -> HandleResult:
@@ -501,13 +636,13 @@ def _handle_negative(lead: dict, wa: WhatsAppService | None) -> HandleResult:
         body = (
             f"Alles klar, {name}. Ich schreibe dir nicht mehr.\n\n"
             f"Viel Erfolg weiterhin mit deinem Deutsch!\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
     else:
         body = (
             f"Entendido, {name}. No te escribo más.\n\n"
             f"¡Mucho éxito con tu alemán!\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
     update_status(lead["id"], "lost", author="agent_4")
     result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
