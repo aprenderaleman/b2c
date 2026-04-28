@@ -30,14 +30,23 @@ export default function StepObjetivo() {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
+  // `handedOff` flips true the instant we trigger the navigation to
+  // /confirmacion. It freezes the guard useEffect below so the state
+  // wipe afterwards can't race the full-page navigation by firing a
+  // client-side router.replace("/agendar/cuando") on mobile (where
+  // window.location.href is slower than client routing).
+  const [handedOff, setHandedOff] = useState(false);
 
-  // Guard: bounce back if earlier steps were skipped.
+  // Guard: bounce back if earlier steps were skipped. Skipped while
+  // submitting or after handing off — otherwise a successful submit's
+  // state.reset() would re-trigger this and yank the user back to
+  // step 1 before /confirmacion has loaded.
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || submitting || handedOff) return;
     if (!state.slot_iso)      { router.replace("/agendar/cuando"); return; }
     if (!state.name || !state.email) { router.replace("/agendar/tu"); return; }
     if (!state.german_level)  { router.replace("/agendar/nivel"); return; }
-  }, [hydrated, state, router]);
+  }, [hydrated, submitting, handedOff, state, router]);
 
   const phoneDigits = state.phone_local.replace(/\D/g, "");
   const phoneOk = (() => {
@@ -98,11 +107,21 @@ export default function StepObjetivo() {
         throw new Error(data.message || data.error || "No se pudo confirmar la reserva.");
       }
 
-      // Success — clear the saved state so a refresh of /confirmacion
-      // doesn't re-hydrate a stale form.
-      reset();
+      // Success — navigate FIRST, then clear the cached form. The
+      // order matters on mobile: setting state empty before the
+      // full-page navigation lets a re-render fire the guard
+      // useEffect, which would client-route us back to step 1
+      // (router.replace beats window.location.href on slower
+      // devices). Freeze the guard, kick the navigation, then wipe
+      // sessionStorage on the way out.
+      setHandedOff(true);
       const params = new URLSearchParams({ c: data.classId, t: data.token });
       window.location.href = `/confirmacion?${params.toString()}`;
+      // sessionStorage cleanup happens after the nav has been queued.
+      // If the browser cancels for some reason the user can refresh
+      // /agendar — they just won't see stale form values.
+      reset();
+      return;
     } catch (e) {
       setSubmitErr(e instanceof Error ? e.message : "Algo salió mal. Inténtalo de nuevo.");
       setSubmitting(false);
