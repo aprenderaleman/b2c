@@ -113,7 +113,13 @@ export async function markTrialAttendedAwaitingConversion(leadId: string): Promi
 
 export async function markTrialAbsent(leadId: string): Promise<void> {
   const sb = supabaseAdmin();
-  const nextContact = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+  // Fire the first follow-up at the very next scheduler tick (the
+  // hourly tick_absent_followups job in the VPS). Setting the date
+  // to "now" makes it immediately eligible — the lead hears from us
+  // in < 1 h instead of waiting a full day. Sales practice: the
+  // first re-touch within an hour materially raises re-booking
+  // rates vs the previous +24 h policy.
+  const nextContact = new Date(Date.now() - 1_000).toISOString();
   await sb
     .from("leads")
     .update({ status: "trial_absent", next_contact_date: nextContact })
@@ -122,6 +128,6 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     lead_id: leadId,
     type: "status_change",
     author: "gelfis",
-    content: "Lead did not attend trial — absent follow-up scheduled.",
+    content: "Lead did not attend trial — immediate absent follow-up scheduled.",
   });
 }

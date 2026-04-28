@@ -52,7 +52,7 @@ def _send_welcome_message(lead: dict) -> None:
             f"SCHULE üben — unserem virtuellen Klassenzimmer:\n"
             f"https://schule.aprender-aleman.de\n\n"
             f"Offiziell willkommen in der Akademie. 🇩🇪\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
     else:
         body = (
@@ -62,7 +62,7 @@ def _send_welcome_message(lead: dict) -> None:
             f"aula virtual gratuita:\n"
             f"https://schule.aprender-aleman.de\n\n"
             f"Bienvenido oficialmente a la Academia. 🇩🇪\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
     send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
@@ -70,9 +70,9 @@ def _send_welcome_message(lead: dict) -> None:
 def _send_goodbye(lead: dict) -> None:
     name = _first_name(lead)
     if lead["language"] == "de":
-        body = f"Alles Gute, {name}. 🧡\n\nStiv, Aprender-Aleman.de"
+        body = f"Alles Gute, {name}. 🧡\n\n— Stiv · Aprender-Aleman.de"
     else:
-        body = f"Te deseamos lo mejor, {name}. 🧡\n\nStiv, Aprender-Aleman.de"
+        body = f"Te deseamos lo mejor, {name}. 🧡\n\n— Stiv · Aprender-Aleman.de"
     send_approved(lead, body, is_new_conversation=False, advance_followup=False)
 
 
@@ -110,19 +110,21 @@ def mark_absent(lead_id: str) -> None:
     if not lead:
         return
     update_status(lead_id, "trial_absent", author="gelfis")
-    # Schedule the first absent follow-up for +1 day.
+    # Make the first absent follow-up eligible immediately so the next
+    # hourly tick_absent_followups picks it up. Mirrors the TS admin
+    # endpoint (web/lib/admin-actions.ts → markTrialAbsent).
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             """
             UPDATE leads
-               SET next_contact_date = NOW() + INTERVAL '1 day'
+               SET next_contact_date = NOW() - INTERVAL '1 second'
              WHERE id = %s
             """,
             (lead_id,),
         )
     log_timeline(
         lead_id, type="status_change", author="gelfis",
-        content="Lead did not attend trial — absent follow-up scheduled.",
+        content="Lead did not attend trial — immediate absent follow-up scheduled.",
     )
 
 
@@ -164,12 +166,12 @@ def _process_absent_followup(lead: dict) -> None:
             f"Hallo {name}, alles gut bei dir? 😊\n\n"
             f"Ich habe gesehen, dass du gestern nicht in der Probestunde warst.\n\n"
             f"Möchtest du einen neuen Termin vereinbaren?\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         ) if lang == "de" else (
             f"Hola {name}, ¿todo bien? 😊\n\n"
             f"Vi que ayer no pudiste conectarte a la clase de prueba.\n\n"
             f"¿Quieres que reagendemos?\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
         next_status = "absent_followup_1"
         next_delta = timedelta(days=3)  # +4d after absent total
@@ -178,12 +180,12 @@ def _process_absent_followup(lead: dict) -> None:
             f"Hallo {name}, ich versuche es noch einmal. 🧡\n\n"
             f"Wenn du Deutsch immer noch lernen möchtest, sag mir Bescheid "
             f"und wir suchen einen neuen Termin.\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         ) if lang == "de" else (
             f"Hola {name}, vuelvo a escribirte. 🧡\n\n"
             f"Si aún te interesa aprender alemán, dímelo y coordinamos "
             f"un nuevo horario.\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
         next_status = "absent_followup_2"
         next_delta = timedelta(days=6)
@@ -192,12 +194,12 @@ def _process_absent_followup(lead: dict) -> None:
             f"Hallo {name}, letztes Mal von meiner Seite.\n\n"
             f"Falls du Deutsch lernen möchtest, schreib mir einfach — "
             f"ansonsten alles Gute für dich! 🧡\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         ) if lang == "de" else (
             f"Hola {name}, último mensaje por mi parte.\n\n"
             f"Si quieres aprender alemán, escríbeme — si no, te deseamos "
             f"lo mejor. 🧡\n\n"
-            f"Stiv, Aprender-Aleman.de"
+            f"— Stiv · Aprender-Aleman.de"
         )
         next_status = "lost"
         next_delta = None

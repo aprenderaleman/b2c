@@ -67,8 +67,8 @@ def _goal_context(lead: dict) -> str:
     return table.get(lead["goal"], table["work"])
 
 
-SIGN_OFF_ES = "\n\nStiv, Aprender-Aleman.de"
-SIGN_OFF_DE = "\n\nStiv, Aprender-Aleman.de"
+SIGN_OFF_ES = "\n\n— Stiv · Aprender-Aleman.de"
+SIGN_OFF_DE = "\n\n— Stiv · Aprender-Aleman.de"
 
 
 def _template_contact_1(lead: dict) -> str:
@@ -128,7 +128,7 @@ HARD LIMITS (a stricter reviewer will reject anything that breaks these):
 
         main point
 
-        Stiv, Aprender-Aleman.de
+        — Stiv · Aprender-Aleman.de
 
   - NO bullet lists.
   - NO Calendly link unless the lead already asked to book.
@@ -161,7 +161,7 @@ Rules specific to this task:
     you'll check with the team — this routes to human handoff.
   - End with the signature line:
 
-        Stiv, Aprender-Aleman.de
+        — Stiv · Aprender-Aleman.de
 
   - Output MUST be only the message text, no preamble, no markdown.
 """
