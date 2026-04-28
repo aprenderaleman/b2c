@@ -2,6 +2,26 @@
 
 import { useState } from "react";
 import { TESTIMONIALS, flagFor, type Testimonial } from "@/lib/testimonials";
+import { useLang } from "@/lib/lang-context";
+
+const COPY = {
+  es: {
+    eyebrow:    "Lo que dicen nuestros alumnos",
+    title:      "De cero a la fluidez en 6 meses.",
+    titleAccent: "Reseñas reales.",
+    seeMore:    (n: number) => `Ver ${n} reseñas más`,
+    reachedLabel: "alcanzó",
+    note:       null as string | null,
+  },
+  de: {
+    eyebrow:    "Was unsere Schüler sagen",
+    title:      "Von null zur Sprachsicherheit in 6 Monaten.",
+    titleAccent: "Echte Bewertungen.",
+    seeMore:    (n: number) => `${n} weitere Bewertungen ansehen`,
+    reachedLabel: "erreichte",
+    note:       "Stimmen unserer spanischsprachigen Schüler — auf Spanisch verfasst.",
+  },
+} as const;
 
 /**
  * Real student testimonials — verbatim from
@@ -34,6 +54,8 @@ function initialsOf(name: string): string {
 }
 
 export function Testimonials() {
+  const { lang } = useLang();
+  const c = COPY[lang === "de" ? "de" : "es"];
   const [showAll, setShowAll] = useState(false);
   const list = showAll ? TESTIMONIALS : TESTIMONIALS.slice(0, VISIBLE_INITIAL);
 
@@ -42,16 +64,21 @@ export function Testimonials() {
       <div className="mx-auto max-w-7xl px-6 lg:px-10 py-20">
         <div className="text-center max-w-2xl mx-auto">
           <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-warm">
-            Lo que dicen nuestros alumnos
+            {c.eyebrow}
           </span>
           <h2 className="mt-3 text-3xl lg:text-[40px] font-bold tracking-tight text-foreground leading-tight">
-            De cero a B1 en 6 meses. <span className="text-warm">Reseñas reales.</span>
+            {c.title} <span className="text-warm">{c.titleAccent}</span>
           </h2>
+          {c.note && (
+            <p className="mt-3 text-xs text-muted-foreground italic">
+              {c.note}
+            </p>
+          )}
         </div>
 
         <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
           {list.map((t, i) => (
-            <TestimonialCard key={t.name} t={t} hue={HUES[i % HUES.length]} />
+            <TestimonialCard key={t.name} t={t} hue={HUES[i % HUES.length]} reachedLabel={c.reachedLabel} />
           ))}
         </div>
 
@@ -64,7 +91,7 @@ export function Testimonials() {
                          border border-border bg-card hover:border-warm
                          px-5 py-2.5 text-sm font-semibold text-foreground transition-colors"
             >
-              Ver {TESTIMONIALS.length - VISIBLE_INITIAL} reseñas más
+              {c.seeMore(TESTIMONIALS.length - VISIBLE_INITIAL)}
               <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M6 9l6 6 6-6" />
               </svg>
@@ -76,7 +103,7 @@ export function Testimonials() {
   );
 }
 
-function TestimonialCard({ t, hue }: { t: Testimonial; hue: Hue }) {
+function TestimonialCard({ t, hue, reachedLabel }: { t: Testimonial; hue: Hue; reachedLabel: string }) {
   return (
     <figure className="rounded-3xl border border-border bg-card p-6 hover:shadow-lg transition-shadow flex flex-col">
       <div className="flex items-center gap-3">
@@ -89,7 +116,7 @@ function TestimonialCard({ t, hue }: { t: Testimonial; hue: Hue }) {
             <span aria-hidden>{flagFor(t.country)}</span>
           </div>
           <div className="text-xs text-muted-foreground">
-            {t.country} · alcanzó <strong className="text-warm">{t.level}</strong>
+            {t.country} · {reachedLabel} <strong className="text-warm">{t.level}</strong>
           </div>
         </div>
       </div>

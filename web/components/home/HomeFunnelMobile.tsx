@@ -7,6 +7,42 @@ import { useRouter } from "next/navigation";
 import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
 import { useBookingState } from "@/lib/booking-state";
+import { useLang } from "@/lib/lang-context";
+
+const COPY = {
+  es: {
+    tabBook:    "📅 Agendar",
+    tabWa:      "💬 WhatsApp",
+    badge:      "100% gratis",
+    title:      "Reserva tu clase de alemán de prueba",
+    sub:        "45 min con un profesor nativo · online · sin compromiso",
+    loadErr:    "No pudimos cargar los horarios. Recarga la página.",
+    noSlots:    "Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te avisamos en cuanto se abran horarios.",
+    fullDateFmt: "es-ES" as const,
+    waPrefill:  "Hola, tengo una consulta sobre los cursos.",
+    waCardTitle: "¿Prefieres preguntar primero?",
+    waCardSub:  "Te respondemos en minutos.",
+    waCta:      "Abrir WhatsApp",
+    waHours:    "Lun a Vie · 9:00 – 19:00 (CET)",
+    floatingPrefix: "Agendar · ",
+  },
+  de: {
+    tabBook:    "📅 Buchen",
+    tabWa:      "💬 WhatsApp",
+    badge:      "100% gratis",
+    title:      "Buche deine Deutsch-Probestunde",
+    sub:        "45 Min mit muttersprachlicher Lehrkraft · online · unverbindlich",
+    loadErr:    "Termine konnten nicht geladen werden. Bitte Seite neu laden.",
+    noSlots:    "Die nächsten 30 Tage sind ausgebucht. Schreib uns per WhatsApp, wir melden uns sobald Termine frei werden.",
+    fullDateFmt: "de-DE" as const,
+    waPrefill:  "Hallo, ich habe eine Frage zu den Kursen.",
+    waCardTitle: "Lieber erst fragen?",
+    waCardSub:  "Wir antworten in Minuten.",
+    waCta:      "WhatsApp öffnen",
+    waHours:    "Mo – Fr · 9:00 – 19:00 (MEZ)",
+    floatingPrefix: "Buchen · ",
+  },
+} as const;
 
 /**
  * Mobile-only inline funnel that lives directly on `/`.
@@ -29,7 +65,6 @@ import { useBookingState } from "@/lib/booking-state";
  */
 
 const WA_NUMBER  = "4915253409644";  // mirrors WhatsAppFloat.tsx
-const WA_PREFILL = "Hola, tengo una consulta sobre los cursos.";
 
 type Tab = "termin" | "wa";
 
@@ -39,14 +74,14 @@ function berlinDateKey(d: Date): string {
   }).format(d);
 }
 
-function fullDateLabel(key: string): string {
+function fullDateLabel(key: string, locale: string): string {
   const [y, m, d] = key.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d, 12));
-  return dt.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+  return dt.toLocaleDateString(locale, { weekday: "long", day: "numeric", month: "long" });
 }
 
-function formatSlotShort(iso: string): string {
-  return new Date(iso).toLocaleString("es-ES", {
+function formatSlotShort(iso: string, locale: string): string {
+  return new Date(iso).toLocaleString(locale, {
     timeZone: "Europe/Berlin",
     weekday:  "short",
     day:      "numeric",
@@ -58,6 +93,8 @@ function formatSlotShort(iso: string): string {
 
 export function HomeFunnelMobile() {
   const router = useRouter();
+  const { lang } = useLang();
+  const c = COPY[lang === "de" ? "de" : "es"];
   const { state, update } = useBookingState();
 
   const [tab, setTab] = useState<Tab>("termin");
@@ -139,10 +176,10 @@ export function HomeFunnelMobile() {
               transition={{ type: "spring", stiffness: 400, damping: 32 }}
             />
             <TabButton active={tab === "termin"} onClick={() => setTab("termin")}>
-              📅 Agendar
+              {c.tabBook}
             </TabButton>
             <TabButton active={tab === "wa"} onClick={() => setTab("wa")}>
-              💬 WhatsApp
+              {c.tabWa}
             </TabButton>
           </div>
         </div>
@@ -155,26 +192,25 @@ export function HomeFunnelMobile() {
                                bg-warm/15 ring-1 ring-warm/40 text-warm
                                px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] mb-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-warm" aria-hidden />
-                100% gratis
+                {c.badge}
               </span>
               <h2 className="text-[22px] font-extrabold tracking-tight text-white leading-tight">
-                Reserva tu clase de alemán de prueba
+                {c.title}
               </h2>
               <p className="text-sm text-white/65 mt-1.5">
-                45 min con un profesor nativo · online · sin compromiso
+                {c.sub}
               </p>
             </div>
 
             {slots === null && !loadErr && <CalendarSkeleton />}
 
             {loadErr && (
-              <p className="px-5 text-sm text-red-300">{loadErr}</p>
+              <p className="px-5 text-sm text-red-300">{c.loadErr}</p>
             )}
 
             {slots && slots.length === 0 && (
               <div className="mx-5 rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-center text-sm text-white/65">
-                Estamos completos los próximos 30 días. Escríbenos por WhatsApp y
-                te avisamos en cuanto se abran horarios.
+                {c.noSlots}
               </div>
             )}
 
@@ -193,7 +229,7 @@ export function HomeFunnelMobile() {
                 {selectedDay && (
                   <div className="px-5">
                     <p className="text-[11px] font-semibold uppercase text-white/55 tracking-wider mb-2 capitalize">
-                      {fullDateLabel(selectedDay)}
+                      {fullDateLabel(selectedDay, c.fullDateFmt)}
                     </p>
                     <TimeList
                       slots={slotsToday}
@@ -219,21 +255,21 @@ export function HomeFunnelMobile() {
                   </svg>
                 </div>
                 <div>
-                  <p className="font-semibold text-white">¿Prefieres preguntar primero?</p>
-                  <p className="text-sm text-white/65">Te respondemos en minutos.</p>
+                  <p className="font-semibold text-white">{c.waCardTitle}</p>
+                  <p className="text-sm text-white/65">{c.waCardSub}</p>
                 </div>
               </div>
               <a
-                href={`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(WA_PREFILL)}`}
+                href={`https://wa.me/${WA_NUMBER}?text=${encodeURIComponent(c.waPrefill)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="block w-full h-12 rounded-2xl bg-[#25D366] text-white font-semibold
                            text-center leading-[3rem] active:scale-[0.99] transition shadow-md shadow-[#25D366]/20"
               >
-                Abrir WhatsApp
+                {c.waCta}
               </a>
               <p className="text-xs text-white/55 mt-3 text-center">
-                Lun a Vie · 9:00 – 19:00 (CET)
+                {c.waHours}
               </p>
             </div>
           </div>
@@ -265,7 +301,7 @@ export function HomeFunnelMobile() {
                 className="w-full h-12 rounded-2xl bg-warm text-warm-foreground font-semibold text-base
                            shadow-lg shadow-warm/30 active:scale-[0.99] transition flex items-center justify-center gap-2"
               >
-                <span>Agendar · {state.slot_iso ? formatSlotShort(state.slot_iso) : ""}</span>
+                <span>{c.floatingPrefix}{state.slot_iso ? formatSlotShort(state.slot_iso, c.fullDateFmt) : ""}</span>
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                   <path d="M5 12h14M13 5l7 7-7 7" />
                 </svg>

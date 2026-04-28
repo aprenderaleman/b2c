@@ -1,3 +1,28 @@
+"use client";
+
+import { useLang } from "@/lib/lang-context";
+
+const COPY = {
+  es: {
+    eyebrow: "Reconocido en toda Europa · Resultados garantizados",
+    items: [
+      { title: "MCER",            subtitle: "A1–C1 · Marco Común Europeo" },
+      { title: "Goethe-Institut", subtitle: "Examen oficial alineado" },
+      { title: "TELC",            subtitle: "Examen oficial alineado" },
+      { title: "DaF",             subtitle: "Profesores certificados" },
+    ],
+  },
+  de: {
+    eyebrow: "Europaweit anerkannt · Garantierte Ergebnisse",
+    items: [
+      { title: "GER",             subtitle: "A1–C1 · Gemeinsamer Europäischer Referenzrahmen" },
+      { title: "Goethe-Institut", subtitle: "An offizieller Prüfung ausgerichtet" },
+      { title: "TELC",            subtitle: "An offizieller Prüfung ausgerichtet" },
+      { title: "DaF",             subtitle: "Zertifizierte Lehrkräfte" },
+    ],
+  },
+} as const;
+
 /**
  * Slim band immediately under the hero. Two purposes:
  *   - Anchor credibility with the certifications visitors look for.
@@ -11,58 +36,45 @@
  * still reading as a trust strip. The text under each clarifies what
  * the alignment is.
  */
+const ICONS = [
+  // MCER / GER — compass
+  <svg key="0" viewBox="0 0 32 32" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M16 2v6M16 24v6M2 16h6M24 16h6M5.6 5.6l4.2 4.2M22.2 22.2l4.2 4.2M5.6 26.4l4.2-4.2M22.2 9.8l4.2-4.2" />
+  </svg>,
+  // Goethe — book
+  <svg key="1" viewBox="0 0 32 32" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M4 7h24v18H4z" />
+    <path d="M4 11h24M10 7v18M22 7v18" />
+  </svg>,
+  // TELC — check
+  <svg key="2" viewBox="0 0 32 32" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <circle cx="16" cy="16" r="11" />
+    <path d="M11 16l3.5 3.5L21 13" />
+  </svg>,
+  // DaF — graduation cap
+  <svg key="3" viewBox="0 0 32 32" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M16 4l11 6-11 6L5 10z" />
+    <path d="M9 13v8c0 2 4 4 7 4s7-2 7-4v-8" />
+  </svg>,
+];
+
 export function TrustStrip() {
+  const { lang } = useLang();
+  const c = COPY[lang === "de" ? "de" : "es"];
   return (
     <section className="hidden md:block bg-white dark:bg-slate-950 border-y border-border">
       <div className="mx-auto max-w-7xl px-6 lg:px-10 py-10">
         <p className="text-center text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
-          Reconocido en toda Europa · Resultados garantizados
+          {c.eyebrow}
         </p>
 
-        {/* Cert marks */}
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-10 gap-y-5 text-foreground/70">
-          <CertMark
-            title="MCER"
-            subtitle="A1–C1 · Marco Común Europeo"
-            icon={
-              <svg viewBox="0 0 32 32" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M16 2v6M16 24v6M2 16h6M24 16h6M5.6 5.6l4.2 4.2M22.2 22.2l4.2 4.2M5.6 26.4l4.2-4.2M22.2 9.8l4.2-4.2" />
-              </svg>
-            }
-          />
-          <Divider />
-          <CertMark
-            title="Goethe-Institut"
-            subtitle="Examen oficial alineado"
-            icon={
-              <svg viewBox="0 0 32 32" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M4 7h24v18H4z" />
-                <path d="M4 11h24M10 7v18M22 7v18" />
-              </svg>
-            }
-          />
-          <Divider />
-          <CertMark
-            title="TELC"
-            subtitle="Examen oficial alineado"
-            icon={
-              <svg viewBox="0 0 32 32" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <circle cx="16" cy="16" r="11" />
-                <path d="M11 16l3.5 3.5L21 13" />
-              </svg>
-            }
-          />
-          <Divider />
-          <CertMark
-            title="DaF"
-            subtitle="Profesores certificados"
-            icon={
-              <svg viewBox="0 0 32 32" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="M16 4l11 6-11 6L5 10z" />
-                <path d="M9 13v8c0 2 4 4 7 4s7-2 7-4v-8" />
-              </svg>
-            }
-          />
+          {c.items.map((item, i) => (
+            <div key={item.title} className="contents">
+              <CertMark title={item.title} subtitle={item.subtitle} icon={ICONS[i]} />
+              {i < c.items.length - 1 && <Divider />}
+            </div>
+          ))}
         </div>
       </div>
     </section>

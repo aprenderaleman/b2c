@@ -6,6 +6,72 @@ import { useRouter } from "next/navigation";
 import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
 import { useBookingState } from "@/lib/booking-state";
+import { useLang } from "@/lib/lang-context";
+
+const COPY = {
+  es: {
+    eyebrow:    "Cursos online · Niveles A1 a C1",
+    h1Pre:      "Aprende ",
+    h1Lang:     "alemán",
+    h1Mid:      " con un profesor ",
+    h1Native:   "nativo",
+    h1Post:     " que habla español.",
+    sub:        "Certificado oficial reconocido en toda Europa según el MCER. Horario flexible, plan personalizado, desde",
+    subPriceFrom: "17 €/h",
+    ratingLine: "Calificación de alumnos",
+    ratingTail: "cientos",
+    ratingTail2: "de estudiantes activos",
+    pills: [
+      { icon: "🎓", text: "Certificado MCER A1–C1, válido en la UE" },
+      { icon: "🗣️", text: "Profesores nativos que hablan español" },
+      { icon: "💳", text: "Sin tarjeta · clase de prueba gratis" },
+      { icon: "🚀", text: "Plan a medida desde el primer día" },
+    ],
+    badge:      "100% gratis",
+    bookTitle:  "Reserva tu clase de prueba",
+    bookSub:    "45 min con profesor nativo · sin compromiso",
+    fmtFull:    "es-ES",
+    weekdayFmt: "long",
+    daySelectedDate: (key: string) => fullDateLabelES(key),
+    chooseToContinue: "Elige un horario para continuar",
+    continueWith: (slotShort: string) => `Continuar · ${slotShort} →`,
+    fineprint:  "Al continuar te pediremos nombre, email, nivel y WhatsApp.\nTarda menos de 2 minutos.",
+    reassurance: "✓ Sin tarjeta · ✓ Sin compromiso · ✓ Cancelable en 1 click",
+    loadErr:    "No pudimos cargar los horarios. Recarga la página.",
+    noSlots:    "Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te avisamos en cuanto se abran horarios.",
+  },
+  de: {
+    eyebrow:    "Online-Kurse · Niveau A1 bis C1",
+    h1Pre:      "Lerne ",
+    h1Lang:     "Deutsch",
+    h1Mid:      " mit einer ",
+    h1Native:   "muttersprachlichen Lehrkraft",
+    h1Post:     ", die Spanisch spricht.",
+    sub:        "Offizielles Zertifikat, europaweit anerkannt nach GER. Flexible Zeiten, individueller Plan, ab",
+    subPriceFrom: "17 €/Std.",
+    ratingLine: "Bewertung unserer Schüler",
+    ratingTail: "Hunderte",
+    ratingTail2: "aktive Schüler",
+    pills: [
+      { icon: "🎓", text: "GER-Zertifikat A1–C1, EU-weit gültig" },
+      { icon: "🗣️", text: "Muttersprachliche Lehrkräfte, sprechen Spanisch" },
+      { icon: "💳", text: "Keine Karte · Probestunde gratis" },
+      { icon: "🚀", text: "Individueller Plan ab dem ersten Tag" },
+    ],
+    badge:      "100% gratis",
+    bookTitle:  "Buche deine Probestunde",
+    bookSub:    "45 Min mit muttersprachlicher Lehrkraft · unverbindlich",
+    fmtFull:    "de-DE",
+    weekdayFmt: "long",
+    daySelectedDate: (key: string) => fullDateLabelDE(key),
+    chooseToContinue: "Wähle eine Uhrzeit",
+    continueWith: (slotShort: string) => `Weiter · ${slotShort} →`,
+    fineprint:  "Im nächsten Schritt fragen wir nach Name, E-Mail, Niveau und WhatsApp.\nDauert unter 2 Minuten.",
+    reassurance: "✓ Keine Karte · ✓ Unverbindlich · ✓ Kündigbar mit 1 Klick",
+    loadErr:    "Termine konnten nicht geladen werden. Bitte Seite neu laden.",
+    noSlots:    "Die nächsten 30 Tage sind ausgebucht. Schreib uns per WhatsApp, wir melden uns sobald Termine frei werden.",
+  },
+} as const;
 
 /**
  * Desktop hero with the booking calendar inline on the right and the
@@ -29,14 +95,20 @@ function berlinDateKey(d: Date): string {
   }).format(d);
 }
 
-function fullDateLabel(key: string): string {
+function fullDateLabelES(key: string): string {
   const [y, m, d] = key.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d, 12));
   return dt.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
 }
 
-function formatSlotShort(iso: string): string {
-  return new Date(iso).toLocaleString("es-ES", {
+function fullDateLabelDE(key: string): string {
+  const [y, m, d] = key.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12));
+  return dt.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
+}
+
+function formatSlotShort(iso: string, locale: string): string {
+  return new Date(iso).toLocaleString(locale, {
     timeZone: "Europe/Berlin",
     weekday:  "short",
     day:      "numeric",
@@ -48,6 +120,8 @@ function formatSlotShort(iso: string): string {
 
 export function DesktopHero() {
   const router = useRouter();
+  const { lang } = useLang();
+  const c = COPY[lang === "de" ? "de" : "es"];
   const { state, update } = useBookingState();
 
   const [slots,    setSlots]    = useState<SlotItem[] | null>(null);
@@ -125,26 +199,25 @@ export function DesktopHero() {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warm opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-warm" />
               </span>
-              Cursos online · Niveles A1 a C1
+              {c.eyebrow}
             </span>
 
             <h1 className="mt-5 font-bold tracking-tight text-white
                            text-4xl lg:text-[44px] xl:text-[52px] leading-[1.08]
                            text-balance">
-              Aprende <span className="text-warm">alemán</span> con un
-              profesor <span className="text-warm">nativo</span> que habla español.
+              {c.h1Pre}<span className="text-warm">{c.h1Lang}</span>{c.h1Mid}
+              <span className="text-warm">{c.h1Native}</span>{c.h1Post}
             </h1>
 
             <p className="mt-5 text-lg lg:text-xl font-medium text-white/75 leading-relaxed text-balance">
-              Certificado oficial reconocido en toda Europa según el MCER.
-              Horario flexible, plan personalizado, desde <strong className="text-white">17&nbsp;€/h</strong>.
+              {c.sub} <strong className="text-white">{c.subPriceFrom}</strong>.
             </p>
 
             {/* Rating — real wording, no fake provider claim */}
             <div className="mt-6 inline-flex items-center gap-3 rounded-full
                             bg-white/[0.06] ring-1 ring-white/10
                             px-4 py-2">
-              <span className="flex items-center gap-0.5" aria-label="5 de 5 estrellas">
+              <span className="flex items-center gap-0.5" aria-label="5/5">
                 {[0, 1, 2, 3, 4].map((i) => (
                   <svg
                     key={i}
@@ -157,19 +230,14 @@ export function DesktopHero() {
                 ))}
               </span>
               <span className="text-sm font-semibold text-white">
-                Calificación de alumnos <span className="text-white/60 font-normal">·</span>{" "}
-                <span className="text-warm">cientos</span> de estudiantes activos
+                {c.ratingLine} <span className="text-white/60 font-normal">·</span>{" "}
+                <span className="text-warm">{c.ratingTail}</span> {c.ratingTail2}
               </span>
             </div>
 
             {/* Trust pills */}
             <ul className="mt-7 grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-lg">
-              {[
-                { icon: "🎓", text: "Certificado MCER A1–C1, válido en la UE" },
-                { icon: "🗣️", text: "Profesores nativos que hablan español" },
-                { icon: "💳", text: "Sin tarjeta · clase de prueba gratis" },
-                { icon: "🚀", text: "Plan a medida desde el primer día" },
-              ].map(item => (
+              {c.pills.map(item => (
                 <li
                   key={item.text}
                   className="flex items-start gap-2.5 rounded-xl bg-white/[0.04] ring-1 ring-white/5 px-3 py-2.5"
@@ -194,13 +262,13 @@ export function DesktopHero() {
                                    bg-warm/15 ring-1 ring-warm/40 text-warm
                                    px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em]">
                     <span className="h-1.5 w-1.5 rounded-full bg-warm" aria-hidden />
-                    100% gratis
+                    {c.badge}
                   </span>
                   <h2 className="mt-2 text-xl font-extrabold tracking-tight text-white">
-                    Reserva tu clase de prueba
+                    {c.bookTitle}
                   </h2>
                   <p className="text-sm text-white/65 mt-0.5">
-                    45 min con profesor nativo · sin compromiso
+                    {c.bookSub}
                   </p>
                 </div>
               </div>
@@ -208,13 +276,12 @@ export function DesktopHero() {
               {slots === null && !loadErr && <CalendarSkeleton />}
 
               {loadErr && (
-                <p className="text-sm text-red-300 px-1">{loadErr}</p>
+                <p className="text-sm text-red-300 px-1">{c.loadErr}</p>
               )}
 
               {slots && slots.length === 0 && (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-5 text-center text-sm text-white/65">
-                  Estamos completos los próximos 30 días. Escríbenos por WhatsApp
-                  y te avisamos en cuanto se abran horarios.
+                  {c.noSlots}
                 </div>
               )}
 
@@ -229,7 +296,7 @@ export function DesktopHero() {
                   {selectedDay && (
                     <div>
                       <p className="text-[11px] font-semibold uppercase text-white/55 tracking-wider mb-2 capitalize">
-                        {fullDateLabel(selectedDay)}
+                        {c.daySelectedDate(selectedDay)}
                       </p>
                       <div className="max-h-[280px] overflow-y-auto pr-1 -mr-1">
                         <TimeList
@@ -252,21 +319,20 @@ export function DesktopHero() {
                                disabled:opacity-50 disabled:active:scale-100"
                   >
                     {hasSelected
-                      ? <>Continuar · {state.slot_iso ? formatSlotShort(state.slot_iso) : ""} →</>
-                      : "Elige un horario para continuar"}
+                      ? c.continueWith(state.slot_iso ? formatSlotShort(state.slot_iso, c.fmtFull) : "")
+                      : c.chooseToContinue}
                   </button>
                 </div>
               )}
 
-              <p className="mt-4 text-[11px] text-white/45 text-center leading-relaxed">
-                Al continuar te pediremos nombre, email, nivel y WhatsApp.
-                <br />Tarda menos de 2 minutos.
+              <p className="mt-4 text-[11px] text-white/45 text-center leading-relaxed whitespace-pre-line">
+                {c.fineprint}
               </p>
             </div>
 
             {/* Reassurance under the card */}
             <p className="mt-4 text-center text-xs text-white/55">
-              ✓ Sin tarjeta &nbsp;·&nbsp; ✓ Sin compromiso &nbsp;·&nbsp; ✓ Cancelable en 1 click
+              {c.reassurance}
             </p>
           </div>
 
