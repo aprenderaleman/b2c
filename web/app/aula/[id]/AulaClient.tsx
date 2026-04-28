@@ -749,11 +749,25 @@ function formatElapsed(sec: number): string {
 
 function LoadingScreen({ classTitle }: { classTitle: string }) {
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center">
-      <div className="text-center">
+    <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-5 py-8">
+      <div className="w-full max-w-md text-center">
         <div className="inline-block h-10 w-10 rounded-full border-2 border-brand-500 border-t-transparent animate-spin" aria-hidden />
         <h1 className="mt-4 text-lg font-semibold">{classTitle}</h1>
         <p className="mt-1 text-xs text-slate-400">Conectando al aula…</p>
+
+        {/* Permission prompt — fires the moment LiveKit calls
+            getUserMedia. Most leads who fail to join do so by clicking
+            "Bloquear" by reflex; surfacing it here primes them for
+            the right answer. */}
+        <div className="mt-6 rounded-2xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 text-left">
+          <p className="text-sm text-amber-100 leading-relaxed">
+            <strong className="font-semibold">🎤📹 Tu navegador te pedirá permiso</strong> para usar el
+            <strong> micrófono</strong> y la <strong>cámara</strong>.
+            <br />
+            Pulsa <strong>“Permitir”</strong> — sin eso el profesor no podrá
+            oírte ni verte.
+          </p>
+        </div>
       </div>
     </main>
   );

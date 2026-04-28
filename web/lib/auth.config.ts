@@ -63,6 +63,22 @@ export const authConfig: NextAuthConfig = {
       const gate = PROTECTED.find(g => pathname.startsWith(g.prefix));
       if (!gate) return true;   // public route
 
+      // /aula and /grabacion accept TWO credentials:
+      //   1. NextAuth session (admin / teacher / student logged in), OR
+      //   2. `aa_trial_session` cookie (trial-magic-link lead — no user
+      //      row, came in via /c/{code} or /trial/{classId}?t={token}).
+      //
+      // Without this branch the lead's link bounces to /login because
+      // they have no NextAuth user. The page-level code in /aula/[id]
+      // validates the cookie's HMAC + class_id properly, so letting an
+      // unverified cookie value through here is safe — a forged cookie
+      // can't pass `getTrialSession()` server-side.
+      const isTrialOpenRoute = gate.prefix === "/aula" || gate.prefix === "/grabacion";
+      if (isTrialOpenRoute) {
+        const trialCookie = request.cookies.get("aa_trial_session")?.value;
+        if (trialCookie) return true;
+      }
+
       if (!auth?.user) return false;   // NextAuth will redirect to /login
 
       const role = (auth.user as { role?: Role }).role;

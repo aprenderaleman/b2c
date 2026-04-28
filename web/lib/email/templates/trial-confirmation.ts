@@ -33,6 +33,11 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
       ${button(v.joinUrl, "Entrar al aula →")}
     </div>
     ${p(`<em style="color:#64748b;">Este enlace es exclusivo para ti. Guárdalo, lo usarás el día de la clase para entrar directamente sin contraseña.</em>`)}
+    <div style="margin:18px 0 4px 0;padding:14px 16px;border-radius:12px;background:#FFF7ED;border:1px solid #FED7AA;">
+      <p style="margin:0;font-size:14px;color:#7C2D12;line-height:1.5;">
+        <strong>⚠️ Importante:</strong> al pulsar el botón, tu navegador pedirá permiso para usar el <strong>micrófono y la cámara</strong>. Pulsa <strong>"Permitir"</strong> — sin eso el profesor no podrá oírte ni verte.
+      </p>
+    </div>
     ${h2(`Cómo prepararte`)}
     ${p(`No necesitas estudiar nada — la clase es 100% conversacional y tu profesor/a se adapta a tu nivel. Solo asegúrate de tener:`)}
     ${p(`• Buena conexión a internet<br>• Cámara y micrófono funcionando<br>• Un sitio tranquilo durante 45 min`)}
@@ -52,6 +57,8 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
     `Con: ${v.teacherName}`, ``,
     `Entrar al aula: ${v.joinUrl}`,
     `(este enlace es exclusivo para ti — no requiere contraseña)`, ``,
+    `⚠️ IMPORTANTE: al abrir el enlace, tu navegador te pedirá permiso para usar`,
+    `micrófono y cámara. Pulsa "Permitir" — sin eso el profesor no podrá oírte ni verte.`, ``,
     `Cómo prepararte:`,
     `• La clase es conversacional, no necesitas estudiar nada antes.`,
     `• Asegúrate de tener buena conexión, cámara y micrófono.`, ``,
@@ -79,6 +86,11 @@ function renderDE(v: TrialConfirmationVars): RenderedEmail {
       ${button(v.joinUrl, "Zum Klassenzimmer →")}
     </div>
     ${p(`<em style="color:#64748b;">Dieser Link ist nur für dich. Speichere ihn — du brauchst ihn am Tag der Stunde, um ohne Passwort einzutreten.</em>`)}
+    <div style="margin:18px 0 4px 0;padding:14px 16px;border-radius:12px;background:#FFF7ED;border:1px solid #FED7AA;">
+      <p style="margin:0;font-size:14px;color:#7C2D12;line-height:1.5;">
+        <strong>⚠️ Wichtig:</strong> Beim Klick fragt dein Browser nach <strong>Mikrofon- und Kamerazugriff</strong>. Bitte auf <strong>"Erlauben"</strong> klicken — sonst kann dich die Lehrkraft nicht hören oder sehen.
+      </p>
+    </div>
     ${h2(`Wie du dich vorbereitest`)}
     ${p(`Du musst nichts lernen — die Stunde ist konversationsbasiert und deine Lehrer/in passt sich deinem Niveau an. Stell nur Folgendes sicher:`)}
     ${p(`• Stabile Internetverbindung<br>• Funktionierende Kamera und Mikrofon<br>• Ein ruhiger Ort für 45 Minuten`)}
@@ -98,6 +110,8 @@ function renderDE(v: TrialConfirmationVars): RenderedEmail {
     `Mit: ${v.teacherName}`, ``,
     `Zum Klassenzimmer: ${v.joinUrl}`,
     `(dieser Link ist nur für dich — kein Passwort nötig)`, ``,
+    `⚠️ WICHTIG: Beim Öffnen des Links fragt dein Browser nach Mikrofon- und`,
+    `Kamerazugriff. Klick auf "Erlauben" — sonst kann dich die Lehrkraft nicht hören oder sehen.`, ``,
     `Vorbereitung:`,
     `• Konversationsbasierte Stunde — nichts zu lernen vorher.`,
     `• Stabile Internetverbindung, Kamera und Mikrofon.`, ``,

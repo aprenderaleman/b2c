@@ -261,8 +261,8 @@ export async function POST(req: Request) {
   const leadFirst = b.name.split(/\s+/)[0] || b.name;
   const waText = b.whatsapp_e164
     ? (b.language === "de"
-        ? `✅ ${leadFirst}, deine kostenlose Probestunde DEUTSCH ist bestätigt.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 Min\n🔗 ${shortLinkUrl}\n\nKannst du mir mit "Sí" oder "Ja" bestätigen, dass du dabei bist? 🙌\n\n— Aprender-Aleman.de`
-        : `✅ ${leadFirst}, tu clase de prueba GRATUITA de ALEMÁN está confirmada.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 min\n🔗 ${shortLinkUrl}\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`)
+        ? `✅ ${leadFirst}, deine kostenlose Probestunde DEUTSCH ist bestätigt.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 Min\n🔗 ${shortLinkUrl}\n\n💡 Tipp: Wenn du den Link öffnest, fragt dein Browser nach Mikrofon- und Kamerazugriff — bitte erlauben, sonst kann dich der Lehrer nicht hören oder sehen.\n\nKannst du mir mit "Ja" bestätigen, dass du dabei bist? 🙌\n\n— Aprender-Aleman.de`
+        : `✅ ${leadFirst}, tu clase de prueba GRATUITA de ALEMÁN está confirmada.\n\n📅 ${startDate}\n👤 ${match.teacherName} · 45 min\n🔗 ${shortLinkUrl}\n\n💡 Importante: al abrir el enlace, tu navegador te pedirá permiso para usar micrófono y cámara — pulsa "Permitir", si no el profesor no te oirá ni te verá.\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`)
     : null;
 
   after(async () => {
