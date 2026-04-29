@@ -51,7 +51,7 @@ const desired = [
   { key: "HANS_URL",            value: "https://hans.aprender-aleman.de",                        targets: ["production", "preview", "development"] },
   { key: "SCHULE_URL",          value: "https://schule.aprender-aleman.de",                      targets: ["production", "preview", "development"] },
   { key: "EMAIL_FROM",          value: "Aprender-Aleman.de <info@aprender-aleman.de>",           targets: ["production", "preview", "development"] },
-  { key: "DIGEST_RECIPIENT",    value: env.ADMIN_EMAIL || "info@aprender-aleman.de",             targets: ["production"] },
+  { key: "DIGEST_RECIPIENT",    value: env.ADMIN_EMAIL || "aprenderaleman2026@gmail.com",       targets: ["production"] },
   { key: "CRON_SECRET",         value: cronSecret,                                               targets: ["production", "preview", "development"] },
 ];
 

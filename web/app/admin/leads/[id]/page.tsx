@@ -2,8 +2,10 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getGelfisNotes, getLeadById, getTimeline } from "@/lib/dashboard";
 import { supabaseAdmin } from "@/lib/supabase";
+import { formatBerlinFull } from "@/lib/time";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { LeadActions } from "@/components/admin/LeadActions";
+import { WaQuickActions } from "@/components/admin/WaQuickActions";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +53,23 @@ export default async function LeadDetail({
   // Leads booked via the new self-book funnel may have NO WhatsApp.
   // Fall back to email-only display when that's the case.
   const waNumber = lead.whatsapp_normalized?.replace("+", "") ?? null;
+
+  // Single source of truth for the lead's upcoming trial: the
+  // `classes` table. The legacy `leads.trial_scheduled_at` column
+  // doesn't get cleared when a class is cancelled, so we ignore it
+  // here and look up the soonest active scheduled trial. If multiple
+  // exist (admin should never let this happen post-040 but historic
+  // data may), we show the soonest and flag the duplicates.
+  const sb = supabaseAdmin();
+  const { data: trialRows } = await sb
+    .from("classes")
+    .select("id, scheduled_at, duration_minutes, short_code, status")
+    .eq("lead_id", lead.id)
+    .eq("is_trial", true)
+    .in("status", ["scheduled", "live", "completed"])
+    .order("scheduled_at", { ascending: true });
+  const activeTrial = (trialRows ?? []).find(c => c.status === "scheduled" || c.status === "live") ?? null;
+  const trialCount  = (trialRows ?? []).filter(c => c.status === "scheduled" || c.status === "live").length;
 
   return (
     <main className="space-y-5">
@@ -121,10 +140,33 @@ export default async function LeadDetail({
             <Kv k="Mensajes vistos"    v={String(lead.messages_seen_count)} />
             <Kv k="Seguimiento #"      v={String(lead.current_followup_number)} />
             <Kv k="Próximo contacto"   v={lead.next_contact_date ? new Date(lead.next_contact_date).toLocaleString("es-ES") : "—"} />
-            <Kv k="Clase agendada"     v={lead.trial_scheduled_at ? new Date(lead.trial_scheduled_at).toLocaleString("es-ES") : "—"} />
-            {lead.trial_zoom_link && <Kv k="Enlace de la clase" v={lead.trial_zoom_link} />}
+            <Kv
+              k="Clase agendada"
+              v={activeTrial
+                ? formatBerlinFull(activeTrial.scheduled_at as string, (lead.language as "es" | "de") ?? "es")
+                : "—"
+              }
+            />
+            {trialCount > 1 && (
+              <Kv k="⚠ Atención" v={`Hay ${trialCount} clases activas — cancela las duplicadas.`} />
+            )}
+            {activeTrial && (
+              <Kv k="Enlace de la clase" v={`/c/${activeTrial.short_code}`} />
+            )}
             <Kv k="RGPD aceptado"      v={lead.gdpr_accepted ? `Sí · ${lead.gdpr_accepted_at ? new Date(lead.gdpr_accepted_at).toLocaleDateString("es-ES") : ""}` : "No"} />
           </Panel>
+
+          {lead.whatsapp_normalized && (
+            <WaQuickActions
+              leadName={lead.name ?? ""}
+              phoneE164={lead.whatsapp_normalized}
+              language={(lead.language as "es" | "de") ?? "es"}
+              trial={activeTrial ? {
+                scheduledAt: activeTrial.scheduled_at as string,
+                shortCode:   (activeTrial.short_code as string | null) ?? null,
+              } : null}
+            />
+          )}
 
           <Panel title="Notas de Gelfis">
             <form

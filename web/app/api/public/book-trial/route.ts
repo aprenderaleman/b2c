@@ -192,6 +192,37 @@ export async function POST(req: Request) {
     leadId = (newLead as { id: string }).id;
   }
 
+  // ── 3.5. Anti-double-booking. If this lead already has an active
+  // trial in the next 30 days, refuse to create a second one — return
+  // the existing booking so the funnel lands on /confirmacion for
+  // that one instead. This used to silently create duplicates when a
+  // lead double-clicked Continuar (e.g. Bayron 2026-04-29: 16:00 +
+  // 17:00 UTC), wasting a teacher slot and confusing the lead.
+  {
+    const { data: existingTrials } = await sb
+      .from("classes")
+      .select("id, scheduled_at, short_code")
+      .eq("lead_id", leadId)
+      .eq("is_trial", true)
+      .in("status", ["scheduled", "live"])
+      .gte("scheduled_at", new Date(Date.now() - 60 * 60_000).toISOString())
+      .order("scheduled_at", { ascending: true });
+    const active = (existingTrials ?? []) as Array<{ id: string; scheduled_at: string; short_code: string }>;
+    if (active.length > 0) {
+      const ex = active[0];
+      // Return the EXISTING class id + a fresh trial token so the
+      // funnel's redirect to /confirmacion still works.
+      const token = buildTrialToken(leadId, ex.id);
+      return NextResponse.json({
+        ok: true,
+        classId: ex.id,
+        token,
+        already: true,
+        scheduled_at: ex.scheduled_at,
+      });
+    }
+  }
+
   // ── 4. Create the trial class.
   const teacherFirst = (match.teacherName.split(/\s+/)[0]) || match.teacherName;
   const classTitle = `Clase de prueba — ${b.name.split(/\s+/)[0]} (${teacherFirst})`;

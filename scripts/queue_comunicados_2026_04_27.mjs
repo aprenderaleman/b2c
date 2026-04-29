@@ -39,7 +39,7 @@ for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
   env[m[1]] = v;
 }
 if (!env.DATABASE_URL) { console.error("DATABASE_URL missing in .env"); process.exit(1); }
-const adminEmail = env.ADMIN_EMAIL || "info@aprender-aleman.de";
+const adminEmail = env.ADMIN_EMAIL || "aprenderaleman2026@gmail.com";
 
 // ---------- payload ----------
 const SCHEDULED_AT_UTC = "2026-04-27 06:04:00+00";   // = 08:04 Europe/Madrid → cron tick at 08:05 picks up
