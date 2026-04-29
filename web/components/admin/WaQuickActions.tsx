@@ -51,46 +51,59 @@ export function WaQuickActions({ leadName, phoneE164, language, trial }: Props) 
   const first = (leadName || "").split(/\s+/)[0] || leadName || "";
   const isDe  = language === "de";
 
-  const trialUrl = trial?.shortCode ? `https://b2c.aprender-aleman.de/c/${trial.shortCode}` : null;
+  const trialUrl  = trial?.shortCode ? `https://b2c.aprender-aleman.de/c/${trial.shortCode}` : null;
   const trialWhen = trial?.scheduledAt ? fmtBerlin(trial.scheduledAt, language) : null;
+  // Time-only ("19:00") for the same-day reminder. Computed only if
+  // we actually have a scheduled trial — eager evaluation against a
+  // null `trial` was crashing the whole admin page (TypeError: cannot
+  // read 'scheduledAt' of null) for any lead without a class.
+  const trialTimeOnly = trial?.scheduledAt
+    ? new Date(trial.scheduledAt).toLocaleTimeString(
+        isDe ? "de-DE" : "es-ES",
+        { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" },
+      )
+    : null;
 
-  const templates: Array<{ label: string; text: string; show: boolean }> = [
-    {
+  const templates: Array<{ label: string; text: string }> = [];
+
+  if (trialUrl && trialWhen) {
+    templates.push({
       label: isDe ? "Probestunde bestätigen"               : "Confirmar clase de prueba",
-      show:  Boolean(trialUrl && trialWhen),
       text:  isDe
         ? `Hallo ${first}! Hier nochmal die Bestätigung deiner kostenlosen Deutsch-Probestunde: ${trialWhen}.\n\nDein persönlicher Link (1 Klick, kein Passwort):\n${trialUrl}\n\nWichtig: Beim Klick fragt dein Browser nach Mikrofon- und Kamerazugriff. Bitte auf "Erlauben" klicken — sonst kann ich dich nicht hoeren oder sehen.\n\nKannst du mir mit "Ja" bestaetigen, dass du dabei bist?\n\n— Stiv | Aprender-Aleman.de`
         : `Hola ${first}! Te confirmo tu clase de prueba gratis de aleman: ${trialWhen}.\n\nTu enlace personal (1 clic, sin contrasena):\n${trialUrl}\n\nImportante: al abrirlo el navegador te pedira permiso para microfono y camara. Pulsa "Permitir" — si no, no podre oirte ni verte.\n\nMe confirmas con un "Si" que asistiras?\n\n— Stiv | Aprender-Aleman.de`,
-    },
-    {
+    });
+  }
+
+  if (trialUrl && trialTimeOnly) {
+    templates.push({
       label: isDe ? "Erinnerung: Stunde heute"             : "Recordatorio: clase hoy",
-      show:  Boolean(trialUrl && trialWhen),
       text:  isDe
-        ? `Hallo ${first}! Kurze Erinnerung: deine Probestunde ist HEUTE um ${new Date(trial!.scheduledAt!).toLocaleTimeString("de-DE", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" })} (Berlin).\n\nLink: ${trialUrl}\n\nTipp: erlaube Mikrofon + Kamera, wenn der Browser fragt.\n\nBis gleich!\n\n— Stiv | Aprender-Aleman.de`
-        : `Hola ${first}! Recordatorio: tu clase de prueba es HOY a las ${new Date(trial!.scheduledAt!).toLocaleTimeString("es-ES", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" })} (Berlin).\n\nLink: ${trialUrl}\n\nDato: cuando el navegador te pida permiso para microfono y camara, pulsa "Permitir".\n\nNos vemos!\n\n— Stiv | Aprender-Aleman.de`,
-    },
-    {
-      label: isDe ? "Hat meine Nachricht angekommen?" : "¿Llegó mi mensaje?",
-      show:  true,
-      text:  isDe
-        ? `Hallo ${first}, kurze Frage: ist meine letzte Nachricht bei dir angekommen? Wir hatten eine technische Stoerung mit WhatsApp. Falls du noch antworten moechtest, schreibe mir gerne.\n\n— Stiv | Aprender-Aleman.de`
-        : `Hola ${first}, pregunta rapida: te llego mi ultimo mensaje? Tuvimos un fallo tecnico con WhatsApp. Si quieres responderme, dime.\n\n— Stiv | Aprender-Aleman.de`,
-    },
-    {
-      label: isDe ? "Reagendar"                            : "Reagendar la clase",
-      show:  true,
-      text:  isDe
-        ? `Hallo ${first}! Wenn du die Probestunde verschieben moechtest, kannst du hier in 1 Minute einen neuen Termin auswaehlen:\nhttps://b2c.aprender-aleman.de/agendar\n\n— Stiv | Aprender-Aleman.de`
-        : `Hola ${first}! Si quieres mover la clase de prueba a otro dia, aqui puedes elegir un nuevo horario en 1 minuto:\nhttps://b2c.aprender-aleman.de/agendar\n\n— Stiv | Aprender-Aleman.de`,
-    },
-    {
-      label: isDe ? "Es ist eine Videokonferenz"           : "Es videollamada (FAQ)",
-      show:  true,
-      text:  isDe
-        ? `Hallo ${first}! Ja, die Probestunde ist eine Videokonferenz, 100% online — wir nutzen unser eigenes Klassenzimmer (kein Zoom oder Meet). Du klickst einfach den Link, dein Browser fragt nach Kamera und Mikrofon, du erlaubst es, und wir sehen uns.\n\n— Stiv | Aprender-Aleman.de`
-        : `Hola ${first}! Si, la clase de prueba es una videollamada, 100% online — usamos nuestra propia aula virtual (no Zoom ni Meet). Haces clic al enlace, tu navegador te pide camara y microfono, das permitir, y nos vemos.\n\n— Stiv | Aprender-Aleman.de`,
-    },
-  ];
+        ? `Hallo ${first}! Kurze Erinnerung: deine Probestunde ist HEUTE um ${trialTimeOnly} (Berlin).\n\nLink: ${trialUrl}\n\nTipp: erlaube Mikrofon + Kamera, wenn der Browser fragt.\n\nBis gleich!\n\n— Stiv | Aprender-Aleman.de`
+        : `Hola ${first}! Recordatorio: tu clase de prueba es HOY a las ${trialTimeOnly} (Berlin).\n\nLink: ${trialUrl}\n\nDato: cuando el navegador te pida permiso para microfono y camara, pulsa "Permitir".\n\nNos vemos!\n\n— Stiv | Aprender-Aleman.de`,
+    });
+  }
+
+  templates.push({
+    label: isDe ? "Hat meine Nachricht angekommen?" : "¿Llegó mi mensaje?",
+    text:  isDe
+      ? `Hallo ${first}, kurze Frage: ist meine letzte Nachricht bei dir angekommen? Wir hatten eine technische Stoerung mit WhatsApp. Falls du noch antworten moechtest, schreibe mir gerne.\n\n— Stiv | Aprender-Aleman.de`
+      : `Hola ${first}, pregunta rapida: te llego mi ultimo mensaje? Tuvimos un fallo tecnico con WhatsApp. Si quieres responderme, dime.\n\n— Stiv | Aprender-Aleman.de`,
+  });
+
+  templates.push({
+    label: isDe ? "Reagendar"                            : "Reagendar la clase",
+    text:  isDe
+      ? `Hallo ${first}! Wenn du die Probestunde verschieben moechtest, kannst du hier in 1 Minute einen neuen Termin auswaehlen:\nhttps://b2c.aprender-aleman.de/agendar\n\n— Stiv | Aprender-Aleman.de`
+      : `Hola ${first}! Si quieres mover la clase de prueba a otro dia, aqui puedes elegir un nuevo horario en 1 minuto:\nhttps://b2c.aprender-aleman.de/agendar\n\n— Stiv | Aprender-Aleman.de`,
+  });
+
+  templates.push({
+    label: isDe ? "Es ist eine Videokonferenz"           : "Es videollamada (FAQ)",
+    text:  isDe
+      ? `Hallo ${first}! Ja, die Probestunde ist eine Videokonferenz, 100% online — wir nutzen unser eigenes Klassenzimmer (kein Zoom oder Meet). Du klickst einfach den Link, dein Browser fragt nach Kamera und Mikrofon, du erlaubst es, und wir sehen uns.\n\n— Stiv | Aprender-Aleman.de`
+      : `Hola ${first}! Si, la clase de prueba es una videollamada, 100% online — usamos nuestra propia aula virtual (no Zoom ni Meet). Haces clic al enlace, tu navegador te pide camara y microfono, das permitir, y nos vemos.\n\n— Stiv | Aprender-Aleman.de`,
+  });
 
   return (
     <details className="rounded-3xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5 p-4">
@@ -103,7 +116,7 @@ export function WaQuickActions({ leadName, phoneE164, language, trial }: Props) 
         quieres dar un toque personal. ASCII puro, sin emojis problemáticos.
       </p>
       <ul className="mt-3 grid gap-2">
-        {templates.filter(t => t.show).map(t => (
+        {templates.map(t => (
           <li key={t.label}>
             <a
               href={url(phoneE164, t.text)}
