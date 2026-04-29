@@ -42,6 +42,31 @@ export function LeadActions({ lead }: { lead: Lead }) {
     lead.ai_paused_until && new Date(lead.ai_paused_until).getTime() > Date.now(),
   );
 
+  const canResendConfirmation =
+    (lead.status === "trial_scheduled" || lead.status === "trial_reminded")
+    && Boolean(lead.phone);
+
+  const [resending,    setResending]   = useState(false);
+  const [resendNotice, setResendNotice] = useState<string | null>(null);
+  const onResend = async () => {
+    if (!confirm("Reenviar la confirmación de la clase de prueba al WhatsApp del lead?")) return;
+    setResending(true);
+    setResendNotice(null);
+    try {
+      const res = await fetch(`/api/admin/leads/${lead.id}/resend-confirmation`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setResendNotice("✓ Reenviado");
+      } else {
+        setResendNotice("✗ " + (data.reason || data.error || "Error"));
+      }
+    } catch (e) {
+      setResendNotice("✗ " + (e instanceof Error ? e.message : "error"));
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {alreadyConverted && lead.student_id && (
@@ -51,6 +76,22 @@ export function LeadActions({ lead }: { lead: Lead }) {
         >
           Ver estudiante →
         </Link>
+      )}
+
+      {/* Resend trial confirmation — manual recovery for the case
+          where Evolution dropped the message at booking time
+          (http_503: no available server). Refuses if no upcoming
+          trial or no phone on file (server-side check). */}
+      {canResendConfirmation && (
+        <button
+          type="button"
+          onClick={onResend}
+          disabled={resending}
+          className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/15 hover:bg-emerald-100 dark:hover:bg-emerald-500/25 px-3 py-1 text-emerald-700 dark:text-emerald-300 disabled:opacity-50"
+          title="Reenviar la confirmación de la clase al WhatsApp del lead"
+        >
+          {resending ? "Reenviando…" : resendNotice ?? "💬 Reenviar confirmación"}
+        </button>
       )}
 
       {/* Manual editor — fixes typos in name/email/whatsapp/level/goal
