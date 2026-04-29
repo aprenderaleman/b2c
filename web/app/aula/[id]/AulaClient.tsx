@@ -3,7 +3,7 @@
 import "@livekit/components-styles";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LiveKitRoom,
   ControlBar,
@@ -22,6 +22,7 @@ import {
 } from "@livekit/components-react";
 import { RoomEvent, Track, ParticipantEvent, type Participant } from "livekit-client";
 import { Reactions } from "./Reactions";
+import { VirtualBackgroundButton } from "./VirtualBackgroundButton";
 
 type Props = {
   classId:          string;
@@ -204,15 +205,18 @@ export function AulaClient(p: Props) {
           <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
         </div>
         <div className="border-t border-slate-800 bg-slate-900/80 backdrop-blur p-2">
-          <ControlBar
-            controls={{
-              microphone:  media.audio,          // hide mic button on devices without mic
-              camera:      media.video,          // hide camera button on devices without camera
-              screenShare: true,                 // enabled for everyone — students can share too
-              chat:        false,                // Phase 4
-              leave:       true,
-            }}
-          />
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            <ControlBar
+              controls={{
+                microphone:  media.audio,          // hide mic button on devices without mic
+                camera:      media.video,          // hide camera button on devices without camera
+                screenShare: true,                 // enabled for everyone — students can share too
+                chat:        false,                // we render our own ChatPanel
+                leave:       true,
+              }}
+            />
+            <VirtualBackgroundButton canCamera={media.video} />
+          </div>
         </div>
         <RoomAudioRenderer />
         <Reactions />
@@ -701,14 +705,57 @@ function ParticipantRow({
 // Kept mounted while the room is open so messages keep arriving even
 // when the panel is hidden — that's how the unread badge in TopBar
 // stays accurate. We just hide it with CSS when `open` is false.
+//
+// Two bugs fixed in this version:
+//   1. Browser was offering credit-card autofill in the chat input
+//      because <Chat /> doesn't ship autocomplete/autocorrect attrs.
+//      We patch them onto the rendered input via a ref-effect.
+//   2. The message list was clipping at the top because LiveKit's
+//      default `.lk-chat-messages` doesn't always inherit the flex
+//      sizing of an arbitrary wrapper. Inline overrides force the
+//      message list to fill available height and scroll correctly.
 // ───────────────────────────────────────────────────────────────────
 function ChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const root = wrapperRef.current;
+    if (!root) return;
+
+    // Suppress the browser's credit-card / password autofill heuristics
+    // on the chat input. Multiple attributes because different browsers
+    // honour different ones; doing all of them is the safe play.
+    const apply = () => {
+      const input = root.querySelector<HTMLInputElement | HTMLTextAreaElement>(
+        "input, textarea, [contenteditable]"
+      );
+      if (!input) return false;
+      input.setAttribute("autocomplete",   "off");
+      input.setAttribute("autocorrect",    "off");
+      input.setAttribute("autocapitalize", "sentences");
+      input.setAttribute("spellcheck",     "true");
+      input.setAttribute("name",           "lk-chat-message");
+      // Chrome / Edge ignore autocomplete=off for fields it considers
+      // "personal data". data-form-type=other is the documented escape.
+      input.setAttribute("data-form-type", "other");
+      input.setAttribute("data-lpignore",  "true");
+      input.setAttribute("data-1p-ignore", "true");
+      return true;
+    };
+    if (!apply()) {
+      // <Chat /> mounts the form async; observe and apply once it shows.
+      const obs = new MutationObserver(() => { if (apply()) obs.disconnect(); });
+      obs.observe(root, { childList: true, subtree: true });
+      return () => obs.disconnect();
+    }
+  }, []);
+
   return (
     <aside
       className={`w-80 shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col ${open ? "" : "hidden"}`}
       aria-hidden={!open}
     >
-      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+      <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">
         <h2 className="text-sm font-semibold text-slate-100">Chat</h2>
         <button
           type="button"
@@ -717,10 +764,24 @@ function ChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
           aria-label="Cerrar chat"
         >×</button>
       </header>
-      {/* LiveKit's prebuilt Chat handles its own scroll, input and
-          message-list rendering. The lk-* CSS from @livekit/components-styles
-          (already imported at the top of this file) gives it the dark theme. */}
-      <div className="flex-1 min-h-0 flex flex-col [&_.lk-chat]:flex-1 [&_.lk-chat]:min-h-0 [&_.lk-chat]:flex [&_.lk-chat]:flex-col">
+
+      {/* LiveKit's prebuilt Chat handles its own message list + input.
+          We force it into a flex column that fills the panel and a
+          messages list that actually scrolls — without these overrides
+          the message list grows past its parent and clips at the top. */}
+      <div
+        ref={wrapperRef}
+        className="flex-1 min-h-0 flex flex-col
+                   [&_.lk-chat]:flex-1
+                   [&_.lk-chat]:min-h-0
+                   [&_.lk-chat]:flex
+                   [&_.lk-chat]:flex-col
+                   [&_.lk-chat]:overflow-hidden
+                   [&_.lk-chat-messages]:flex-1
+                   [&_.lk-chat-messages]:min-h-0
+                   [&_.lk-chat-messages]:overflow-y-auto
+                   [&_.lk-chat-form]:shrink-0"
+      >
         <Chat />
       </div>
     </aside>
