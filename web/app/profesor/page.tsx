@@ -5,6 +5,7 @@ import { getTeacherUpcomingClasses, type ClassWithPeople, classStatusEs, formatC
 import { NextClassCard } from "@/components/classes/NextClassCard";
 import { getUserIcalToken, icalUrlFor } from "@/lib/user-extras";
 import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
+import { OpenSchuleTeacherButton } from "@/components/entitlements/OpenSchuleTeacherButton";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,10 @@ export default async function TeacherHome() {
       ) : (
         <EmptyNext />
       )}
+
+      {/* Acceso a SCHULE — el profesor entra como su alumno para ver
+          el material y poder asignar tareas concretas. */}
+      <OpenSchuleTeacherButton />
 
       <DayGroup title="Hoy" classes={todayClasses} />
       <DayGroup title="Esta semana" classes={thisWeek} />
