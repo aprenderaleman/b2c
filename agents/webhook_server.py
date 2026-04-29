@@ -374,10 +374,13 @@ async def internal_send_text(request: Request):
 
     phone = (body.get("phone") or "").strip()
     text  = (body.get("text")  or "").strip()
+    # Optional metadata so the retry queue can label the row + write
+    # a meaningful send_failed timeline event if the lead is known.
+    kind     = (body.get("kind") or "manual")[:60]
+    lead_id  = (body.get("lead_id") or None)
     if not phone or not text:
         raise HTTPException(status_code=400, detail="missing_phone_or_text")
 
-    # Normalize / sanity-check the phone.
     try:
         normalized = normalize_phone(phone)
     except ValueError as e:
@@ -387,20 +390,51 @@ async def internal_send_text(request: Request):
     wa = WhatsAppService()
 
     try:
-        message_id = wa.send_text(instance, normalized, text)
+        message_id = wa.send_text(instance, normalized, text, kind=kind, lead_id=lead_id)
     except WhatsAppError as e:
-        log.warning("internal/send-text failed: %s", e)
-        raise HTTPException(status_code=502, detail=f"whatsapp_error:{e}")
-
-    # NOTE: timeline logging happens on the WEB side now. The caller
-    # (e.g. /api/public/book-trial) writes the `system_message_sent`
-    # row using the result of this call, so we don't need to also
-    # write one here. Keeping this server stateless avoids the
-    # duplicate-row problem we had when both sides logged, and the
-    # silent-enum-violation problem we had when this side wrote
-    # author='web' (which isn't in the timeline_author enum).
+        log.warning("internal/send-text failed (queued for retry): %s", e)
+        # The send_text helper already enqueued for retry on its way
+        # out. We still return 502 so the caller logs the FIRST attempt
+        # as a known failure — but the queue will redeliver in 30 s,
+        # then 1 m, etc. without further admin action. The "queued"
+        # signal lets the web side mute its alarm.
+        raise HTTPException(status_code=502, detail=f"whatsapp_error:{e}", headers={"X-Queued-For-Retry": "1"})
 
     return {"ok": True, "messageId": message_id}
+
+
+# ──────────────────────────────────────────────────────────
+# /internal/whatsapp-status — used by /admin/system dashboard
+# ──────────────────────────────────────────────────────────
+
+
+@app.get("/internal/whatsapp-status")
+async def internal_whatsapp_status(request: Request):
+    expected = os.environ.get("AGENTS_INTERNAL_SECRET")
+    if not expected:
+        raise HTTPException(status_code=503, detail="internal_secret_not_configured")
+    provided = request.headers.get("x-internal-secret")
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    wa = WhatsAppService()
+    state = "unknown"
+    err   = None
+    try:
+        state = wa.get_connection_state(instance)
+    except Exception as e:                              # noqa: BLE001
+        err = str(e)[:200]
+
+    # Queue snapshot.
+    queue: dict = {}
+    try:
+        from agents.shared.outbound_queue import stats as queue_stats
+        queue = queue_stats()
+    except Exception as e:                              # noqa: BLE001
+        queue = {"error": str(e)[:120]}
+
+    return {"ok": True, "state": state, "queue": queue, "instance": instance, "error": err}
 
 
 # ──────────────────────────────────────────────────────────

@@ -22,6 +22,7 @@ type Health = {
   outbound:  { lastAt: string | null; ageSec: number | null; concern: boolean };
   failed24h: number;
   stuckLeads: number;
+  queue?:    { queued: number; sent: number; failed_permanent: number };
   overall: "ok" | "warn";
 };
 
@@ -157,6 +158,20 @@ export default function SystemPage() {
                   {h.stuckLeads}
                 </span>
               </Row>
+              {h.queue && h.queue.queued >= 0 && (
+                <>
+                  <Row label="Cola: pendientes">
+                    <span className={`font-bold ${h.queue.queued > 0 ? "text-amber-500" : "text-emerald-500"}`}>
+                      {h.queue.queued}
+                    </span>
+                  </Row>
+                  <Row label="Cola: fallos permanentes">
+                    <span className={`font-bold ${h.queue.failed_permanent > 0 ? "text-red-500" : "text-emerald-500"}`}>
+                      {h.queue.failed_permanent}
+                    </span>
+                  </Row>
+                </>
+              )}
               <Link href="/admin/leads" className="block mt-2 text-xs text-brand-600 hover:underline">Ver lista de leads →</Link>
             </>
           ) : <Skel />}

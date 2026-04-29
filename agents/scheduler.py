@@ -19,6 +19,7 @@ In production this is the `aa-scheduler` systemd unit.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -27,6 +28,8 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from agents.agent_0_watcher import tick as agent_0_tick
 from agents.agent_5_guardian import tick_absent_followups
+from agents.shared.outbound_queue import drain as drain_outbound_queue
+from agents.whatsapp_health import tick_webhook_self_heal, tick_inbound_replay
 from agents.janitor import run as janitor_run
 from agents.notifications import notify_daily_summary, scan_escalations_and_notify
 from agents.shared.db import get_conn
@@ -178,6 +181,22 @@ def _agent_0_tick_with_beat() -> None:
             log.warning("heartbeat write failed: %s", e)
 
 
+def _drain_outbound_with_beat() -> None:
+    """Worker tick for outbound_queue. Imports WhatsAppService lazily to
+    avoid a hard dep at scheduler boot (so a missing API key doesn't kill
+    the entire scheduler — janitor still runs)."""
+    from agents.whatsapp_service import WhatsAppService
+    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    wa = WhatsAppService()
+    def _send(phone: str, body: str) -> str:
+        # Pass kind=retry so the inner enqueue (if it fails again) tags
+        # the row appropriately. lead_id stays as the original.
+        return wa.send_text(instance, phone, body, kind="retry")
+    summary = drain_outbound_queue(_send, batch_size=20)
+    if summary["sent"] or summary["requeued"] or summary["failed"]:
+        log.info("outbound_queue tick: %s", summary)
+
+
 def _heartbeat_keepalive() -> None:
     """Pure scheduler-liveness signal — runs every 5 min 24/7 (not tied to
     business hours), so outside the Agent 0 window the janitor doesn't
@@ -258,6 +277,32 @@ def main() -> int:
         notify_daily_summary,
         CronTrigger(hour=19, minute=0, timezone=BERLIN),
         id="daily_summary",
+        max_instances=1, coalesce=True,
+    )
+
+    # Outbound retry queue worker — drains rows whose next_attempt_at
+    # is due, with exponential backoff. Runs every 30 s.
+    sched.add_job(
+        _drain_outbound_with_beat,
+        IntervalTrigger(seconds=30, timezone=BERLIN),
+        id="outbound_retry",
+        max_instances=1, coalesce=True,
+    )
+
+    # WhatsApp webhook health & inbound replay — every 10 min.
+    # Self-heals if Evolution dropped the webhook config, and replays
+    # any inbound messages that never reached our pipeline (the case
+    # that left Aisa unanswered).
+    sched.add_job(
+        tick_webhook_self_heal,
+        IntervalTrigger(minutes=10, timezone=BERLIN),
+        id="whatsapp_webhook_heal",
+        max_instances=1, coalesce=True,
+    )
+    sched.add_job(
+        tick_inbound_replay,
+        IntervalTrigger(minutes=10, timezone=BERLIN),
+        id="whatsapp_inbound_replay",
         max_instances=1, coalesce=True,
     )
 

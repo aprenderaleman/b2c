@@ -54,7 +54,19 @@ export async function GET() {
   const sb = supabaseAdmin();
   const now = Date.now();
 
-  const [evo, lastInbound, lastOutbound, failed24h, stuckLeads] = await Promise.all([
+  // Queue snapshot (table from migration 040). Counts by status.
+  const queuePromise = sb
+    .from("outbound_queue")
+    .select("status", { count: "exact", head: false })
+    .then(({ data }) => {
+      const counts: Record<string, number> = { queued: 0, sent: 0, failed_permanent: 0 };
+      for (const row of (data ?? []) as Array<{ status: string }>) {
+        counts[row.status] = (counts[row.status] ?? 0) + 1;
+      }
+      return counts;
+    }, () => ({ queued: -1, sent: -1, failed_permanent: -1 }));   // -1 = table missing
+
+  const [evo, lastInbound, lastOutbound, failed24h, stuckLeads, queue] = await Promise.all([
     probeEvolution(),
     sb.from("lead_timeline")
       .select("timestamp")
@@ -74,6 +86,7 @@ export async function GET() {
       .gte("timestamp", new Date(now - 24 * 3600_000).toISOString()),
     // "Stuck" = status active + last lead_timeline event > 24h ago.
     sb.rpc("admin_stuck_leads_count").then(r => r, () => ({ data: null, error: { message: "rpc_missing" } })),
+    queuePromise,
   ]);
 
   const lastInboundIso  = (lastInbound.data  as { timestamp?: string } | null)?.timestamp ?? null;
@@ -116,6 +129,7 @@ export async function GET() {
     },
     failed24h: failedCount,
     stuckLeads: stuck,
-    overall: evolutionOk && !inboundConcern && !outboundConcern && failedCount < 3 ? "ok" : "warn",
+    queue,
+    overall: evolutionOk && !inboundConcern && !outboundConcern && failedCount < 3 && (queue?.queued ?? 0) === 0 ? "ok" : "warn",
   });
 }

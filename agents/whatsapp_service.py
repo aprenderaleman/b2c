@@ -175,13 +175,26 @@ class WhatsAppService:
         """Evolution expects a bare number (no +) or a full jid 'xxx@s.whatsapp.net'."""
         return re.sub(r"\D", "", phone_e164)
 
-    def send_text(self, name: str, to_e164: str, text: str) -> str:
+    def send_text(
+        self,
+        name: str,
+        to_e164: str,
+        text: str,
+        *,
+        kind:    str = "manual",
+        lead_id: str | None = None,
+    ) -> str:
         """
         Send a WhatsApp text message. Returns the Evolution message id on success.
         Raises WhatsAppError otherwise.
 
+        On TRANSIENT failures (Evolution disconnected, http_503, network)
+        the message is also pushed to `outbound_queue` so the scheduler
+        worker retries it with exponential backoff. The exception is still
+        raised so the immediate caller knows the inline send didn't work,
+        but the lead won't be left without their message.
+
         Uses the Evolution v1.8 shape: {number, options, textMessage:{text}}.
-        (v2.x used a flatter {number, text} shape but v1.8 is what works on our VPS.)
         """
         payload = {
             "number": self._to_jid(to_e164),
@@ -192,11 +205,37 @@ class WhatsAppService:
             },
             "textMessage": {"text": text},
         }
-        res = self._request("POST", f"/message/sendText/{name}", json=payload)
+        try:
+            res = self._request("POST", f"/message/sendText/{name}", json=payload)
+        except WhatsAppError as e:
+            self._maybe_enqueue_for_retry(to_e164, text, kind, lead_id, str(e))
+            raise
         if isinstance(res, dict):
             key = res.get("key") or {}
             return key.get("id") or res.get("messageId") or "sent"
         return "sent"
+
+    @staticmethod
+    def _maybe_enqueue_for_retry(
+        phone:   str,
+        body:    str,
+        kind:    str,
+        lead_id: str | None,
+        error:   str,
+    ) -> None:
+        """Best-effort enqueue. Imported lazily to avoid a hard module dep
+        when running scripts that don't need DB access."""
+        try:
+            from agents.shared.outbound_queue import enqueue_for_retry
+            enqueue_for_retry(
+                phone_e164=phone, body=body, kind=kind,
+                lead_id=lead_id, error=error,
+            )
+        except Exception:                           # noqa: BLE001
+            # Worst case the retry just doesn't happen — the caller still
+            # logs the original failure to the lead timeline so we don't
+            # silently lose visibility.
+            pass
 
     def is_number_on_whatsapp(self, name: str, to_e164: str) -> bool:
         numbers = [self._to_jid(to_e164)]
