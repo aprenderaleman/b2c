@@ -1,11 +1,16 @@
 /**
  * Access control + timing rules for live classrooms and recordings.
  *
- * The rules (spec):
+ * The rules (spec, updated 2026-04-30):
  *   - Only users listed in class_participants can join
  *   - Only the assigned teacher can be host
  *   - Room opens 15 min BEFORE scheduled start
- *   - Room auto-closes 30 min AFTER scheduled end
+ *   - Room closes EXACTLY at scheduled_at + duration_minutes (no grace)
+ *     → past that, the surface shows "Ver grabación →" instead.
+ *
+ * The "no grace" rule is intentional: Gelfis wants the class to feel
+ * bounded. Once the clock runs out, the student is bounced to SCHULE
+ * to keep the learning loop tight.
  */
 
 import { supabaseAdmin } from "./supabase";
@@ -40,7 +45,10 @@ export async function authorizeTrialAulaAccess(
 
   const scheduled = new Date(c.scheduled_at);
   const opensAt   = new Date(scheduled.getTime() - 15 * 60_000);
-  const closesAt  = new Date(scheduled.getTime() + (c.duration_minutes + 30) * 60_000);
+  // Tight close: no grace minutes. Past closesAt the surface shows the
+  // recording link (or a "class ended" screen) instead of letting them
+  // back in.
+  const closesAt  = new Date(scheduled.getTime() + c.duration_minutes * 60_000);
   return {
     ok:           true,
     role:         "participant",     // lead is never host
@@ -81,7 +89,8 @@ export async function authorizeAulaAccess(
   const scheduled = new Date((cls as { scheduled_at: string }).scheduled_at);
   const duration  = (cls as { duration_minutes: number }).duration_minutes;
   const opensAt   = new Date(scheduled.getTime() - 15 * 60_000);
-  const closesAt  = new Date(scheduled.getTime() + (duration + 30) * 60_000);
+  // Tight close at scheduled_at + duration_minutes (no grace).
+  const closesAt  = new Date(scheduled.getTime() + duration * 60_000);
   const canEnterNow = now >= opensAt && now <= closesAt;
 
   const roomName = (cls as { livekit_room_id: string }).livekit_room_id;

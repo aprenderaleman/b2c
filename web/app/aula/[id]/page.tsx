@@ -106,6 +106,15 @@ export default async function AulaPage({
     return <NotConfiguredScreen classTitle={aulaTitle} homeHref={backHref} />;
   }
 
+  // Decide where the AulaClient should send the user on disconnect:
+  //   host    → teacher / admin observer (their own back-href + ?end=1)
+  //   student → SCHULE (Gelfis spec: keep the learning loop tight)
+  //   lead    → public site (no SCHULE account yet)
+  const audience: "host" | "student" | "lead" =
+    access.role === "host" ? "host"
+    : !session?.user        ? "lead"
+    :                          "student";
+
   return (
     <AulaClient
       classId={cls.id}
@@ -113,6 +122,7 @@ export default async function AulaPage({
       scheduledAt={cls.scheduled_at}
       durationMinutes={cls.duration_minutes}
       isHost={access.role === "host"}
+      audience={audience}
       displayName={displayName}
       backHref={backHref}
     />

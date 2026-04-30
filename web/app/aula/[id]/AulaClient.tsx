@@ -30,6 +30,10 @@ type Props = {
   scheduledAt:      string;
   durationMinutes:  number;
   isHost:           boolean;
+  /** "host" = teacher / admin observer; "student" = enrolled student;
+   *  "lead" = trial-magic-link visitor without a user row. Used to
+   *  decide where to send them on disconnect. */
+  audience?:        "host" | "student" | "lead";
   displayName:      string;
   backHref:         string;
 };
@@ -169,7 +173,28 @@ export function AulaClient(p: Props) {
               : "Tu dispositivo no pudo activar cámara o micrófono. Sigues conectado como espectador.",
           );
         }}
-        onDisconnected={() => { /* keep state, user can reconnect */ }}
+        onDisconnected={() => {
+          // Decide where to send the user when LiveKit disconnects:
+          //   host    → /profesor (handled by HostTeardown via custom event)
+          //   student → SCHULE (keep the learning loop tight — Gelfis spec)
+          //   lead    → /confirmacion is already in their history; bounce
+          //             them to the public site so they don't get stuck on
+          //             a half-loaded /aula screen.
+          if (p.isHost) {
+            // HostTeardown handles this branch with router.push so SSR
+            // state survives. Just emit the legacy event for it.
+            window.dispatchEvent(new CustomEvent("livekit:disconnected", {
+              detail: { event: RoomEvent.Disconnected },
+            }));
+            return;
+          }
+          if (p.audience === "lead") {
+            window.location.href = "https://aprender-aleman.de";
+            return;
+          }
+          // Default = student. SSO into SCHULE keeps them learning.
+          window.location.href = "/api/entitlements/schule-open";
+        }}
         className="flex-1 min-h-0 flex flex-col"
       >
         {mediaWarning && (

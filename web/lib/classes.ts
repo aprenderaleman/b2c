@@ -276,20 +276,31 @@ export async function getTeacherUpcomingClasses(
       )
     `)
     .eq("teacher_id", teacherId)
-    .gte("scheduled_at", now.toISOString())
+    // Lower bound is `now − 4h` (not `now`) so a class that started
+    // hours ago but is still within scheduled_at + duration_minutes
+    // keeps showing up — otherwise a teacher arriving 5 min late
+    // sees an empty dashboard. The exact end-of-window filter
+    // happens after the query.
+    .gte("scheduled_at", new Date(now.getTime() - 4 * 3600_000).toISOString())
     .lte("scheduled_at", to.toISOString())
     .in("status", ["scheduled", "live"])
     .order("scheduled_at", { ascending: true });
   if (error) throw error;
   // Defence in depth: skip orphan trial classes (lead deleted but the
-  // class survived because of ON DELETE SET NULL on the FK). The
-  // /api/admin/leads/[id]/delete endpoint already auto-cancels these
-  // before the delete, but if anything ever races we still avoid
-  // showing "(sin nombre) · Sin datos de contacto" to the teacher.
-  const filtered = (data ?? []).filter((c: { is_trial?: boolean; lead_id?: string | null }) => {
-    if (c.is_trial && !c.lead_id) return false;
-    return true;
-  });
+  // class survived because of ON DELETE SET NULL on the FK).
+  const filtered = (data ?? [])
+    .filter((c: { is_trial?: boolean; lead_id?: string | null }) => {
+      if (c.is_trial && !c.lead_id) return false;
+      return true;
+    })
+    // Drop classes whose end-of-window is already in the past UNLESS
+    // status='live' (teacher hasn't ended it yet — keep it visible
+    // for late joiners).
+    .filter((c: { scheduled_at?: string; duration_minutes?: number; status?: string }) => {
+      if (!c.scheduled_at || !c.duration_minutes) return true;
+      const end = new Date(c.scheduled_at).getTime() + c.duration_minutes * 60_000;
+      return end > now.getTime() || c.status === "live";
+    });
   return filtered.map(normaliseClassRow);
 }
 
@@ -325,7 +336,12 @@ export async function getStudentUpcomingClasses(
       )
     `)
     .eq("student_id", studentId)
-    .gte("class.scheduled_at", now.toISOString())
+    // Lower bound is `now − 4h` so a class still within its
+    // scheduled_at + duration_minutes window keeps appearing
+    // even if the student loads the dashboard 5 min after start.
+    // Without this, NextClassCard never sees the in-progress
+    // class and the "EN DIRECTO AHORA" CTA never shows up.
+    .gte("class.scheduled_at", new Date(now.getTime() - 4 * 3600_000).toISOString())
     .lte("class.scheduled_at", to.toISOString())
     .in("class.status", ["scheduled", "live"]);
   if (error) throw error;
@@ -336,6 +352,13 @@ export async function getStudentUpcomingClasses(
       return normaliseClassRow((Array.isArray(c) ? c[0] : c) as Record<string, unknown>);
     })
     .filter((c): c is ClassWithPeople => Boolean(c?.id))
+    // Drop classes whose end-of-window is already past UNLESS the
+    // teacher hasn't marked them live yet — same rule as the
+    // teacher path above.
+    .filter(c => {
+      const end = new Date(c.scheduled_at).getTime() + c.duration_minutes * 60_000;
+      return end > now.getTime() || c.status === "live";
+    })
     .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
   return rows;
 }
