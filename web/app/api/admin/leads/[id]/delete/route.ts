@@ -21,6 +21,28 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .maybeSingle();
   if (!lead) return NextResponse.json({ error: "not found" }, { status: 404 });
 
+  // Cancel any future scheduled trial classes BEFORE deleting the lead.
+  // The FK on classes.lead_id is ON DELETE SET NULL, so without this
+  // step the class would survive as a ghost row with lead_id=NULL — and
+  // appear on /profesor as "Agendada · (sin nombre)". Cancelling first
+  // keeps the class in DB for audit but flips it out of the active
+  // listings.
+  const { error: cancelErr, data: cancelled } = await sb
+    .from("classes")
+    .update({
+      status:      "cancelled",
+      notes_admin: "[auto] Lead deleted — class auto-cancelled to avoid orphan listings.",
+      updated_at:  new Date().toISOString(),
+    })
+    .eq("lead_id", id)
+    .in("status", ["scheduled", "live"])
+    .select("id");
+  if (cancelErr) {
+    console.warn("[delete-lead] could not auto-cancel future classes:", cancelErr.message);
+  } else if (cancelled && cancelled.length > 0) {
+    console.info(`[delete-lead] auto-cancelled ${cancelled.length} class(es) for lead ${id}`);
+  }
+
   // Use the GDPR helper if it exists. Falls back to a plain DELETE
   // if the RPC isn't installed (migration 002 hasn't run, etc.).
   // Surface DB errors instead of silently swallowing them — the

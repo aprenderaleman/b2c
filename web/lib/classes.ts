@@ -262,7 +262,7 @@ export async function getTeacherUpcomingClasses(
     .select(`
       id, type, teacher_id, scheduled_at, duration_minutes,
       recurrence_pattern, recurrence_end_date, parent_class_id,
-      title, topic, status, livekit_room_id, is_trial, group_id,
+      title, topic, status, livekit_room_id, is_trial, group_id, lead_id,
       group:student_groups(name),
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
       teacher:teachers!inner(
@@ -281,7 +281,16 @@ export async function getTeacherUpcomingClasses(
     .in("status", ["scheduled", "live"])
     .order("scheduled_at", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map(normaliseClassRow);
+  // Defence in depth: skip orphan trial classes (lead deleted but the
+  // class survived because of ON DELETE SET NULL on the FK). The
+  // /api/admin/leads/[id]/delete endpoint already auto-cancels these
+  // before the delete, but if anything ever races we still avoid
+  // showing "(sin nombre) · Sin datos de contacto" to the teacher.
+  const filtered = (data ?? []).filter((c: { is_trial?: boolean; lead_id?: string | null }) => {
+    if (c.is_trial && !c.lead_id) return false;
+    return true;
+  });
+  return filtered.map(normaliseClassRow);
 }
 
 /**
