@@ -167,7 +167,8 @@ export default async function StudentDetailPage({
 
           <Panel title="Accesos">
             <Kv k="SCHULE" v={student.schule_access ? "Sí" : "No"} />
-            <Kv k="HANS"   v={student.hans_access ? "Sí" : "No"} />
+            {/* Hans temporalmente fuera de servicio (2026-04-30). Restaurar:
+                <Kv k="HANS" v={student.hans_access ? "Sí" : "No"} /> */}
           </Panel>
         </div>
 

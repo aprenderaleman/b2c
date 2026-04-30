@@ -49,7 +49,6 @@ function renderES(v: WelcomeStudentVars): RenderedEmail {
 
     <div style="margin:22px 0 4px 0;font-size:13px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:0.06em;">También tienes acceso a</div>
     ${p(`<strong>🎓 SCHULE</strong> — Aula virtual con ejercicios, audios, gramática y vocabulario.<br><a href="${v.schuleUrl}" style="color:#ea580c;text-decoration:none;">${escapeHtml(v.schuleUrl)}</a>`)}
-    ${p(`<strong>🤖 HANS</strong> — Tu profesor de IA 24/7. Practica conversación por voz o texto cuando quieras.<br><a href="${v.hansUrl}" style="color:#ea580c;text-decoration:none;">${escapeHtml(v.hansUrl)}</a>`)}
 
     ${p("En tu panel podrás ver tus próximas clases, grabaciones, chat con tu profesor y todo lo que necesites.")}
     ${p("¡Bienvenido oficialmente! 🇩🇪")}
@@ -75,7 +74,6 @@ function renderES(v: WelcomeStudentVars): RenderedEmail {
     ``,
     `También tienes acceso a:`,
     `- SCHULE (Aula Virtual): ${v.schuleUrl}`,
-    `- HANS (Tu profesor IA 24/7): ${v.hansUrl}`,
     ``,
     `¡Bienvenido oficialmente! 🇩🇪`,
     `El equipo de Aprender-Aleman.de`,
@@ -117,7 +115,6 @@ function renderDE(v: WelcomeStudentVars): RenderedEmail {
 
     <div style="margin:22px 0 4px 0;font-size:13px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:0.06em;">Du hast außerdem Zugang zu</div>
     ${p(`<strong>🎓 SCHULE</strong> — Virtuelles Klassenzimmer mit Übungen, Audios, Grammatik und Wortschatz.<br><a href="${v.schuleUrl}" style="color:#ea580c;text-decoration:none;">${escapeHtml(v.schuleUrl)}</a>`)}
-    ${p(`<strong>🤖 HANS</strong> — Dein KI-Lehrer 24/7. Übe Gespräche per Sprache oder Text, wann immer du willst.<br><a href="${v.hansUrl}" style="color:#ea580c;text-decoration:none;">${escapeHtml(v.hansUrl)}</a>`)}
 
     ${p("In deinem Bereich siehst du deine nächsten Stunden, Aufnahmen, den Chat mit deinem Lehrer und alles, was du brauchst.")}
     ${p("Herzlich willkommen! 🇩🇪")}
@@ -143,7 +140,6 @@ function renderDE(v: WelcomeStudentVars): RenderedEmail {
     ``,
     `Du hast außerdem Zugang zu:`,
     `- SCHULE (Virtuelles Klassenzimmer): ${v.schuleUrl}`,
-    `- HANS (Dein KI-Lehrer 24/7): ${v.hansUrl}`,
     ``,
     `Herzlich willkommen! 🇩🇪`,
     `Dein Aprender-Aleman.de Team`,

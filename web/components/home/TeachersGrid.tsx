@@ -47,19 +47,22 @@ const TEACHERS: TeacherCard[] = [
     countryDe: "Deutschland",
     hue:       "emerald",
   },
-  {
-    initial:   "H",
-    name:      "Hans",
-    taglineEs: "Tu tutor IA disponible 24/7 en SCHULE.",
-    taglineDe: "Dein KI-Tutor, 24/7 verfügbar auf SCHULE.",
-    flag:      "🤖",
-    countryEs: "Online",
-    countryDe: "Online",
-    certsEs:   ["Asistente IA", "Práctica ilimitada"],
-    certsDe:   ["KI-Assistent", "Unbegrenzte Praxis"],
-    isAi:      true,
-    hue:       "violet",
-  },
+  // Hans (tutor IA) temporalmente fuera de servicio (2026-04-30).
+  // Cuando vuelva, restaurar este bloque + cambiar el grid de
+  // grid-cols-3 a grid-cols-4 abajo.
+  // {
+  //   initial:   "H",
+  //   name:      "Hans",
+  //   taglineEs: "Tu tutor IA disponible 24/7 en SCHULE.",
+  //   taglineDe: "Dein KI-Tutor, 24/7 verfügbar auf SCHULE.",
+  //   flag:      "🤖",
+  //   countryEs: "Online",
+  //   countryDe: "Online",
+  //   certsEs:   ["Asistente IA", "Práctica ilimitada"],
+  //   certsDe:   ["KI-Assistent", "Unbegrenzte Praxis"],
+  //   isAi:      true,
+  //   hue:       "violet",
+  // },
 ];
 
 const HEAD = {
@@ -112,7 +115,7 @@ export function TeachersGrid() {
           </p>
         </div>
 
-        <div className="mt-14 grid grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
+        <div className="mt-14 grid grid-cols-1 sm:grid-cols-3 gap-5 lg:gap-6 max-w-5xl mx-auto">
           {TEACHERS.map((t) => {
             const tagline = isDe ? t.taglineDe : t.taglineEs;
             const country = isDe ? t.countryDe : t.countryEs;

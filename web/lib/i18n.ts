@@ -14,9 +14,9 @@ export const translations = {
       advantage1Title: "Profesores nativos",
       advantage1Body:
         "Certificados, de Alemania y Suiza, que también hablan español.",
-      advantage2Title: "Hans, tu profe IA 24/7",
+      advantage2Title: "SCHULE 24/7",
       advantage2Body:
-        "Practica por voz y texto cuando quieras, sin límite de horario.",
+        "Plataforma online con ejercicios, gramática y audios para practicar cuando quieras.",
       advantage3Title: "Resultados garantizados",
       advantage3Body:
         "Plan personalizado para visa, trabajo, estudios o exámenes oficiales.",
@@ -36,10 +36,10 @@ export const translations = {
       step2Label: "Clase de prueba gratis",
       step2Body:  "Un profesor nativo evalúa tu nivel y diseña tu plan.",
       step3Label: "Avanza con tu plan",
-      step3Body:  "Clases personalizadas + SCHULE + Hans 24/7.",
+      step3Body:  "Clases personalizadas + SCHULE 24/7.",
       faqTitle: "Preguntas frecuentes",
       faq1Q: "¿Se puede pasar de cero a B1 en 6 meses?",
-      faq1A: "Sí. Con nuestro plan intensivo (clases 1-a-1 + práctica guiada en SCHULE + Hans 24/7), la mayoría de nuestros alumnos va de A0 a B1 en 6 meses. Tu profesor diseña el calendario en la primera clase según tu ritmo.",
+      faq1A: "Sí. Con nuestro plan intensivo (clases 1-a-1 + práctica guiada en SCHULE 24/7), la mayoría de nuestros alumnos va de A0 a B1 en 6 meses. Tu profesor diseña el calendario en la primera clase según tu ritmo.",
       faq2Q: "¿Los profesores son de verdad nativos?",
       faq2A: "Sí — todos viven en Alemania o Suiza y están certificados oficialmente. Hablan español para explicar la gramática sin bloqueos.",
       faq3Q: "¿Puedo cancelar si no me gusta?",
@@ -167,9 +167,9 @@ export const translations = {
       advantage1Title: "Muttersprachliche Lehrer",
       advantage1Body:
         "Zertifiziert, aus Deutschland und der Schweiz, sprechen auch Spanisch.",
-      advantage2Title: "Hans, dein KI-Lehrer 24/7",
+      advantage2Title: "SCHULE 24/7",
       advantage2Body:
-        "Übe per Sprache und Text, wann immer du willst — ohne Zeitlimit.",
+        "Online-Plattform mit Übungen, Grammatik und Audios — wann immer du willst.",
       advantage3Title: "Garantierte Ergebnisse",
       advantage3Body:
         "Persönlicher Plan für Visum, Job, Studium oder offizielle Prüfungen.",
@@ -189,10 +189,10 @@ export const translations = {
       step2Label: "Kostenlose Probestunde",
       step2Body:  "Ein muttersprachlicher Lehrer testet dein Niveau und plant deinen Weg.",
       step3Label: "Starte mit deinem Plan",
-      step3Body:  "Persönlicher Unterricht + SCHULE + Hans 24/7.",
+      step3Body:  "Persönlicher Unterricht + SCHULE 24/7.",
       faqTitle: "Häufige Fragen",
       faq1Q: "Ist es möglich, in 6 Monaten von null auf B1 zu kommen?",
-      faq1A: "Ja. Mit unserem Intensivplan (1-zu-1-Unterricht + geführtes Training auf SCHULE + Hans 24/7) schaffen die meisten unserer Schüler den Sprung von A0 auf B1 in 6 Monaten. Dein Lehrer plant den Fahrplan in der ersten Stunde nach deinem Tempo.",
+      faq1A: "Ja. Mit unserem Intensivplan (1-zu-1-Unterricht + geführtes Training auf SCHULE 24/7) schaffen die meisten unserer Schüler den Sprung von A0 auf B1 in 6 Monaten. Dein Lehrer plant den Fahrplan in der ersten Stunde nach deinem Tempo.",
       faq2Q: "Sind die Lehrer wirklich Muttersprachler?",
       faq2A: "Ja — alle leben in Deutschland oder der Schweiz und sind offiziell zertifiziert. Sie sprechen Spanisch, um die Grammatik verständlich zu erklären.",
       faq3Q: "Kann ich kündigen, wenn es mir nicht passt?",

@@ -22,7 +22,7 @@ const GOOGLE_ADS_ID = "AW-17724667323";
 export const metadata: Metadata = {
   title: "Aprender-Aleman.de — Aprender alemán online",
   description:
-    "Academia online de alemán para hispanohablantes. Profesores nativos certificados + preparación Goethe/TELC + Hans, tu profesor IA 24/7.",
+    "Academia online de alemán para hispanohablantes. Profesores nativos certificados + preparación Goethe/TELC + plataforma SCHULE 24/7.",
 };
 
 export const viewport = {

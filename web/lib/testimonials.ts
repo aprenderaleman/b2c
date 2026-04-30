@@ -80,12 +80,14 @@ export const TESTIMONIALS: Testimonial[] = [
     level:   "B2",
     quote:   "Lo paga mi empresa. Yo gano alemán, ellos ganan productividad.",
   },
-  {
-    name:    "Valeria Castro",
-    country: "Venezuela",
-    level:   "A2",
-    quote:   "Trabajo turnos rotativos. Hans me salva los días que no puedo entrar a clase con un profe humano.",
-  },
+  // Valeria Castro: testimonio menciona Hans (tutor IA), oculto temporalmente
+  // mientras Hans está fuera de servicio (2026-04-30). Restaurar cuando vuelva:
+  // {
+  //   name:    "Valeria Castro",
+  //   country: "Venezuela",
+  //   level:   "A2",
+  //   quote:   "Trabajo turnos rotativos. Hans me salva los días que no puedo entrar a clase con un profe humano.",
+  // },
 ];
 
 /** Country flag emoji for the testimonial card. */

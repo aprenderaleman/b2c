@@ -193,11 +193,11 @@ export async function POST(
       ? `Willkommen an der Akademie, ${firstName}! 🎉
 
 Checke deine E-Mails — wir haben dir deine Zugangsdaten zur Plattform geschickt.
-Während wir deine erste Stunde vorbereiten, kannst du schon auf SCHULE und HANS starten. Los geht's!`
+Während wir deine erste Stunde vorbereiten, kannst du schon auf SCHULE starten. Los geht's!`
       : `¡Bienvenido a la Academia, ${firstName}! 🎉
 
 Revisa tu email — te enviamos tus accesos a la plataforma.
-Mientras preparamos tu primera clase, ya puedes entrar a SCHULE y HANS para empezar a practicar. ¡Vamos!`;
+Mientras preparamos tu primera clase, ya puedes entrar a SCHULE para empezar a practicar. ¡Vamos!`;
 
     const waResult = await sendWhatsappText(waPhone, waText);
     if (!waResult.ok) {

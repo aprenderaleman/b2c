@@ -178,7 +178,7 @@ function ClosedScreen({
             🎓 Empezar ahora con SCHULE
           </a>
           <p className="mt-3 text-xs text-slate-400">
-            Practica gratis con Hans (IA) y los cursos online mientras esperas tu clase.
+            Practica gratis los cursos online de SCHULE mientras esperas tu clase.
           </p>
         </>
       ) : (

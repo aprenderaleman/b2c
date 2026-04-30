@@ -131,8 +131,8 @@ export default async function ConfirmacionPage({
           </h2>
           <p className="mt-4 text-base md:text-lg text-white/75 leading-relaxed">
             Entra a <strong className="text-white">SCHULE</strong>, nuestra plataforma
-            online: clases interactivas, ejercicios por nivel y tu profesor IA Hans
-            disponible 24/7 para practicar por voz o por texto.
+            online: clases interactivas, ejercicios por nivel, gramática y audios
+            para que avances a tu ritmo desde el primer día.
           </p>
           <div className="mt-8">
             <a
