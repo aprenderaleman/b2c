@@ -1,13 +1,50 @@
+import {
+  SCHULE_MAINTENANCE,
+  SCHULE_MAINTENANCE_TITLE_ES,
+  SCHULE_MAINTENANCE_BODY_ES,
+} from "@/lib/schule-maintenance";
+
 /**
- * Teacher-flavoured "Entrar a SCHULE" card.
- *
- * Reuses the same /api/entitlements/schule-open endpoint as students —
- * the endpoint only enforces the subscription check for `role=student`,
- * so teachers (admins / superadmins too) get an SSO link without
- * eligibility gating. The copy is slightly different so the teacher
- * understands they're seeing the platform from the student's POV.
+ * Teacher-flavoured "Entrar a SCHULE" card. Same SSO endpoint as
+ * students. When SCHULE_MAINTENANCE=true → muestra aviso y no es
+ * clicable.
  */
 export function OpenSchuleTeacherButton() {
+  if (SCHULE_MAINTENANCE) {
+    return (
+      <div
+        aria-disabled="true"
+        className="relative rounded-3xl
+                   bg-slate-100 dark:bg-slate-900
+                   border border-slate-200 dark:border-slate-800 p-5 block w-full text-left
+                   opacity-80 cursor-not-allowed select-none"
+      >
+        <div className="flex items-start gap-4">
+          <span
+            className="inline-flex h-12 w-12 items-center justify-center rounded-2xl
+                       bg-slate-300 dark:bg-slate-700 text-slate-600 dark:text-slate-300
+                       text-2xl shadow-sm"
+            aria-hidden
+          >
+            🛠️
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-base font-bold text-slate-700 dark:text-slate-200">
+                SCHULE
+              </h3>
+              <span className="text-[10px] font-semibold uppercase tracking-wider rounded-full bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-300 px-2 py-0.5">
+                {SCHULE_MAINTENANCE_TITLE_ES}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+              {SCHULE_MAINTENANCE_BODY_ES}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <a
       href="/api/entitlements/schule-open"

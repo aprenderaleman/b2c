@@ -3,6 +3,11 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
 import { supabaseAdmin } from "@/lib/supabase";
 import { verifyTrialToken } from "@/lib/trial-token";
+import {
+  SCHULE_MAINTENANCE,
+  SCHULE_MAINTENANCE_TITLE_ES,
+  SCHULE_MAINTENANCE_BODY_ES,
+} from "@/lib/schule-maintenance";
 
 /**
  * GET /confirmacion?c={classId}&t={token}
@@ -135,19 +140,30 @@ export default async function ConfirmacionPage({
             para que avances a tu ritmo desde el primer día.
           </p>
           <div className="mt-8">
-            <a
-              href={SCHULE_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-primary-lg"
-            >
-              Empezar ahora con SCHULE
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-                <polyline points="12 5 19 12 12 19"/>
-              </svg>
-            </a>
+            {SCHULE_MAINTENANCE ? (
+              <div className="inline-flex flex-col items-center gap-1 rounded-2xl border border-amber-300/40 bg-amber-500/10 px-5 py-4">
+                <span className="text-sm font-semibold text-amber-100">
+                  🛠️ {SCHULE_MAINTENANCE_TITLE_ES}
+                </span>
+                <span className="text-xs text-amber-100/80">
+                  {SCHULE_MAINTENANCE_BODY_ES}
+                </span>
+              </div>
+            ) : (
+              <a
+                href={SCHULE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-primary-lg"
+              >
+                Empezar ahora con SCHULE
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                  <polyline points="12 5 19 12 12 19"/>
+                </svg>
+              </a>
+            )}
           </div>
         </div>
       </section>

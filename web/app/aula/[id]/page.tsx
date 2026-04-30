@@ -7,6 +7,11 @@ import { livekitConfigured } from "@/lib/livekit";
 import { getTrialSession } from "@/lib/trial-token";
 import { supabaseAdmin } from "@/lib/supabase";
 import { AulaClient } from "./AulaClient";
+import {
+  SCHULE_MAINTENANCE,
+  SCHULE_MAINTENANCE_TITLE_ES,
+  SCHULE_MAINTENANCE_BODY_ES,
+} from "@/lib/schule-maintenance";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Aula virtual · Aprender-Aleman.de" };
@@ -165,22 +170,36 @@ function ClosedScreen({
       </p>
 
       {isTrial ? (
-        // The lead is just sitting on /aula/{id} too early. Send them to
-        // SCHULE so they can start practising while they wait, instead
-        // of bouncing them back to the marketing home.
-        <>
-          <a
-            href="https://schule.aprender-aleman.de"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-primary mt-8 inline-flex"
-          >
-            🎓 Empezar ahora con SCHULE
-          </a>
-          <p className="mt-3 text-xs text-slate-400">
-            Practica gratis los cursos online de SCHULE mientras esperas tu clase.
-          </p>
-        </>
+        SCHULE_MAINTENANCE ? (
+          // Mientras SCHULE está en mantenimiento, sustituimos el botón
+          // promocional por un aviso. El lead sigue viendo la fecha de
+          // su clase con el ClosedScreen original arriba.
+          <div className="mt-8 rounded-2xl border border-amber-300/40 bg-amber-500/10 p-4">
+            <p className="text-sm text-amber-100 font-semibold">
+              🛠️ {SCHULE_MAINTENANCE_TITLE_ES}
+            </p>
+            <p className="mt-1 text-xs text-amber-100/85">
+              {SCHULE_MAINTENANCE_BODY_ES}
+            </p>
+          </div>
+        ) : (
+          // The lead is just sitting on /aula/{id} too early. Send them to
+          // SCHULE so they can start practising while they wait, instead
+          // of bouncing them back to the marketing home.
+          <>
+            <a
+              href="https://schule.aprender-aleman.de"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary mt-8 inline-flex"
+            >
+              🎓 Empezar ahora con SCHULE
+            </a>
+            <p className="mt-3 text-xs text-slate-400">
+              Practica gratis los cursos online de SCHULE mientras esperas tu clase.
+            </p>
+          </>
+        )
       ) : (
         <Link href={homeHref} className="btn-primary mt-8 inline-flex">
           Volver al inicio

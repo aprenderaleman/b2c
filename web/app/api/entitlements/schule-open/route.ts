@@ -3,6 +3,11 @@ import { auth } from "@/lib/auth";
 import { getImpersonation } from "@/lib/impersonation";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createSchuleSsoLink } from "@/lib/entitlements";
+import {
+  SCHULE_MAINTENANCE,
+  SCHULE_MAINTENANCE_TITLE_ES,
+  SCHULE_MAINTENANCE_BODY_ES,
+} from "@/lib/schule-maintenance";
 
 /**
  * GET /api/entitlements/schule-open
@@ -39,6 +44,30 @@ a{display:inline-block;margin-top:1.5rem;color:#ea580c;text-decoration:none;font
 }
 
 export async function GET() {
+  // Cortocircuito si SCHULE está en mantenimiento. Si alguien tiene
+  // este enlace en una pestaña abierta o lo abre desde un email,
+  // ve un mensaje legible en lugar de redirigirse a una app rota.
+  if (SCHULE_MAINTENANCE) {
+    const body = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><title>${SCHULE_MAINTENANCE_TITLE_ES}</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:32rem;margin:5rem auto;padding:2rem;text-align:center;color:#334155;line-height:1.6}
+  .icon{font-size:3rem;margin-bottom:1rem}
+  h1{color:#0f172a;font-size:1.5rem;margin:0 0 .75rem}
+  p{color:#64748b}
+  a{display:inline-block;margin-top:2rem;color:#fff;background:#ea580c;border-radius:.5rem;padding:.6rem 1.25rem;text-decoration:none;font-weight:600}
+</style></head><body>
+<div class="icon">🛠️</div>
+<h1>${SCHULE_MAINTENANCE_TITLE_ES}</h1>
+<p>${SCHULE_MAINTENANCE_BODY_ES}</p>
+<a href="https://b2c.aprender-aleman.de/estudiante">← Volver al panel</a>
+</body></html>`;
+    return new NextResponse(body, {
+      status:  503,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+  }
+
   const session = await auth();
   if (!session?.user) {
     return NextResponse.redirect("https://b2c.aprender-aleman.de/login");
