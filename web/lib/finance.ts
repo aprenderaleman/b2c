@@ -46,7 +46,7 @@ export type TeacherMonthlyEarnings = {
  * Billing uses the per-class-type rate (migration 023):
  *   - group       → teachers.rate_group_cents
  *   - individual  → teachers.rate_individual_cents
- * and the 45/90-minute duration rule so we don't pay 1h for a 12-min no-show.
+ * and the 15/90-minute duration rule so we don't pay 1h for a 5-min no-show.
  */
 export async function logClassHoursAndRollup(args: {
   classId:          string;
@@ -75,8 +75,8 @@ export async function logClassHoursAndRollup(args: {
   const currency  = ((t as { currency: string } | null)?.currency ?? "EUR");
   const rate      = rateCents / 100;  // EUR per hour, stored as NUMERIC in class_hours_log
 
-  // Duration rule: <45 → 0h (no pay), 45-90 → 1h, >90 → 2h.
-  const billedHours = args.durationMinutes < 45 ? 0
+  // Duration rule: <15 → 0h (no pay), 15-90 → 1h, >90 → 2h.
+  const billedHours = args.durationMinutes < 15 ? 0
                     : args.durationMinutes <= 90 ? 1 : 2;
   const amountCents = billedHours * rateCents;
 
@@ -254,6 +254,38 @@ export async function getTotalRevenue(fromDate: Date, toDate: Date): Promise<{
     by_type:       byType,
     payment_count: (data ?? []).length,
     currency:      (data?.[0] as Row | undefined)?.currency ?? "EUR",
+  };
+}
+
+/**
+ * Sum of operating expenses (ads, tools, infra, legal, other) within
+ * the [from, to) range, broken down by category. Used by
+ * /admin/finanzas to net against revenue + teacher payroll.
+ */
+export async function getTotalExpenses(fromDate: Date, toDate: Date): Promise<{
+  total_cents:     number;
+  by_category:     Record<string, number>;
+  expense_count:   number;
+}> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("business_expenses")
+    .select("amount_cents, category")
+    .gte("incurred_at", fromDate.toISOString().slice(0, 10))
+    .lt("incurred_at",  toDate.toISOString().slice(0, 10));
+  if (error) return { total_cents: 0, by_category: {}, expense_count: 0 };
+
+  type Row = { amount_cents: number; category: string };
+  let total = 0;
+  const byCat: Record<string, number> = {};
+  for (const r of (data ?? []) as Row[]) {
+    total += Number(r.amount_cents);
+    byCat[r.category] = (byCat[r.category] ?? 0) + Number(r.amount_cents);
+  }
+  return {
+    total_cents:   total,
+    by_category:   byCat,
+    expense_count: (data ?? []).length,
   };
 }
 

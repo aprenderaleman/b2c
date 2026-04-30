@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
-import { formatMonthEs, getAllEarningsForMonth, getTotalRevenue, moneyFromCents } from "@/lib/finance";
+import { formatMonthEs, getAllEarningsForMonth, getTotalRevenue, getTotalExpenses, moneyFromCents } from "@/lib/finance";
 import { FinanceMonthPicker } from "./MonthPicker";
 
 export const dynamic = "force-dynamic";
@@ -23,19 +23,26 @@ export default async function FinanzasPage({
   const monthEnd   = new Date(Date.UTC(focus.getUTCFullYear(), focus.getUTCMonth() + 1, 1));
   const monthStr   = monthStart.toISOString().slice(0, 7);
 
-  const [revenueMonth, revenueYear, earnings, activeStudents] = await Promise.all([
+  const yearStart = new Date(Date.UTC(focus.getUTCFullYear(),     0, 1));
+  const yearEnd   = new Date(Date.UTC(focus.getUTCFullYear() + 1, 0, 1));
+
+  const [revenueMonth, revenueYear, earnings, activeStudents,
+         expensesMonth, expensesYear] = await Promise.all([
     getTotalRevenue(monthStart, monthEnd),
-    getTotalRevenue(
-      new Date(Date.UTC(focus.getUTCFullYear(), 0, 1)),
-      new Date(Date.UTC(focus.getUTCFullYear() + 1, 0, 1)),
-    ),
+    getTotalRevenue(yearStart, yearEnd),
     getAllEarningsForMonth(focus),
     countActiveSubscriptions(),
+    getTotalExpenses(monthStart, monthEnd),
+    getTotalExpenses(yearStart, yearEnd),
   ]);
 
   const teacherPayrollCents = earnings.reduce((s, e) => s + e.amount_cents, 0);
   const unpaidPayrollCents  = earnings.filter(e => !e.paid).reduce((s, e) => s + e.amount_cents, 0);
-  const netProfitCents      = revenueMonth.revenue_cents - teacherPayrollCents;
+  // Net profit (month) = ingresos – nómina profesores – gastos op.
+  // Year version recalculated under the year panel below.
+  const netProfitCents      = revenueMonth.revenue_cents - teacherPayrollCents - expensesMonth.total_cents;
+  const adsMonthCents       = expensesMonth.by_category["ads"] ?? 0;
+  const adsYearCents        = expensesYear.by_category["ads"]  ?? 0;
 
   return (
     <main className="space-y-6">
@@ -52,9 +59,15 @@ export default async function FinanzasPage({
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Ingresos este mes"   value={moneyFromCents(revenueMonth.revenue_cents, revenueMonth.currency)} accent />
         <Stat label="Pagos a profesores"  value={moneyFromCents(teacherPayrollCents, "EUR")} />
+        <Stat label="Gastos en ads (año)" value={moneyFromCents(adsYearCents, "EUR")}
+              tone={adsYearCents > 0 ? "neg" : undefined} />
         <Stat label="Beneficio neto"       value={moneyFromCents(netProfitCents, revenueMonth.currency)} tone={netProfitCents >= 0 ? "pos" : "neg"} />
-        <Stat label="Estudiantes activos" value={activeStudents.toString()} />
       </section>
+      <p className="-mt-2 text-xs text-slate-500 dark:text-slate-400">
+        Beneficio neto = ingresos del mes − nómina profesores del mes − gastos del mes (ads, herramientas…)
+        {adsMonthCents > 0 && <> · este mes hay {moneyFromCents(adsMonthCents, "EUR")} en ads</>}
+        {" "}· {activeStudents} estudiante{activeStudents === 1 ? "" : "s"} activo{activeStudents === 1 ? "" : "s"}.
+      </p>
 
       <section className="grid gap-4 lg:grid-cols-2">
         <Panel title="Ingresos del año">
@@ -74,6 +87,34 @@ export default async function FinanzasPage({
               ))}
             </ul>
           )}
+
+          {/* Gastos operativos del año + beneficio neto YTD */}
+          <div className="mt-5 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-1.5 text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-slate-600 dark:text-slate-300">Gastos del año</span>
+              <span className="font-mono text-red-600 dark:text-red-400">
+                − {moneyFromCents(expensesYear.total_cents, "EUR")}
+              </span>
+            </div>
+            {Object.entries(expensesYear.by_category).map(([cat, cents]) => (
+              <div key={cat} className="flex items-center justify-between gap-4 pl-3 text-xs">
+                <span className="text-slate-500 dark:text-slate-400">↳ {humanExpense(cat)}</span>
+                <span className="font-mono text-slate-500 dark:text-slate-400">
+                  {moneyFromCents(cents, "EUR")}
+                </span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-800/60">
+              <span className="font-semibold text-slate-700 dark:text-slate-200">Beneficio bruto del año (sin nómina)</span>
+              <span className={`font-mono font-bold ${
+                revenueYear.revenue_cents - expensesYear.total_cents >= 0
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-red-600 dark:text-red-400"
+              }`}>
+                {moneyFromCents(revenueYear.revenue_cents - expensesYear.total_cents, revenueYear.currency)}
+              </span>
+            </div>
+          </div>
         </Panel>
 
         <Panel title="Nómina del mes">
@@ -185,6 +226,16 @@ function humanType(type: string): string {
     subscription_payment:  "Suscripción",
     other:                 "Otros",
   } as Record<string, string>)[type] ?? type;
+}
+
+function humanExpense(cat: string): string {
+  return ({
+    ads:    "Publicidad",
+    tools:  "Herramientas",
+    infra:  "Infraestructura",
+    legal:  "Legal",
+    other:  "Otros",
+  } as Record<string, string>)[cat] ?? cat;
 }
 
 function Th({ children }: { children: React.ReactNode }) {
