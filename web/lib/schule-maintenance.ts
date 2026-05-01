@@ -14,7 +14,7 @@
  * Para reactivar SCHULE: cambia esta línea a `false` y haz commit.
  * Vercel rebuild ~2 min y todo vuelve.
  */
-export const SCHULE_MAINTENANCE = true;
+export const SCHULE_MAINTENANCE = false;
 
 export const SCHULE_MAINTENANCE_TITLE_ES   = "SCHULE en mantenimiento";
 export const SCHULE_MAINTENANCE_BODY_ES    =
