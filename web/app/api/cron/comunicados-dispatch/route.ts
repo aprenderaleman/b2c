@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { resolveRecipients } from "@/lib/comunicados/audience";
-import { sendToRecipient, summariseResults } from "@/lib/comunicados/send";
-import { audienceFilterSchema } from "@/lib/comunicados/schema";
-import type { AudienceFilter, Channel, SendResultRow } from "@/lib/comunicados/types";
+import { sendToRecipient, summariseResults, loadAttachments } from "@/lib/comunicados/send";
+import { audienceFilterSchema, attachmentsArraySchema } from "@/lib/comunicados/schema";
+import type { Attachment, AudienceFilter, Channel, SendResultRow } from "@/lib/comunicados/types";
 
 /**
  * GET/POST /api/cron/comunicados-dispatch
@@ -79,7 +79,7 @@ async function runDispatch(req: Request) {
       .update({ status: "sending" })
       .eq("id", id)
       .eq("status", "queued")
-      .select("id, audience_filter, subject, message_markdown, channels")
+      .select("id, audience_filter, subject, message_markdown, channels, attachments")
       .maybeSingle();
     if (claimErr) {
       processed.push({ id, ok: false, total: 0, ok_count: 0, fail_count: 0, error: `claim:${claimErr.message}` });
@@ -105,14 +105,23 @@ async function runDispatch(req: Request) {
     const filter:   AudienceFilter = filterParsed.data;
     const channels: Channel[]      = (claimed.channels ?? []).filter((c: string): c is Channel => c === "email" || c === "whatsapp");
 
+    // Defensive parse: a hand-crafted row (or pre-attachments row) might
+    // have null/missing/invalid attachments. Default to [] and skip
+    // anything that doesn't fit the schema instead of failing the send.
+    const attachmentsParsed = attachmentsArraySchema.safeParse(claimed.attachments ?? []);
+    const attachments: Attachment[] = attachmentsParsed.success ? attachmentsParsed.data : [];
+
     // 4. Resolve fresh + send sequentially (per-recipient) so the agents
     //    VPS / Resend aren't hammered.
     let results: SendResultRow[] = [];
     let dispatchError: string | null = null;
     try {
-      const recipients = await resolveRecipients(filter);
+      const recipients        = await resolveRecipients(filter);
+      const loadedAttachments = await loadAttachments(attachments);
       for (const r of recipients) {
-        const row = await sendToRecipient(r, claimed.subject, claimed.message_markdown, channels);
+        const row = await sendToRecipient(
+          r, claimed.subject, claimed.message_markdown, channels, loadedAttachments,
+        );
         results.push(row);
       }
     } catch (e) {

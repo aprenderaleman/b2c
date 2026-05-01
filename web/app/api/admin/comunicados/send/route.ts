@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/comunicados/auth";
 import { sendBodySchema } from "@/lib/comunicados/schema";
 import { resolveRecipients } from "@/lib/comunicados/audience";
-import { sendToRecipient, summariseResults } from "@/lib/comunicados/send";
+import { sendToRecipient, summariseResults, loadAttachments } from "@/lib/comunicados/send";
 import { supabaseAdmin } from "@/lib/supabase";
 import type { SendResultRow } from "@/lib/comunicados/types";
 
@@ -25,15 +25,19 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_body", issues: parsed.error.issues }, { status: 400 });
   }
-  const { audience_filter, subject, message_markdown, channels } = parsed.data;
+  const { audience_filter, subject, message_markdown, channels, attachments } = parsed.data;
 
   const recipients = await resolveRecipients(audience_filter);
+
+  // Download every attachment ONCE — same bytes get reused for every
+  // recipient. Empty list when no attachments were provided.
+  const loadedAttachments = await loadAttachments(attachments);
 
   // Sequential per-recipient — protects Resend / the agents VPS and keeps
   // ordering deterministic. Channel sends inside sendToRecipient run in parallel.
   const results: SendResultRow[] = [];
   for (const r of recipients) {
-    const row = await sendToRecipient(r, subject, message_markdown, channels);
+    const row = await sendToRecipient(r, subject, message_markdown, channels, loadedAttachments);
     results.push(row);
   }
 
@@ -52,6 +56,7 @@ export async function POST(req: Request) {
         subject,
         message_markdown,
         channels,
+        attachments,
         total_recipients: recipients.length,
         ok_count,
         fail_count,

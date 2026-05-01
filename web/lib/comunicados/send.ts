@@ -1,19 +1,54 @@
-import { sendRaw } from "@/lib/email/send";
+import { sendRaw, type EmailAttachment } from "@/lib/email/send";
 import { sendWhatsappText } from "@/lib/whatsapp";
+import { supabaseAdmin } from "@/lib/supabase";
 import { renderBroadcast, renderWhatsappOnly } from "./render";
-import type { Channel, Recipient, SendResultRow } from "./types";
+import type { Attachment, Channel, Recipient, SendResultRow } from "./types";
+
+/**
+ * Download every attachment referenced by a broadcast row from the
+ * `materials` Supabase bucket and return them as ready-to-send Buffers.
+ *
+ * We do this ONCE per send (not per recipient) — the bytes are
+ * identical for everyone and Supabase Storage is the network bottleneck.
+ *
+ * Failures are not fatal: if a single file can't be downloaded we log
+ * and skip it. The send still goes through with whatever loaded.
+ */
+export async function loadAttachments(refs: Attachment[]): Promise<EmailAttachment[]> {
+  if (!refs || refs.length === 0) return [];
+  const sb  = supabaseAdmin();
+  const out: EmailAttachment[] = [];
+  for (const ref of refs) {
+    try {
+      const { data, error } = await sb.storage.from("materials").download(ref.path);
+      if (error || !data) {
+        console.error("[comunicados] attachment download failed:", ref.path, error?.message);
+        continue;
+      }
+      const buf = Buffer.from(await data.arrayBuffer());
+      out.push({ filename: ref.name, content: buf, contentType: ref.content_type });
+    } catch (e) {
+      console.error("[comunicados] attachment threw:", ref.path, e);
+    }
+  }
+  return out;
+}
 
 /**
  * Send a broadcast message to one recipient across the selected channels.
  * Email + WhatsApp run in parallel per recipient; the outer loop (in the
  * API route) sequences recipients so we don't batter Resend or the
  * agents VPS with dozens of simultaneous connections.
+ *
+ * `attachments` is email-only — WhatsApp ignores them. Pass the result of
+ * loadAttachments() here so we don't re-download per recipient.
  */
 export async function sendToRecipient(
   r:        Recipient,
   subject:  string,
   markdown: string,
   channels: Channel[],
+  attachments: EmailAttachment[] = [],
 ): Promise<SendResultRow> {
   const wantEmail    = channels.includes("email")    && r.channels_available.includes("email")    && !!r.email;
   const wantWhatsapp = channels.includes("whatsapp") && r.channels_available.includes("whatsapp") && !!r.phone;
@@ -32,7 +67,7 @@ export async function sendToRecipient(
   if (wantEmail) {
     const { subject: s, html, text } = renderBroadcast(subject, markdown, r.name);
     jobs.push(
-      sendRaw(r.email!, s, html, text)
+      sendRaw(r.email!, s, html, text, attachments.length > 0 ? attachments : undefined)
         .then(res => {
           row.email_r = res.ok
             ? { ok: true,  id: res.id, error: null }

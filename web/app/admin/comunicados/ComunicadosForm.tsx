@@ -1,7 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import type { AudienceFilter, Channel, Recipient, SendResultRow } from "@/lib/comunicados/types";
+import { useMemo, useRef, useState, useTransition } from "react";
+import {
+  ATTACHMENT_LIMITS,
+  type Attachment,
+  type AudienceFilter,
+  type Channel,
+  type Recipient,
+  type SendResultRow,
+} from "@/lib/comunicados/types";
 
 type Group = { id: string; name: string; level: string };
 
@@ -42,6 +49,12 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
   const [markdown, setMarkdown] = useState("");
   const [emailOn, setEmailOn]   = useState(true);
   const [whatsOn, setWhatsOn]   = useState(true);
+
+  // --- Attachments (email-only) ---
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploading,   setUploading]   = useState(false);
+  const [uploadErr,   setUploadErr]   = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // --- Preview / send state ---
   const [pending, start]          = useTransition();
@@ -97,6 +110,59 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
     });
   };
 
+  // ---------- Attachments ----------
+  const totalAttachmentBytes = useMemo(
+    () => attachments.reduce((s, a) => s + a.size, 0),
+    [attachments],
+  );
+
+  const handleFilesSelected = async (filesList: FileList | null) => {
+    if (!filesList || filesList.length === 0) return;
+    setUploadErr(null);
+
+    const remainingSlots = ATTACHMENT_LIMITS.MAX_FILES - attachments.length;
+    if (remainingSlots <= 0) {
+      setUploadErr(`Máximo ${ATTACHMENT_LIMITS.MAX_FILES} archivos.`);
+      return;
+    }
+    const files = Array.from(filesList).slice(0, remainingSlots);
+
+    setUploading(true);
+    try {
+      let runningTotal = totalAttachmentBytes;
+      for (const f of files) {
+        // Pre-flight client-side checks (server re-validates).
+        const lower = f.name.toLowerCase();
+        const extOk = ATTACHMENT_LIMITS.ALLOWED_EXT.some(ext => lower.endsWith(ext));
+        if (!extOk) { setUploadErr(`"${f.name}" no es un tipo permitido (${ATTACHMENT_LIMITS.ALLOWED_EXT.join(", ")}).`); break; }
+        if (f.size > ATTACHMENT_LIMITS.MAX_FILE_BYTES) { setUploadErr(`"${f.name}" supera ${prettyBytes(ATTACHMENT_LIMITS.MAX_FILE_BYTES)}.`); break; }
+        if (runningTotal + f.size > ATTACHMENT_LIMITS.MAX_TOTAL_BYTES) {
+          setUploadErr(`El total supera ${prettyBytes(ATTACHMENT_LIMITS.MAX_TOTAL_BYTES)}. Quita archivos o usa uno más pequeño.`);
+          break;
+        }
+
+        const fd = new FormData();
+        fd.append("file", f, f.name);
+        const res = await fetch("/api/admin/comunicados/upload", { method: "POST", body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setUploadErr(data?.message ?? data?.error ?? `Subida fallida (${res.status}).`);
+          break;
+        }
+        const att = data.attachment as Attachment;
+        runningTotal += att.size;
+        setAttachments(prev => [...prev, att]);
+      }
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveAttachment = (idx: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== idx));
+  };
+
   const handleSend = () => {
     setSendErr(null);
     setSendResult(null);
@@ -111,6 +177,7 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
             subject:          subject.trim(),
             message_markdown: markdown.trim(),
             channels,
+            attachments,
           }),
         });
         const data = await res.json();
@@ -285,6 +352,63 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
           </label>
         </div>
 
+        {/* Attachments — email-only */}
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/40 p-4">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <div>
+              <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                Adjuntos (solo email)
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                {ATTACHMENT_LIMITS.ALLOWED_EXT.join(", ")} · máx {ATTACHMENT_LIMITS.MAX_FILES} archivos · {prettyBytes(ATTACHMENT_LIMITS.MAX_TOTAL_BYTES)} total
+              </div>
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+              {attachments.length}/{ATTACHMENT_LIMITS.MAX_FILES} · {prettyBytes(totalAttachmentBytes)}/{prettyBytes(ATTACHMENT_LIMITS.MAX_TOTAL_BYTES)}
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ATTACHMENT_LIMITS.ALLOWED_EXT.join(",")}
+              onChange={e => void handleFilesSelected(e.target.files)}
+              disabled={uploading || attachments.length >= ATTACHMENT_LIMITS.MAX_FILES}
+              className="text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-brand-500 file:hover:bg-brand-600 file:text-white file:font-semibold file:px-3 file:py-2 file:cursor-pointer file:disabled:opacity-50"
+            />
+            {uploading && <span className="text-xs text-slate-500">Subiendo…</span>}
+          </div>
+
+          {uploadErr && <p className="mt-2 text-xs text-red-600 dark:text-red-400">{uploadErr}</p>}
+
+          {attachments.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {attachments.map((a, i) => (
+                <li key={a.path} className="flex items-center justify-between gap-3 text-xs bg-white dark:bg-slate-900 rounded-lg px-3 py-2 border border-slate-200 dark:border-slate-700">
+                  <span className="min-w-0 truncate text-slate-700 dark:text-slate-200">📎 {a.name}</span>
+                  <span className="font-mono text-slate-500 dark:text-slate-400 shrink-0">{prettyBytes(a.size)}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttachment(i)}
+                    className="text-slate-400 hover:text-red-600 transition-colors text-base leading-none"
+                    aria-label={`Quitar ${a.name}`}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {!emailOn && attachments.length > 0 && (
+            <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">
+              ⚠️ Tienes adjuntos pero el canal email está desactivado — no se enviarán.
+            </p>
+          )}
+        </div>
+
         {/* Live previews */}
         <div className="grid md:grid-cols-2 gap-3">
           <div>
@@ -401,6 +525,7 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
           channels={channels}
           recipientCount={preview.length}
           audience={kind}
+          attachments={attachments}
           onCancel={() => setModalOpen(false)}
           onConfirm={handleSend}
           pending={pending}
@@ -415,11 +540,13 @@ function ConfirmModal(props: {
   channels: Channel[];
   recipientCount: number;
   audience: AudienceKind;
+  attachments: Attachment[];
   onCancel: () => void;
   onConfirm: () => void;
   pending: boolean;
 }) {
-  const { subject, channels, recipientCount, audience, onCancel, onConfirm, pending } = props;
+  const { subject, channels, recipientCount, audience, attachments, onCancel, onConfirm, pending } = props;
+  const totalAttachmentBytes = attachments.reduce((s, a) => s + a.size, 0);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-6 shadow-2xl">
@@ -432,6 +559,17 @@ function ConfirmModal(props: {
           <div><span className="text-slate-500">Destinatarios:</span> <span className="font-medium text-slate-900 dark:text-slate-100">{recipientCount}</span></div>
           <div><span className="text-slate-500">Canales:</span> <span className="font-medium text-slate-900 dark:text-slate-100">{channels.join(" + ")}</span></div>
           <div><span className="text-slate-500">Asunto:</span> <span className="font-medium text-slate-900 dark:text-slate-100 break-words">{subject}</span></div>
+          {attachments.length > 0 && (
+            <div>
+              <span className="text-slate-500">Adjuntos:</span>{" "}
+              <span className="font-medium text-slate-900 dark:text-slate-100">
+                {attachments.length} archivo{attachments.length === 1 ? "" : "s"} · {prettyBytes(totalAttachmentBytes)}
+              </span>
+              {!channels.includes("email") && (
+                <span className="ml-1 text-amber-700 dark:text-amber-400">(no se enviarán — falta canal email)</span>
+              )}
+            </div>
+          )}
         </div>
         <div className="mt-5 flex items-center justify-end gap-3">
           <button type="button" onClick={onCancel} disabled={pending} className="btn-secondary">Cancelar</button>
@@ -459,6 +597,13 @@ function splitList(s: string): string[] {
     .split(/[,;\n]+/)
     .map(x => x.trim())
     .filter(Boolean);
+}
+
+function prettyBytes(n: number): string {
+  if (n < 1024)            return `${n} B`;
+  if (n < 1024 * 1024)     return `${(n / 1024).toFixed(0)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 // ---------------------------------------------------------------------------

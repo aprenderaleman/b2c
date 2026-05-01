@@ -70,3 +70,31 @@ export type SendResultRow = {
   email_r:    PerChannelResult | null;   // null = channel not attempted
   whatsapp_r: PerChannelResult | null;
 };
+
+/**
+ * Reference to a file attached to a broadcast email. The file itself
+ * lives in the `materials` Supabase bucket; this struct only carries
+ * the metadata we need to (a) display in the UI, (b) decide whether
+ * to allow the send (size/type rules), (c) re-download at send time.
+ *
+ * Attachments are EMAIL-ONLY — WhatsApp sends ignore them silently.
+ */
+export type Attachment = {
+  path:         string;   // e.g. "comunicados/<adminId>/<uuid>-foo.pdf"
+  name:         string;   // sanitised display name
+  size:         number;   // bytes
+  content_type: string;
+};
+
+/** Hard limits we enforce on the upload endpoint and the UI. */
+export const ATTACHMENT_LIMITS = {
+  MAX_FILES:        5,
+  MAX_TOTAL_BYTES:  25 * 1024 * 1024,   // 25 MB total — Gmail's inbound ceiling
+  MAX_FILE_BYTES:   25 * 1024 * 1024,   // 25 MB per file
+  ALLOWED_MIME: [
+    "application/pdf",
+    "application/msword",                                                       // .doc
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  // .docx
+  ] as const,
+  ALLOWED_EXT: [".pdf", ".doc", ".docx"] as const,
+};

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ATTACHMENT_LIMITS } from "./types";
 
 const language = z.enum(["es", "de"]).optional();
 const status   = z.enum(["active", "paused", "all"]).optional();
@@ -16,6 +17,26 @@ export const audienceFilterSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
+export const attachmentSchema = z.object({
+  path:         z.string().min(1).max(500),
+  name:         z.string().min(1).max(200),
+  size:         z.number().int().nonnegative().max(ATTACHMENT_LIMITS.MAX_FILE_BYTES),
+  content_type: z.string().min(1).max(120),
+});
+
+export const attachmentsArraySchema = z
+  .array(attachmentSchema)
+  .max(ATTACHMENT_LIMITS.MAX_FILES)
+  .superRefine((arr, ctx) => {
+    const total = arr.reduce((s, a) => s + a.size, 0);
+    if (total > ATTACHMENT_LIMITS.MAX_TOTAL_BYTES) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `total attachment size exceeds ${ATTACHMENT_LIMITS.MAX_TOTAL_BYTES} bytes`,
+      });
+    }
+  });
+
 export const previewBodySchema = z.object({
   audience_filter: audienceFilterSchema,
 });
@@ -25,4 +46,5 @@ export const sendBodySchema = z.object({
   subject:          z.string().trim().min(1).max(200),
   message_markdown: z.string().trim().min(1).max(4000),
   channels:         z.array(z.enum(["email", "whatsapp"])).min(1),
+  attachments:      attachmentsArraySchema.optional().default([]),
 });
