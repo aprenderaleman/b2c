@@ -192,13 +192,8 @@ export function AulaClient(p: Props) {
             window.location.href = "https://aprender-aleman.de";
             return;
           }
-          // Default = student. Mientras SCHULE está en mantenimiento,
-          // los devolvemos a /estudiante en lugar de a la SSO de SCHULE
-          // (que ahora devuelve HTML 503 de mantenimiento). Cuando
-          // SCHULE vuelva, descomentar la línea de SSO y borrar la
-          // de /estudiante.
-          window.location.href = "/estudiante";
-          // window.location.href = "/api/entitlements/schule-open";
+          // Default = student. SSO into SCHULE keeps them learning.
+          window.location.href = "/api/entitlements/schule-open";
         }}
         className="flex-1 min-h-0 flex flex-col"
       >
