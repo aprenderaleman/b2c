@@ -45,7 +45,7 @@ export function renderEnvelope(body: string, footerNote: string): string {
           <tr><td style="padding:20px 28px;background:#fff7ed;border-top:1px solid #fed7aa;font-size:12px;color:#78716c;">
             ${footerNote}
             <br><br>
-            Aprender-Aleman.de · Linguify Global LLC<br>
+            Aprender-Aleman.de · Gelfis Horn, Einzelunternehmer · Springe (DE)<br>
             <a href="https://aprender-aleman.de" style="color:#ea580c;text-decoration:none;">aprender-aleman.de</a>
             ·
             <a href="https://aprender-aleman.de/privacy" style="color:#ea580c;text-decoration:none;">Privacidad</a>

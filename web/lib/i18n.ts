@@ -61,7 +61,7 @@ export const translations = {
       examTelcTitle: "telc Deutsch",
       examTelcBody: "A1 · A2 · B1 · B2 · C1. Aceptado para la ciudadanía alemana (Einbürgerungstest) y para profesiones reguladas.",
       examsCTA: "Quiero prepararme →",
-      footer: "© {year} Linguify Global LLC · Aprender-Aleman.de",
+      footer: "© {year} Aprender-Aleman.de · Gelfis Horn (Einzelunternehmer)",
     },
     funnel: {
       progress: "Paso {n} de {total}",
@@ -214,7 +214,7 @@ export const translations = {
       examTelcTitle: "telc Deutsch",
       examTelcBody: "A1 · A2 · B1 · B2 · C1. Anerkannt für die deutsche Einbürgerung und für reglementierte Berufe.",
       examsCTA: "Ich will mich vorbereiten →",
-      footer: "© {year} Linguify Global LLC · Aprender-Aleman.de",
+      footer: "© {year} Aprender-Aleman.de · Gelfis Horn (Einzelunternehmer)",
     },
     funnel: {
       progress: "Schritt {n} von {total}",

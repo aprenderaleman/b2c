@@ -137,7 +137,7 @@ export default async function LoginPage({
         </form>
 
         <p className="mt-5 text-center text-xs text-slate-400 dark:text-slate-500">
-          © {new Date().getFullYear()} Linguify Global LLC ·{" "}
+          © {new Date().getFullYear()} Aprender-Aleman.de ·{" "}
           <Link href="/privacy" className="hover:text-brand-600 dark:hover:text-brand-400 underline-offset-4 hover:underline">
             Privacidad
           </Link>
