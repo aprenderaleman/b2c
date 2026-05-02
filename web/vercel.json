@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm install --legacy-peer-deps",
   "crons": [
     {
       "path": "/api/cron/class-reminders",
@@ -15,7 +16,7 @@
     },
     {
       "path": "/api/cron/trial-reminders-morning",
-      "schedule": "0 7 * * *"
+      "schedule": "0 6,7 * * *"
     },
     {
       "path": "/api/cron/comunicados-dispatch",
