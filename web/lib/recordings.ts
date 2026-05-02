@@ -88,6 +88,55 @@ export async function getStudentRecordings(studentId: string): Promise<
   return out;
 }
 
+/**
+ * "Recordings the teacher has access to" — every recording of a class
+ * they taught (classes.teacher_id == teacherId). Same shape as
+ * getStudentRecordings so the two pages can render with one component
+ * if we ever DRY them up.
+ */
+export async function getTeacherRecordings(teacherId: string): Promise<
+  Array<RecordingRow & { class_title: string; scheduled_at: string }>
+> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("classes")
+    .select(`
+      id, title, scheduled_at,
+      recordings(
+        id, file_url, status, duration_seconds, downloadable, created_at, processed_at, error
+      )
+    `)
+    .eq("teacher_id", teacherId);
+  if (error) return [];
+
+  type Raw = {
+    id: string; title: string; scheduled_at: string;
+    recordings: Record<string, unknown>[] | undefined;
+  };
+  const out: Array<RecordingRow & { class_title: string; scheduled_at: string }> = [];
+  for (const c of (data ?? []) as Raw[]) {
+    const recs = c.recordings ?? [];
+    for (const rec of recs) {
+      out.push({
+        id:               rec.id as string,
+        class_id:         c.id,
+        file_url:         (rec.file_url as string | null) ?? null,
+        file_size_bytes:  null,
+        duration_seconds: (rec.duration_seconds as number | null) ?? null,
+        status:           (rec.status as RecordingStatus) ?? "processing",
+        error:            (rec.error as string | null) ?? null,
+        downloadable:     Boolean(rec.downloadable),
+        created_at:       rec.created_at as string,
+        processed_at:     (rec.processed_at as string | null) ?? null,
+        class_title:      c.title,
+        scheduled_at:     c.scheduled_at,
+      });
+    }
+  }
+  out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return out;
+}
+
 export function formatDurationHms(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
