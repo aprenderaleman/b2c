@@ -163,6 +163,31 @@ export async function POST(req: NextRequest) {
 
   const sb = supabaseAdmin();
 
+  // ── 0. ¿El email ya tiene una cuenta de usuario (alumno / profe /
+  //       admin)? Lo cazamos AQUÍ (paso 5) y no más tarde en
+  //       /api/public/book-trial — si dejamos pasar al lead, llegaría
+  //       al slot picker y rebotaría con "already_registered" después
+  //       de haber elegido un horario. Decisión Gelfis 2026-05-02:
+  //       avisar al momento de enviar el email para que pueda
+  //       cambiarlo o iniciar sesión.
+  const { data: existingUser } = await sb
+    .from("users")
+    .select("id, email, role")
+    .eq("email", b.email)
+    .maybeSingle();
+  if (existingUser) {
+    const baseUrl = (process.env.NEXT_PUBLIC_BASE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+    return NextResponse.json(
+      {
+        ok:       false,
+        error:    "already_registered",
+        message:  "Ya tienes cuenta. Inicia sesión para agendar.",
+        login_url: `${baseUrl}/login`,
+      },
+      { status: 409 },
+    );
+  }
+
   // Upsert por email O whatsapp — mismo patrón que /api/public/book-trial.
   const orFilters: string[] = [`email.eq.${b.email}`, `whatsapp_normalized.eq.${whatsappE164}`];
   const { data: existingLead } = await sb

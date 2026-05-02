@@ -134,24 +134,24 @@ async function runCron(req: Request) {
         kind = "wa+email";
         const waText = lead.language === "de"
           ? [
-              `Hallo ${firstName}, hier ist Gelfis von Aprender-Aleman.de 👋`,
+              `Hallo ${firstName}, hier ist Stiv von Aprender-Aleman.de 👋`,
               ``,
               `Dein persönlicher Deutschplan ist fertig. Um ihn zu starten, lade ich dich zu einer kostenlosen 30-Min-Probestunde mit einer muttersprachlichen Lehrkraft ein.`,
               ``,
               `📅 Hier buchen: ${bookUrl}`,
               ``,
               `Bei Fragen schreib mir einfach hier.`,
-              `— Gelfis`,
+              `— Stiv`,
             ].join("\n")
           : [
-              `Hola ${firstName}, soy Gelfis de Aprender-Aleman.de 👋`,
+              `Hola ${firstName}, soy Stiv de Aprender-Aleman.de 👋`,
               ``,
               `Tu plan personalizado de alemán está listo. Para activarlo te invito a una clase de prueba GRATIS de 30 min con un profesor nativo certificado.`,
               ``,
               `📅 Agenda aquí: ${bookUrl}`,
               ``,
               `Cualquier duda, escríbeme por aquí.`,
-              `— Gelfis`,
+              `— Stiv`,
             ].join("\n");
 
         const sendEmail = lead.email

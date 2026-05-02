@@ -24,9 +24,10 @@
  */
 
 import { useState, useMemo, useEffect } from "react";
-import { useRouter }                    from "next/navigation";
 import Link                             from "next/link";
-import { firePixelLead }                from "@/lib/pixels";
+import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
+import { MobileDayStrip }               from "@/components/agendar/MobileDayStrip";
+import { TimeList, type SlotItem }      from "@/components/agendar/TimeList";
 
 // ── Opciones del quiz (sincronizadas 1-a-1 con el endpoint
 //    /api/public/diagnostico/register — si cambias texto aquí cámbialo
@@ -120,7 +121,6 @@ type FormData = {
 type Step = 1 | 2 | 3 | 4 | "low_budget_exit" | 5 | 6;
 
 export function DiagnosticoFunnel() {
-  const router = useRouter();
   const [step, setStep]       = useState<Step>(1);
   const [answers, setAnswers] = useState<Answers>({
     level: null, goal: null, urgency: null, budget: null,
@@ -130,6 +130,8 @@ export function DiagnosticoFunnel() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
+  const [alreadyRegistered, setAlreadyRegistered] = useState<{ loginUrl: string } | null>(null);
+  const [leadId,     setLeadId]     = useState<string | null>(null);
 
   // Theme color para la barra de estado en móvil
   useEffect(() => {
@@ -209,6 +211,11 @@ export function DiagnosticoFunnel() {
         body:    JSON.stringify(body),
       });
       const json = await res.json();
+      if (res.status === 409 && json.error === "already_registered") {
+        setAlreadyRegistered({ loginUrl: json.login_url ?? "/login" });
+        setSubmitting(false);
+        return;
+      }
       if (!res.ok || !json.ok) {
         setSubmitErr(json.error ?? "No se pudo guardar. Inténtalo de nuevo.");
         setSubmitting(false);
@@ -265,6 +272,7 @@ export function DiagnosticoFunnel() {
         sessionStorage.setItem("diagnostico_email",   body.email);
       } catch { /* ignore */ }
 
+      setLeadId(json.lead_id);
       setStep(6);
     } catch (e) {
       console.error("[diagnostico] submit failed:", e);
@@ -352,20 +360,28 @@ export function DiagnosticoFunnel() {
         )}
         {step === "low_budget_exit" && <LowBudgetExit onBack={() => setStep(4)} />}
         {step === 5 && (
-          <DataCaptureStep
-            form={form}
-            setForm={setForm}
-            countries={COUNTRY_OPTIONS}
-            submitting={submitting}
-            submitErr={submitErr}
-            onSubmit={submitData}
-          />
+          alreadyRegistered ? (
+            <AlreadyRegisteredScreen
+              loginUrl={alreadyRegistered.loginUrl}
+              onBack={() => { setAlreadyRegistered(null); setForm(f => ({ ...f, email: "" })); }}
+            />
+          ) : (
+            <DataCaptureStep
+              form={form}
+              setForm={setForm}
+              countries={COUNTRY_OPTIONS}
+              submitting={submitting}
+              submitErr={submitErr}
+              onSubmit={submitData}
+            />
+          )
         )}
-        {step === 6 && (
-          <SummaryStep
+        {step === 6 && leadId && (
+          <CalendarStep
             name={form.name.trim().split(/\s+/)[0] || "tú"}
             answers={answers}
-            onContinue={() => router.push("/agendar/cuando")}
+            form={form}
+            leadId={leadId}
           />
         )}
       </main>
@@ -605,44 +621,249 @@ function DataCaptureStep({
   );
 }
 
-function SummaryStep({
-  name, answers, onContinue,
+/**
+ * Step 6 — resumen + calendario inline.
+ *
+ * Decisión Gelfis 2026-05-02: el usuario debe agendar SIN pasar por
+ * otra pantalla intermedia. Sin botón "Ver horarios". Calendario
+ * embebido en este mismo paso. Al elegir slot, hacemos POST directo
+ * a /api/public/book-trial con todos los datos del quiz + paso 5,
+ * y redirigimos a /confirmacion en éxito.
+ */
+function CalendarStep({
+  name, answers, form, leadId,
 }: {
-  name:       string;
-  answers:    Answers;
-  onContinue: () => void;
+  name:    string;
+  answers: Answers;
+  form:    FormData;
+  leadId:  string;
 }) {
+  const [slots,    setSlots]    = useState<SlotItem[] | null>(null);
+  const [loadErr,  setLoadErr]  = useState<string | null>(null);
+  const [selectedDay, setDay]   = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitErr,  setSubmitErr]  = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/public/trial-slots", { cache: "no-store" })
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setSlots(d.slots ?? []); })
+      .catch(() => { if (!cancelled) setLoadErr("No pudimos cargar los horarios. Recarga la página."); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const slotsByDay = useMemo(() => {
+    const map = new Map<string, SlotItem[]>();
+    for (const s of slots ?? []) {
+      const key = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit",
+      }).format(new Date(s.startIso));
+      const list = map.get(key) ?? [];
+      list.push(s);
+      map.set(key, list);
+    }
+    return map;
+  }, [slots]);
+
+  const daysWithSlots = useMemo(() => new Set(slotsByDay.keys()), [slotsByDay]);
+
+  useEffect(() => {
+    if (!slots || slots.length === 0 || selectedDay) return;
+    const firstKey = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date(slots[0].startIso));
+    setDay(firstKey);
+  }, [slots, selectedDay]);
+
+  const fullDateLabel = (key: string): string => {
+    const [y, m, d] = key.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d, 12));
+    return dt.toLocaleDateString("es-ES", {
+      weekday: "long", day: "numeric", month: "long",
+    });
+  };
+
+  const slotsToday: SlotItem[] = selectedDay ? (slotsByDay.get(selectedDay) ?? []) : [];
+
+  const onPickSlot = async (s: SlotItem) => {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitErr(null);
+    try {
+      const levelMap: Record<string, "A0" | "A1-A2" | "B1" | "B2+"> = {
+        "Cero / no sé nada":     "A0",
+        "Básico (A1-A2)":        "A1-A2",
+        "Intermedio (B1-B2)":    "B1",
+        "Avanzado (C1+)":        "B2+",
+        "No estoy seguro":       "A0",
+      };
+      const goalMap: Record<string, string> = {
+        "Trabajo":                       "work",
+        "Estudios":                      "studies",
+        "Vida diaria / integración":     "already_in_dach",
+        "Examen oficial / ciudadanía":   "exam",
+        "Crecimiento personal":          "travel",
+      };
+
+      const localDigits  = form.whatsapp.replace(/\D/g, "");
+      const cc           = form.countryCode.startsWith("+") ? form.countryCode : `+${form.countryCode}`;
+      const whatsappE164 = `${cc}${localDigits}`;
+
+      const res = await fetch("/api/public/book-trial", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name:          form.name.trim(),
+          email:         form.email.trim().toLowerCase(),
+          whatsapp_e164: whatsappE164,
+          whatsapp_raw:  `${cc} ${form.whatsapp}`,
+          german_level:  answers.level ? levelMap[answers.level] : "A0",
+          goal:          answers.goal  ? goalMap [answers.goal]  : "work",
+          language:      "es",
+          slot_iso:      s.startIso,
+          teacher_id:    s.teacherId,
+          gdpr_accepted: true,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409 && data.error === "slot_taken") {
+        setSubmitErr("Ese horario se acaba de ocupar. Elige otro.");
+        fetch("/api/public/trial-slots", { cache: "no-store" })
+          .then(r => r.json())
+          .then(d => setSlots(d.slots ?? []))
+          .catch(() => { /* ignore */ });
+        setSubmitting(false);
+        return;
+      }
+      if (!res.ok || !data.ok) {
+        setSubmitErr(data.message ?? data.error ?? "No pudimos confirmar tu clase. Inténtalo de nuevo.");
+        setSubmitting(false);
+        return;
+      }
+      firePixelSchedule({ leadId });
+      try {
+        sessionStorage.removeItem("b2c.agendar.v1");
+        sessionStorage.removeItem("diagnostico_lead_id");
+        sessionStorage.removeItem("diagnostico_name");
+        sessionStorage.removeItem("diagnostico_email");
+      } catch { /* ignore */ }
+      if (typeof window !== "undefined") window.location.href = "/confirmacion";
+    } catch (e) {
+      console.error("[diagnostico] book-trial failed:", e);
+      setSubmitErr("Error de conexión. Inténtalo de nuevo.");
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="px-5 pt-6 pb-12">
       <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
         ¡Tu plan está listo, {name}!
       </h1>
 
-      <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5 space-y-3">
+      <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2.5">
         <SummaryRow label="Nivel"    value={answers.level} />
         <SummaryRow label="Objetivo" value={answers.goal} />
         <SummaryRow label="Plazo"    value={answers.urgency} />
       </div>
 
-      <p className="mt-6 text-[15px] text-white/80 leading-relaxed">
-        Reserva ahora tu clase de prueba <strong>GRATIS de 30 min</strong> con un
-        profesor nativo:
+      <p className="mt-6 text-[15px] text-white/85 leading-relaxed">
+        Reserva ahora tu clase de prueba <strong>GRATIS de 30 min</strong> con un profesor nativo:
       </p>
+
+      <div className="mt-5">
+        {slots === null && !loadErr && (
+          <div className="space-y-4">
+            <div className="flex gap-2 overflow-hidden">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="shrink-0 w-14 h-[68px] rounded-2xl bg-white/[0.06] animate-pulse" />
+              ))}
+            </div>
+            <div className="space-y-2 mt-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-14 rounded-2xl bg-white/[0.06] animate-pulse" />
+              ))}
+            </div>
+          </div>
+        )}
+        {loadErr && <p className="text-sm text-red-300">{loadErr}</p>}
+
+        {submitting && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3
+                          text-sm text-white/85 flex items-center gap-3 mb-4">
+            <span className="inline-block h-4 w-4 rounded-full border-2 border-warm border-t-transparent animate-spin" aria-hidden />
+            Confirmando tu clase…
+          </div>
+        )}
+        {submitErr && (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200 mb-4">
+            {submitErr}
+          </div>
+        )}
+
+        {slots && slots.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-center text-sm text-white/65">
+            Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te avisamos en cuanto se abran horarios.
+          </div>
+        )}
+
+        {slots && slots.length > 0 && (
+          <div className="space-y-5">
+            <MobileDayStrip
+              daysWithSlots={daysWithSlots}
+              selectedDay={selectedDay}
+              onSelect={setDay}
+            />
+            {selectedDay && (
+              <div>
+                <p className="text-[11px] font-semibold uppercase text-white/55 tracking-wider mb-2 capitalize">
+                  {fullDateLabel(selectedDay)}
+                </p>
+                <TimeList
+                  slots={slotsToday}
+                  selectedIso={null}
+                  selectedTeacherId={null}
+                  onSelect={onPickSlot}
+                />
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AlreadyRegisteredScreen({ loginUrl, onBack }: { loginUrl: string; onBack: () => void }) {
+  return (
+    <div className="px-5 pt-8 pb-12">
+      <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
+        Ese email ya tiene cuenta
+      </h1>
+      <p className="mt-4 text-[15px] text-white/80 leading-relaxed">
+        Detectamos que ya eres parte de Aprender-Aleman.de con ese email.
+        Inicia sesión y agenda tu clase desde tu panel.
+      </p>
+
+      <a
+        href={loginUrl}
+        className="mt-7 block w-full text-center h-12 rounded-2xl bg-warm text-warm-foreground
+                   font-semibold text-base shadow-lg shadow-warm/20 active:scale-[0.98] transition
+                   leading-[3rem]"
+      >
+        Iniciar sesión
+      </a>
 
       <button
         type="button"
-        onClick={onContinue}
-        className="mt-6 w-full h-12 rounded-2xl bg-warm text-warm-foreground
-                   font-semibold text-base shadow-lg shadow-warm/20
+        onClick={onBack}
+        className="mt-3 block w-full text-center h-12 rounded-2xl
+                   border border-white/15 text-white/85 font-medium
                    active:scale-[0.98] transition"
       >
-        Ver horarios disponibles →
+        ← Usar otro email
       </button>
-
-      <p className="mt-4 text-xs text-white/50 text-center">
-        Te hemos enviado un email y un WhatsApp con tu plan. Si no agendas
-        ahora podrás hacerlo desde el mensaje cuando quieras.
-      </p>
     </div>
   );
 }
