@@ -641,6 +641,7 @@ function CalendarStep({
   const [slots,    setSlots]    = useState<SlotItem[] | null>(null);
   const [loadErr,  setLoadErr]  = useState<string | null>(null);
   const [selectedDay, setDay]   = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
 
@@ -686,8 +687,22 @@ function CalendarStep({
 
   const slotsToday: SlotItem[] = selectedDay ? (slotsByDay.get(selectedDay) ?? []) : [];
 
-  const onPickSlot = async (s: SlotItem) => {
+  // Click en una hora — solo selecciona. La confirmación de la
+  // reserva la dispara el botón "Confirmar [día · hora]" pegado
+  // al pie. Decisión Gelfis 2026-05-02: el usuario necesita ver
+  // qué eligió antes del submit, no auto-submit al toque.
+  const onPickSlot = (s: SlotItem) => {
     if (submitting) return;
+    setSelectedSlot(s);
+    setSubmitErr(null);
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try { navigator.vibrate?.(8); } catch { /* iOS no-op */ }
+    }
+  };
+
+  const confirmBooking = async () => {
+    if (submitting || !selectedSlot) return;
+    const s = selectedSlot;
     setSubmitting(true);
     setSubmitErr(null);
     try {
@@ -768,8 +783,27 @@ function CalendarStep({
     }
   };
 
+  // Label del botón "Confirmar [día · hora]" cuando hay slot
+  // seleccionado. Formato: "viernes 9 de mayo · 17:00".
+  const confirmLabel = (() => {
+    if (!selectedSlot) return null;
+    const dt = new Date(selectedSlot.startIso);
+    const dayPart = dt.toLocaleDateString("es-ES", {
+      timeZone: "Europe/Berlin",
+      weekday:  "long",
+      day:      "numeric",
+      month:    "long",
+    });
+    const timePart = dt.toLocaleTimeString("es-ES", {
+      timeZone: "Europe/Berlin",
+      hour:     "2-digit",
+      minute:   "2-digit",
+    });
+    return `${dayPart} · ${timePart}`;
+  })();
+
   return (
-    <div className="px-5 pt-6 pb-12">
+    <div className={`px-5 pt-6 ${selectedSlot ? "pb-[calc(env(safe-area-inset-bottom)+5.5rem)]" : "pb-12"}`}>
       <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
         ¡Tu plan está listo, {name}!
       </h1>
@@ -834,8 +868,8 @@ function CalendarStep({
                 </p>
                 <TimeList
                   slots={slotsToday}
-                  selectedIso={null}
-                  selectedTeacherId={null}
+                  selectedIso={selectedSlot?.startIso ?? null}
+                  selectedTeacherId={selectedSlot?.teacherId ?? null}
                   onSelect={onPickSlot}
                 />
               </div>
@@ -843,6 +877,47 @@ function CalendarStep({
           </div>
         )}
       </div>
+
+      {/* CTA sticky de confirmación. Solo se muestra cuando el lead ha
+          escogido un slot — antes no hay nada que confirmar. */}
+      {selectedSlot && confirmLabel && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-30
+                     bg-gradient-to-t from-navy-900 via-navy-900/95 to-navy-900/0
+                     pt-6"
+        >
+          <div
+            className="mx-auto max-w-xl px-5 pb-4"
+            style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
+          >
+            <button
+              type="button"
+              onClick={confirmBooking}
+              disabled={submitting}
+              className="w-full h-14 rounded-2xl bg-warm text-warm-foreground font-semibold
+                         shadow-lg shadow-warm/20 active:scale-[0.98] transition
+                         disabled:opacity-60 disabled:active:scale-100
+                         flex flex-col items-center justify-center gap-0.5"
+            >
+              {submitting ? (
+                <span className="flex items-center gap-2 text-base">
+                  <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
+                  Confirmando…
+                </span>
+              ) : (
+                <>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-75">
+                    Confirmar
+                  </span>
+                  <span className="text-[15px] font-bold capitalize">
+                    {confirmLabel}
+                  </span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
