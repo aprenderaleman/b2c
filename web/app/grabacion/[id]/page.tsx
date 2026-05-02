@@ -63,12 +63,16 @@ export default async function RecordingPage({
         )}
 
         {rec.status === "ready" && playbackUrl && (
-          <div className="rounded-2xl overflow-hidden bg-black ring-1 ring-slate-800">
+          <div className="relative rounded-2xl overflow-hidden bg-black ring-1 ring-slate-800">
             <video
               src={playbackUrl}
               controls
               playsInline
-              preload="metadata"
+              // `auto` lets the browser fetch ahead more aggressively; combined
+              // with R2_PUBLIC_DOMAIN (CDN edge) this drops time-to-first-frame
+              // dramatically vs `metadata`. Browsers respect bandwidth hints
+              // so this is safe on mobile too.
+              preload="auto"
               className="w-full h-auto max-h-[80vh] bg-black"
             />
           </div>

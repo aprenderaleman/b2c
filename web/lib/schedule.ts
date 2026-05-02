@@ -40,6 +40,14 @@ export type ScheduleSpec =
       firstDate:      string;
     }
   | {
+      // Multi-slot: each weekday can have its OWN time + duration.
+      // E.g. Thu 19:00 / Fri 18:00 — what `weekly_days` cannot express.
+      mode:           "weekly_slots";
+      slots:          Array<{ weekday: Weekday; time: string; durationMin: number }>;
+      totalSessions:  number;
+      firstDate:      string;
+    }
+  | {
       mode:           "monthly_day";
       dayOfMonth:     number;                            // 1-31
       time:           string;
@@ -90,9 +98,44 @@ export function generateSchedule(spec: ScheduleSpec): ScheduleEntry[] {
     case "biweekly_days":
       return generateRecurring(spec, 2);
 
+    case "weekly_slots":
+      return generateWeeklySlots(spec);
+
     case "monthly_day":
       return generateMonthly(spec);
   }
+}
+
+function generateWeeklySlots(
+  spec: Extract<ScheduleSpec, { mode: "weekly_slots" }>,
+): ScheduleEntry[] {
+  if (spec.slots.length === 0) return [];
+  const total = Math.min(spec.totalSessions, MAX_SESSIONS_PER_SCHEDULE);
+  if (total <= 0) return [];
+
+  // Index slots by weekday for O(1) lookup. If somebody added two slots
+  // for the same weekday we keep the first (defensive — UI prevents it).
+  const byDow = new Map<Weekday, { time: string; durationMin: number }>();
+  for (const s of spec.slots) {
+    if (!byDow.has(s.weekday)) byDow.set(s.weekday, { time: s.time, durationMin: s.durationMin });
+  }
+
+  const entries: ScheduleEntry[] = [];
+  const cursor = parseLocalDate(spec.firstDate);
+  // Walk forward day by day. Worst case: 7 days yield 1 slot, so cap
+  // the loop at total*7 + a fortnight of slack.
+  for (let safety = 0; safety < total * 7 + 14 && entries.length < total; safety++) {
+    const dow = cursor.getUTCDay() as Weekday;
+    const slot = byDow.get(dow);
+    if (slot) {
+      entries.push({
+        scheduledAtIso: berlinWallClockToIso(isoDate(cursor), slot.time),
+        durationMin:    slot.durationMin,
+      });
+    }
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return entries;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -191,11 +234,22 @@ export function berlinWallClockToIso(dateYmd: string, hhmm: string): string {
 }
 
 function berlinOffsetMinutes(d: Date): number {
-  // Difference between Berlin local and UTC, in minutes.
-  const utcMs    = d.getTime();
-  const berlinStr = d.toLocaleString("en-US", { timeZone: BERLIN_TZ });
-  const berlinMs = new Date(berlinStr).getTime();
-  return Math.round((berlinMs - utcMs) / 60_000);
+  // Difference between Berlin local and UTC, in minutes — independent of
+  // the host machine's timezone (formatToParts gives us the same parts
+  // whether we run on Vercel-UTC or a Berlin browser).
+  const opts: Intl.DateTimeFormatOptions = {
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  };
+  const grab = (tz: string) => {
+    const parts = new Intl.DateTimeFormat("en-US", { ...opts, timeZone: tz }).formatToParts(d);
+    const o: Record<string, string> = {};
+    for (const p of parts) o[p.type] = p.value;
+    // 24h "00"-"23" except some locales return "24" at midnight; normalise.
+    const hour = o.hour === "24" ? 0 : Number(o.hour);
+    return Date.UTC(Number(o.year), Number(o.month) - 1, Number(o.day), hour, Number(o.minute));
+  };
+  return Math.round((grab(BERLIN_TZ) - grab("UTC")) / 60_000);
 }
 
 function parseLocalDate(ymd: string): Date {

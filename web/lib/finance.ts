@@ -46,8 +46,17 @@ export type TeacherMonthlyEarnings = {
  * Billing uses the per-class-type rate (migration 023):
  *   - group       → teachers.rate_group_cents
  *   - individual  → teachers.rate_individual_cents
- * and the 15/90-minute duration rule so we don't pay 1h for a 5-min no-show.
+ * and the 50-min academic-class rule so we don't pay 1 unit for a 5-min
+ * no-show, but we DO pay 2 for a 100-min session. See computeBillingUnits.
  */
+export function computeBillingUnits(durationMin: number): number {
+  if (durationMin < 15) return 0;
+  if (durationMin <= 75)  return 1;
+  if (durationMin <= 125) return 2;
+  if (durationMin <= 175) return 3;
+  return Math.ceil(durationMin / 50);
+}
+
 export async function logClassHoursAndRollup(args: {
   classId:          string;
   teacherId:        string;
@@ -73,11 +82,19 @@ export async function logClassHoursAndRollup(args: {
     ? ((t as { rate_individual_cents: number } | null)?.rate_individual_cents ?? 0)
     : ((t as { rate_group_cents:      number } | null)?.rate_group_cents      ?? 0);
   const currency  = ((t as { currency: string } | null)?.currency ?? "EUR");
-  const rate      = rateCents / 100;  // EUR per hour, stored as NUMERIC in class_hours_log
+  const rate      = rateCents / 100;  // EUR per academic class (= 50 min)
 
-  // Duration rule: <15 → 0h (no pay), 15-90 → 1h, >90 → 2h.
-  const billedHours = args.durationMinutes < 15 ? 0
-                    : args.durationMinutes <= 90 ? 1 : 2;
+  // Universal billing rule (Gelfis 2026-05-02):
+  //   1 academic class = 50 minutes.
+  //   <15 min       → 0 (no-show buffer; not billed, not consumed)
+  //   15-75 min     → 1 (one nominal 50-min session, with leeway)
+  //   76-125 min    → 2 (covers the 100-min "2-hour academic" sessions)
+  //   126-175 min   → 3
+  //   ≥176 min      → ceil(duration / 50) — generalised
+  //
+  // The same value is used for student credit consumption (via the trigger
+  // that sums billed_hours) and teacher pay (rate × billed_hours).
+  const billedHours = computeBillingUnits(args.durationMinutes);
   const amountCents = billedHours * rateCents;
 
   // Also stamp billed_hours on the class itself for the pack-consumption view.
@@ -96,7 +113,7 @@ export async function logClassHoursAndRollup(args: {
     {
       class_id:         args.classId,
       teacher_id:       args.teacherId,
-      duration_minutes: billedHours * 60,     // billed, not wall-clock
+      duration_minutes: billedHours * 50,     // billed academic minutes (50/unit)
       rate_at_time:     rate,
       amount_cents:     amountCents,
       currency,

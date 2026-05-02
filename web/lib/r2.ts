@@ -15,6 +15,12 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
  *   R2_ACCESS_KEY_ID        access key
  *   R2_SECRET_ACCESS_KEY    secret
  *   R2_BUCKET               optional, defaults to "aprender-aleman-recordings"
+ *   R2_PUBLIC_DOMAIN        optional. If set (e.g. "recordings.aprender-aleman.de"),
+ *                           signed URLs are rewritten to use that host so playback
+ *                           goes through Cloudflare CDN edge cache instead of
+ *                           hitting the R2 origin every time. Massive speed-up
+ *                           for big MP4s. Configure this domain in Cloudflare
+ *                           dashboard → R2 bucket → "Custom Domains".
  */
 
 const DEFAULT_BUCKET = "aprender-aleman-recordings";
@@ -68,7 +74,31 @@ export async function signRecordingUrl(
     Key:    parts.key,
   });
   try {
-    return await getSignedUrl(c, cmd, { expiresIn });
+    const signed = await getSignedUrl(c, cmd, { expiresIn });
+    // Rewrite the host to a CDN-enabled custom domain when configured.
+    // Cloudflare's R2 custom domains are CDN-fronted, so the same object
+    // streams from the nearest edge instead of the bucket origin —
+    // turns slow first-byte + linear download into a fast cached fetch.
+    // The signature is path-based; rewriting just the host preserves
+    // authentication AS LONG AS the custom domain is bound to the same
+    // bucket in the Cloudflare dashboard.
+    const publicDomain = process.env.R2_PUBLIC_DOMAIN;
+    if (publicDomain) {
+      try {
+        const u = new URL(signed);
+        u.host = publicDomain;
+        // R2 custom domains use virtual-hosted-style; drop the bucket
+        // path prefix that the SDK injected.
+        const bucket = process.env.R2_BUCKET || parts.bucket || DEFAULT_BUCKET;
+        if (u.pathname.startsWith(`/${bucket}/`)) {
+          u.pathname = u.pathname.slice(bucket.length + 1);
+        }
+        return u.toString();
+      } catch {
+        // If anything in the rewrite fails, fall back to the raw signed URL.
+      }
+    }
+    return signed;
   } catch (e) {
     console.error("[r2] sign failed:", e);
     return fileUrl;

@@ -77,6 +77,14 @@ export function CreateGroupWizard({
   const [customEntries, setCustomE]   = useState<Array<{ date: string; time: string; durationMin: number }>>([
     { date: todayIsoDate(), time: "19:00", durationMin: 60 },
   ]);
+  // weekly_slots — varios horarios distintos por día de la semana
+  const [slots, setSlots] = useState<Array<{ weekday: Weekday; time: string; durationMin: number }>>([
+    { weekday: 4, time: "19:00", durationMin: 60 },
+    { weekday: 5, time: "18:00", durationMin: 60 },
+  ]);
+  // Toggle "hasta agotar créditos" + caché del min calculado
+  const [untilCreditsRunOut, setUntilCredits] = useState(false);
+  const [creditsCap, setCreditsCap] = useState<{ min: number; details: string } | null>(null);
 
   // Step 3 — preview entries (mutable so user can delete one)
   const [previewEntries, setPreviewEntries] = useState<ScheduleEntry[]>([]);
@@ -93,9 +101,75 @@ export function CreateGroupWizard({
     setFirstDate(todayIsoDate()); setRSes(20); setDayOfMonth(1);
     setSingleDate(todayIsoDate()); setSingleTime("19:00"); setSingleDur(60);
     setCustomE([{ date: todayIsoDate(), time: "19:00", durationMin: 60 }]);
+    setSlots([
+      { weekday: 4, time: "19:00", durationMin: 60 },
+      { weekday: 5, time: "18:00", durationMin: 60 },
+    ]);
+    setUntilCredits(false); setCreditsCap(null);
     setPreviewEntries([]);
     setError(null);
   }, [open, teachers]);
+
+  // When "hasta agotar créditos" is toggled on, fetch min(remaining) for
+  // the currently selected members. The actual `totalSessions` is then
+  // derived from that cap PLUS the average session duration (1h = 1
+  // class universal rule — a 2h session consumes 2 credits).
+  useEffect(() => {
+    if (!untilCreditsRunOut) { setCreditsCap(null); return; }
+    if (memberIds.length === 0) {
+      setCreditsCap({ min: 0, details: "Selecciona al menos un miembro en el paso 1." });
+      setRSes(0);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/students/credits-min", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ student_ids: memberIds }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok) {
+          setCreditsCap({ min: 0, details: `Error: ${data.message ?? data.error ?? "desconocido"}` });
+          return;
+        }
+        const lines = (data.students as Array<{ name: string; remaining: number }>)
+          .map(s => `${s.name}: ${s.remaining}`).join(" · ");
+        setCreditsCap({ min: data.min, details: lines });
+      } catch (e: unknown) {
+        if (!cancelled) setCreditsCap({ min: 0, details: `Error: ${(e as Error).message}` });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [untilCreditsRunOut, memberIds]);
+
+  // Derive the actual session count that fits within the credits cap,
+  // honouring the "50 min = 1 academic class" rule. Recomputes whenever
+  // the cap or the slot durations change so the preview stays accurate.
+  useEffect(() => {
+    if (!untilCreditsRunOut || !creditsCap) return;
+    const cap = creditsCap.min;            // remaining academic classes
+    if (cap <= 0) { setRSes(0); return; }
+    if (mode === "weekly_slots") {
+      // Walk slots in cycle; stop just before exceeding cap.
+      const ordered = [...slots].sort((a, b) => a.weekday - b.weekday);
+      if (ordered.length === 0) { setRSes(0); return; }
+      let used = 0, count = 0, i = 0;
+      while (count < MAX_SESSIONS_PER_SCHEDULE) {
+        const next = ordered[i % ordered.length];
+        const units = unitsForDuration(next.durationMin);
+        if (units <= 0) break;
+        if (used + units > cap) break;
+        used += units; count++; i++;
+      }
+      setRSes(count);
+    } else if (mode === "weekly_days" || mode === "biweekly_days" || mode === "monthly_day") {
+      const units = unitsForDuration(duration);
+      setRSes(units > 0 ? Math.floor(cap / units) : 0);
+    }
+  }, [untilCreditsRunOut, creditsCap, mode, slots, duration]);
 
   // Build the spec from current state.
   const spec: ScheduleSpec | null = useMemo(() => {
@@ -111,6 +185,9 @@ export function CreateGroupWizard({
           totalSessions:  recurringSessions,
           firstDate,
         };
+      case "weekly_slots":
+        if (slots.length === 0 || !firstDate) return null;
+        return { mode: "weekly_slots", slots, firstDate, totalSessions: recurringSessions };
       case "monthly_day":
         if (!firstDate) return null;
         return {
@@ -129,7 +206,7 @@ export function CreateGroupWizard({
     }
   }, [
     mode, weekdays, time, duration, firstDate, recurringSessions,
-    dayOfMonth, singleDate, singleTime, singleDuration, customEntries,
+    dayOfMonth, singleDate, singleTime, singleDuration, customEntries, slots,
   ]);
 
   if (!open) return null;
@@ -244,6 +321,9 @@ export function CreateGroupWizard({
               singleTime={singleTime} setSingleTime={setSingleTime}
               singleDuration={singleDuration} setSingleDur={setSingleDur}
               customEntries={customEntries} setCustomE={setCustomE}
+              slots={slots} setSlots={setSlots}
+              untilCreditsRunOut={untilCreditsRunOut} setUntilCredits={setUntilCredits}
+              creditsCap={creditsCap}
               specPreview={spec ? generateSchedule(spec).slice(0, 5) : []}
             />
           )}
@@ -387,6 +467,10 @@ function Step2(p: {
   singleDuration: number; setSingleDur: (v: number) => void;
   customEntries: Array<{ date: string; time: string; durationMin: number }>;
   setCustomE: (v: Array<{ date: string; time: string; durationMin: number }>) => void;
+  slots: Array<{ weekday: Weekday; time: string; durationMin: number }>;
+  setSlots: (v: Array<{ weekday: Weekday; time: string; durationMin: number }>) => void;
+  untilCreditsRunOut: boolean; setUntilCredits: (v: boolean) => void;
+  creditsCap: { min: number; details: string } | null;
   specPreview: ScheduleEntry[];
 }) {
   const toggleWeekday = (d: Weekday) => {
@@ -396,7 +480,8 @@ function Step2(p: {
     <div className="space-y-4">
       <Field label="Cómo se repiten las clases">
         <select value={p.mode} onChange={e => p.setMode(e.target.value as ScheduleMode)} className="input-text w-full">
-          <option value="weekly_days">Semanal · días específicos</option>
+          <option value="weekly_days">Semanal · días específicos (mismo horario)</option>
+          <option value="weekly_slots">Semanal · varios slots con horarios distintos</option>
           <option value="biweekly_days">Quincenal · días específicos</option>
           <option value="monthly_day">Mensual · mismo día del mes</option>
           <option value="custom_dates">Fechas personalizadas (estilo Zoom)</option>
@@ -436,6 +521,90 @@ function Step2(p: {
                 value={p.sessions} onChange={e => p.setSessions(Number(e.target.value))} className="input-text w-full" />
             </Field>
           </div>
+        </>
+      )}
+
+      {p.mode === "weekly_slots" && (
+        <>
+          <Field label="Slots semanales (cada día con su propio horario y duración)">
+            <div className="space-y-2">
+              {p.slots.map((s, i) => (
+                <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end">
+                  <select
+                    value={s.weekday}
+                    onChange={e => p.setSlots(p.slots.map((x, j) => j === i ? { ...x, weekday: Number(e.target.value) as Weekday } : x))}
+                    className="input-text"
+                    aria-label="Día de la semana"
+                  >
+                    {WEEKDAY_LABELS.map(w => <option key={w.id} value={w.id}>{w.long}</option>)}
+                  </select>
+                  <input
+                    type="time" step={300}
+                    value={s.time}
+                    onChange={e => p.setSlots(p.slots.map((x, j) => j === i ? { ...x, time: e.target.value } : x))}
+                    className="input-text"
+                    aria-label="Hora"
+                  />
+                  <select
+                    value={s.durationMin}
+                    onChange={e => p.setSlots(p.slots.map((x, j) => j === i ? { ...x, durationMin: Number(e.target.value) } : x))}
+                    className="input-text"
+                    aria-label="Duración"
+                  >
+                    {[30,45,60,75,90,105,120,150,180].map(m => <option key={m} value={m}>{m} min</option>)}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => p.setSlots(p.slots.filter((_, j) => j !== i))}
+                    disabled={p.slots.length === 1}
+                    className="text-xs px-2 py-2 text-red-600 hover:text-red-800 dark:text-red-400 disabled:opacity-30"
+                    aria-label="Quitar slot"
+                  >×</button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => p.setSlots([...p.slots, { weekday: 1, time: "19:00", durationMin: 60 }])}
+                className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+              >+ Añadir slot</button>
+            </div>
+          </Field>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Empieza el">
+              <input type="date" value={p.firstDate} onChange={e => p.setFirstDate(e.target.value)} className="input-text w-full" />
+            </Field>
+            <Field label="N.º total de sesiones a generar">
+              <input
+                type="number" min={1} max={MAX_SESSIONS_PER_SCHEDULE}
+                value={p.sessions}
+                onChange={e => p.setSessions(Number(e.target.value))}
+                disabled={p.untilCreditsRunOut}
+                className="input-text w-full disabled:opacity-60"
+              />
+            </Field>
+          </div>
+          <label className="flex items-start gap-2 rounded-xl border border-slate-200 dark:border-slate-700 p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={p.untilCreditsRunOut}
+              onChange={e => p.setUntilCredits(e.target.checked)}
+              className="mt-0.5 h-4 w-4"
+            />
+            <span className="text-xs text-slate-700 dark:text-slate-200">
+              <strong>Generar hasta agotar créditos disponibles</strong>
+              <span className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Calcula el mín. de <code>classes_remaining</code> entre los miembros del grupo y usa ese valor como N.º de sesiones.
+                {p.untilCreditsRunOut && p.creditsCap && (
+                  <span className="block mt-1 font-mono text-emerald-600 dark:text-emerald-400">
+                    cap = {p.creditsCap.min} clases · {p.creditsCap.details}
+                  </span>
+                )}
+                <span className="block mt-1 text-[10px] text-amber-700 dark:text-amber-400">
+                  Regla universal: 50 min = 1 clase. Sesión de 100 min consume 2 créditos; 150 min, 3.
+                </span>
+              </span>
+            </span>
+          </label>
         </>
       )}
 
@@ -673,6 +842,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="mt-1.5">{children}</div>
     </label>
   );
+}
+
+/** 1 academic class = 50 min (universal rule, see web/lib/finance.ts). */
+function unitsForDuration(min: number): number {
+  if (min < 15) return 0;
+  if (min <= 75)  return 1;
+  if (min <= 125) return 2;
+  if (min <= 175) return 3;
+  return Math.ceil(min / 50);
 }
 
 function todayIsoDate(): string {
