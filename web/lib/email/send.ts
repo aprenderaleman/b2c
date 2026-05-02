@@ -35,6 +35,10 @@ import {
   renderWelcomePlatform,
   type WelcomePlatformVars,
 } from "./templates/welcome-platform";
+import {
+  renderDiagnosticoWelcome,
+  type DiagnosticoWelcomeVars,
+} from "./templates/diagnostico-welcome";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -293,5 +297,18 @@ export async function sendWelcomePlatformEmail(
   vars: WelcomePlatformVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderWelcomePlatform(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Email transaccional disparado al completar el paso 5 del nuevo
+ * funnel `/diagnostico` (root). Bridge entre "creó plan" y "agendó
+ * clase" — si abandonan, este email queda como punto de regreso.
+ */
+export async function sendDiagnosticoWelcomeEmail(
+  to: string,
+  vars: DiagnosticoWelcomeVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderDiagnosticoWelcome(vars);
   return sendRaw(to, subject, html, text);
 }

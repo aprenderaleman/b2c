@@ -40,9 +40,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { after }                      from "next/server";
 import { z }                          from "zod";
 import { supabaseAdmin }              from "@/lib/supabase";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
+import { sendDiagnosticoWelcomeEmail } from "@/lib/email/send";
+import { sendWhatsappText }            from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -251,6 +254,67 @@ export async function POST(req: NextRequest) {
     author:  "system",
     content: `📋 Diagnóstico completado — nivel: ${b.answers.level}, objetivo: ${b.answers.goal}, urgencia: ${b.answers.urgency}, presupuesto: ${b.answers.budget}, país: ${b.country}`,
     metadata: { kind: "diagnostico_register", answers: b.answers, country: b.country },
+  });
+
+  // ── Welcome inmediato (email + WhatsApp) ──────────────────────
+  //
+  // Decisión Gelfis 2026-05-02: el lead recibe email + WA al
+  // completar paso 5, ANTES de que agende. Así si abandonan en el
+  // paso 6 (calendar) tienen el link en su bandeja para volver.
+  //
+  // Vía `after()` para no bloquear la respuesta del endpoint —
+  // el frontend redirige al paso 6 mientras los mensajes salen.
+  // Errores en el envío NO rompen el registro (ya está en DB).
+  const leadFirst = b.name.trim().split(/\s+/)[0] || b.name;
+  const baseUrl   = (process.env.NEXT_PUBLIC_BASE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+  const bookUrl   = `${baseUrl}/agendar/cuando`;
+
+  after(async () => {
+    const [emailRes, waRes] = await Promise.allSettled([
+      sendDiagnosticoWelcomeEmail(b.email, {
+        leadName: leadFirst,
+        bookUrl,
+        language: b.language,
+      }),
+      sendWhatsappText(
+        whatsappE164,
+        b.language === "de"
+          ? `Hallo ${leadFirst} 👋 Wir haben deinen Deutschplan erstellt. Buche jetzt deine kostenlose Probestunde: ${bookUrl}`
+          : `Hola ${leadFirst} 👋 Hemos creado tu plan personalizado de alemán. Agenda tu clase de prueba GRATIS aquí: ${bookUrl}`,
+      ),
+    ]);
+
+    if (emailRes.status === "fulfilled" && emailRes.value.ok) {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "system_message_sent",
+        author:  "system",
+        content: "✉️ Welcome diagnóstico enviado por email",
+        metadata: { kind: "diagnostico_welcome_email", message_id: emailRes.value.id },
+      });
+    } else if (emailRes.status === "rejected" ||
+               (emailRes.status === "fulfilled" && !emailRes.value.ok)) {
+      const err = emailRes.status === "rejected"
+        ? (emailRes.reason instanceof Error ? emailRes.reason.message : String(emailRes.reason))
+        : (emailRes.value as { ok: false; error: string }).error;
+      console.error("[diagnostico/register] welcome email failed:", err);
+    }
+
+    if (waRes.status === "fulfilled" && waRes.value.ok) {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "system_message_sent",
+        author:  "system",
+        content: "💬 Welcome diagnóstico enviado por WhatsApp",
+        metadata: { kind: "diagnostico_welcome_wa", message_id: waRes.value.messageId },
+      });
+    } else if (waRes.status === "rejected" ||
+               (waRes.status === "fulfilled" && !waRes.value.ok)) {
+      const err = waRes.status === "rejected"
+        ? (waRes.reason instanceof Error ? waRes.reason.message : String(waRes.reason))
+        : "send_failed";
+      console.error("[diagnostico/register] welcome WA failed:", err);
+    }
   });
 
   return NextResponse.json(
