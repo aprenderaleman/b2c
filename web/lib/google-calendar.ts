@@ -1,3 +1,6 @@
+// Build cache bust: 2026-05-02 — Vercel deploy 1ff7bd1 falló sin
+// cambios de código identificables; build local pasa limpio. Este
+// no-op fuerza un nuevo intento con cache invalidado.
 /**
  * Google Calendar — espejo de las clases de prueba en el calendar
  * personal de Gelfis (`aprenderaleman2026@gmail.com`).
