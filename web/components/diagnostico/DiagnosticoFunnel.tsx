@@ -741,6 +741,15 @@ function CalendarStep({
         setSubmitting(false);
         return;
       }
+      // /confirmacion EXIGE ?c=<classId>&t=<token> — sin esos params
+      // hace `redirect('/')` server-side (ver /app/confirmacion/page.tsx
+      // líneas 41 y 44). Sin estos query params, el lead aterrizaba
+      // de vuelta en el paso 1 del quiz.
+      if (!data.classId || !data.token) {
+        setSubmitErr("Tu clase se guardó pero no pudimos cargar la confirmación. Mira tu email — te llegará el enlace ahí.");
+        setSubmitting(false);
+        return;
+      }
       firePixelSchedule({ leadId });
       try {
         sessionStorage.removeItem("b2c.agendar.v1");
@@ -748,7 +757,10 @@ function CalendarStep({
         sessionStorage.removeItem("diagnostico_name");
         sessionStorage.removeItem("diagnostico_email");
       } catch { /* ignore */ }
-      if (typeof window !== "undefined") window.location.href = "/confirmacion";
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams({ c: data.classId, t: data.token });
+        window.location.href = `/confirmacion?${params.toString()}`;
+      }
     } catch (e) {
       console.error("[diagnostico] book-trial failed:", e);
       setSubmitErr("Error de conexión. Inténtalo de nuevo.");
@@ -769,7 +781,7 @@ function CalendarStep({
       </div>
 
       <p className="mt-6 text-[15px] text-white/85 leading-relaxed">
-        Reserva ahora tu clase de prueba <strong>GRATIS de 30 min</strong> con un profesor nativo:
+        Reserva ahora tu clase de <strong>alemán</strong> prueba <strong>GRATIS de 30 min</strong> con tu profesor alemán nativo que también habla español:
       </p>
 
       <div className="mt-5">

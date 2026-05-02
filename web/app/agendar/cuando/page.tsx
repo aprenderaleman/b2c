@@ -132,12 +132,23 @@ export default function StepCuando() {
           setSubmitting(false);
           return;
         }
+        // /confirmacion EXIGE ?c=<classId>&t=<token> o redirige a `/`
+        // (ver app/confirmacion/page.tsx). Sin esos params el lead
+        // termina otra vez en el inicio del funnel.
+        if (!json.classId || !json.token) {
+          setSubmitErr("Tu clase se guardó pero no pudimos cargar la confirmación. Mira tu email — te llegará el enlace ahí.");
+          setSubmitting(false);
+          return;
+        }
         if (state.lead_id) firePixelSchedule({ leadId: state.lead_id });
         // Limpiar booking-state — la sesión se cierra aquí.
         try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
         // Hard nav para que `/confirmacion` cargue limpio sin que el
         // guard de /agendar/* haga ping-pong.
-        if (typeof window !== "undefined") window.location.href = "/confirmacion";
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams({ c: json.classId, t: json.token });
+          window.location.href = `/confirmacion?${params.toString()}`;
+        }
       } catch (e) {
         console.error("[agendar/cuando] direct submit failed:", e);
         setSubmitErr("Error de conexión. Inténtalo de nuevo.");
