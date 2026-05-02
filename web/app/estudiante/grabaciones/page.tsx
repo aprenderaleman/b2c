@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { getStudentRecordings, formatDurationHms } from "@/lib/recordings";
 import { formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
@@ -16,7 +16,12 @@ export const metadata = { title: "Grabaciones · Aprender-Aleman.de" };
  * cuando el grupo lleva varios meses dando clase.
  */
 export default async function StudentRecordingsPage() {
-  const session = await requireRole(["student", "admin", "superadmin"]);
+  // Same pattern as /estudiante/clases — when an admin uses "Ver como
+  // estudiante" the session.user.id resolves to the impersonated student.
+  const session = await requireRoleWithImpersonation(
+    ["student", "admin", "superadmin"],
+    "student",
+  );
   const student = await getStudentByUserId(session.user.id);
   if (!student) {
     return (
