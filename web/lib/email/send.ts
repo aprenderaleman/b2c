@@ -39,6 +39,10 @@ import {
   renderDiagnosticoWelcome,
   type DiagnosticoWelcomeVars,
 } from "./templates/diagnostico-welcome";
+import {
+  renderDiagnosticoFollowup,
+  type DiagnosticoFollowupVars,
+} from "./templates/diagnostico-followup";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -310,5 +314,17 @@ export async function sendDiagnosticoWelcomeEmail(
   vars: DiagnosticoWelcomeVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderDiagnosticoWelcome(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Followups del drip de leads abandonados — variante 'reminder_24h'
+ * o 'final_7d'. Disparado por `/api/cron/diagnostico-followups`.
+ */
+export async function sendDiagnosticoFollowupEmail(
+  to: string,
+  vars: DiagnosticoFollowupVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderDiagnosticoFollowup(vars);
   return sendRaw(to, subject, html, text);
 }

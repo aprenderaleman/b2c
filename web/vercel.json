@@ -25,6 +25,10 @@
     {
       "path": "/api/cron/recordings-reconcile",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/diagnostico-followups",
+      "schedule": "*/30 * * * *"
     }
   ]
 }
