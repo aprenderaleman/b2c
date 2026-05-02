@@ -19,7 +19,7 @@ export async function GET() {
   const sb = supabaseAdmin();
   const { data, error } = await sb
     .from("admin_broadcasts")
-    .select("id, created_at, admin_user_id, audience_filter, subject, channels, total_recipients, ok_count, fail_count")
+    .select("id, created_at, admin_user_id, audience_filter, subject, channels, total_recipients, ok_count, fail_count, status, scheduled_at, attachments")
     .order("created_at", { ascending: false })
     .limit(20);
 

@@ -41,10 +41,42 @@ export const previewBodySchema = z.object({
   audience_filter: audienceFilterSchema,
 });
 
+/**
+ * Minimum slack between "now" and a scheduled_at value. Matches the
+ * 5-minute dispatch cron interval — anything closer risks the cron
+ * having already run for that window.
+ */
+export const SCHEDULE_MIN_LEAD_MS = 5 * 60 * 1000;
+
+/**
+ * scheduled_at: ISO-8601 string. The endpoint resolves "future or not"
+ * by comparing the parsed Date against now() server-side, so we don't
+ * trust the client clock.
+ */
+const scheduledAtSchema = z
+  .string()
+  .datetime({ offset: true })
+  .refine(s => !isNaN(new Date(s).getTime()), { message: "invalid_date" })
+  .optional();
+
 export const sendBodySchema = z.object({
   audience_filter:  audienceFilterSchema,
   subject:          z.string().trim().min(1).max(200),
   message_markdown: z.string().trim().min(1).max(4000),
   channels:         z.array(z.enum(["email", "whatsapp"])).min(1),
   attachments:      attachmentsArraySchema.optional().default([]),
+  scheduled_at:     scheduledAtSchema,
+});
+
+/**
+ * /update accepts the same body as /send PLUS the row id. Used to edit
+ * a still-queued broadcast (subject / body / channels / audience /
+ * attachments / scheduled_at).
+ */
+export const updateBodySchema = sendBodySchema.extend({
+  id: z.string().uuid(),
+});
+
+export const cancelBodySchema = z.object({
+  id: z.string().uuid(),
 });

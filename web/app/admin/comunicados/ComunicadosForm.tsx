@@ -18,40 +18,78 @@ type Level = "A1" | "A2" | "B1" | "B2" | "C1";
 type LanguageChoice = "" | "es" | "de";
 
 type SendResponse = {
-  ok: boolean;
-  broadcast_id: string | null;
-  total_recipients: number;
-  ok_count: number;
-  fail_count: number;
-  results: SendResultRow[];
+  ok:               boolean;
+  queued?:          boolean;
+  broadcast_id:     string | null;
+  total_recipients?: number;
+  ok_count?:        number;
+  fail_count?:      number;
+  results?:         SendResultRow[];
+  scheduled_at?:    string;
+};
+
+/**
+ * Shape passed in from page.tsx when the URL has `?edit=<id>` and the
+ * row is still queued. Mirrors the columns we hydrate state from.
+ */
+export type EditingBroadcast = {
+  id:               string;
+  audience_filter:  AudienceFilter & { _marker?: string };
+  subject:          string;
+  message_markdown: string;
+  channels:         Channel[];
+  attachments:      Attachment[];
+  scheduled_at:     string;        // ISO
+  status:           "queued";
 };
 
 const LEVELS: Level[] = ["A1", "A2", "B1", "B2", "C1"];
+
+/** 5 min slack — must match SCHEDULE_MIN_LEAD_MS on the server. */
+const SCHEDULE_MIN_LEAD_MS = 5 * 60 * 1000;
 
 /**
  * Main composer. Builds an AudienceFilter + message, previews it,
  * then opens a confirm modal before POST-ing to /send. The preview +
  * the send both re-resolve recipients server-side so the client can't
  * spoof the audience.
+ *
+ * When `editing` is non-null we're editing a still-queued broadcast:
+ * state is hydrated from the row, schedule mode is forced on, and the
+ * submit posts to /update instead of /send.
  */
-export function ComunicadosForm({ groups }: { groups: Group[] }) {
+export function ComunicadosForm({
+  groups,
+  editing,
+}: {
+  groups:   Group[];
+  editing?: EditingBroadcast | null;
+}) {
+  const isEditing = !!editing;
+  const initial   = hydrateFromEditing(editing, groups);
+
   // --- Audience ---
-  const [kind,   setKind]   = useState<AudienceKind>("all_students");
-  const [status, setStatus] = useState<StudentStatus>("active");
-  const [level,  setLevel]  = useState<Level>("B1");
-  const [groupId, setGroupId] = useState<string>(groups[0]?.id ?? "");
-  const [language, setLanguage] = useState<LanguageChoice>("");
-  const [customEmails, setCustomEmails] = useState("");
-  const [customPhones, setCustomPhones] = useState("");
+  const [kind,   setKind]   = useState<AudienceKind>(initial.kind);
+  const [status, setStatus] = useState<StudentStatus>(initial.status);
+  const [level,  setLevel]  = useState<Level>(initial.level);
+  const [groupId, setGroupId] = useState<string>(initial.groupId);
+  const [language, setLanguage] = useState<LanguageChoice>(initial.language);
+  const [customEmails, setCustomEmails] = useState(initial.customEmails);
+  const [customPhones, setCustomPhones] = useState(initial.customPhones);
 
   // --- Message ---
-  const [subject, setSubject]   = useState("");
-  const [markdown, setMarkdown] = useState("");
-  const [emailOn, setEmailOn]   = useState(true);
-  const [whatsOn, setWhatsOn]   = useState(true);
+  const [subject, setSubject]   = useState(initial.subject);
+  const [markdown, setMarkdown] = useState(initial.markdown);
+  const [emailOn, setEmailOn]   = useState(initial.emailOn);
+  const [whatsOn, setWhatsOn]   = useState(initial.whatsOn);
+
+  // --- Schedule ---
+  const [scheduleMode, setScheduleMode] = useState<"now" | "schedule">(initial.scheduleMode);
+  const [scheduledLocal, setScheduledLocal] = useState<string>(initial.scheduledLocal);
+  const [scheduleErr, setScheduleErr]       = useState<string | null>(null);
 
   // --- Attachments (email-only) ---
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>(initial.attachments);
   const [uploading,   setUploading]   = useState(false);
   const [uploadErr,   setUploadErr]   = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -163,28 +201,61 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
     setAttachments(prev => prev.filter((_, i) => i !== idx));
   };
 
+  // Compute scheduled_at as ISO UTC if the user chose "programar".
+  const scheduledIso = useMemo<string | null>(() => {
+    if (scheduleMode !== "schedule") return null;
+    if (!scheduledLocal) return null;
+    const t = new Date(scheduledLocal).getTime();
+    if (isNaN(t)) return null;
+    return new Date(t).toISOString();
+  }, [scheduleMode, scheduledLocal]);
+
+  // The button is allowed iff schedule input (if any) is well-formed.
+  const scheduleValid = useMemo<boolean>(() => {
+    setScheduleErr(null);
+    if (scheduleMode === "now") return true;
+    if (!scheduledIso) { setScheduleErr("Elige una fecha y hora."); return false; }
+    const lead = new Date(scheduledIso).getTime() - Date.now();
+    if (lead < SCHEDULE_MIN_LEAD_MS) {
+      setScheduleErr("La hora elegida es demasiado pronto. Mínimo 5 min en el futuro.");
+      return false;
+    }
+    return true;
+  }, [scheduleMode, scheduledIso]);
+
   const handleSend = () => {
     setSendErr(null);
     setSendResult(null);
     setModalOpen(false);
     start(async () => {
       try {
-        const res = await fetch("/api/admin/comunicados/send", {
+        const url    = isEditing ? "/api/admin/comunicados/update" : "/api/admin/comunicados/send";
+        const body: Record<string, unknown> = {
+          audience_filter:  audienceFilter,
+          subject:          subject.trim(),
+          message_markdown: markdown.trim(),
+          channels,
+          attachments,
+        };
+        if (scheduledIso)  body.scheduled_at = scheduledIso;
+        if (isEditing)     body.id = editing!.id;
+
+        const res = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            audience_filter:  audienceFilter,
-            subject:          subject.trim(),
-            message_markdown: markdown.trim(),
-            channels,
-            attachments,
-          }),
+          body: JSON.stringify(body),
         });
         const data = await res.json();
         if (!res.ok) { setSendErr(data?.message ?? data?.error ?? "Error al enviar."); return; }
         setSendResult(data as SendResponse);
         // refresh history panel
         window.dispatchEvent(new CustomEvent("comunicados:sent"));
+        // If we just saved an edit, drop the ?edit=… so a second submit
+        // wouldn't re-update unintentionally. Replace history so back
+        // button doesn't bounce them into edit mode again.
+        if (isEditing && typeof window !== "undefined") {
+          window.history.replaceState(null, "", "/admin/comunicados");
+        }
       } catch (e) {
         setSendErr(e instanceof Error ? e.message : "Error de red.");
       }
@@ -201,6 +272,22 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
 
   return (
     <div className="space-y-5">
+      {/* Edit banner — shown only when hydrating an existing queued row */}
+      {isEditing && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700/50 px-4 py-3 text-sm text-amber-900 dark:text-amber-200 flex items-baseline justify-between gap-3 flex-wrap">
+          <div>
+            <strong>Editando un comunicado programado.</strong>{" "}
+            Los cambios sustituyen el envío original; el horario se mantiene salvo que lo modifiques abajo.
+          </div>
+          <a
+            href="/admin/comunicados"
+            className="text-xs underline font-semibold hover:text-amber-700"
+          >
+            Salir de edición
+          </a>
+        </div>
+      )}
+
       {/* ── Audience card ───────────────────────────────────────────── */}
       <section className="surface-card p-5 space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
@@ -437,11 +524,71 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
         </div>
       </section>
 
+      {/* ── Schedule ───────────────────────────────────────────────── */}
+      <section className="surface-card p-5 space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          3. Cuándo enviar
+        </h2>
+        <div className="grid sm:grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setScheduleMode("now")}
+            disabled={isEditing}
+            className={`rounded-xl px-4 py-3 text-sm font-semibold border transition-colors ${
+              scheduleMode === "now"
+                ? "border-brand-500 bg-brand-50 text-brand-900 dark:bg-brand-500/10 dark:text-brand-200"
+                : "border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-brand-400"
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            ⚡ Ahora
+          </button>
+          <button
+            type="button"
+            onClick={() => setScheduleMode("schedule")}
+            className={`rounded-xl px-4 py-3 text-sm font-semibold border transition-colors ${
+              scheduleMode === "schedule"
+                ? "border-brand-500 bg-brand-50 text-brand-900 dark:bg-brand-500/10 dark:text-brand-200"
+                : "border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:border-brand-400"
+            }`}
+          >
+            📅 Programar
+          </button>
+        </div>
+
+        {isEditing && (
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Editar implica programación. Si quieres enviar ahora, cancela este programado y crea uno nuevo.
+          </p>
+        )}
+
+        {scheduleMode === "schedule" && (
+          <div className="space-y-2">
+            <label className="block">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Fecha y hora (zona del navegador)</span>
+              <input
+                type="datetime-local"
+                className="input-text mt-1"
+                value={scheduledLocal}
+                onChange={e => setScheduledLocal(e.target.value)}
+                min={localMinForInput()}
+              />
+            </label>
+            {scheduledIso && (
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                Saldrá <strong>{formatScheduled(scheduledIso)}</strong>.{" "}
+                <span className="text-slate-500">El sistema revisa la cola cada 5 min, así que el envío real puede ser hasta 5 min después.</span>
+              </p>
+            )}
+            {scheduleErr && <p className="text-xs text-red-600 dark:text-red-400">{scheduleErr}</p>}
+          </div>
+        )}
+      </section>
+
       {/* ── Preview + send ──────────────────────────────────────────── */}
       <section className="surface-card p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-            3. Revisar y enviar
+            4. Revisar y enviar
           </h2>
           <div className="flex items-center gap-2">
             <button
@@ -455,10 +602,10 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
             <button
               type="button"
               onClick={() => setModalOpen(true)}
-              disabled={pending || !canSend}
+              disabled={pending || !canSend || !scheduleValid}
               className="btn-primary"
             >
-              Enviar
+              {sendButtonLabel(isEditing, scheduleMode, scheduledIso)}
             </button>
           </div>
         </div>
@@ -492,12 +639,19 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
 
         {sendErr && <p className="text-sm text-red-600 dark:text-red-400">{sendErr}</p>}
 
-        {sendResult && (
+        {sendResult && sendResult.queued && (
+          <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/40 p-4 text-sm text-emerald-900 dark:text-emerald-200">
+            <strong>✓ {isEditing ? "Cambios guardados" : "Programado"}.</strong>{" "}
+            {sendResult.scheduled_at && <>Saldrá <strong>{formatScheduled(sendResult.scheduled_at)}</strong>.</>} Aparece en el historial abajo y puedes cancelarlo o editarlo hasta 5 min antes.
+          </div>
+        )}
+
+        {sendResult && !sendResult.queued && sendResult.results && (
           <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4">
             <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-              {sendResult.ok_count} ok
-              {sendResult.fail_count > 0 && <span className="text-red-600 dark:text-red-400"> · {sendResult.fail_count} con error</span>}
-              {" "}· {sendResult.total_recipients} total
+              {sendResult.ok_count ?? 0} ok
+              {(sendResult.fail_count ?? 0) > 0 && <span className="text-red-600 dark:text-red-400"> · {sendResult.fail_count} con error</span>}
+              {" "}· {sendResult.total_recipients ?? 0} total
             </p>
             <ul className="mt-3 space-y-1.5 text-xs">
               {sendResult.results.map((r, i) => (
@@ -526,6 +680,8 @@ export function ComunicadosForm({ groups }: { groups: Group[] }) {
           recipientCount={preview.length}
           audience={kind}
           attachments={attachments}
+          scheduledIso={scheduledIso}
+          isEditing={isEditing}
           onCancel={() => setModalOpen(false)}
           onConfirm={handleSend}
           pending={pending}
@@ -541,19 +697,32 @@ function ConfirmModal(props: {
   recipientCount: number;
   audience: AudienceKind;
   attachments: Attachment[];
+  scheduledIso: string | null;
+  isEditing: boolean;
   onCancel: () => void;
   onConfirm: () => void;
   pending: boolean;
 }) {
-  const { subject, channels, recipientCount, audience, attachments, onCancel, onConfirm, pending } = props;
+  const { subject, channels, recipientCount, audience, attachments, scheduledIso, isEditing, onCancel, onConfirm, pending } = props;
   const totalAttachmentBytes = attachments.reduce((s, a) => s + a.size, 0);
+  const title = isEditing
+    ? "Confirmar cambios"
+    : (scheduledIso ? "Confirmar programación" : "Confirmar envío");
+  const blurb = isEditing
+    ? "Vas a sustituir el comunicado programado con estos cambios."
+    : (scheduledIso
+        ? "El comunicado se guardará en cola y saldrá a la hora programada."
+        : "Vas a enviar este mensaje. Esta acción no se puede deshacer.");
+  const cta = pending
+    ? (isEditing ? "Guardando…" : (scheduledIso ? "Programando…" : "Enviando…"))
+    : (isEditing
+        ? "Guardar cambios"
+        : (scheduledIso ? `Programar (${recipientCount} hoy)` : `Enviar a ${recipientCount}`));
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
       <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-6 shadow-2xl">
-        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">Confirmar envío</h3>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-          Vas a enviar este mensaje. Esta acción no se puede deshacer.
-        </p>
+        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-50">{title}</h3>
+        <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{blurb}</p>
         <div className="mt-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 text-sm space-y-1.5">
           <div><span className="text-slate-500">Audiencia:</span> <span className="font-medium text-slate-900 dark:text-slate-100">{audienceLabel(audience)}</span></div>
           <div><span className="text-slate-500">Destinatarios:</span> <span className="font-medium text-slate-900 dark:text-slate-100">{recipientCount}</span></div>
@@ -570,12 +739,17 @@ function ConfirmModal(props: {
               )}
             </div>
           )}
+          {scheduledIso && (
+            <div>
+              <span className="text-slate-500">Programado:</span>{" "}
+              <span className="font-medium text-slate-900 dark:text-slate-100">{formatScheduled(scheduledIso)}</span>
+              <div className="text-[11px] text-slate-500 mt-0.5">La audiencia se re-resuelve a la hora del envío.</div>
+            </div>
+          )}
         </div>
         <div className="mt-5 flex items-center justify-end gap-3">
           <button type="button" onClick={onCancel} disabled={pending} className="btn-secondary">Cancelar</button>
-          <button type="button" onClick={onConfirm} disabled={pending} className="btn-primary">
-            {pending ? "Enviando…" : `Enviar a ${recipientCount}`}
-          </button>
+          <button type="button" onClick={onConfirm} disabled={pending} className="btn-primary">{cta}</button>
         </div>
       </div>
     </div>
@@ -604,6 +778,121 @@ function prettyBytes(n: number): string {
   if (n < 1024 * 1024)     return `${(n / 1024).toFixed(0)} KB`;
   if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
   return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/**
+ * Min value for `<input type="datetime-local">`. Browsers want the
+ * literal string "YYYY-MM-DDTHH:mm" in LOCAL time (no timezone).
+ * We use now+5min so the picker visually disallows past times.
+ */
+function localMinForInput(): string {
+  const d = new Date(Date.now() + 5 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Convert an ISO string into a friendly Spanish date for previews. */
+function formatScheduled(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString("es-ES", {
+      weekday: "long",
+      day:     "2-digit",
+      month:   "short",
+      hour:    "2-digit",
+      minute:  "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function sendButtonLabel(
+  isEditing:    boolean,
+  scheduleMode: "now" | "schedule",
+  scheduledIso: string | null,
+): string {
+  if (isEditing)            return "Guardar cambios";
+  if (scheduleMode === "now") return "Enviar ahora";
+  if (scheduledIso)         return `Programar para ${formatScheduled(scheduledIso)}`;
+  return "Programar";
+}
+
+/**
+ * Translate a (maybe null) EditingBroadcast row into the initial
+ * useState values for every field of the form. Falls back to defaults
+ * when no row is supplied.
+ */
+function hydrateFromEditing(
+  e:      EditingBroadcast | null | undefined,
+  groups: Group[],
+): {
+  kind:           AudienceKind;
+  status:         StudentStatus;
+  level:          Level;
+  groupId:        string;
+  language:       LanguageChoice;
+  customEmails:   string;
+  customPhones:   string;
+  subject:        string;
+  markdown:       string;
+  emailOn:        boolean;
+  whatsOn:        boolean;
+  scheduleMode:   "now" | "schedule";
+  scheduledLocal: string;
+  attachments:    Attachment[];
+} {
+  if (!e) {
+    return {
+      kind:           "all_students",
+      status:         "active",
+      level:          "B1",
+      groupId:        groups[0]?.id ?? "",
+      language:       "",
+      customEmails:   "",
+      customPhones:   "",
+      subject:        "",
+      markdown:       "",
+      emailOn:        true,
+      whatsOn:        true,
+      scheduleMode:   "now",
+      scheduledLocal: "",
+      attachments:    [],
+    };
+  }
+  const f = e.audience_filter as AudienceFilter & { _marker?: string };
+  // Reverse-engineer the kind/status/level/group fields from the persisted filter.
+  const kind: AudienceKind   = f.kind;
+  const statusVal            = "status"   in f && f.status   ? f.status   : "active";
+  const levelVal             = "level"    in f && f.level    ? f.level    : "B1";
+  const groupIdVal           = "group_id" in f && f.group_id ? f.group_id : groups[0]?.id ?? "";
+  const languageVal: LanguageChoice = ("language" in f && f.language) ? f.language : "";
+  const emails               = ("custom_emails" in f ? f.custom_emails ?? [] : []) as string[];
+  const phones               = ("custom_phones" in f ? f.custom_phones ?? [] : []) as string[];
+
+  return {
+    kind,
+    status:         statusVal as StudentStatus,
+    level:          levelVal as Level,
+    groupId:        groupIdVal,
+    language:       languageVal,
+    customEmails:   emails.join(", "),
+    customPhones:   phones.join(", "),
+    subject:        e.subject,
+    markdown:       e.message_markdown,
+    emailOn:        e.channels.includes("email"),
+    whatsOn:        e.channels.includes("whatsapp"),
+    scheduleMode:   "schedule",
+    scheduledLocal: isoToLocalInput(e.scheduled_at),
+    attachments:    e.attachments ?? [],
+  };
+}
+
+/** ISO UTC → "YYYY-MM-DDTHH:mm" in the browser's local timezone. */
+function isoToLocalInput(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // ---------------------------------------------------------------------------
