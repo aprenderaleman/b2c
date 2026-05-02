@@ -253,7 +253,12 @@ export async function POST(req: Request) {
 
   // ── 4. Create the trial class.
   const teacherFirst = (match.teacherName.split(/\s+/)[0]) || match.teacherName;
-  const classTitle = `Clase de prueba — ${b.name.split(/\s+/)[0]} (${teacherFirst})`;
+  // Título comercial — el del lead va en el .ics y el evento de GCal.
+  // Política Gelfis 2026-04-30: NO mencionar al profesor en mensajes
+  // públicos. Para uso interno (DB row, admin UI) dejamos un título
+  // separado que sí incluye al profe.
+  const classTitle         = `${b.name.split(/\s+/)[0]} + Sesión de Prueba de Alemán ☀️`;
+  const classTitleInternal = `Clase de prueba — ${b.name.split(/\s+/)[0]} (${teacherFirst})`;
   // Pre-generate a short code now so we don't need a follow-up update.
   // Collision is astronomically unlikely (8 base36 chars ≈ 2.8 trillion
   // values, and the unique index would catch one if it ever happened).
@@ -263,7 +268,7 @@ export async function POST(req: Request) {
     teacher_id:         b.teacher_id,
     scheduled_at:       b.slot_iso,
     duration_minutes:   TRIAL_DURATION_MIN,
-    title:              classTitle,
+    title:              classTitleInternal,
     topic:              b.goal ?? null,
     status:             "scheduled",
     is_trial:           true,
@@ -334,9 +339,9 @@ export async function POST(req: Request) {
     durationMin:   TRIAL_DURATION_MIN,
     summary:       classTitle,
     description:
-      `Tu clase de prueba gratuita de alemán de 45 min.\n\n` +
+      `¿Quieres probar nuestro método antes de comprometerte?\n\n` +
+      `Reserva una sesión individual de 45 minutos con un profesor bilingüe experto. Analizaremos tu nivel, definiremos tus objetivos y vivirás la experiencia de nuestra metodología.\n\n` +
       `Aula virtual: ${shortLinkUrl}\n\n` +
-      `Profesor: ${match.teacherName}\n\n` +
       `Importante: al abrir el enlace tu navegador te pedirá permiso para micrófono y cámara — pulsa "Permitir".`,
     organizerName:  "Aprender-Aleman.de",
     organizerEmail: "info@aprender-aleman.de",

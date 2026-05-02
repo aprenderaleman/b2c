@@ -98,24 +98,33 @@ export async function createTrialEvent(a: CreateArgs): Promise<CreatedEvent | nu
   const start = new Date(a.startIso);
   const end   = new Date(start.getTime() + a.durationMinutes * 60_000);
 
-  const leadFirst    = (a.leadName    || "").split(/\s+/)[0] || a.leadName    || "Lead";
-  const teacherFirst = (a.teacherName || "").split(/\s+/)[0] || a.teacherName || "profesor";
+  const leadFirst = (a.leadName || "").split(/\s+/)[0] || a.leadName || "Lead";
 
+  // Copy comercial decidida por Gelfis 2026-05-02. La descripción
+  // empieza con el pitch (es lo primero que ve el lead si abre el
+  // evento desde su .ics) y termina con el bloque interno de datos
+  // del lead, que solo aparece en TU calendar — necesario para
+  // preparar la clase. El profesor no se nombra en la copy pública.
   const lines: string[] = [
+    "¿Quieres probar nuestro método antes de comprometerte?",
+    "",
+    "Reserva una sesión individual de 45 minutos con un profesor bilingüe experto. Analizaremos tu nivel, definiremos tus objetivos y vivirás la experiencia de nuestra metodología.",
+    "",
+    `Aula: ${a.joinUrl}`,
+    "",
+    "—",
     `Lead: ${a.leadName}`,
     a.leadEmail    ? `Email: ${a.leadEmail}` : null,
     a.leadWhatsapp ? `WhatsApp: ${a.leadWhatsapp}` : null,
     a.germanLevel  ? `Nivel: ${a.germanLevel}` : null,
     a.goal         ? `Objetivo: ${a.goal}` : null,
-    "",
-    `Aula: ${a.joinUrl}`,
   ].filter(Boolean) as string[];
 
   try {
     const res = await cal.events.insert({
       calendarId,
       requestBody: {
-        summary:     `Clase de prueba — ${leadFirst} (con ${teacherFirst})`,
+        summary:     `${leadFirst} + Sesión de Prueba de Alemán ☀️`,
         description: lines.join("\n"),
         start: { dateTime: start.toISOString(), timeZone: "Europe/Berlin" },
         end:   { dateTime: end.toISOString(),   timeZone: "Europe/Berlin" },
