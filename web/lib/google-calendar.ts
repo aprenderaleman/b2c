@@ -22,7 +22,7 @@
  * producción la usa cuando estén las envs.
  */
 
-import type { calendar_v3 } from "googleapis";
+import type { calendar_v3 } from "@googleapis/calendar";
 
 type CreateArgs = {
   /** Lead's first name + teacher's first name. Va al título. */
@@ -66,16 +66,20 @@ async function getCalendarClient(): Promise<calendar_v3.Calendar | null> {
     return null;
   }
 
-  const { google } = await import("googleapis");
+  // Swapped from full `googleapis` package (~50MB resolved, kept failing
+  // npm install on Vercel) to the per-API split `@googleapis/calendar`
+  // plus `google-auth-library` for the JWT. Same scopes, same v3 API.
+  const { JWT } = await import("google-auth-library");
+  const { calendar } = await import("@googleapis/calendar");
   // Newlines in the env var arrive as literal "\n" in some hosts; normalise.
   const privateKey = parsed.private_key.replace(/\\n/g, "\n");
-  const auth = new google.auth.JWT({
+  const auth = new JWT({
     email: parsed.client_email,
     key:   privateKey,
     scopes: ["https://www.googleapis.com/auth/calendar.events"],
   });
 
-  return google.calendar({ version: "v3", auth });
+  return calendar({ version: "v3", auth });
 }
 
 

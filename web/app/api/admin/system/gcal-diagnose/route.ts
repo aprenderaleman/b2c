@@ -96,13 +96,14 @@ export async function GET() {
   //    Si falla con 404 → calendar id mal.
   let liveCheck: Record<string, unknown> = { attempted: true };
   try {
-    const { google } = await import("googleapis");
-    const auth = new google.auth.JWT({
+    const { JWT } = await import("google-auth-library");
+    const { calendar } = await import("@googleapis/calendar");
+    const auth = new JWT({
       email: clientEmail,
       key:   privateKey.replace(/\\n/g, "\n"),
       scopes: ["https://www.googleapis.com/auth/calendar.events.readonly"],
     });
-    const cal = google.calendar({ version: "v3", auth });
+    const cal = calendar({ version: "v3", auth });
     // El endpoint más barato: list 1 evento en los próximos 30 días.
     const r = await cal.events.list({
       calendarId: calId,
