@@ -409,6 +409,11 @@ export async function getClassById(id: string): Promise<ClassWithPeople | null> 
 /**
  * Cancel a class (single instance or whole series if `whole` is true).
  * Doesn't delete rows — sets status='cancelled' so the history is preserved.
+ *
+ * If the class had a mirror event in Gelfis's Google Calendar
+ * (`google_calendar_event_id` populated by /api/public/book-trial),
+ * we also delete that event. Failures are non-blocking — the DB
+ * cancellation always wins, the GCal cleanup is best-effort.
  */
 export async function cancelClass(
   classId: string,
@@ -437,12 +442,33 @@ export async function cancelClass(
 
   if (ids.length === 0) return { cancelledIds: [] };
 
+  // Pull the GCal event ids BEFORE the update so we can clean them up.
+  const { data: withGcal } = await sb
+    .from("classes")
+    .select("id, google_calendar_event_id")
+    .in("id", ids)
+    .not("google_calendar_event_id", "is", null);
+  const gcalEventIds = ((withGcal ?? []) as Array<{ google_calendar_event_id: string }>)
+    .map(r => r.google_calendar_event_id);
+
   const { error } = await sb
     .from("classes")
     .update({ status: "cancelled" })
     .in("id", ids)
     .eq("status", "scheduled");   // only cancel still-scheduled classes
   if (error) throw new Error(`cancel failed: ${error.message}`);
+
+  // Best-effort GCal cleanup. Lazy import to avoid pulling googleapis
+  // into bundles that don't need it (e.g. read-only admin views).
+  if (gcalEventIds.length > 0) {
+    void (async () => {
+      const { deleteTrialEvent } = await import("./google-calendar");
+      for (const evId of gcalEventIds) {
+        try { await deleteTrialEvent(evId); }
+        catch (e) { console.warn(`[gcal] cancel cleanup failed for event ${evId}:`, e); }
+      }
+    })();
+  }
 
   return { cancelledIds: ids };
 }

@@ -31,6 +31,10 @@ import {
   renderTeacherInvoicePaid,
   type TeacherInvoicePaidVars,
 } from "./templates/teacher-invoice-paid";
+import {
+  renderWelcomePlatform,
+  type WelcomePlatformVars,
+} from "./templates/welcome-platform";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -205,9 +209,19 @@ export async function sendClassReminder30mEmail(
 export async function sendTrialConfirmationEmail(
   to: string,
   vars: TrialConfirmationVars,
+  /** Optional .ics attachment so the lead can add the trial to their
+   *  own calendar with one click. Built by lib/ics.ts in book-trial. */
+  ics?: { content: Buffer | string; filename?: string },
 ): Promise<SendResult> {
   const { subject, html, text } = renderTrialConfirmation(vars);
-  return sendRaw(to, subject, html, text);
+  const attachments: EmailAttachment[] | undefined = ics
+    ? [{
+        filename:    ics.filename ?? "clase-de-prueba.ics",
+        content:     typeof ics.content === "string" ? Buffer.from(ics.content, "utf-8") : ics.content,
+        contentType: "text/calendar; method=REQUEST; charset=UTF-8",
+      }]
+    : undefined;
+  return sendRaw(to, subject, html, text, attachments);
 }
 
 /**
@@ -265,4 +279,19 @@ export async function sendTeacherInvoicePaidEmail(
   return sendRaw(to, subject, html, text, [
     { filename: pdf.filename, content: pdf.content, contentType: "application/pdf" },
   ]);
+}
+
+
+/**
+ * "Bienvenido a la plataforma" — email manual disparado por admin desde
+ * /admin/usuarios cuando un alumno aún no ha entrado. Combina link de
+ * establecer contraseña + tour rápido del dashboard. Transactional — no
+ * gated por LIFECYCLE_EMAILS_ENABLED.
+ */
+export async function sendWelcomePlatformEmail(
+  to: string,
+  vars: WelcomePlatformVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderWelcomePlatform(vars);
+  return sendRaw(to, subject, html, text);
 }

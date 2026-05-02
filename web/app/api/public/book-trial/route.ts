@@ -7,6 +7,8 @@ import { buildTrialToken } from "@/lib/trial-token";
 import { sendTrialConfirmationEmail } from "@/lib/email/send";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
+import { createTrialEvent } from "@/lib/google-calendar";
+import { buildTrialIcs } from "@/lib/ics";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
 function generateShortCode(): string {
@@ -324,8 +326,27 @@ export async function POST(req: Request) {
         : `✅ ${leadFirst}, tu clase de prueba GRATUITA de ALEMÁN está confirmada.\n\n📅 ${startDate}\n⏱ 45 min\n🔗 ${shortLinkUrl}\n\n💡 Importante: al abrir el enlace, tu navegador te pedirá permiso para usar micrófono y cámara — pulsa "Permitir", si no el profesor no te oirá ni te verá.\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`)
     : null;
 
+  // Build the .ics inline so we attach it to the email AND can later
+  // log "ics_attached" if needed. Sin recordatorios (decisión Gelfis).
+  const icsContent = buildTrialIcs({
+    uid:           classId,
+    startIso:      b.slot_iso,
+    durationMin:   TRIAL_DURATION_MIN,
+    summary:       classTitle,
+    description:
+      `Tu clase de prueba gratuita de alemán de 45 min.\n\n` +
+      `Aula virtual: ${shortLinkUrl}\n\n` +
+      `Profesor: ${match.teacherName}\n\n` +
+      `Importante: al abrir el enlace tu navegador te pedirá permiso para micrófono y cámara — pulsa "Permitir".`,
+    organizerName:  "Aprender-Aleman.de",
+    organizerEmail: "info@aprender-aleman.de",
+    attendeeName:   b.name,
+    attendeeEmail:  b.email,
+    location:       shortLinkUrl,
+  });
+
   after(async () => {
-    const [emailResult, waResult] = await Promise.allSettled([
+    const [emailResult, waResult, gcalResult] = await Promise.allSettled([
       sendTrialConfirmationEmail(b.email, {
         leadName:    leadFirst,
         classTitle,
@@ -334,11 +355,48 @@ export async function POST(req: Request) {
         teacherName: match.teacherName,
         joinUrl:     shortLinkUrl,
         language:    b.language,
+      }, {
+        content:  icsContent,
+        filename: "clase-de-prueba-aleman.ics",
       }),
       waText && b.whatsapp_e164
         ? sendWhatsappText(b.whatsapp_e164, waText)
         : Promise.resolve(null),
+      // Google Calendar mirror — env-gated. Si no hay creds, devuelve
+      // null y no logueamos error. Si está configurado y crea el
+      // evento, guardamos su id en la fila de la clase para poder
+      // eliminarlo cuando se cancele.
+      createTrialEvent({
+        leadName:        b.name,
+        teacherName:     match.teacherName,
+        startIso:        b.slot_iso,
+        durationMinutes: TRIAL_DURATION_MIN,
+        leadEmail:       b.email,
+        leadWhatsapp:    b.whatsapp_e164 ?? null,
+        germanLevel:     b.german_level ?? null,
+        goal:            goal,
+        joinUrl:         shortLinkUrl,
+      }),
     ]);
+
+    // ── Google Calendar mirror result ──
+    if (gcalResult.status === "fulfilled" && gcalResult.value) {
+      await sb.from("classes")
+        .update({ google_calendar_event_id: gcalResult.value.eventId })
+        .eq("id", classId);
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "agent_note",
+        author:  "system",
+        content: `📅 Evento creado en Google Calendar (${gcalResult.value.eventId.slice(0, 12)}…)`,
+        metadata: { kind: "google_calendar_event", event_id: gcalResult.value.eventId, class_id: classId },
+      });
+    } else if (gcalResult.status === "rejected") {
+      // No bloqueante — sólo log + nota interna. La clase y el email
+      // del lead salen igual.
+      console.error("[book-trial] google calendar create failed:",
+        gcalResult.reason instanceof Error ? gcalResult.reason.message : gcalResult.reason);
+    }
 
     // ── Email timeline log ──
     if (emailResult.status === "fulfilled" && emailResult.value.ok) {
