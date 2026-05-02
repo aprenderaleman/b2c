@@ -7,6 +7,9 @@ import { StepFrame } from "@/components/agendar/FunnelShell";
 import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
 import { useBookingState } from "@/lib/booking-state";
+import { useLang } from "@/lib/lang-context";
+import { normalizePhone } from "@/lib/phone";
+import { firePixelSchedule } from "@/lib/pixels";
 
 /**
  * Step 1 — slot picker. Mobile pattern: horizontal day strip + vertical
@@ -34,11 +37,14 @@ function fullDateLabel(key: string): string {
 
 export default function StepCuando() {
   const router = useRouter();
+  const { lang } = useLang();
   const { state, update, hydrated } = useBookingState();
 
   const [slots,    setSlots]    = useState<SlotItem[] | null>(null);
   const [loadErr,  setLoadErr]  = useState<string | null>(null);
   const [selectedDay, setDay]   = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitErr,  setSubmitErr]  = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +83,7 @@ export default function StepCuando() {
 
   const slotsToday: SlotItem[] = selectedDay ? (slotsByDay.get(selectedDay) ?? []) : [];
 
-  const onPickSlot = (s: SlotItem) => {
+  const onPickSlot = async (s: SlotItem) => {
     update({
       slot_iso:     s.startIso,
       teacher_id:   s.teacherId,
@@ -86,6 +92,62 @@ export default function StepCuando() {
     if (typeof navigator !== "undefined" && "vibrate" in navigator) {
       try { navigator.vibrate?.(8); } catch { /* iOS no-op */ }
     }
+
+    // Hand-off desde el funnel `/diagnostico`: el lead ya nos dio
+    // nombre, email, teléfono, nivel y objetivo en el quiz. No tiene
+    // sentido pedirle que rellene los pasos /tu /nivel /objetivo
+    // otra vez. Submeteamos directo a book-trial con todos los
+    // datos y redirigimos a /confirmacion.
+    if (state.from_diagnostico
+        && state.name && state.email
+        && state.phone_local && state.country_code
+        && state.german_level && state.goal) {
+      if (submitting) return;
+      setSubmitting(true);
+      setSubmitErr(null);
+      try {
+        const whatsapp_e164 = normalizePhone(
+          `${state.country_code} ${state.phone_local}`,
+          state.country_code.replace("+", ""),
+        );
+        const res = await fetch("/api/public/book-trial", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name:          state.name.trim(),
+            email:         state.email.trim().toLowerCase(),
+            whatsapp_e164,
+            whatsapp_raw:  `${state.country_code} ${state.phone_local}`,
+            german_level:  state.german_level,
+            goal:          state.goal,
+            language:      lang,
+            slot_iso:      s.startIso,
+            teacher_id:    s.teacherId,
+            gdpr_accepted: true,
+          }),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          setSubmitErr(json.error ?? "No pudimos confirmar tu clase. Inténtalo de nuevo.");
+          setSubmitting(false);
+          return;
+        }
+        if (state.lead_id) firePixelSchedule({ leadId: state.lead_id });
+        // Limpiar booking-state — la sesión se cierra aquí.
+        try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
+        // Hard nav para que `/confirmacion` cargue limpio sin que el
+        // guard de /agendar/* haga ping-pong.
+        if (typeof window !== "undefined") window.location.href = "/confirmacion";
+      } catch (e) {
+        console.error("[agendar/cuando] direct submit failed:", e);
+        setSubmitErr("Error de conexión. Inténtalo de nuevo.");
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // Flujo normal — usuario que entró directo a `/agendar/cuando`
+    // sin pasar por el quiz. Sigue la ruta de 4 pasos.
     router.push("/agendar/tu");
   };
 
@@ -111,6 +173,19 @@ export default function StepCuando() {
       )}
 
       {loadErr && <p className="text-sm text-red-300">{loadErr}</p>}
+
+      {submitting && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3
+                        text-sm text-white/80 flex items-center gap-3">
+          <span className="inline-block h-4 w-4 rounded-full border-2 border-warm border-t-transparent animate-spin" aria-hidden />
+          Confirmando tu clase…
+        </div>
+      )}
+      {submitErr && (
+        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          {submitErr}
+        </div>
+      )}
 
       {slots && slots.length === 0 && (
         <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-center text-sm text-white/65">

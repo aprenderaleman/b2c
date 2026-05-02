@@ -1,6 +1,9 @@
 import { NextResponse }   from "next/server";
 import { supabaseAdmin }  from "@/lib/supabase";
-import { sendDiagnosticoFollowupEmail } from "@/lib/email/send";
+import {
+  sendDiagnosticoWelcomeEmail,
+  sendDiagnosticoFollowupEmail,
+} from "@/lib/email/send";
 import { sendWhatsappText }             from "@/lib/whatsapp";
 
 /**
@@ -14,10 +17,14 @@ import { sendWhatsappText }             from "@/lib/whatsapp";
  *
  * Cadencia (referencia: tiempo desde diagnostico_completed_at):
  *
- *   msg 1   →  T+1h   →  WhatsApp  "¿dudas con el horario?"
- *   msg 2   →  T+24h  →  Email     reminder_24h
- *   msg 3   →  T+3d   →  WhatsApp  "última llamada"
- *   msg 4   →  T+7d   →  Email     final_7d  + status='cold'
+ *   msg 1   →  T+15min →  Welcome — WhatsApp + Email (en paralelo).
+ *                          Reemplaza al welcome inmediato que antes
+ *                          mandaba register: damos 15 min de margen
+ *                          para que el lead pueda completar el booking
+ *                          sin recibir mensajes redundantes.
+ *   msg 2   →  T+24h   →  Email reminder_24h (recordatorio)
+ *   msg 3   →  T+3d    →  WhatsApp última llamada
+ *   msg 4   →  T+7d    →  Email final_7d  + status='cold'
  *
  * Stop conditions (managed implicitly):
  *   - Si el lead agenda → book-trial cambia status a 'trial_scheduled'
@@ -37,16 +44,17 @@ import { sendWhatsappText }             from "@/lib/whatsapp";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const HOUR_MS = 60 * 60 * 1000;
+const MIN_MS  = 60 * 1000;
+const HOUR_MS = 60 * MIN_MS;
 const DAY_MS  = 24 * HOUR_MS;
 
 // Gates por mensaje — tiempo MÍNIMO desde diagnostico_completed_at
 // para que el mensaje N pueda salir.
 const GATES_MS: Record<1 | 2 | 3 | 4, number> = {
-  1:        HOUR_MS,
-  2:        DAY_MS,
-  3:    3 * DAY_MS,
-  4:    7 * DAY_MS,
+  1: 15 * MIN_MS,
+  2:      DAY_MS,
+  3:  3 * DAY_MS,
+  4:  7 * DAY_MS,
 };
 
 function authorised(req: Request): boolean {
@@ -115,17 +123,66 @@ async function runCron(req: Request) {
 
     const firstName = lead.name.split(/\s+/)[0] || lead.name;
     let ok = false;
-    let kind: "wa" | "email" = "wa";
+    let kind: "wa" | "email" | "wa+email" = "wa";
 
     try {
       if (nextN === 1) {
-        // WhatsApp soft nudge
-        kind = "wa";
-        const text = lead.language === "de"
-          ? `${firstName}, hast du Fragen zur Uhrzeit? Ich helfe dir gerne 🙌  ${bookUrl}`
-          : `${firstName}, ¿tienes dudas con el horario? Te ayudo a elegir uno que te encaje 🙌  ${bookUrl}`;
-        const r = await sendWhatsappText(lead.whatsapp_normalized, text);
-        ok = r.ok;
+        // Welcome — WhatsApp + Email en paralelo. Si AL MENOS UNO de
+        // los dos sale, contamos el msg como entregado y avanzamos
+        // last_drip_msg_n. Loguamos los fallos individuales en
+        // timeline para diagnóstico.
+        kind = "wa+email";
+        const waText = lead.language === "de"
+          ? [
+              `Hallo ${firstName}, hier ist Gelfis von Aprender-Aleman.de 👋`,
+              ``,
+              `Dein persönlicher Deutschplan ist fertig. Um ihn zu starten, lade ich dich zu einer kostenlosen 30-Min-Probestunde mit einer muttersprachlichen Lehrkraft ein.`,
+              ``,
+              `📅 Hier buchen: ${bookUrl}`,
+              ``,
+              `Bei Fragen schreib mir einfach hier.`,
+              `— Gelfis`,
+            ].join("\n")
+          : [
+              `Hola ${firstName}, soy Gelfis de Aprender-Aleman.de 👋`,
+              ``,
+              `Tu plan personalizado de alemán está listo. Para activarlo te invito a una clase de prueba GRATIS de 30 min con un profesor nativo certificado.`,
+              ``,
+              `📅 Agenda aquí: ${bookUrl}`,
+              ``,
+              `Cualquier duda, escríbeme por aquí.`,
+              `— Gelfis`,
+            ].join("\n");
+
+        const sendEmail = lead.email
+          ? sendDiagnosticoWelcomeEmail(lead.email, {
+              leadName: firstName,
+              bookUrl,
+              language: lead.language,
+            })
+          : Promise.resolve({ ok: false as const, error: "no_email" });
+
+        const [waRes, emailRes] = await Promise.allSettled([
+          sendWhatsappText(lead.whatsapp_normalized, waText),
+          sendEmail,
+        ]);
+        const waOk = waRes.status === "fulfilled" && waRes.value.ok;
+        const emailOk = emailRes.status === "fulfilled" &&
+          (emailRes.value as { ok: boolean }).ok;
+        ok = waOk || emailOk;
+
+        if (!waOk) {
+          const err = waRes.status === "rejected"
+            ? (waRes.reason instanceof Error ? waRes.reason.message : String(waRes.reason))
+            : "send_failed";
+          console.error(`[diagnostico-followups] welcome WA failed lead=${lead.id}:`, err);
+        }
+        if (!emailOk) {
+          const err = emailRes.status === "rejected"
+            ? (emailRes.reason instanceof Error ? emailRes.reason.message : String(emailRes.reason))
+            : (emailRes.value as { ok: false; error: string }).error;
+          console.error(`[diagnostico-followups] welcome email failed lead=${lead.id}:`, err);
+        }
       } else if (nextN === 2) {
         // Email reminder 24h
         kind = "email";

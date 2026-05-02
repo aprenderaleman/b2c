@@ -222,8 +222,44 @@ export function DiagnosticoFunnel() {
         budget: body.answers.budget,
       });
 
-      // Guardar lead_id para que /agendar/* lo reuse al agendar
+      // Pre-cargar el booking-state que usa `/agendar/*` para que el
+      // siguiente paso (slot picker) tenga toda la info y NO le pida
+      // al lead que reescriba nombre, email, teléfono, nivel y
+      // objetivo. La flag `from_diagnostico=true` le dice a la
+      // página `/agendar/cuando` que tras escoger horario haga submit
+      // directo a /api/public/book-trial sin pasar por /tu /nivel
+      // /objetivo.
+      const levelMap: Record<string, "A0" | "A1-A2" | "B1" | "B2+"> = {
+        "Cero / no sé nada":     "A0",
+        "Básico (A1-A2)":        "A1-A2",
+        "Intermedio (B1-B2)":    "B1",
+        "Avanzado (C1+)":        "B2+",
+        "No estoy seguro":       "A0",
+      };
+      const goalMap: Record<string, "work" | "studies" | "already_in_dach" | "exam" | "travel"> = {
+        "Trabajo":                       "work",
+        "Estudios":                      "studies",
+        "Vida diaria / integración":     "already_in_dach",
+        "Examen oficial / ciudadanía":   "exam",
+        "Crecimiento personal":          "travel",
+      };
+      const bookingState = {
+        slot_iso:         null,
+        teacher_id:       null,
+        teacher_name:     null,
+        name:             form.name.trim(),
+        email:            body.email,
+        german_level:     answers.level    ? levelMap[answers.level] : null,
+        goal:             answers.goal     ? goalMap [answers.goal]  : null,
+        country_code:     form.countryCode.startsWith("+") ? form.countryCode : `+${form.countryCode}`,
+        phone_local:      form.whatsapp,
+        from_diagnostico: true,
+        lead_id:          json.lead_id,
+        savedAt:          Date.now(),
+      };
       try {
+        sessionStorage.setItem("b2c.agendar.v1", JSON.stringify(bookingState));
+        // Backwards-compat keys (por si algo los leía).
         sessionStorage.setItem("diagnostico_lead_id", json.lead_id);
         sessionStorage.setItem("diagnostico_name",    form.name.trim());
         sessionStorage.setItem("diagnostico_email",   body.email);

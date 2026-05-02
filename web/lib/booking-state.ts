@@ -34,6 +34,14 @@ export type BookingState = {
   goal:         Goal | null;
   country_code: string;
   phone_local:  string;
+  // Cross-funnel hand-off — set to true when the user arrives at
+  // `/agendar/cuando` from the diagnostico funnel at `/`. The slot
+  // picker uses this to skip /tu, /nivel, /objetivo and submit
+  // directly with the data we already collected in the quiz.
+  from_diagnostico: boolean;
+  // Pre-existing lead row id (from `/api/public/diagnostico/register`).
+  // book-trial uses this to upsert instead of creating a new lead.
+  lead_id?:     string;
   // Lifecycle
   savedAt:      number;     // ms epoch — used to expire stale state
 };
@@ -42,16 +50,17 @@ const KEY  = "b2c.agendar.v1";
 const TTL  = 30 * 60 * 1000;   // 30 minutes
 
 const EMPTY: BookingState = {
-  slot_iso:     null,
-  teacher_id:   null,
-  teacher_name: null,
-  name:         "",
-  email:        "",
-  german_level: null,
-  goal:         null,
-  country_code: "+34",          // Spain default — most leads come from ES
-  phone_local:  "",
-  savedAt:      0,
+  slot_iso:         null,
+  teacher_id:       null,
+  teacher_name:     null,
+  name:             "",
+  email:            "",
+  german_level:     null,
+  goal:             null,
+  country_code:     "+34",          // Spain default — most leads come from ES
+  phone_local:      "",
+  from_diagnostico: false,
+  savedAt:          0,
 };
 
 function readFromStorage(): BookingState {
