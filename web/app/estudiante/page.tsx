@@ -6,8 +6,7 @@ import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
 import { getAttendanceStreakForStudent } from "@/lib/attendance-streak";
 import { AttendanceStreakCard } from "@/components/classes/AttendanceStreakCard";
 import { OpenSchuleButton } from "@/components/entitlements/OpenSchuleButton";
-// Hans temporalmente fuera de servicio (2026-04-30). Cuando vuelva:
-//   import { OpenHansButton } from "@/components/entitlements/OpenHansButton";
+import { OpenHansButton } from "@/components/entitlements/OpenHansButton";
 import { getStudentUpcomingClasses, type ClassWithPeople, classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { NextClassCard } from "@/components/classes/NextClassCard";
 import { LiveClassCta } from "@/components/classes/LiveClassCta";
@@ -277,12 +276,10 @@ function EmptyNext() {
 }
 
 function ExternalToolsRow() {
-  // Mientras Hans esté fuera de servicio, solo se muestra SCHULE en
-  // ancho completo. Cuando Hans vuelva, restaurar el grid sm:grid-cols-2
-  // y volver a montar <OpenHansButton /> debajo de <OpenSchuleButton />.
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-4 sm:grid-cols-2">
       <OpenSchuleButton />
+      <OpenHansButton />
     </section>
   );
 }
