@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Inter } from "next/font/google";
 import { LangProvider } from "@/lib/lang-context";
 import { ThemeProvider, THEME_INIT_SCRIPT } from "@/lib/theme-context";
+import { PixelTags } from "@/components/PixelTags";
 import "./globals.css";
 
 // Single typeface across the whole app. `display: swap` so the page
@@ -57,6 +58,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             gtag('config', '${GOOGLE_ADS_ID}');
           `}
         </Script>
+        {/* Meta Pixel + TikTok Pixel — solo se inyectan si las envs
+            NEXT_PUBLIC_META_PIXEL_ID / NEXT_PUBLIC_TIKTOK_PIXEL_ID
+            están seteadas. Sin envs, no-op. */}
+        <PixelTags />
       </head>
       <body className="min-h-screen">
         <ThemeProvider>
