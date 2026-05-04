@@ -30,6 +30,7 @@ from agents.shared.leads import (
     update_status,
     was_message_ever_seen,
 )
+from agents.shared.pre_send_guard import check_can_send
 from agents.shared.rate_limits import (
     can_send_now,
     random_delay_seconds,
@@ -97,6 +98,30 @@ def send_approved(
     'trial_scheduled').
     """
     instance = _active_instance()
+
+    # 0. Pre-send dedup/burst guard — última línea de defensa contra
+    #    duplicados (incidente Asmaa 2026-05-04). NO se postpone next_
+    #    contact_date aquí: si el guard bloquea es por bug del flujo, no
+    #    por estado del lead, así que dejamos que Agent 0 reintente
+    #    según su cadencia normal.
+    guard = check_can_send(lead["id"], text)
+    if guard.blocked:
+        log.warning(
+            "[pre_send_guard] blocked send for lead %s: %s — %s",
+            lead["id"], guard.code, guard.detail,
+        )
+        log_timeline(
+            lead["id"],
+            type="send_failed",
+            author="system",
+            content=f"🛑 Pre-send guard: {guard.code} — {guard.detail}",
+            metadata={
+                "guard_code": guard.code,
+                "guard_detail": guard.detail,
+                "drafted_text": text[:400],
+            },
+        )
+        return SendResult(success=False, reason=f"guard:{guard.code}")
 
     # 1. Rate-limit / window check.
     gate = can_send_now(instance, is_new_conversation=is_new_conversation)
