@@ -28,6 +28,7 @@ import Link                             from "next/link";
 import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
 import { MobileDayStrip }               from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem }      from "@/components/agendar/TimeList";
+import { RobotMark }                    from "@/components/RobotMark";
 
 // ── Opciones del quiz (sincronizadas 1-a-1 con el endpoint
 //    /api/public/diagnostico/register — si cambias texto aquí cámbialo
@@ -305,14 +306,29 @@ export function DiagnosticoFunnel() {
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
-            {step === "low_budget_exit"
-              ? "Resultado"
-              : step === 6
-                ? "Tu plan"
-                : `Paso ${visualStepNum} de ${totalSteps}`}
+
+          {/* Brand: logo + wordmark. Click vuelve a la home (reinicia
+              el quiz). Tamaño compacto para no robar foco al contenido. */}
+          <Link
+            href="/"
+            aria-label="Aprender-Aleman.de"
+            className="flex items-center gap-1.5 text-white/90 active:scale-[0.97] transition"
+          >
+            <RobotMark size={26} />
+            <span className="text-[13px] sm:text-sm font-semibold tracking-tight">
+              Aprender-Aleman<span className="text-warm">.de</span>
+            </span>
+          </Link>
+
+          {/* Indicador discreto de paso en el slot derecho. Para los
+              pasos sin número (low_budget_exit, 6) lo escondemos. */}
+          <div className="h-10 w-10 inline-flex items-center justify-end pr-1">
+            {step !== "low_budget_exit" && step !== 6 && (
+              <span className="text-[11px] font-semibold tracking-wide text-white/55 tabular-nums">
+                {visualStepNum}/{totalSteps}
+              </span>
+            )}
           </div>
-          <div className="h-10 w-10" />
         </div>
         <div className="h-0.5 bg-white/5">
           <div
