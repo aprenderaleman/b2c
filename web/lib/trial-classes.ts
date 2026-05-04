@@ -23,9 +23,9 @@ export type TrialClassRow = {
   leadLanguage:       "es" | "de" | null;
   leadGermanLevel:    string | null;
   leadGoal:           string | null;
-  leadUrgency:        string | null;
-  leadBudget:         string | null;
-  leadSource:         string | null;
+  leadFirstNote:      string | null;
+  leadFirstNoteAt:    string | null;
+  leadFirstNoteAuthor:string | null;
   teacherId:          string;
   teacherName:        string;
   teacherEmail:       string;
@@ -44,7 +44,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       id, scheduled_at, duration_minutes, status, short_code, notes_admin,
       teacher_id,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, urgency, budget, source)
+      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal)
     `)
     .eq("is_trial", true)
     .order("scheduled_at", { ascending: true });
@@ -74,9 +74,6 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       language: "es" | "de" | null;
       german_level: string | null;
       goal: string | null;
-      urgency: string | null;
-      budget: string | null;
-      source: string | null;
     } | Array<{
       id: string;
       name: string | null;
@@ -85,19 +82,42 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       language: "es" | "de" | null;
       german_level: string | null;
       goal: string | null;
-      urgency: string | null;
-      budget: string | null;
-      source: string | null;
     }> | null;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null =>
     !x ? null : Array.isArray(x) ? x[0] ?? null : x;
+
+  // Pre-fetch the FIRST agent_note per lead (typically the diagnostic
+  // summary written by the funnel). Cheaper than nesting the join in
+  // the main query and we de-dup by lead_id in memory.
+  const leadIds = Array.from(
+    new Set(
+      (data ?? [])
+        .map((r) => flat((r as Raw).lead)?.id)
+        .filter((x): x is string => !!x),
+    ),
+  );
+  const firstNoteByLead = new Map<string, { content: string; timestamp: string; author: string | null }>();
+  if (leadIds.length > 0) {
+    const { data: notes } = await sb
+      .from("lead_timeline")
+      .select("lead_id, content, timestamp, author")
+      .eq("type", "agent_note")
+      .in("lead_id", leadIds)
+      .order("timestamp", { ascending: true });
+    for (const n of (notes ?? []) as Array<{ lead_id: string; content: string; timestamp: string; author: string | null }>) {
+      if (!firstNoteByLead.has(n.lead_id)) {
+        firstNoteByLead.set(n.lead_id, { content: n.content, timestamp: n.timestamp, author: n.author });
+      }
+    }
+  }
 
   return (data ?? []).map((r) => {
     const row = r as Raw;
     const teacherWrap = flat(row.teacher);
     const tu = teacherWrap ? flat(teacherWrap.users) : null;
     const lead = flat(row.lead);
+    const note = lead?.id ? firstNoteByLead.get(lead.id) ?? null : null;
     return {
       classId:         row.id,
       scheduledAt:     row.scheduled_at,
@@ -112,9 +132,9 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       leadLanguage:    lead?.language ?? null,
       leadGermanLevel: lead?.german_level ?? null,
       leadGoal:        lead?.goal ?? null,
-      leadUrgency:     lead?.urgency ?? null,
-      leadBudget:      lead?.budget ?? null,
-      leadSource:      lead?.source ?? null,
+      leadFirstNote:       note?.content ?? null,
+      leadFirstNoteAt:     note?.timestamp ?? null,
+      leadFirstNoteAuthor: note?.author ?? null,
       teacherId:       row.teacher_id,
       teacherName:     tu?.full_name ?? tu?.email ?? "—",
       teacherEmail:    tu?.email ?? "",

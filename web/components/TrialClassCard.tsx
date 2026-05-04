@@ -62,32 +62,15 @@ export function TrialClassCard({
             {!row.leadEmail && !row.leadWhatsapp && <span className="italic text-slate-400">Sin datos de contacto</span>}
           </div>
 
-          {/* Funnel answers */}
-          {(row.leadUrgency || row.leadBudget || row.leadSource) && (
+          {/* First agent note (typically the diagnostic summary) */}
+          {row.leadFirstNote && (
             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1.5">
-                Respuestas del funnel
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-1">
+                Nota del agente
+                {row.leadFirstNoteAuthor && <span className="ml-1 normal-case font-normal text-slate-400 dark:text-slate-500">· {row.leadFirstNoteAuthor}</span>}
+                {row.leadFirstNoteAt && <span className="ml-1 normal-case font-normal text-slate-400 dark:text-slate-500">· {new Date(row.leadFirstNoteAt).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })}</span>}
               </div>
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                {row.leadUrgency && (
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-slate-500 dark:text-slate-400">Urgencia</dt>
-                    <dd className="text-slate-700 dark:text-slate-200 text-right">{row.leadUrgency}</dd>
-                  </div>
-                )}
-                {row.leadBudget && (
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-slate-500 dark:text-slate-400">Presupuesto</dt>
-                    <dd className="text-slate-700 dark:text-slate-200 text-right">{row.leadBudget}</dd>
-                  </div>
-                )}
-                {row.leadSource && (
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-slate-500 dark:text-slate-400">Origen</dt>
-                    <dd className="text-slate-700 dark:text-slate-200 text-right">{row.leadSource}</dd>
-                  </div>
-                )}
-              </dl>
+              <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{row.leadFirstNote}</p>
             </div>
           )}
         </div>
