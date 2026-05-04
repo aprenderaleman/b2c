@@ -34,20 +34,23 @@ export function SidebarDesktop({
 
       <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
         {items.map(it => {
-          const active = isActive(pathname, it.href);
-          return (
-            <Link
-              key={it.href}
-              href={it.href}
-              className={`group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors
+          const active = !it.external && isActive(pathname, it.href);
+          const className = `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors
                 ${active
                   ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
                   : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
-                }`}
-            >
+                }`;
+          const inner = (
+            <>
               <NavIcon name={it.icon} className={`h-[18px] w-[18px] ${active ? "text-brand-600 dark:text-brand-400" : ""}`} />
               <span className="truncate">{it.label}</span>
-            </Link>
+              {it.external && <span aria-hidden className="ml-auto text-xs text-slate-400">↗</span>}
+            </>
+          );
+          return it.external ? (
+            <a key={it.href} href={it.href} target="_blank" rel="noopener noreferrer" className={className}>{inner}</a>
+          ) : (
+            <Link key={it.href} href={it.href} className={className}>{inner}</Link>
           );
         })}
       </nav>

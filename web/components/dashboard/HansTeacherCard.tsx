@@ -15,7 +15,7 @@
  * con jerarquía mayor (es nueva).
  */
 
-const HANS_URL = "https://hans.aprender-aleman.de";
+const HANS_URL = "https://hans.aprender-aleman.de/lehrer";
 
 export function HansTeacherCard() {
   return (

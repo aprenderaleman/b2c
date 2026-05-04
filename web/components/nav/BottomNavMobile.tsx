@@ -23,19 +23,21 @@ export function BottomNavMobile({
   const [moreOpen, setMoreOpen] = useState(false);
 
   const renderTab = (it: NavItem) => {
-    const active = isActive(pathname, it.href);
-    return (
-      <Link
-        key={it.href}
-        href={it.href}
-        className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium
+    const active = !it.external && isActive(pathname, it.href);
+    const cls = `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium
           ${active
             ? "text-brand-600 dark:text-brand-400"
-            : "text-slate-500 dark:text-slate-400"}`}
-      >
+            : "text-slate-500 dark:text-slate-400"}`;
+    const inner = (
+      <>
         <NavIcon name={it.icon} className="h-5 w-5" />
         <span className="truncate max-w-[64px]">{it.label}</span>
-      </Link>
+      </>
+    );
+    return it.external ? (
+      <a key={it.href} href={it.href} target="_blank" rel="noopener noreferrer" className={cls}>{inner}</a>
+    ) : (
+      <Link key={it.href} href={it.href} className={cls}>{inner}</Link>
     );
   };
 
@@ -86,17 +88,20 @@ function MoreSheet({
       <div className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white dark:bg-slate-900 p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl">
         <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-slate-300 dark:bg-slate-700" />
         <div className="grid grid-cols-3 gap-2">
-          {extras.map(it => (
-            <Link
-              key={it.href}
-              href={it.href}
-              onClick={onClose}
-              className="flex flex-col items-center gap-1 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 text-xs text-slate-700 dark:text-slate-200 hover:border-brand-400 transition-colors"
-            >
-              <NavIcon name={it.icon} className="h-6 w-6" />
-              <span className="truncate">{it.label}</span>
-            </Link>
-          ))}
+          {extras.map(it => {
+            const cls = "flex flex-col items-center gap-1 rounded-2xl border border-slate-200 dark:border-slate-800 p-3 text-xs text-slate-700 dark:text-slate-200 hover:border-brand-400 transition-colors";
+            const inner = (
+              <>
+                <NavIcon name={it.icon} className="h-6 w-6" />
+                <span className="truncate">{it.label}</span>
+              </>
+            );
+            return it.external ? (
+              <a key={it.href} href={it.href} target="_blank" rel="noopener noreferrer" onClick={onClose} className={cls}>{inner}</a>
+            ) : (
+              <Link key={it.href} href={it.href} onClick={onClose} className={cls}>{inner}</Link>
+            );
+          })}
         </div>
         <div className="mt-4 [&_button]:w-full [&_button]:rounded-xl [&_button]:bg-slate-100 dark:[&_button]:bg-slate-800 [&_button]:py-3 [&_button]:text-sm [&_button]:font-medium [&_button]:text-slate-700 dark:[&_button]:text-slate-200 [&_button]:hover:bg-slate-200 dark:[&_button]:hover:bg-slate-700">
           {logoutForm}

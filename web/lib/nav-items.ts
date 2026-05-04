@@ -14,6 +14,7 @@ export type NavItem = {
   href:     string;
   icon:     NavIconKey;          // lucide icon name (see NavIcon)
   priority: number;              // lower = shows first in bottom bar
+  external?: boolean;            // true → opens in new tab via plain <a>
 };
 
 export type NavIconKey =
@@ -42,6 +43,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
     { label: "Clases de prueba", href: "/profesor/clasedeprueba",   icon: "userCheck",      priority: 2.5 },
     { label: "Estudiantes",      href: "/profesor/estudiantes",     icon: "graduationCap",  priority: 3 },
     { label: "Mis grupos",       href: "/profesor/grupos",          icon: "folder",         priority: 3.5 },
+    { label: "Hans (Asistente IA)", href: "https://hans.aprender-aleman.de/lehrer", icon: "graduationCap", priority: 3.7, external: true },
     { label: "Ganancias",        href: "/profesor/ganancias",       icon: "wallet",         priority: 4 },
     { label: "Disponibilidad",   href: "/profesor/disponibilidad",  icon: "clock",          priority: 5 },
     { label: "Materiales",       href: "/profesor/materiales",      icon: "folder",         priority: 6 },

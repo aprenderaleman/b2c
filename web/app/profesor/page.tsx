@@ -65,11 +65,6 @@ export default async function TeacherHome() {
         {icalToken && <CalendarSyncButton icalUrl={icalUrlFor(icalToken)} />}
       </header>
 
-      {/* Hans (asistente IA para preparar clases). Va antes del fold,
-          encima de la lista de clases — decisión Gelfis 2026-05-04
-          al lanzar Hans en https://hans.aprender-aleman.de. */}
-      <HansTeacherCard />
-
       {next ? (
         <NextClassCard
           classId={next.id}
@@ -84,6 +79,10 @@ export default async function TeacherHome() {
       ) : (
         <EmptyNext />
       )}
+
+      {/* Hans (asistente IA para preparar clases) — encima de SCHULE
+          decisión Gelfis 2026-05-04. URL específica de profes: /lehrer. */}
+      <HansTeacherCard />
 
       {/* Acceso a SCHULE — el profesor entra como su alumno para ver
           el material y poder asignar tareas concretas. */}
