@@ -19,6 +19,10 @@
       "schedule": "0 6,7 * * *"
     },
     {
+      "path": "/api/cron/trial-reminders-30m",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/comunicados-dispatch",
       "schedule": "*/5 * * * *"
     },
