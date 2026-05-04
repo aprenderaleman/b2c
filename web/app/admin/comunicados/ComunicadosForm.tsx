@@ -3,16 +3,19 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import {
   ATTACHMENT_LIMITS,
+  LEAD_STATUS_GROUPS,
+  LEAD_STATUS_GROUPS_DEFAULT,
   type Attachment,
   type AudienceFilter,
   type Channel,
+  type LeadStatusGroup,
   type Recipient,
   type SendResultRow,
 } from "@/lib/comunicados/types";
 
 type Group = { id: string; name: string; level: string };
 
-type AudienceKind = "all_students" | "all_teachers" | "level" | "group" | "custom";
+type AudienceKind = "all_students" | "all_teachers" | "level" | "group" | "leads" | "custom";
 type StudentStatus = "active" | "paused" | "all";
 type Level = "A1" | "A2" | "B1" | "B2" | "C1";
 type LanguageChoice = "" | "es" | "de";
@@ -74,6 +77,7 @@ export function ComunicadosForm({
   const [level,  setLevel]  = useState<Level>(initial.level);
   const [groupId, setGroupId] = useState<string>(initial.groupId);
   const [language, setLanguage] = useState<LanguageChoice>(initial.language);
+  const [leadStatusGroups, setLeadStatusGroups] = useState<LeadStatusGroup[]>(initial.leadStatusGroups);
   const [customEmails, setCustomEmails] = useState(initial.customEmails);
   const [customPhones, setCustomPhones] = useState(initial.customPhones);
 
@@ -116,16 +120,21 @@ export function ComunicadosForm({
       case "all_teachers": return { kind: "all_teachers", language: lang };
       case "level":        return { kind: "level", level, status, language: lang };
       case "group":        return { kind: "group", group_id: groupId, language: lang };
+      case "leads":        return { kind: "leads", status_groups: leadStatusGroups, language: lang };
       case "custom":       return {
         kind: "custom",
         custom_emails: splitList(customEmails),
         custom_phones: splitList(customPhones),
       };
     }
-  }, [kind, status, level, groupId, language, customEmails, customPhones]);
+  }, [kind, status, level, groupId, language, leadStatusGroups, customEmails, customPhones]);
 
   const canPreview = channels.length > 0 && (
-    kind !== "custom" || splitList(customEmails).length + splitList(customPhones).length > 0
+    kind === "custom"
+      ? splitList(customEmails).length + splitList(customPhones).length > 0
+      : kind === "leads"
+        ? leadStatusGroups.length > 0
+        : true
   );
   const canSend = preview !== null && preview.length > 0 && subject.trim() && markdown.trim() && channels.length > 0;
 
@@ -294,8 +303,8 @@ export function ComunicadosForm({
           1. ¿A quién?
         </h2>
 
-        <div className="grid sm:grid-cols-5 gap-2">
-          {(["all_students","all_teachers","level","group","custom"] as AudienceKind[]).map(k => (
+        <div className="grid sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          {(["all_students","all_teachers","level","group","leads","custom"] as AudienceKind[]).map(k => (
             <button
               key={k}
               type="button"
@@ -352,6 +361,69 @@ export function ComunicadosForm({
                   : groups.map(g => <option key={g.id} value={g.id}>{g.name} {g.level ? `(${g.level})` : ""}</option>)}
               </select>
             </label>
+          )}
+          {kind === "leads" && (
+            <div className="block sm:col-span-2">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Estado del lead</span>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setLeadStatusGroups(LEAD_STATUS_GROUPS_DEFAULT)}
+                    className="text-brand-600 hover:underline"
+                  >
+                    Por defecto
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeadStatusGroups(Object.keys(LEAD_STATUS_GROUPS) as LeadStatusGroup[])}
+                    className="text-brand-600 hover:underline"
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLeadStatusGroups([])}
+                    className="text-slate-500 hover:underline"
+                  >
+                    Ninguno
+                  </button>
+                </div>
+              </div>
+              <div className="mt-2 grid sm:grid-cols-2 gap-2">
+                {(Object.entries(LEAD_STATUS_GROUPS) as [LeadStatusGroup, typeof LEAD_STATUS_GROUPS[LeadStatusGroup]][]).map(([key, def]) => {
+                  const checked = leadStatusGroups.includes(key);
+                  return (
+                    <label
+                      key={key}
+                      className={`flex items-center gap-2 rounded-xl border px-3 py-2 cursor-pointer transition-colors ${
+                        checked
+                          ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10"
+                          : "border-slate-200 dark:border-slate-700 hover:border-brand-400"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => {
+                          setLeadStatusGroups(prev =>
+                            prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
+                          );
+                        }}
+                        className="h-4 w-4 accent-orange-500"
+                      />
+                      <span className="text-sm">
+                        {def.emoji} <span className="text-slate-800 dark:text-slate-100 font-medium">{def.label}</span>{" "}
+                        <span className="text-[10px] text-slate-500">({def.raw.length})</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+                Excluye automáticamente leads ya convertidos a alumno y los que no aceptaron GDPR.
+              </p>
+            </div>
           )}
           {kind !== "custom" && (
             <label className="block">
@@ -762,6 +834,7 @@ function audienceLabel(k: AudienceKind): string {
     case "all_teachers": return "Profesores";
     case "level":        return "Por nivel";
     case "group":        return "Grupo";
+    case "leads":        return "Leads";
     case "custom":       return "Custom";
   }
 }
@@ -827,37 +900,39 @@ function hydrateFromEditing(
   e:      EditingBroadcast | null | undefined,
   groups: Group[],
 ): {
-  kind:           AudienceKind;
-  status:         StudentStatus;
-  level:          Level;
-  groupId:        string;
-  language:       LanguageChoice;
-  customEmails:   string;
-  customPhones:   string;
-  subject:        string;
-  markdown:       string;
-  emailOn:        boolean;
-  whatsOn:        boolean;
-  scheduleMode:   "now" | "schedule";
-  scheduledLocal: string;
-  attachments:    Attachment[];
+  kind:             AudienceKind;
+  status:           StudentStatus;
+  level:            Level;
+  groupId:          string;
+  language:         LanguageChoice;
+  leadStatusGroups: LeadStatusGroup[];
+  customEmails:     string;
+  customPhones:     string;
+  subject:          string;
+  markdown:         string;
+  emailOn:          boolean;
+  whatsOn:          boolean;
+  scheduleMode:     "now" | "schedule";
+  scheduledLocal:   string;
+  attachments:      Attachment[];
 } {
   if (!e) {
     return {
-      kind:           "all_students",
-      status:         "active",
-      level:          "B1",
-      groupId:        groups[0]?.id ?? "",
-      language:       "",
-      customEmails:   "",
-      customPhones:   "",
-      subject:        "",
-      markdown:       "",
-      emailOn:        true,
-      whatsOn:        true,
-      scheduleMode:   "now",
-      scheduledLocal: "",
-      attachments:    [],
+      kind:             "all_students",
+      status:           "active",
+      level:            "B1",
+      groupId:          groups[0]?.id ?? "",
+      language:         "",
+      leadStatusGroups: LEAD_STATUS_GROUPS_DEFAULT,
+      customEmails:     "",
+      customPhones:     "",
+      subject:          "",
+      markdown:         "",
+      emailOn:          true,
+      whatsOn:          true,
+      scheduleMode:     "now",
+      scheduledLocal:   "",
+      attachments:      [],
     };
   }
   const f = e.audience_filter as AudienceFilter & { _marker?: string };
@@ -867,24 +942,29 @@ function hydrateFromEditing(
   const levelVal             = "level"    in f && f.level    ? f.level    : "B1";
   const groupIdVal           = "group_id" in f && f.group_id ? f.group_id : groups[0]?.id ?? "";
   const languageVal: LanguageChoice = ("language" in f && f.language) ? f.language : "";
+  const leadGroupsVal: LeadStatusGroup[] =
+    ("status_groups" in f && Array.isArray(f.status_groups))
+      ? (f.status_groups as LeadStatusGroup[])
+      : LEAD_STATUS_GROUPS_DEFAULT;
   const emails               = ("custom_emails" in f ? f.custom_emails ?? [] : []) as string[];
   const phones               = ("custom_phones" in f ? f.custom_phones ?? [] : []) as string[];
 
   return {
     kind,
-    status:         statusVal as StudentStatus,
-    level:          levelVal as Level,
-    groupId:        groupIdVal,
-    language:       languageVal,
-    customEmails:   emails.join(", "),
-    customPhones:   phones.join(", "),
-    subject:        e.subject,
-    markdown:       e.message_markdown,
-    emailOn:        e.channels.includes("email"),
-    whatsOn:        e.channels.includes("whatsapp"),
-    scheduleMode:   "schedule",
-    scheduledLocal: isoToLocalInput(e.scheduled_at),
-    attachments:    e.attachments ?? [],
+    status:           statusVal as StudentStatus,
+    level:            levelVal as Level,
+    groupId:          groupIdVal,
+    language:         languageVal,
+    leadStatusGroups: leadGroupsVal,
+    customEmails:     emails.join(", "),
+    customPhones:     phones.join(", "),
+    subject:          e.subject,
+    markdown:         e.message_markdown,
+    emailOn:          e.channels.includes("email"),
+    whatsOn:          e.channels.includes("whatsapp"),
+    scheduleMode:     "schedule",
+    scheduledLocal:   isoToLocalInput(e.scheduled_at),
+    attachments:      e.attachments ?? [],
   };
 }
 

@@ -180,6 +180,10 @@ function describeAudience(f: HistoryRow["audience_filter"]): string {
   if (kind === "all_teachers") return "Profesores";
   if (kind === "level")        return `Nivel ${f.level as string}`;
   if (kind === "group")        return "Grupo";
+  if (kind === "leads") {
+    const groups = Array.isArray(f.status_groups) ? (f.status_groups as string[]) : [];
+    return groups.length > 0 ? `Leads (${groups.length})` : "Leads";
+  }
   if (kind === "custom")       return "Custom";
   return String(kind ?? "?");
 }

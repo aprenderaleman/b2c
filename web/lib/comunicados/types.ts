@@ -16,6 +16,11 @@ export type Channel = "email" | "whatsapp";
  *   all_teachers   — every active teacher
  *   level          — students at A1|A2|B1|B2|C1 (filtered by `status`)
  *   group          — every member of student_groups.id
+ *   leads          — rows from the `leads` table whose lifecycle status
+ *                    matches one of the requested groups; ALWAYS excludes
+ *                    leads who have been converted to users (avoid
+ *                    double-targeting via the all_students audience) and
+ *                    those who never accepted GDPR.
  *   custom         — free-form list of emails AND/OR E.164 phones; no DB
  *                    lookup other than a best-effort match so we can show
  *                    a name in the preview
@@ -42,10 +47,47 @@ export type AudienceFilter =
       language?: Language;
     }
   | {
+      kind:        "leads";
+      status_groups?: LeadStatusGroup[];  // empty/undefined = all "active" groups
+      language?:   Language;
+    }
+  | {
       kind:           "custom";
       custom_emails?: string[];   // bare emails
       custom_phones?: string[];   // E.164 after normalizePhone
     };
+
+/**
+ * Buckets we expose in the UI instead of the 19 raw lead_status values.
+ * Each maps to a curated set of statuses below; both layers (UI + the
+ * server resolver) use the same source of truth.
+ */
+export type LeadStatusGroup =
+  | "new"
+  | "in_conversation"
+  | "trial_scheduled"
+  | "trial_absent"
+  | "needs_human"
+  | "cold_lost";
+
+/** UI-friendly mapping; resolver expands these into raw status arrays. */
+export const LEAD_STATUS_GROUPS: Record<LeadStatusGroup, {
+  label: string;
+  emoji: string;
+  raw:   string[];
+}> = {
+  new:              { label: "Nuevos",              emoji: "🆕", raw: ["new"] },
+  in_conversation:  { label: "En conversación",     emoji: "💬", raw: ["contacted_1","contacted_2","contacted_3","contacted_4","contacted_5","in_conversation","link_sent"] },
+  trial_scheduled:  { label: "Trial agendado",      emoji: "📅", raw: ["trial_scheduled","trial_reminded"] },
+  trial_absent:     { label: "No asistió al trial", emoji: "❌", raw: ["trial_absent","absent_followup_1","absent_followup_2","absent_followup_3"] },
+  needs_human:      { label: "Necesitan revisión",  emoji: "🙋", raw: ["needs_human"] },
+  cold_lost:        { label: "Fríos / perdidos",    emoji: "🥶", raw: ["cold","lost"] },
+};
+
+/** Default selection in the UI (everything except cold/lost). */
+export const LEAD_STATUS_GROUPS_DEFAULT: LeadStatusGroup[] = [
+  "new", "in_conversation", "trial_scheduled", "trial_absent", "needs_human",
+];
 
 export type Recipient = {
   user_id:   string | null;    // null for custom entries that didn't match a user

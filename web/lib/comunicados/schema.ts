@@ -5,11 +5,20 @@ const language = z.enum(["es", "de"]).optional();
 const status   = z.enum(["active", "paused", "all"]).optional();
 const level    = z.enum(["A1", "A2", "B1", "B2", "C1"]);
 
+const leadStatusGroup = z.enum([
+  "new", "in_conversation", "trial_scheduled", "trial_absent", "needs_human", "cold_lost",
+]);
+
 export const audienceFilterSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all_students"), status, language }),
   z.object({ kind: z.literal("all_teachers"), language }),
   z.object({ kind: z.literal("level"), level, status, language }),
   z.object({ kind: z.literal("group"), group_id: z.string().uuid(), language }),
+  z.object({
+    kind:          z.literal("leads"),
+    status_groups: z.array(leadStatusGroup).optional(),
+    language,
+  }),
   z.object({
     kind:          z.literal("custom"),
     custom_emails: z.array(z.string().email()).optional(),

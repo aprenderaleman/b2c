@@ -1,6 +1,13 @@
 import { supabaseAdmin } from "@/lib/supabase";
 import { normalizePhone, isValidE164 } from "@/lib/phone";
-import type { AudienceFilter, Recipient, Language } from "./types";
+import {
+  LEAD_STATUS_GROUPS,
+  LEAD_STATUS_GROUPS_DEFAULT,
+  type AudienceFilter,
+  type Language,
+  type LeadStatusGroup,
+  type Recipient,
+} from "./types";
 
 /**
  * Resolve an AudienceFilter into a concrete list of recipients.
@@ -20,6 +27,10 @@ export async function resolveRecipients(
 
   if (filter.kind === "custom") {
     return resolveCustom(filter.custom_emails ?? [], filter.custom_phones ?? []);
+  }
+
+  if (filter.kind === "leads") {
+    return resolveLeads(filter.status_groups, filter.language);
   }
 
   // Everything else pulls from users via a role/status scope.
@@ -194,3 +205,65 @@ async function resolveCustom(
 }
 
 function uniq<T>(xs: T[]): T[] { return [...new Set(xs)]; }
+
+/**
+ * Pull leads matching the requested status groups. Two safety filters
+ * apply unconditionally:
+ *
+ *   • `gdpr_accepted = true`  — never message a lead who hasn't opted in.
+ *   • `converted_to_user_id IS NULL` — converted leads already exist in
+ *     the `users` table; messaging them via the leads audience would
+ *     double-target them when combined with the all_students audience.
+ *
+ * The `status_groups` array maps to raw lead_status values via
+ * LEAD_STATUS_GROUPS. Empty/undefined falls back to LEAD_STATUS_GROUPS_DEFAULT
+ * (everything except cold/lost), matching the UI default.
+ */
+async function resolveLeads(
+  groups:   LeadStatusGroup[] | undefined,
+  language: Language | undefined,
+): Promise<Recipient[]> {
+  const sb = supabaseAdmin();
+
+  const selectedGroups: LeadStatusGroup[] =
+    (groups && groups.length > 0) ? groups : LEAD_STATUS_GROUPS_DEFAULT;
+  const rawStatuses = selectedGroups
+    .flatMap(g => LEAD_STATUS_GROUPS[g]?.raw ?? [])
+    .filter((v, i, a) => a.indexOf(v) === i);
+  if (rawStatuses.length === 0) return [];
+
+  let q = sb
+    .from("leads")
+    .select("id, name, email, whatsapp_normalized, language, status, gdpr_accepted, converted_to_user_id")
+    .eq("gdpr_accepted", true)
+    .is("converted_to_user_id", null)
+    .in("status", rawStatuses);
+
+  if (language) q = q.eq("language", language);
+
+  const { data } = await q;
+
+  const out = new Map<string, Recipient>();
+  for (const r of data ?? []) {
+    const lead = r as {
+      id: string;
+      name: string | null;
+      email: string | null;
+      whatsapp_normalized: string | null;
+      language: Language | null;
+    };
+    const email = lead.email?.trim() || null;
+    const phone = lead.whatsapp_normalized?.trim() || null;
+    if (!email && !phone) continue;       // nothing to send to
+
+    out.set(lead.id, {
+      user_id:  null,                     // leads are not users
+      name:     lead.name ?? "",
+      email,
+      phone,
+      language: (lead.language ?? "es") as Language,
+      channels_available: channelsFor(email, phone),
+    });
+  }
+  return [...out.values()];
+}
