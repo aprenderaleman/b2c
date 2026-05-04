@@ -23,6 +23,9 @@ export type TrialClassRow = {
   leadLanguage:       "es" | "de" | null;
   leadGermanLevel:    string | null;
   leadGoal:           string | null;
+  leadUrgency:        string | null;
+  leadBudget:         string | null;
+  leadSource:         string | null;
   teacherId:          string;
   teacherName:        string;
   teacherEmail:       string;
@@ -41,7 +44,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       id, scheduled_at, duration_minutes, status, short_code, notes_admin,
       teacher_id,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal)
+      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, urgency, budget, source)
     `)
     .eq("is_trial", true)
     .order("scheduled_at", { ascending: true });
@@ -71,6 +74,9 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       language: "es" | "de" | null;
       german_level: string | null;
       goal: string | null;
+      urgency: string | null;
+      budget: string | null;
+      source: string | null;
     } | Array<{
       id: string;
       name: string | null;
@@ -79,6 +85,9 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       language: "es" | "de" | null;
       german_level: string | null;
       goal: string | null;
+      urgency: string | null;
+      budget: string | null;
+      source: string | null;
     }> | null;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null =>
@@ -103,6 +112,9 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       leadLanguage:    lead?.language ?? null,
       leadGermanLevel: lead?.german_level ?? null,
       leadGoal:        lead?.goal ?? null,
+      leadUrgency:     lead?.urgency ?? null,
+      leadBudget:      lead?.budget ?? null,
+      leadSource:      lead?.source ?? null,
       teacherId:       row.teacher_id,
       teacherName:     tu?.full_name ?? tu?.email ?? "—",
       teacherEmail:    tu?.email ?? "",
@@ -115,11 +127,14 @@ export function partitionByTime(rows: TrialClassRow[]) {
   const upcoming: TrialClassRow[] = [];
   const past:     TrialClassRow[] = [];
   for (const r of rows) {
-    if (new Date(r.scheduledAt).getTime() >= now) upcoming.push(r);
+    const isFuture = new Date(r.scheduledAt).getTime() >= now;
+    // Cancelled classes never count as "upcoming" — Calendly-style:
+    // a cancelled future booking shouldn't push the real next class down.
+    if (isFuture && r.status !== "cancelled") upcoming.push(r);
     else past.push(r);
   }
   // Past: newest first.
-  past.reverse();
+  past.sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
   return { upcoming, past };
 }
 

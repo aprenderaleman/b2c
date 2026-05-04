@@ -27,16 +27,28 @@ export default async function AdminTrialClassesPage() {
         </p>
       </header>
 
-      {/* ── Upcoming ── */}
+      {/* ── Next (Calendly-style hero) ── */}
+      {upcoming.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-3">
+            Siguiente clase
+          </h2>
+          <div className="rounded-2xl ring-2 ring-emerald-400/60 dark:ring-emerald-500/40 shadow-md">
+            <TrialClassCard row={upcoming[0]} showLeadDetailLink />
+          </div>
+        </section>
+      )}
+
+      {/* ── Rest of upcoming ── */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-3">
-          Próximas
+          {upcoming.length > 1 ? "Siguientes" : "Próximas"}
         </h2>
-        {upcoming.length === 0 ? (
-          <EmptyState text="No hay clases de prueba agendadas." />
+        {upcoming.length <= 1 ? (
+          <EmptyState text={upcoming.length === 0 ? "No hay clases de prueba agendadas." : "No hay más clases agendadas después de la siguiente."} />
         ) : (
           <div className="grid gap-3">
-            {upcoming.map((r) => (
+            {upcoming.slice(1).map((r) => (
               <TrialClassCard key={r.classId} row={r} showLeadDetailLink />
             ))}
           </div>
