@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { getCalendarBusy } from "./google-calendar";
 
 /**
  * Trial-slot computation for the public funnel.
@@ -167,6 +168,31 @@ async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
     const list = busyByTeacher.get(r.teacher_id) ?? [];
     list.push({ startMs, endMs: startMs + r.duration_minutes * 60_000 });
     busyByTeacher.set(r.teacher_id, list);
+  }
+
+  // ── Bonus busy: Google Calendar de Gelfis ─────────────────────
+  // Si la env GOOGLE_CALENDAR_ID está seteada Y existe un teacher
+  // cuyo email coincide con el calendar id (= Gelfis), añadimos los
+  // intervalos `busy` de su calendar personal a SUS busy locales.
+  // Así eventos personales (médico, reunión, etc.) bloquean los
+  // huecos que el funnel ofrecería para sus trials. Failure-mode:
+  // si Google no responde, getCalendarBusy() devuelve [] y el flujo
+  // sigue como antes (preferimos un riesgo de conflicto raro a
+  // bloquear el funnel entero).
+  const gcalEmail = (process.env.GOOGLE_CALENDAR_ID ?? "").toLowerCase();
+  if (gcalEmail) {
+    const gcalTeacher = teachers.find(t => t.email.toLowerCase() === gcalEmail);
+    if (gcalTeacher) {
+      const personalBusy = await getCalendarBusy(
+        now.toISOString(),
+        horizonEnd.toISOString(),
+      );
+      if (personalBusy.length > 0) {
+        const list = busyByTeacher.get(gcalTeacher.id) ?? [];
+        list.push(...personalBusy);
+        busyByTeacher.set(gcalTeacher.id, list);
+      }
+    }
   }
 
   // 3. Walk each Berlin-day in the horizon, accumulating candidate slots

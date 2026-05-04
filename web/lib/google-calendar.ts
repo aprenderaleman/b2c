@@ -180,3 +180,84 @@ export async function deleteTrialEvent(eventId: string): Promise<boolean> {
 export function googleCalendarConfigured(): boolean {
   return Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON && process.env.GOOGLE_CALENDAR_ID);
 }
+
+
+// ─────────────────────────────────────────────────────────────
+// freeBusy — consultar intervalos ocupados del calendar de Gelfis
+// para que el slot picker del funnel no ofrezca horas que choquen
+// con eventos personales (médico, reunión, lo que sea).
+//
+// Cache de 5 min en memoria del módulo. El slot picker se llama por
+// cada visitante del funnel; sin cache sería un DDoS contra la API
+// de Google. La key del cache incluye los timestamps redondeados a
+// la hora porque pequeños cambios de "now" no cambian materialmente
+// el conjunto de busy intervals.
+// ─────────────────────────────────────────────────────────────
+
+export type BusyInterval = { startMs: number; endMs: number };
+
+type CacheEntry = { intervals: BusyInterval[]; expiresAtMs: number };
+const busyCache = new Map<string, CacheEntry>();
+const BUSY_CACHE_TTL_MS = 5 * 60_000;
+
+function cacheKey(timeMinIso: string, timeMaxIso: string): string {
+  // Round both timestamps to the hour so we get cache hits across
+  // close-enough calls.
+  const min = new Date(timeMinIso); min.setUTCMinutes(0, 0, 0);
+  const max = new Date(timeMaxIso); max.setUTCMinutes(0, 0, 0);
+  return `${min.toISOString()}|${max.toISOString()}`;
+}
+
+/**
+ * Devuelve los intervalos ocupados del calendar `GOOGLE_CALENDAR_ID`
+ * entre `timeMinIso` y `timeMaxIso`. Si la integración no está
+ * configurada o la API de Google falla, devuelve [] — fail-open
+ * para no bloquear el funnel.
+ */
+export async function getCalendarBusy(
+  timeMinIso: string,
+  timeMaxIso: string,
+): Promise<BusyInterval[]> {
+  const cal = await getCalendarClient();
+  if (!cal) return [];
+  const calendarId = process.env.GOOGLE_CALENDAR_ID;
+  if (!calendarId) return [];
+
+  const key = cacheKey(timeMinIso, timeMaxIso);
+  const now = Date.now();
+  const cached = busyCache.get(key);
+  if (cached && cached.expiresAtMs > now) {
+    return cached.intervals;
+  }
+
+  try {
+    const res = await cal.freebusy.query({
+      requestBody: {
+        timeMin: timeMinIso,
+        timeMax: timeMaxIso,
+        items:   [{ id: calendarId }],
+      },
+    });
+    const cals = res.data.calendars ?? {};
+    const entry = cals[calendarId];
+    const busy = entry?.busy ?? [];
+    const intervals: BusyInterval[] = busy
+      .filter(b => b.start && b.end)
+      .map(b => ({
+        startMs: new Date(b.start as string).getTime(),
+        endMs:   new Date(b.end   as string).getTime(),
+      }));
+
+    busyCache.set(key, { intervals, expiresAtMs: now + BUSY_CACHE_TTL_MS });
+    // Trim cache si crece — evita memory leak en runtime de larga vida.
+    if (busyCache.size > 50) {
+      const oldest = [...busyCache.entries()]
+        .sort((a, b) => a[1].expiresAtMs - b[1].expiresAtMs)[0];
+      if (oldest) busyCache.delete(oldest[0]);
+    }
+    return intervals;
+  } catch (e) {
+    console.error("[gcal] freeBusy query failed:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
