@@ -6,6 +6,7 @@ import { NextClassCard } from "@/components/classes/NextClassCard";
 import { getUserIcalToken, icalUrlFor } from "@/lib/user-extras";
 import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
 import { OpenSchuleTeacherButton } from "@/components/entitlements/OpenSchuleTeacherButton";
+import { HansTeacherCard } from "@/components/dashboard/HansTeacherCard";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +64,11 @@ export default async function TeacherHome() {
         </div>
         {icalToken && <CalendarSyncButton icalUrl={icalUrlFor(icalToken)} />}
       </header>
+
+      {/* Hans (asistente IA para preparar clases). Va antes del fold,
+          encima de la lista de clases — decisión Gelfis 2026-05-04
+          al lanzar Hans en https://hans.aprender-aleman.de. */}
+      <HansTeacherCard />
 
       {next ? (
         <NextClassCard
