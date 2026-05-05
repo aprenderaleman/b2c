@@ -24,7 +24,7 @@ from typing import Any
 
 import base64
 import uvicorn
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from agents.agent_4_conversation import handle_incoming_message
@@ -32,6 +32,14 @@ from agents.shared.db import get_conn
 from agents.shared.leads import get_lead_by_phone, log_timeline
 from agents.shared.phone import normalize_phone
 from agents.whatsapp_service import WhatsAppError, WhatsAppService
+
+try:
+    from psycopg.errors import UniqueViolation       # psycopg v3
+except Exception:                                     # noqa: BLE001
+    try:
+        from psycopg2.errors import UniqueViolation  # psycopg2 fallback
+    except Exception:                                 # noqa: BLE001
+        UniqueViolation = Exception                   # type: ignore[misc,assignment]
 
 # In-memory store for the latest QR (per instance).
 # Evolution regenerates QRs every ~30s while pairing; we keep the latest.
@@ -118,19 +126,41 @@ async def calendly_webhook_deprecated():
 _EVOLUTION_WEBHOOK_SECRET = os.environ.get("EVOLUTION_WEBHOOK_SECRET", "")
 
 
-@app.post("/webhook/whatsapp")
-async def whatsapp_webhook(request: Request):
-    # Evolution can be configured to send a shared secret in a header; if
-    # you set EVOLUTION_WEBHOOK_SECRET, we require it to match.
-    if _EVOLUTION_WEBHOOK_SECRET:
-        got = request.headers.get("X-Webhook-Secret") or request.headers.get("apikey")
-        if got != _EVOLUTION_WEBHOOK_SECRET:
-            raise HTTPException(status_code=401, detail="invalid secret")
+def _claim_inbound(msg_id: str) -> bool:
+    """
+    Atomic dedup: try to INSERT this WhatsApp message_id into inbound_dedup.
+    Returns True if we got the lock (first time this id is seen) →
+    proceed with processing. Returns False if it was already there →
+    skip processing, this is a retry from Evolution.
 
-    payload = await request.json()
-    event = payload.get("event") or payload.get("type") or ""
-    log.info("WA webhook event=%r payload_keys=%s", event, list(payload.keys())[:8])
+    Fail-open on unexpected errors: better to risk a duplicate than miss
+    a real message.
+    """
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO inbound_dedup (wa_message_id) VALUES (%s)",
+                (msg_id,),
+            )
+        return True
+    except UniqueViolation:
+        return False
+    except Exception:                                       # noqa: BLE001
+        log.exception("inbound_dedup claim failed for %s — failing open", msg_id)
+        return True
 
+
+def _dispatch_event(event: str, payload: dict[str, Any]) -> None:
+    """Background worker. Runs AFTER the 200 has been returned to Evolution
+    so the handler can take the 30-90s of compose+review+delay+send without
+    Evolution's webhook timeout retrying the same message.
+
+    Para messages.upsert: la resolución del lead + parseo del texto es
+    rápido (<1s). Si el lead se resuelve, encolamos la tarea de procesar
+    (Agent 4 + send) en `inbound_processing_queue` para que un cron retry-e
+    si BackgroundTasks crashea o hay timeout en Anthropic. Esto cubre el
+    caso Christian 2026-04-30: Ja+No responde llegaron pero la respuesta
+    nunca salió (probablemente background task murió silenciosamente)."""
     try:
         if event in ("messages.upsert", "MESSAGES_UPSERT"):
             _handle_whatsapp_message(payload)
@@ -142,11 +172,79 @@ async def whatsapp_webhook(request: Request):
             _handle_qrcode_updated(payload)
         else:
             log.info("Ignoring Evolution event: %s", event)
-    except Exception:
-        log.exception("WhatsApp handler failed")
-        # Evolution retries on non-2xx — we log & swallow to avoid storm.
-        return JSONResponse({"ok": False, "error": "handler error"}, status_code=200)
+    except Exception:                                       # noqa: BLE001
+        log.exception("WhatsApp background handler failed")
 
+
+def _enqueue_for_processing(lead_id: str, text: str, wa_message_id: str | None) -> None:
+    """Persiste el inbound resuelto en inbound_processing_queue. El
+    drainer retry-eará hasta 3 veces si Agent 4 falla."""
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO inbound_processing_queue
+                  (lead_id, text, wa_message_id, status)
+                VALUES (%s, %s, %s, 'pending')
+                """,
+                (lead_id, text, wa_message_id),
+            )
+    except Exception:                                       # noqa: BLE001
+        log.exception("could not enqueue inbound — falling back to inline processing")
+
+
+def _mark_queue_done(lead_id: str, text: str) -> None:
+    """Marca como done la fila pending más reciente que matchea (lead, text)."""
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE inbound_processing_queue
+                   SET status = 'done', last_attempt_at = NOW()
+                 WHERE id = (
+                     SELECT id FROM inbound_processing_queue
+                      WHERE lead_id = %s AND text = %s
+                        AND status IN ('pending','processing')
+                      ORDER BY queued_at DESC LIMIT 1
+                 )
+                """,
+                (lead_id, text),
+            )
+    except Exception:                                       # noqa: BLE001
+        log.exception("could not mark queue done")
+
+
+@app.post("/webhook/whatsapp")
+async def whatsapp_webhook(request: Request, background: BackgroundTasks):
+    # Evolution can be configured to send a shared secret in a header; if
+    # you set EVOLUTION_WEBHOOK_SECRET, we require it to match.
+    if _EVOLUTION_WEBHOOK_SECRET:
+        got = request.headers.get("X-Webhook-Secret") or request.headers.get("apikey")
+        if got != _EVOLUTION_WEBHOOK_SECRET:
+            raise HTTPException(status_code=401, detail="invalid secret")
+
+    payload = await request.json()
+    event = payload.get("event") or payload.get("type") or ""
+
+    # Idempotency: each Evolution `messages.upsert` has a unique key.id.
+    # If Evolution times out on us and retries, the same key.id arrives
+    # again. We claim it atomically; on the second attempt the INSERT
+    # fails with UniqueViolation and we return 200 without doing the
+    # work twice. (Caso Christian Moresi 2026-04-29: retry generó 3
+    # respuestas IA idénticas.)
+    if event in ("messages.upsert", "MESSAGES_UPSERT"):
+        data = payload.get("data") or payload
+        key  = data.get("key") or {}
+        msg_id = key.get("id")
+        if msg_id and not _claim_inbound(msg_id):
+            log.info("Duplicate inbound key.id=%r — Evolution retry, ignoring.", msg_id)
+            return JSONResponse({"ok": True, "duplicate": True})
+
+    log.info("WA webhook event=%r payload_keys=%s", event, list(payload.keys())[:8])
+
+    # Schedule processing in background. Returns 200 in <100ms so Evolution
+    # never times out and never retries.
+    background.add_task(_dispatch_event, event, payload)
     return JSONResponse({"ok": True})
 
 
@@ -202,7 +300,16 @@ def _handle_whatsapp_message(payload: dict[str, Any]) -> None:
     ).strip()
 
     if not lead:
-        log.info("Inbound WhatsApp unmatched — jid=%r push=%r — ignoring.",
+        # POLÍTICA Gelfis 2026-05-04: el WhatsApp de la academia
+        # (+4915253409644) recibe mensajes de muchas personas que NO son
+        # leads — familia, amigos, vendedores, números equivocados. Si
+        # no hay match exacto contra `leads.whatsapp_normalized` o
+        # `leads.whatsapp_lid`, IGNORAMOS en silencio. No reply, no
+        # timeline, no unmatched_inbounds. La heurística previa de
+        # "asociar al lead con outbound más reciente" causaba cross-
+        # contaminación de mensajes — ver
+        # _resolve_by_recent_outbound (eliminada).
+        log.info("Inbound WhatsApp unmatched — jid=%r push=%r — silently ignored.",
                  remote_jid, push_name)
         return
 
@@ -216,7 +323,17 @@ def _handle_whatsapp_message(payload: dict[str, Any]) -> None:
         )
         return
 
-    handle_incoming_message(lead, text)
+    # Encolar para procesamiento durable + procesar inline. Si el inline
+    # falla (timeout Anthropic, etc.), el cron _drain_inbound_queue lo
+    # retomará. Si el inline tiene éxito, marca la fila como 'done'.
+    msg_id = key.get("id")
+    _enqueue_for_processing(lead["id"], text, msg_id)
+    try:
+        handle_incoming_message(lead, text)
+        # Marcar la fila más reciente para este lead+text como done
+        _mark_queue_done(lead["id"], text)
+    except Exception:                                       # noqa: BLE001
+        log.exception("inline inbound processing failed — queue will retry")
 
 
 def _resolve_lead_for_lid(remote_jid: str, push_name: str) -> dict | None:
@@ -278,7 +395,94 @@ def _resolve_lead_for_lid(remote_jid: str, push_name: str) -> dict | None:
     if len(rows) > 1:
         log.warning("Ambiguous pushName %r — %d candidate leads; ignoring.",
                     clean, len(rows))
+
+    # ELIMINADO 2026-05-04 — `_resolve_by_recent_outbound` adivinaba
+    # el lead por "outbound más reciente" cuando no había match por
+    # teléfono ni por LID. Causaba cross-contaminación: mensajes de
+    # personas no-lead (familia, vendedores, etc.) se asociaban al
+    # lead que casualmente acababa de recibir un mensaje. Ver
+    # incidente Abel Alonso Garcia (+41772771069). Política nueva:
+    # si no hay match exacto, devolvemos None y el caller ignora
+    # en silencio.
     return None
+
+
+def _record_unmatched(remote_jid: str, push_name: str, text: str,
+                       candidates_summary: str = "") -> None:
+    """DEPRECATED 2026-05-04 — ya no se llama desde el webhook. Antes
+    registraba inbounds no resueltos para revisión manual; ahora la
+    política es ignorar silenciosamente cualquier inbound que no
+    machee por teléfono o LID exacto. Función conservada por si en el
+    futuro queremos un panel "rebotes" — borrar después de validar
+    que no la necesitamos."""
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO unmatched_inbounds
+                  (jid, push_name, content_preview, candidates)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (remote_jid, push_name[:200], (text or "")[:300],
+                 candidates_summary[:500] or None),
+            )
+    except Exception as e:                              # noqa: BLE001
+        log.warning("could not record unmatched_inbound: %s", e)
+
+
+def _resolve_by_recent_outbound(remote_jid: str) -> dict | None:
+    """DEPRECATED 2026-05-04 — ELIMINADA del flow porque adivinaba el
+    lead por "outbound más reciente" cuando llegaba un LID nuevo,
+    causando que mensajes de personas no-lead se asociaran al lead que
+    casualmente había recibido el último outbound. Ver incidente Abel
+    Alonso Garcia (+41772771069). Función conservada como referencia;
+    no la llames desde nuevo código."""
+    # Ventana 6h: cubre el caso "lead respondió varias horas después" o
+    # "el sistema replaya un msg viejo". El TOP 1 más reciente sin LID es
+    # el candidato más probable. Si hay ambigüedad logamos warning.
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (l.id) l.*, msl.sent_at AS last_outbound
+              FROM message_send_log msl
+              JOIN leads l ON l.whatsapp_normalized = msl.to_number
+             WHERE msl.success = TRUE
+               AND msl.sent_at > NOW() - INTERVAL '6 hours'
+               AND l.whatsapp_lid IS NULL
+               AND l.status NOT IN ('lost','converted')
+             ORDER BY l.id, msl.sent_at DESC
+            """
+        )
+        rows = sorted(list(cur.fetchall()), key=lambda r: r["last_outbound"], reverse=True)
+
+    if not rows:
+        return None
+
+    # Si solo un lead es candidato → match unívoco.
+    distinct_ids = {r["id"] for r in rows}
+    if len(distinct_ids) == 1:
+        lead = dict(rows[0])
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE leads SET whatsapp_lid = %s WHERE id = %s",
+                (remote_jid, lead["id"]),
+            )
+        log.info("LID %s bound to lead %s (%s) by recent-outbound correlation.",
+                 remote_jid, lead["id"], lead["name"])
+        return lead
+
+    # Múltiples candidatos → tomar el MÁS reciente (mejor heurística que random).
+    # Loguear los otros para que Gelfis sepa si hay riesgo de cruce.
+    lead = dict(rows[0])
+    others = [f"{r['name']}({r['whatsapp_normalized']})" for r in rows[1:]]
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE leads SET whatsapp_lid = %s WHERE id = %s",
+            (remote_jid, lead["id"]),
+        )
+    log.warning("LID %s tied to lead %s (%s) by recent-outbound — also recent: %s.",
+                remote_jid, lead["id"], lead["name"], ", ".join(others))
+    return lead
 
 
 def _handle_whatsapp_status_update(payload: dict[str, Any]) -> None:
