@@ -37,6 +37,14 @@
     {
       "path": "/api/cron/diagnostico-followups",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/close-stale-classes",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/data-integrity-check",
+      "schedule": "0 6 * * *"
     }
   ]
 }

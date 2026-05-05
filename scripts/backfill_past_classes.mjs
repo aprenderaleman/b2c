@@ -3,8 +3,8 @@
  * Backfill historical classes from Zoom into Supabase.
  *
  * Policy (per Gelfis):
- *   - A past Zoom instance counts as a real class iff duration ≥ 45 min.
- *     45-90 min → billed_hours=1, >90 min → billed_hours=2.
+ *   - A past Zoom instance counts as a real class iff duration ≥ 15 min.
+ *     15-90 min → billed_hours=1, >90 min → billed_hours=2.
  *   - Group members: every current member of the group is recorded as
  *     attended=TRUE and counts_as_session=TRUE (option (b)), regardless
  *     of whether they appeared in the Zoom participant list (because many
@@ -52,7 +52,7 @@ const MEETINGS = [
 const NACHMITTAGS_ZOOM_ID = "86393586961";
 
 function billedHours(min) {
-  if (min < 45)  return 0;
+  if (min < 15)  return 0;
   if (min <= 90) return 1;
   return 2;
 }
@@ -136,7 +136,8 @@ for (const meeting of MEETINGS) {
   if (!g) { console.log(`\n✗ group not found: ${meeting.group_name}`); continue; }
 
   const { rows: members } = await db.query(
-    `SELECT s.id AS student_id, s.pack_started_at, u.full_name
+    `SELECT s.id AS student_id, s.pack_started_at, u.full_name,
+            m.joined_at AS group_joined_at
        FROM student_group_members m
        JOIN students s ON s.id = m.student_id
        JOIN users u    ON u.id = s.user_id
@@ -144,6 +145,15 @@ for (const meeting of MEETINGS) {
       ORDER BY u.full_name`,
     [g.id],
   );
+
+  // SAFETY: si algún miembro no tiene joined_at registrado, abortar.
+  // Sin esa fecha no podemos saber qué clases pasadas le corresponden.
+  const sinFecha = members.filter(m => !m.group_joined_at);
+  if (sinFecha.length > 0) {
+    console.log(`  ✗ ABORT: ${sinFecha.length} miembros sin group_joined_at: ${sinFecha.map(s=>s.full_name).join(", ")}`);
+    console.log(`    Rellena student_group_members.joined_at antes de re-ejecutar este script.`);
+    continue;
+  }
 
   console.log(`\n── ${g.name}  (group_id=${g.id}, ${members.length} members) ──`);
 
@@ -180,9 +190,12 @@ for (const meeting of MEETINGS) {
     );
     totalClasses++;
 
-    // Add every eligible member as attended
+    // Add every eligible member as attended.
+    // CRITICAL: solo si el alumno YA era miembro del grupo cuando ocurrió la clase.
+    // El bug del 2026-04-19 fue precisamente saltarse este filtro.
     let participantCount = 0;
     for (const mem of members) {
+      if (new Date(mem.group_joined_at) > new Date(startedAt)) continue;
       if (mem.pack_started_at && new Date(mem.pack_started_at) > new Date(startedAt)) continue;
       await db.query(
         `INSERT INTO class_participants
