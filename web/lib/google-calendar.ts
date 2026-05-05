@@ -148,6 +148,46 @@ export async function createTrialEvent(a: CreateArgs): Promise<CreatedEvent | nu
 
 
 /**
+ * Mueve un evento existente a un nuevo horario. Usado por el flujo de
+ * "cambio de hora" del trial (agents/reschedule_flow.py). Idempotente:
+ * si el evento no existe (404) lo logueamos y devolvemos false para que
+ * el caller decida (típicamente: registrar en lead_timeline y seguir,
+ * la fila en `classes` es la fuente de verdad real).
+ */
+export async function patchTrialEvent(
+  eventId:        string,
+  newStartIso:    string,
+  durationMinutes: number,
+): Promise<boolean> {
+  const cal = await getCalendarClient();
+  if (!cal) return false;
+
+  const calendarId = process.env.GOOGLE_CALENDAR_ID!;
+  const start = new Date(newStartIso);
+  const end   = new Date(start.getTime() + durationMinutes * 60_000);
+
+  try {
+    await cal.events.patch({
+      calendarId,
+      eventId,
+      requestBody: {
+        start: { dateTime: start.toISOString(), timeZone: "Europe/Berlin" },
+        end:   { dateTime: end.toISOString(),   timeZone: "Europe/Berlin" },
+      },
+    });
+    return true;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("404") || msg.includes("Resource has been deleted")) {
+      console.warn(`[gcal] patch: event ${eventId} not found (already deleted?)`);
+      return false;
+    }
+    console.error("[gcal] patch failed:", msg);
+    return false;
+  }
+}
+
+/**
  * Elimina el evento espejo. Llamado desde el flujo de cancelación de
  * clases. Idempotente: si el id no existe (ya borrado) o la SA perdió
  * permiso, lo logueamos y seguimos. La cancelación de la clase NO se

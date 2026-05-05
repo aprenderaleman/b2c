@@ -30,7 +30,7 @@ from agents.agent_1_writer import MessageDraft, compose_reply
 from agents.agent_2_reviewer import review_single
 from agents.agent_3_sender import send_approved
 from agents.shared.db import get_config, get_conn
-from agents.shared.leads import log_timeline, update_status
+from agents.shared.leads import log_timeline, reset_reactivation_count, update_status
 from agents.shared.rate_limits import BERLIN
 from agents.whatsapp_service import WhatsAppService
 
@@ -41,18 +41,36 @@ log = logging.getLogger("agent_4")
 # Keyword tables (match on word boundaries, case-insensitive)
 # ──────────────────────────────────────────────────────────
 
-BOOKING_WORDS = {
+# BOOKING — separado en dos categorías para evitar falsos positivos brutales
+# como el caso Sara 2026-04-30: dijo "Todo ok y perfecto, tomaré clases en
+# una escuela presencial" y "ok" matcheó BOOKING → bot le mandó horarios.
+#
+#  BOOKING_PHRASES: frases multi-palabra inequívocas — siempre booking.
+#  BOOKING_AFFIRMATIONS: afirmaciones cortas — solo cuentan si el mensaje
+#                        es BREVE (≤ _BOOKING_AFFIRMATION_MAX_CHARS).
+BOOKING_PHRASES = {
     "es": [
-        "si", "sí", "claro", "ok", "okey", "vale", "dale", "quiero",
-        "agendar", "agéndame", "agendame", "envíame", "enviame",
-        "mándame", "mandame", "manda", "enlace", "link", "reservar",
-        "reserva", "reservame", "book", "booking",
+        "agendar", "agéndame", "agendame",
+        "envíame", "enviame", "envia me",
+        "mándame", "mandame", "manda me",
+        "manda el link", "manda link", "mándame el link", "mandame el link",
+        "envíame el link", "enviame el link",
+        "quiero agendar", "quiero reservar", "quiero clase", "quiero la clase",
+        "reservar", "reserva", "resérvame", "resérvame", "reservame",
+        "book", "booking", "pasa el link", "pásame el link", "pasame el link",
     ],
     "de": [
-        "ja", "klar", "gerne", "okay", "ok", "schick", "schicken",
-        "buchen", "termin", "link", "buche", "schick mir",
+        "schick mir", "schick den link", "schicke den link",
+        "buchen", "termin buchen", "ich buche", "ich möchte buchen",
+        "schicke mir den", "ich will buchen",
     ],
 }
+BOOKING_AFFIRMATIONS = {
+    "es": ["si", "sí", "claro", "ok", "okey", "vale", "dale", "quiero", "enlace", "link"],
+    "de": ["ja", "klar", "gerne", "okay", "ok", "schick", "schicken", "termin", "link", "buche"],
+}
+_BOOKING_AFFIRMATION_MAX_CHARS = 25  # mensajes > 25 chars no se interpretan
+                                      # como booking aunque contengan "ok"
 
 HUMAN_WORDS = {
     "es": [
@@ -69,17 +87,38 @@ HUMAN_WORDS = {
 
 NEGATIVE_WORDS = {
     "es": [
+        # rechazo explícito
         "no me escriban más", "no me escriban mas",
         "dejen de escribirme", "dejen de escribir",
-        "no me interesa", "cancelar", "cancela",
+        "no me interesa", "ya no me interesa",
+        "cancelar", "cancela",
         "borrar", "borra mis datos", "basta", "stop",
         "quiten mi número", "quiten mi numero",
+        # rechazo amable / "me voy a otro lado" (caso Sara 2026-04-30)
+        "tomaré clases", "tomare clases", "voy a tomar clases",
+        "voy a estudiar en", "estudiaré en", "estudiare en",
+        "voy a otra academia", "elegí otra", "elegi otra",
+        "ya elegí", "ya elegi", "decidí no", "decidi no",
+        "ya me inscribí", "ya me inscribi",
+        "academia presencial", "escuela presencial",
+        "preferí otra", "preferi otra", "preferí no", "preferi no",
+        "agradezco tu tiempo", "agradezco el tiempo",
+        "agradezco muchísimo tu tiempo", "agradezco muchisimo tu tiempo",
+        "gracias por tu tiempo", "muchas gracias por tu tiempo",
+        "te deseo buena suerte", "te deseo lo mejor",
+        "mejor no", "no por ahora", "por ahora no",
     ],
     "de": [
         "bitte nicht mehr schreiben", "nicht mehr schreiben",
         "abmelden", "kein interesse",
         "nicht interessiert", "stopp", "stop",
         "meine daten löschen",
+        # rechazo amable
+        "ich gehe zu", "ich besuche eine andere", "ich habe mich entschieden",
+        "danke für deine zeit", "danke fuer deine zeit",
+        "vielen dank für deine zeit", "vielen dank fuer deine zeit",
+        "ich wünsche dir viel erfolg", "ich wuensche dir viel erfolg",
+        "andere schule", "präsenzschule", "praesenzschule",
     ],
 }
 
@@ -193,6 +232,28 @@ def _format_slot_line(iso: str, lang: str) -> str:
     return f"• {weekdays_es[dt.weekday()]} {dt.day} {months_es[dt.month-1]} · {dt.strftime('%H:%M')} (Berlín)"
 
 
+def _is_awaiting_trial_decision(lead_id: str) -> bool:
+    """True si en últimos 14 días hubo un status_change que marca
+    "attended trial". El caller YA verifica que status == 'in_conversation',
+    así que sabemos que el lead no ha pasado a converted/lost (esos cambian
+    el status). Una nota residual con "lost" en el content (notas, no
+    status_changes reales) no nos confunde."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1
+              FROM lead_timeline
+             WHERE lead_id = %s
+               AND type = 'status_change'
+               AND content ILIKE %s
+               AND timestamp > NOW() - INTERVAL '14 days'
+             LIMIT 1
+            """,
+            (lead_id, "%attended trial%"),
+        )
+        return cur.fetchone() is not None
+
+
 def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").lower().strip())
 
@@ -251,6 +312,11 @@ def handle_incoming_message(
         content=text,
     )
 
+    # El lead acaba de escribir → está engaged otra vez. Reseteamos el
+    # contador de reactivaciones para que un futuro silencio empiece de cero.
+    # (No-op si ya estaba en 0.)
+    reset_reactivation_count(lead["id"])
+
     # Once converted, NEVER auto-reply (spec).
     if status == "converted":
         log.info("Lead %s converted — ignoring inbound.", lead["id"])
@@ -260,6 +326,27 @@ def handle_incoming_message(
     if status == "needs_human":
         log.info("Lead %s in needs_human — holding.", lead["id"])
         return HandleResult("needs_human_already_paused_ignore", sent=False)
+
+    # POST-TRIAL DECISIÓN PENDIENTE: cuando Gelfis marca al lead como
+    # asistido (markTrialAttendedAwaitingConversion en web/lib/admin-
+    # actions.ts), el sistema lo deja en status='in_conversation' + un
+    # status_change con content "Lead attended trial — awaiting...".
+    # Mientras esa decisión esté pendiente y no haya conversion ni lost,
+    # el bot NO debe auto-mensajear. Caso Sara 2026-04-30 donde el bot
+    # le ofreció horarios a alguien que iba a otra academia.
+    if status == "in_conversation" and _is_awaiting_trial_decision(lead["id"]):
+        log.info("Lead %s post-trial pendiente decisión — escalando a Gelfis.", lead["id"])
+        log_timeline(
+            lead["id"], type="escalation", author="agent_4",
+            content=f"Post-trial pendiente decisión: \"{text[:200]}\"",
+            metadata={"alert_gelfis": True},
+        )
+        try:
+            from agents.notifications import notify_trial_attended_pending
+            notify_trial_attended_pending(lead)
+        except Exception:                               # noqa: BLE001
+            pass
+        return HandleResult("trial_attended_escalated", sent=False)
 
     # Per-lead admin takeover: when Gelfis presses "Tomo yo desde aquí"
     # in /admin/leads/[id], the row gets `ai_paused_until` set into the
@@ -281,6 +368,19 @@ def handle_incoming_message(
                 return HandleResult("ai_paused_by_admin", sent=False)
         except (ValueError, TypeError) as e:
             log.warning("Lead %s: could not parse ai_paused_until=%r (%s) — ignoring pause.", lead["id"], paused_until, e)
+
+    # ── RESCHEDULE FLOW ────────────────────────────────────────
+    # Antes de cualquier flujo conversacional, dar prioridad al state
+    # machine de "cambio de hora del trial". Toma control si:
+    #   (a) el lead ya está en flujo (continúa la conversación), o
+    #   (b) detecta intent reschedule + lead tiene trial scheduled.
+    # Si maneja el mensaje, retornamos sin pasar por agent_1/2/3 normal.
+    try:
+        from agents.reschedule_flow import handle_inbound as _resched_inbound
+        if _resched_inbound(lead, text):
+            return HandleResult("reschedule_flow_handled", sent=True)
+    except Exception:                                    # noqa: BLE001
+        log.exception("[reschedule_flow] uncaught exception — caer al flujo normal")
 
     text_norm = _norm(text)
     other_lang = "es" if lang == "de" else "de"
@@ -307,7 +407,15 @@ def handle_incoming_message(
     if _has_phrase(text_norm, INFO_CALL_WORDS[lang] + INFO_CALL_WORDS[other_lang]):
         return _handle_info_call_request(lead, wa)
 
-    if _has_phrase(text_norm, BOOKING_WORDS[lang]):
+    # Frases multi-palabra inequívocas → siempre booking
+    if _has_phrase(text_norm, BOOKING_PHRASES[lang]):
+        return _handle_booking(lead, wa)
+    # Afirmaciones cortas ("sí", "ok", "vale") → SOLO si el mensaje es breve
+    # (≤ _BOOKING_AFFIRMATION_MAX_CHARS). Evita el caso Sara: "Todo ok y
+    # perfecto, tomaré clases en una escuela presencial" matcheaba "ok"
+    # como booking. Si el mensaje es largo, es conversación, no booking.
+    if (len(text_norm) <= _BOOKING_AFFIRMATION_MAX_CHARS
+        and _has_phrase(text_norm, BOOKING_AFFIRMATIONS[lang])):
         return _handle_booking(lead, wa)
 
     # Price questions get a concrete answer BEFORE the generic info bucket
@@ -367,12 +475,26 @@ def _trial_class_details(lead_id: str) -> tuple[datetime | None, str | None]:
 
 
 def _format_trial_when(dt: datetime | None, lang: str) -> str:
+    """Formatea fecha/hora del trial en el idioma del lead.
+
+    NO usar strftime('%A') — depende del locale del sistema (en el
+    container Docker es 'C'/'en_US' → suelta 'Thursday' en mensaje
+    alemán). Hard-coded por idioma garantiza consistencia."""
     if not dt:
         return "pronto" if lang == "es" else "bald"
     local = dt.astimezone(BERLIN) if dt.tzinfo else BERLIN.localize(dt)
+
     if lang == "de":
-        return local.strftime("%A, %d.%m.%Y um %H:%M") + " (Berlin)"
-    # Spanish — capitalise weekday so it reads naturally mid-sentence.
+        weekdays_de = ["Montag", "Dienstag", "Mittwoch", "Donnerstag",
+                       "Freitag", "Samstag", "Sonntag"]
+        months_de = ["Januar", "Februar", "März", "April", "Mai", "Juni",
+                     "Juli", "August", "September", "Oktober", "November", "Dezember"]
+        return (
+            f"{weekdays_de[local.weekday()]}, {local.day}. "
+            f"{months_de[local.month - 1]} {local.year} um "
+            f"{local.strftime('%H:%M')} (Berlin)"
+        )
+    # Spanish
     weekdays_es = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
     months_es   = ["enero", "febrero", "marzo", "abril", "mayo", "junio",
                    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
@@ -385,53 +507,89 @@ def _format_trial_when(dt: datetime | None, lang: str) -> str:
 def _handle_trial_already_booked(
     lead: dict, incoming: str, wa: WhatsAppService | None,
 ) -> HandleResult:
-    """Lead already has a trial scheduled. Don't push booking — surface the
-    details and offer to help. We let the AI handle the substantive reply
-    (so the lead's actual question gets answered), but anchor it with the
-    booking facts so the model never invents a different time/teacher.
+    """Lead already has a trial scheduled. Don't push booking — confirm
+    the time only.
+
+    Política Gelfis 2026-04-30:
+      • NO mencionar el nombre del profesor (interno, no relevante al lead)
+      • NO añadir preguntas tipo "¿en qué te puedo ayudar?" — esto es
+        confirmación, no apertura de conversación
+      • Día de la semana en idioma del lead (no en inglés)
+
+    Si el mensaje del lead es solo confirmación corta ("Ja", "ok", "sí",
+    "perfecto", etc.) usamos un acuse estático breve. Para preguntas reales
+    pasamos al AI con contexto.
     """
     name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
     lang = lead.get("language", "es")
-    when_dt, teacher_name = _trial_class_details(lead["id"])
+    when_dt, _teacher_name = _trial_class_details(lead["id"])  # teacher ignorado por política
     when_str = _format_trial_when(when_dt, lang)
 
-    # Compose a reply through Agent 1 + Agent 2 with the booking facts as
-    # extra context. If the AI can't produce a good reply, fall back to a
-    # static acknowledgement with the booking details.
+    # Detectar si el lead solo confirma (mensaje corto + palabra de
+    # afirmación). En ese caso, acuse estático sin invitar conversación.
+    incoming_norm = (incoming or "").strip().lower()
+    SHORT_CONFIRM = {
+        "es": {"si", "sí", "ok", "okey", "vale", "perfecto", "claro", "dale",
+               "genial", "gracias", "muchas gracias"},
+        "de": {"ja", "ok", "okay", "klar", "perfekt", "danke", "vielen dank",
+               "alles klar"},
+    }
+    is_short_confirm = (
+        len(incoming_norm) <= 25
+        and any(w in SHORT_CONFIRM[lang] for w in incoming_norm.replace("!", "").replace(".", "").split())
+    )
+
+    if is_short_confirm:
+        # Acuse breve, sin pregunta ni profesor.
+        if lang == "de":
+            body = (
+                f"Perfekt, {name}! 👍\n\n"
+                f"Bestätigt: deine Probestunde ist am {when_str}.\n\n"
+                f"— Stiv · Aprender-Aleman.de"
+            )
+        else:
+            body = (
+                f"¡Perfecto, {name}! 👍\n\n"
+                f"Confirmado: tu clase de prueba es el {when_str}.\n\n"
+                f"— Stiv · Aprender-Aleman.de"
+            )
+        result = send_approved(lead, body, is_new_conversation=False,
+                               advance_followup=False, wa=wa)
+        return HandleResult("trial_already_booked", sent=result.success, message_sent=body)
+
+    # Mensaje no-confirmación → pasar al AI con contexto fáctico.
     facts_es = (
         f"[CONTEXTO INTERNO — NO REPETIR LITERAL]\n"
-        f"Este lead YA TIENE clase de prueba reservada: {when_str}"
-        f"{' con ' + teacher_name if teacher_name else ''}.\n"
-        f"NO le ofrezcas reservar otra clase. Si pregunta por la fecha o el profesor, "
-        f"confírmaselos. Responde brevemente a su mensaje actual."
+        f"Este lead YA TIENE clase de prueba reservada: {when_str}.\n"
+        f"NO le ofrezcas reservar otra clase. NO menciones el nombre del profesor. "
+        f"NO añadas preguntas tipo '¿en qué te puedo ayudar?'. "
+        f"Si solo confirma, simplemente confírmaselo. Responde brevemente "
+        f"a su mensaje actual."
     )
     facts_de = (
         f"[INTERNER KONTEXT — NICHT WÖRTLICH WIEDERHOLEN]\n"
-        f"Dieser Lead hat BEREITS eine Probestunde gebucht: {when_str}"
-        f"{' mit ' + teacher_name if teacher_name else ''}.\n"
-        f"BIETE KEINE neue Buchung an. Wenn er nach Datum/Lehrer fragt, "
-        f"bestätige sie. Antworte kurz auf seine aktuelle Nachricht."
+        f"Dieser Lead hat BEREITS eine Probestunde gebucht: {when_str}.\n"
+        f"BIETE KEINE neue Buchung an. NENNE NICHT den Namen des Lehrers. "
+        f"FÜGE KEINE Fragen wie 'Wie kann ich dir helfen?' hinzu. "
+        f"Wenn er nur bestätigt, bestätige es einfach kurz. Antworte kurz "
+        f"auf seine aktuelle Nachricht."
     )
     facts = facts_de if lang == "de" else facts_es
     augmented = f"{facts}\n\n[MENSAJE DEL LEAD]\n{incoming}"
 
     draft = compose_reply(lead, augmented)
     if draft is None or not review_single(lead, draft).approved:
-        # Static fallback — confirms the class without sounding like a bot.
+        # Static fallback — sin profesor, sin pregunta innecesaria.
         if lang == "de":
             body = (
                 f"Hallo {name}! 👋\n\n"
-                f"Du hast deine Probestunde am {when_str}"
-                f"{' mit ' + teacher_name if teacher_name else ''}.\n\n"
-                f"Wie kann ich dir helfen?\n\n"
+                f"Deine Probestunde ist am {when_str}.\n\n"
                 f"— Stiv · Aprender-Aleman.de"
             )
         else:
             body = (
                 f"¡Hola {name}! 👋\n\n"
-                f"Tu clase de prueba es el {when_str}"
-                f"{' con ' + teacher_name if teacher_name else ''}.\n\n"
-                f"¿En qué te puedo ayudar?\n\n"
+                f"Tu clase de prueba es el {when_str}.\n\n"
                 f"— Stiv · Aprender-Aleman.de"
             )
     else:
