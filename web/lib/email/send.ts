@@ -210,6 +210,15 @@ export async function sendClassReminder30mEmail(
   return sendRaw(to, subject, html, text);
 }
 
+import { renderClassMorningSummary, type ClassMorningVars } from "./templates/class-morning-summary";
+export async function sendClassMorningSummaryEmail(
+  to: string,
+  vars: ClassMorningVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderClassMorningSummary(vars);
+  return sendRaw(to, subject, html, text);
+}
+
 /**
  * Trial-class booking confirmation. Sent the moment the lead picks
  * a slot in the public funnel. Includes the magic-link aula URL.
