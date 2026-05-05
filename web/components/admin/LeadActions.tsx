@@ -110,11 +110,41 @@ export function LeadActions({ lead }: { lead: Lead }) {
       )}
 
       {/* Stiv takeover toggle — pauses or reactivates the AI on this
-          single lead, without touching status or follow-up counters. */}
+          single lead, without touching status or follow-up counters.
+          Al REACTIVAR, pedimos una nota de handoff (qué se habló durante
+          el takeover) que se guarda en gelfis_notes para que agent_1 no
+          responda a ciegas. Caso Asmaa 2026-05-04. */}
       {!alreadyConverted && lead.status !== "lost" && (
         <form
           action={`/api/admin/leads/${lead.id}/ai-pause`}
           method="post"
+          onSubmit={(e) => {
+            if (aiPaused) {
+              // Reactivando → pedir nota
+              const note = window.prompt(
+                "Antes de reactivar Stiv, escribe un breve resumen del " +
+                "estado del lead (qué se habló, qué quedó pendiente).\n\n" +
+                "Esta nota se la pasaremos al bot para que tenga contexto.",
+                "",
+              );
+              if (note === null) { e.preventDefault(); return; }
+              const trimmed = note.trim();
+              if (trimmed.length === 0) {
+                if (!confirm(
+                  "⚠️ No escribiste una nota de handoff.\n\n" +
+                  "Sin contexto, Stiv puede repetir información que ya " +
+                  "trataste manualmente. ¿Reactivar igualmente?",
+                )) { e.preventDefault(); return; }
+              }
+              // Inyectar la nota en el form antes de submit
+              const f = e.currentTarget;
+              const hidden = document.createElement("input");
+              hidden.type = "hidden";
+              hidden.name = "note";
+              hidden.value = trimmed;
+              f.appendChild(hidden);
+            }
+          }}
         >
           <input type="hidden" name="paused" value={aiPaused ? "false" : "true"} />
           <button
@@ -125,7 +155,7 @@ export function LeadActions({ lead }: { lead: Lead }) {
                 : "border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
             }`}
             title={aiPaused
-              ? "Stiv está pausado para este lead. Pulsa para reactivarlo."
+              ? "Stiv está pausado para este lead. Pulsa para reactivarlo (te pediré una nota de handoff)."
               : "Pausa Stiv para este lead y toma la conversación tú."}
           >
             {aiPaused ? "▶ Reactivar Stiv" : "✋ Tomo yo desde aquí"}

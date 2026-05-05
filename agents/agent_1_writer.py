@@ -238,16 +238,50 @@ Write the next follow-up message now, in {lead['language']}.
     )
 
 
+def _detect_recent_admin_takeover(timeline: list[dict]) -> bool:
+    """
+    Devuelve True si en los últimos 14 días el admin ha hecho un takeover
+    (pause + reactivate) sobre este lead. Cuando es True, el writer
+    eleva la atención del LLM a las gelfis_notes para no repetir info.
+    Decisión Gelfis 2026-05-04 tras incidente Asmaa.
+    """
+    from datetime import datetime, timedelta, timezone
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    for e in timeline:
+        ts = e.get("timestamp")
+        if not ts or ts < cutoff:
+            continue
+        if e.get("type") == "agent_note" and e.get("author") == "admin":
+            content = (e.get("content") or "").lower()
+            if "stiv reactivado" in content or "tomo la conversación" in content:
+                return True
+    return False
+
+
 def compose_reply(lead: dict, incoming_text: str) -> MessageDraft | None:
     """
     Compose a reply to a lead's incoming message. Called by Agent 4 after
     the keyword layer fails to find a direct match.
     """
-    timeline = get_recent_timeline(lead["id"], limit=5)
-    notes    = get_gelfis_notes(lead["id"], limit=3)
+    # Pillamos timeline más largo para detectar takeover ↓ (limit=15) y
+    # luego cortamos al renderizar (limit=5).
+    timeline = get_recent_timeline(lead["id"], limit=15)
+    notes    = get_gelfis_notes(lead["id"], limit=5)
+    recent_takeover = _detect_recent_admin_takeover(timeline)
+
+    takeover_warning = ""
+    if recent_takeover:
+        takeover_warning = (
+            "⚠️ TAKEOVER RECIENTE — el admin manejó este lead "
+            "manualmente hace poco y dejó nota(s) en GELFIS NOTES. "
+            "LEE las notas con atención antes de responder. NO repitas "
+            "información que el admin ya trató. Si la nota dice algo "
+            "como 'le dije que reagendamos para X' o 'le envié el link', "
+            "asume que eso ya está hecho y continúa desde ahí.\n\n"
+        )
 
     user_prompt = f"""\
-LEAD PROFILE
+{takeover_warning}LEAD PROFILE
   - name: {lead.get('name')}
   - language: {lead.get('language')}
   - German level: {lead.get('german_level')}
@@ -291,6 +325,7 @@ def compose_message(lead: dict) -> MessageDraft | None:
     """Decide what outbound message (if any) to compose for this lead."""
     status = lead["status"]
     lang = lead["language"]
+    rc = int(lead.get("reactivation_count") or 0)
 
     if status == "new":
         return MessageDraft(
@@ -307,4 +342,95 @@ def compose_message(lead: dict) -> MessageDraft | None:
     if status in ("contacted_2", "contacted_3", "contacted_4"):
         return _compose_ai_reengagement(lead)
 
+    # Post-engagement reactivations (migración 041 + política Gelfis 2026-04-29).
+    if status == "link_sent" and rc < 2:
+        return MessageDraft(
+            text=_template_link_reminder(lead, rc),
+            kind=f"template_link_reminder_{rc + 1}",
+            language=lang,
+        )
+    if status == "in_conversation" and rc < 1:
+        return MessageDraft(
+            text=_template_conversation_revive(lead),
+            kind="template_conversation_revive",
+            language=lang,
+        )
+
     return None
+
+
+# ──────────────────────────────────────────────────────────
+# Templates de reactivación (post-engagement)
+# ──────────────────────────────────────────────────────────
+
+
+_FUNNEL_URL = "https://b2c.aprender-aleman.de/agendar"
+
+
+def _template_link_reminder(lead: dict, reactivation_count: int) -> str:
+    """Recordatorio para leads en status='link_sent' que no booketron tras
+    enviarles el link.
+
+    reactivation_count == 0 → primer recordatorio (+24h tras link_sent).
+    reactivation_count == 1 → último recordatorio (+5d después). Tras
+                              enviar este, el sistema marca al lead como cold.
+    """
+    name = _first_name(lead)
+    de   = lead["language"] == "de"
+
+    if reactivation_count == 0:
+        if de:
+            return (
+                f"Hallo {name} 👋\n\n"
+                f"Hat alles geklappt mit der Buchung? Falls etwas nicht funktioniert "
+                f"hat oder du noch eine Frage hattest, schreib mir kurz.\n\n"
+                f"Hier ist der Link nochmal:\n{_FUNNEL_URL}\n\n"
+                f"{SIGN_OFF_DE.lstrip()}"
+            )
+        return (
+            f"Hola {name} 👋\n\n"
+            f"¿Pudiste agendar tu clase de prueba? Si tuviste algún problema o "
+            f"te quedó alguna duda, dímelo y te ayudo.\n\n"
+            f"Te paso el link otra vez:\n{_FUNNEL_URL}\n\n"
+            f"{SIGN_OFF_ES.lstrip()}"
+        )
+
+    # reactivation_count == 1 — último intento
+    if de:
+        return (
+            f"Hallo {name},\n\n"
+            f"Letzte Erinnerung von mir 🙂. Falls du noch Lust auf die "
+            f"kostenlose Probestunde hast, hier der Link:\n{_FUNNEL_URL}\n\n"
+            f"Sonst alles Gute für dich.\n\n"
+            f"{SIGN_OFF_DE.lstrip()}"
+        )
+    return (
+        f"Hola {name},\n\n"
+        f"Último recordatorio de mi parte 🙂. Si aún quieres tu clase de prueba "
+        f"gratis, aquí va el link:\n{_FUNNEL_URL}\n\n"
+        f"Si no, te deseo lo mejor.\n\n"
+        f"{SIGN_OFF_ES.lstrip()}"
+    )
+
+
+def _template_conversation_revive(lead: dict) -> str:
+    """Reactivación para leads en status='in_conversation' que se quedaron
+    callados tras una respuesta del bot. Solo se envía 1 vez (rc=0). Si
+    no responden tras esto, el sistema los marca cold.
+    """
+    name = _first_name(lead)
+    if lead["language"] == "de":
+        return (
+            f"Hallo {name}, alles gut bei dir? 😊\n\n"
+            f"Ich wollte nur kurz nachfragen — gibt es noch etwas, das ich klären "
+            f"kann, oder ist es gerade nicht der richtige Moment?\n\n"
+            f"Schreib mir, wann du willst.\n\n"
+            f"{SIGN_OFF_DE.lstrip()}"
+        )
+    return (
+        f"Hola {name}, ¿todo bien? 😊\n\n"
+        f"Te escribo solo para chequear — ¿quedó alguna duda que pueda resolverte, "
+        f"o simplemente no es el momento?\n\n"
+        f"Cuando quieras, escríbeme.\n\n"
+        f"{SIGN_OFF_ES.lstrip()}"
+    )

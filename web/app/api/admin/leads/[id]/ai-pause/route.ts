@@ -36,16 +36,19 @@ export async function POST(
   // inline button (form post) and any future programmatic clients.
   let paused = false;
   let hours  = 24;
+  let takeoverNote = "";
   const ct = req.headers.get("content-type") ?? "";
   if (ct.includes("application/json")) {
     const body = await req.json().catch(() => ({}));
     paused = Boolean(body?.paused);
     hours  = Number.isFinite(body?.hours) ? Number(body.hours) : 24;
+    takeoverNote = String(body?.note ?? "").trim();
   } else {
     const form = await req.formData().catch(() => null);
     paused = form?.get("paused") === "true" || form?.get("paused") === "1";
     const h = Number(form?.get("hours"));
     if (Number.isFinite(h) && h > 0) hours = h;
+    takeoverNote = String(form?.get("note") ?? "").trim();
   }
 
   const value = paused
@@ -53,6 +56,18 @@ export async function POST(
     : null;
 
   const sb = supabaseAdmin();
+
+  // Si el admin está REACTIVANDO Stiv (paused=false) y dejó una nota,
+  // guárdala en gelfis_notes ANTES de limpiar la pausa. agent_1 la
+  // recoge en la próxima respuesta. Decisión Gelfis 2026-05-04: el bot
+  // necesita contexto humano para no responder a ciegas tras un takeover.
+  if (!paused && takeoverNote.length > 0) {
+    await sb.from("gelfis_notes").insert({
+      lead_id: id,
+      note:    `[Takeover handoff] ${takeoverNote}`,
+    });
+  }
+
   const { error } = await sb
     .from("leads")
     .update({ ai_paused_until: value })
@@ -62,13 +77,18 @@ export async function POST(
   }
 
   // Note in the timeline so the chronology shows who paused/resumed.
+  // Para reactivaciones, incluimos en el content si hubo nota o no — eso
+  // permite que agent_1 detecte "reactivación reciente" en el timeline
+  // y eleve la atención del LLM a las gelfis_notes.
   await sb.from("lead_timeline").insert({
     lead_id: id,
     type:    "agent_note",
     author:  "admin",
     content: paused
       ? `Stiv pausado ${hours}h — admin toma la conversación manual.`
-      : "Stiv reactivado — vuelve a responder automáticamente.",
+      : (takeoverNote
+          ? `Stiv reactivado con nota de handoff. Bot debe leer gelfis_notes antes de responder.`
+          : `Stiv reactivado SIN nota de handoff — bot puede no tener contexto del takeover.`),
   });
 
   if (ct.includes("application/json")) {
