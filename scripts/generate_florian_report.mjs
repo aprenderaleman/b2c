@@ -60,7 +60,7 @@ const marzo = [
   { fecha: "2026-03-24", concepto: "Fernanda B1",                 horas: 1, tarifa: 15, total: 15 },
   { fecha: "2026-03-26", concepto: "Fernanda B1",                 horas: 1, tarifa: 15, total: 15 },
   { fecha: "2026-03-26", concepto: "Gruppe A1 (1 hora)",          horas: 1, tarifa: 17, total: 17 },
-  { fecha: "—",          concepto: "Ajuste manual (Florian apuntó 280€)", horas: 0, tarifa: 0, total: 30, isAdj: true },
+  { fecha: "—",          concepto: "Otras horas conciliadas (ya pagadas)", horas: 0, tarifa: 0, total: 30, isAdj: true },
 ];
 
 // Abril 2026
@@ -80,11 +80,10 @@ const abril = [
 const totalMar = marzo.reduce((s,r)=>s+r.total,0);
 const totalAbr = abril.reduce((s,r)=>s+r.total,0);
 const totalGen = totalMar + totalAbr;
-const yaPagado = 113 + 250 + 90; // ene-feb-mar pagados (90 ene, 250 mar antes del ajuste, 113 abr antes)
-                                   // pero realmente era: feb=90, mar=250, abr=113 = 453€ pagados
-const realmentePagado = 90 + 250 + 113; // 453€
-const totalDebido      = 90 + 280 + 213; // feb 90 (sin cambios) + mar 280 + abr 213 = 583€
-const diferencia       = totalDebido - realmentePagado; // 130€
+// Pagos reales realizados: feb=90, mar=280 (no 250 — el banco confirma 280), abr=113.
+const realmentePagado  = 90 + 280 + 113;   // 483€
+const totalDebido      = 90 + 280 + 213;   // 583€
+const diferencia       = totalDebido - realmentePagado; // 100€ (solo abril)
 
 // ── BUILDERS ────────────────────────────────────────────────────────
 const cols = [1700, 4660, 1000, 1000, 1000];
@@ -161,11 +160,11 @@ function summaryTable() {
     columnWidths: [w1, w2],
     rows: [
       row("Febrero 2026 (sin cambios)",                            "90€"),
-      row("Marzo 2026 (corregido: 250€ → 280€, +30€)",             "280€"),
+      row("Marzo 2026 (ya pagado correctamente)",                  "280€"),
       row("Abril 2026 (corregido: 113€ → 213€, +100€)",            "213€"),
       row("TOTAL febrero–abril 2026",                              `${90+280+213}€`, { bold: true, fill: totalFill }),
       row("Ya pagado",                                             `${realmentePagado}€`),
-      row("Diferencia pendiente de pago",                          `${diferencia}€`, { bold: true, color: "C00000", fill: adjFill }),
+      row("Diferencia pendiente (solo abril)",                     `${diferencia}€`, { bold: true, color: "C00000", fill: adjFill }),
     ],
   });
 }
@@ -207,7 +206,7 @@ const doc = new Document({
         children: [new TextRun({ text: "Período: marzo–abril 2026", size: 22, color: "808080" })] }),
 
       p("Hola Florian,", { spacingAfter: 160 }),
-      p("Tienes razón con tu cálculo. He revisado clase por clase y confirmamos que faltaban 100€ en abril y 30€ en marzo. Aquí tienes el detalle completo y corregido. La diferencia (130€) se ingresará en tu próxima transferencia.", { spacingAfter: 240 }),
+      p("Tienes razón con tu cálculo de abril. He revisado clase por clase y confirmamos que faltaban 100€. Aquí tienes el detalle de marzo (ya pagado correctamente, 280€) y abril (corregido, 213€). Los 100€ pendientes los ingreso en tu próxima transferencia.", { spacingAfter: 240 }),
 
       h1("Resumen general"),
       summaryTable(),
@@ -235,8 +234,6 @@ const doc = new Document({
         children: [new TextRun({ text: "28 de abril — Fernanda B1: la clase estaba registrada pero el sistema no le había puesto el tiempo facturable. Corregida a 1h × 15€ = 15€.", size: 22 })] }),
       new Paragraph({ numbering: { reference: "bullets", level: 0 }, spacing: { after: 100 },
         children: [new TextRun({ text: "30 de abril — Gruppe A1 (1 hora): mismo bug que la del 28; corregida a 1h × 17€ = 17€.", size: 22 })] }),
-      new Paragraph({ numbering: { reference: "bullets", level: 0 }, spacing: { after: 100 },
-        children: [new TextRun({ text: "Marzo: ajuste de +30€ aceptado según tu cálculo (280€ en lugar de 250€).", size: 22 })] }),
 
       new Paragraph({ spacing: { before: 320 }, children: [new TextRun("")] }),
       p("Gracias por avisarnos — esta revisión nos ayuda a tener los registros bien.", { spacingAfter: 100 }),
