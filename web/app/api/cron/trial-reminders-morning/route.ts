@@ -5,14 +5,17 @@ import { sendTrialReminderEmail } from "@/lib/email/send";
 /**
  * GET/POST /api/cron/trial-reminders-morning
  *
- * Vercel Cron hits this once a day at 08:00 Europe/Berlin. For every
- * trial class scheduled later TODAY (Berlin), fires a "today is your
- * class" EMAIL reminder to BOTH the lead and the teacher.
+ * Vercel Cron lo dispara dos veces (06:00 y 07:00 UTC) para cubrir
+ * DST. El endpoint solo procesa si la hora local Berlin es 08:00
+ * (= 06:00 UTC en CEST verano, 07:00 UTC en CET invierno). El otro
+ * tick devuelve `skipped_dst` y termina sin trabajar.
  *
- * Auth: Authorization: Bearer <CRON_SECRET> or X-Cron-Secret.
+ * Para cada trial class scheduled hoy (Berlin), envía un EMAIL "tu
+ * clase es hoy" tanto al lead como al profesor.
  *
- * Idempotency: marker on classes.notes_admin so a re-run doesn't
- * duplicate sends.
+ * Auth: Authorization: Bearer <CRON_SECRET> o X-Cron-Secret.
+ *
+ * Idempotencia: marker en classes.notes_admin para evitar duplicados.
  */
 export const runtime  = "nodejs";
 export const dynamic  = "force-dynamic";
@@ -39,6 +42,32 @@ async function run(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  // DST guard: el cron Vercel dispara a 06:00 y 07:00 UTC. Solo procesar
+  // si la hora local Berlin es exactamente 08. Esto cubre verano (CEST,
+  // 06:00 UTC = 08:00 Berlin) e invierno (CET, 07:00 UTC = 08:00 Berlin)
+  // sin requerir reconfigurar cron al cambio de DST.
+  // Bypass para testing manual: pasar ?force=1 al endpoint.
+  const url = new URL(req.url);
+  const forceFlag = url.searchParams.get("force");
+  if (forceFlag !== "1") {
+    const berlinHour = parseInt(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: "Europe/Berlin",
+        hour:     "numeric",
+        hour12:   false,
+      }).format(new Date()),
+      10,
+    );
+    if (berlinHour !== 8) {
+      return NextResponse.json({
+        ok:      true,
+        skipped: "dst_guard",
+        berlin_hour: berlinHour,
+        note:    "Endpoint solo dispara cuando hora Berlin = 08. Otros ticks UTC se ignoran.",
+      });
+    }
+  }
+
   // "Today" in Berlin — `now` until tomorrow 00:00 Berlin. We don't
   // include classes that have already started a few minutes ago to
   // avoid sending a "today" reminder right before/during the trial
@@ -57,7 +86,7 @@ async function run(req: Request) {
     .select(`
       id, scheduled_at, duration_minutes, notes_admin,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads!inner(id, name, language, email)
+      lead:leads!inner(id, name, language, email, ai_paused_until)
     `)
     .eq("is_trial", true)
     .eq("status", "scheduled")
@@ -68,8 +97,8 @@ async function run(req: Request) {
     id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null;
     teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
-    lead: { id: string; name: string; language: "es" | "de"; email: string | null } |
-          Array<{ id: string; name: string; language: "es" | "de"; email: string | null }>;
+    lead: { id: string; name: string; language: "es" | "de"; email: string | null; ai_paused_until: string | null } |
+          Array<{ id: string; name: string; language: "es" | "de"; email: string | null; ai_paused_until: string | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null => !x ? null : Array.isArray(x) ? x[0] ?? null : x;
 
@@ -81,6 +110,11 @@ async function run(req: Request) {
     const teacherWrap = flat(r.teacher);
     const tu = teacherWrap ? flat(teacherWrap.users) : null;
     if (!lead) { skipped++; continue; }
+
+    // Honra ai_paused_until ("Tomo yo desde aquí" del admin).
+    if (lead.ai_paused_until && new Date(lead.ai_paused_until).getTime() > Date.now()) {
+      skipped++; continue;
+    }
 
     const leadFirst    = (lead.name || "").split(/\s+/)[0] || lead.name || "";
     const teacherName  = tu?.full_name ?? tu?.email ?? "tu profesor/a";

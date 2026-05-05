@@ -50,7 +50,7 @@ async function run(req: Request) {
     .select(`
       id, scheduled_at, duration_minutes, notes_admin,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads!inner(id, name, language, email)
+      lead:leads!inner(id, name, language, email, ai_paused_until)
     `)
     .eq("is_trial", true)
     .eq("status", "scheduled")
@@ -61,8 +61,8 @@ async function run(req: Request) {
     id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null;
     teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
-    lead: { id: string; name: string; language: "es" | "de"; email: string | null } |
-          Array<{ id: string; name: string; language: "es" | "de"; email: string | null }>;
+    lead: { id: string; name: string; language: "es" | "de"; email: string | null; ai_paused_until: string | null } |
+          Array<{ id: string; name: string; language: "es" | "de"; email: string | null; ai_paused_until: string | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null => !x ? null : Array.isArray(x) ? x[0] ?? null : x;
 
@@ -75,6 +75,12 @@ async function run(req: Request) {
     const tu = teacherWrap ? flat(teacherWrap.users) : null;
 
     if (!lead) { skipped++; continue; }
+
+    // Honra ai_paused_until ("Tomo yo desde aquí" del admin) para que las
+    // automatizaciones no escriban al lead mientras Gelfis lo gestiona.
+    if (lead.ai_paused_until && new Date(lead.ai_paused_until).getTime() > Date.now()) {
+      skipped++; continue;
+    }
 
     const leadFirst    = (lead.name || "").split(/\s+/)[0] || lead.name || "";
     const teacherName  = tu?.full_name ?? tu?.email ?? "tu profesor/a";

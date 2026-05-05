@@ -57,7 +57,7 @@ async function run(req: Request) {
     .select(`
       id, scheduled_at, duration_minutes, notes_admin,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads!inner(id, name, language, whatsapp_normalized)
+      lead:leads!inner(id, name, language, whatsapp_normalized, ai_paused_until)
     `)
     .eq("is_trial", true)
     .eq("status", "scheduled")
@@ -68,8 +68,8 @@ async function run(req: Request) {
     id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null;
     teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
-    lead: { id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null } |
-          Array<{ id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null }>;
+    lead: { id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null; ai_paused_until: string | null } |
+          Array<{ id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null; ai_paused_until: string | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null => !x ? null : Array.isArray(x) ? x[0] ?? null : x;
 
@@ -85,6 +85,15 @@ async function run(req: Request) {
     const teacherWrap = flat(r.teacher);
     const tu = teacherWrap ? flat(teacherWrap.users) : null;
     if (!lead || !lead.whatsapp_normalized) { skipped++; continue; }
+
+    // "Tomo yo desde aquí": admin pausó toda automatización para este lead.
+    // Honramos la pausa también en los crons de recordatorios — caso Asmaa
+    // 2026-05-04 que recibió WhatsApp 30min mientras Gelfis manejaba el
+    // cambio de hora manualmente.
+    if (lead.ai_paused_until) {
+      const until = new Date(lead.ai_paused_until).getTime();
+      if (until > nowMs) { skipped++; continue; }
+    }
 
     const leadFirst   = (lead.name || "").split(/\s+/)[0] || lead.name || "";
     const teacherName = tu?.full_name ?? "tu profesor/a";
