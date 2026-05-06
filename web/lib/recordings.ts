@@ -45,17 +45,22 @@ export async function getStudentRecordings(studentId: string): Promise<
   Array<RecordingRow & { class_title: string; scheduled_at: string }>
 > {
   const sb = supabaseAdmin();
+  // Excluimos trials por defensa — las clases de prueba son confidenciales
+  // (solo profe asignado + superadmin las ven). En la práctica un alumno
+  // no debería estar nunca en class_participants de un trial (esos son leads),
+  // pero el filtro garantiza que no se cuele nada.
   const { data, error } = await sb
     .from("class_participants")
     .select(`
       class:classes!inner(
-        id, title, scheduled_at,
+        id, title, scheduled_at, is_trial,
         recordings(
           id, file_url, status, duration_seconds, downloadable, created_at, processed_at, error
         )
       )
     `)
-    .eq("student_id", studentId);
+    .eq("student_id", studentId)
+    .eq("class.is_trial", false);
   if (error) return [];
 
   type Raw = {
@@ -92,16 +97,17 @@ export async function getStudentRecordings(studentId: string): Promise<
  * "Recordings the teacher has access to" — every recording of a class
  * they taught (classes.teacher_id == teacherId). Same shape as
  * getStudentRecordings so the two pages can render with one component
- * if we ever DRY them up.
+ * if we ever DRY them up. `is_trial` se incluye para que la página
+ * pueda separar trials de regulares (solo el profe que las dió las ve).
  */
 export async function getTeacherRecordings(teacherId: string): Promise<
-  Array<RecordingRow & { class_title: string; scheduled_at: string }>
+  Array<RecordingRow & { class_title: string; scheduled_at: string; is_trial: boolean }>
 > {
   const sb = supabaseAdmin();
   const { data, error } = await sb
     .from("classes")
     .select(`
-      id, title, scheduled_at,
+      id, title, scheduled_at, is_trial,
       recordings(
         id, file_url, status, duration_seconds, downloadable, created_at, processed_at, error
       )
@@ -110,10 +116,10 @@ export async function getTeacherRecordings(teacherId: string): Promise<
   if (error) return [];
 
   type Raw = {
-    id: string; title: string; scheduled_at: string;
+    id: string; title: string; scheduled_at: string; is_trial: boolean;
     recordings: Record<string, unknown>[] | undefined;
   };
-  const out: Array<RecordingRow & { class_title: string; scheduled_at: string }> = [];
+  const out: Array<RecordingRow & { class_title: string; scheduled_at: string; is_trial: boolean }> = [];
   for (const c of (data ?? []) as Raw[]) {
     const recs = c.recordings ?? [];
     for (const rec of recs) {
@@ -130,6 +136,7 @@ export async function getTeacherRecordings(teacherId: string): Promise<
         processed_at:     (rec.processed_at as string | null) ?? null,
         class_title:      c.title,
         scheduled_at:     c.scheduled_at,
+        is_trial:         Boolean(c.is_trial),
       });
     }
   }

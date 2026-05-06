@@ -141,6 +141,11 @@ export async function authorizeAulaAccess(
 /**
  * Whether a given user can watch a recording. A student/teacher can watch
  * only the recordings of classes they participated in; admins see all.
+ *
+ * Trial classes (is_trial=true) son confidenciales: solo el profesor
+ * asignado y un superadmin pueden verlas. Los admins normales y los
+ * alumnos no pueden — los participantes de un trial son leads, no
+ * alumnos, así que para ellos esto no aplica.
  */
 export async function canViewRecording(
   recordingId: string,
@@ -155,33 +160,46 @@ export async function canViewRecording(
     .maybeSingle();
   if (!rec) return { ok: false };
 
-  if (role === "superadmin" || role === "admin") {
-    return { ok: true, classId: (rec as { class_id: string }).class_id };
-  }
-
-  // Reuse the aula access check: if you could be in the room, you can
-  // watch the recording (even after the time window closes).
+  // Cargamos la clase ya con `is_trial` para todas las decisiones de abajo.
   const { data: cls } = await sb
     .from("classes")
     .select(`
-      id,
+      id, is_trial,
       teacher:teachers!inner(user_id),
-      class_participants!inner(
-        students!inner(user_id)
+      class_participants(
+        students(user_id)
       )
     `)
     .eq("id", (rec as { class_id: string }).class_id)
     .maybeSingle();
   if (!cls) return { ok: false };
 
+  const isTrial = Boolean((cls as { is_trial: boolean }).is_trial);
   const teacher = (cls as { teacher: unknown }).teacher;
   const tFlat = (Array.isArray(teacher) ? teacher[0] : teacher) as { user_id: string } | null;
+
+  // Trials: solo superadmin y el profesor asignado.
+  if (isTrial) {
+    if (role === "superadmin") {
+      return { ok: true, classId: (rec as { class_id: string }).class_id };
+    }
+    if (role === "teacher" && tFlat?.user_id === userId) {
+      return { ok: true, classId: (rec as { class_id: string }).class_id };
+    }
+    return { ok: false };
+  }
+
+  // Clases normales: superadmin/admin ven todo.
+  if (role === "superadmin" || role === "admin") {
+    return { ok: true, classId: (rec as { class_id: string }).class_id };
+  }
+
   if (role === "teacher" && tFlat?.user_id === userId) {
     return { ok: true, classId: (rec as { class_id: string }).class_id };
   }
 
   if (role === "student") {
-    type Part = { students: { user_id: string } | Array<{ user_id: string }> };
+    type Part = { students: { user_id: string } | Array<{ user_id: string }> | null };
     const parts = ((cls as { class_participants: Part[] }).class_participants ?? []);
     const mine = parts.some(p => {
       const s = Array.isArray(p.students) ? p.students[0] : p.students;
