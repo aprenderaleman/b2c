@@ -208,7 +208,14 @@ class WhatsAppService:
         try:
             res = self._request("POST", f"/message/sendText/{name}", json=payload)
         except WhatsAppError as e:
-            self._maybe_enqueue_for_retry(to_e164, text, kind, lead_id, str(e))
+            # Si esta llamada VIENE del drainer (kind="retry"), la fila YA
+            # está en outbound_queue y el drainer va a actualizar attempts
+            # vía _requeue. Volver a llamar enqueue_for_retry creaba una
+            # fila nueva por cada fallo → loop infinito que llenó la queue
+            # con 225k filas el 2026-05-02 (ver _drain_queue.py de
+            # cleanup). Solo enqueamos cuando el origen NO es retry.
+            if kind != "retry":
+                self._maybe_enqueue_for_retry(to_e164, text, kind, lead_id, str(e))
             raise
         if isinstance(res, dict):
             key = res.get("key") or {}

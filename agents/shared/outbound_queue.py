@@ -33,12 +33,20 @@ MAX_ATTEMPTS    = len(BACKOFF_SECONDS) - 1  # 6
 
 
 # Substrings that mark a permanent failure — we won't retry these.
+# Importante mantener sincronizado con los mensajes reales que devuelve
+# Evolution. Cualquier hint nuevo que veas en `last_error` y que sea
+# permanente, agregar aquí para que la queue no entre en loop.
 _PERMANENT_HINTS = (
     "not on whatsapp",
     "invalid wa.me",
     "number does not exist",
     "block",                 # blocked by user
     "phone is not registered",
+    # Evolution v1.8 devuelve esto cuando el número no tiene cuenta WA.
+    # Antes faltaba y los números de prueba +34253409644 etc. del 2 may
+    # quedaban en retry-loop infinito (ver cleanup _drain_queue.py).
+    '"exists":false',
+    '"exists": false',
 )
 
 
