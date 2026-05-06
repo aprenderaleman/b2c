@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { resolveRecipients } from "@/lib/comunicados/audience";
-import { sendToRecipient, summariseResults, loadAttachments } from "@/lib/comunicados/send";
+import { dispatchSequentially, summariseResults, loadAttachments } from "@/lib/comunicados/send";
 import { audienceFilterSchema, attachmentsArraySchema } from "@/lib/comunicados/schema";
 import type { Attachment, AudienceFilter, Channel, SendResultRow } from "@/lib/comunicados/types";
 
@@ -111,19 +111,16 @@ async function runDispatch(req: Request) {
     const attachmentsParsed = attachmentsArraySchema.safeParse(claimed.attachments ?? []);
     const attachments: Attachment[] = attachmentsParsed.success ? attachmentsParsed.data : [];
 
-    // 4. Resolve fresh + send sequentially (per-recipient) so the agents
-    //    VPS / Resend aren't hammered.
+    // 4. Resolve fresh + send sequentially with pacing so we don't blow
+    //    past Resend's 5 req/s rate limit on big sends.
     let results: SendResultRow[] = [];
     let dispatchError: string | null = null;
     try {
       const recipients        = await resolveRecipients(filter);
       const loadedAttachments = await loadAttachments(attachments);
-      for (const r of recipients) {
-        const row = await sendToRecipient(
-          r, claimed.subject, claimed.message_markdown, channels, loadedAttachments,
-        );
-        results.push(row);
-      }
+      results = await dispatchSequentially(
+        recipients, claimed.subject, claimed.message_markdown, channels, loadedAttachments,
+      );
     } catch (e) {
       dispatchError = e instanceof Error ? e.message : "unknown";
     }

@@ -5,6 +5,49 @@ import { renderBroadcast, renderWhatsappOnly } from "./render";
 import type { Attachment, Channel, Recipient, SendResultRow } from "./types";
 
 /**
+ * Resend's free / default tier caps requests at 5 req/s per API key.
+ * `sendToRecipient` issues at most one Resend call (the email one), so
+ * pacing the OUTER loop at ≥ 250 ms guarantees we stay at 4 req/s with
+ * comfortable headroom — even when WhatsApp is also enabled (those go
+ * to a different host and don't share the budget).
+ *
+ * The pacing is a no-op for recipients that don't trigger an email
+ * (whatsapp-only sends), but the cost of an extra ~250 ms in those
+ * cases is negligible vs. the simplicity of one knob covering both.
+ */
+export const SEND_PACING_MS = 250;
+
+/** Promise-based sleep used between recipient iterations to pace sends. */
+export function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Drive a sequential per-recipient send while pacing iterations to
+ * stay under provider rate limits. The first recipient fires
+ * immediately; every subsequent one waits SEND_PACING_MS after the
+ * previous one finished.
+ *
+ * Both /api/admin/comunicados/send and the dispatch cron use this so
+ * pacing rules live in exactly one place.
+ */
+export async function dispatchSequentially(
+  recipients:  Recipient[],
+  subject:     string,
+  markdown:    string,
+  channels:    Channel[],
+  attachments: EmailAttachment[],
+): Promise<SendResultRow[]> {
+  const out: SendResultRow[] = [];
+  for (let i = 0; i < recipients.length; i++) {
+    if (i > 0) await sleep(SEND_PACING_MS);
+    const row = await sendToRecipient(recipients[i], subject, markdown, channels, attachments);
+    out.push(row);
+  }
+  return out;
+}
+
+/**
  * Download every attachment referenced by a broadcast row from the
  * `materials` Supabase bucket and return them as ready-to-send Buffers.
  *

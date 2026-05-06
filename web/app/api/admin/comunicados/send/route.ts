@@ -2,9 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/comunicados/auth";
 import { sendBodySchema, SCHEDULE_MIN_LEAD_MS } from "@/lib/comunicados/schema";
 import { resolveRecipients } from "@/lib/comunicados/audience";
-import { sendToRecipient, summariseResults, loadAttachments } from "@/lib/comunicados/send";
+import { dispatchSequentially, summariseResults, loadAttachments } from "@/lib/comunicados/send";
 import { supabaseAdmin } from "@/lib/supabase";
-import type { SendResultRow } from "@/lib/comunicados/types";
 
 /**
  * POST /api/admin/comunicados/send
@@ -84,11 +83,10 @@ export async function POST(req: Request) {
   const recipients        = await resolveRecipients(audience_filter);
   const loadedAttachments = await loadAttachments(attachments);
 
-  const results: SendResultRow[] = [];
-  for (const r of recipients) {
-    const row = await sendToRecipient(r, subject, message_markdown, channels, loadedAttachments);
-    results.push(row);
-  }
+  // Sequential per-recipient with pacing — keeps us under Resend's 5 req/s.
+  const results = await dispatchSequentially(
+    recipients, subject, message_markdown, channels, loadedAttachments,
+  );
 
   const { ok_count, fail_count } = summariseResults(results);
 
