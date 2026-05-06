@@ -62,21 +62,30 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
 
   if (!cls) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if ((cls as { status: string }).status !== "scheduled") {
-    return NextResponse.json({
-      ok: false, error: "not_scheduled",
-      reason: `clase ya tiene status='${(cls as { status: string }).status}'`,
-    }, { status: 409 });
-  }
+  const currentStatus = (cls as { status: string }).status;
 
-  // 1. Update DB
-  const { error: updErr } = await sb
-    .from("classes")
-    .update({ status: "cancelled" })
-    .eq("id", body.class_id)
-    .eq("status", "scheduled");
-  if (updErr) {
-    return NextResponse.json({ error: "update_failed", message: updErr.message }, { status: 500 });
+  // Idempotente: si ya está cancelada (otra ruta admin la cerró), saltamos
+  // el update y procedemos solo con GCal cleanup + emails. Útil para
+  // ejecutar el endpoint a posteriori cuando alguien marcó la clase
+  // cancelled pero no se mandaron emails.
+  let alreadyCancelled = false;
+  if (currentStatus === "cancelled") {
+    alreadyCancelled = true;
+  } else if (currentStatus !== "scheduled") {
+    return NextResponse.json({
+      ok: false, error: "wrong_status",
+      reason: `clase tiene status='${currentStatus}' — solo se acepta scheduled o cancelled`,
+    }, { status: 409 });
+  } else {
+    // 1. Update DB
+    const { error: updErr } = await sb
+      .from("classes")
+      .update({ status: "cancelled" })
+      .eq("id", body.class_id)
+      .eq("status", "scheduled");
+    if (updErr) {
+      return NextResponse.json({ error: "update_failed", message: updErr.message }, { status: 500 });
+    }
   }
 
   // 2. GCal cleanup (best-effort, async)
@@ -157,6 +166,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     class_id: body.class_id,
+    already_cancelled: alreadyCancelled,
     cancelled: true,
     gcal_deleted: gcalDeleted,
     emails: { teacher: sentTeacher, students: sentStudents, skipped_opt_out: skippedOptOut, failed },
