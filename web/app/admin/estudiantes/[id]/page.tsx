@@ -7,6 +7,7 @@ import { IssueCertificateButton } from "@/components/admin/IssueCertificateButto
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 import { AdjustClassesButton } from "@/components/admin/AdjustClassesButton";
 import { EditPackButton } from "@/components/admin/EditPackButton";
+import { EditStudentButton } from "@/components/admin/EditStudentButton";
 import { NotesCard } from "@/components/admin/NotesCard";
 import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOutToggle";
 import { listStudentCertificates } from "@/lib/certificates";
@@ -85,6 +86,19 @@ export default async function StudentDetailPage({
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <EditStudentButton student={{
+              id:                  student.id,
+              full_name:           student.full_name,
+              email:                student.email,
+              phone:                student.phone,
+              language_preference:  student.language_preference,
+              current_level:        student.current_level,
+              goal:                 student.goal,
+              subscription_type:    student.subscription_type,
+              subscription_status:  student.subscription_status,
+              schule_access:        student.schule_access,
+              hans_access:          student.hans_access,
+            }} />
             <ImpersonateButton
               userId={student.user_id}
               userName={student.full_name ?? student.email}

@@ -37,6 +37,12 @@ export default async function StudentsListPage({
             {total.toLocaleString("es-ES")} resultado{total === 1 ? "" : "s"}
           </p>
         </div>
+        <a
+          href="/admin/estudiantes/nuevo"
+          className="text-sm font-semibold px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white"
+        >
+          + Nuevo estudiante
+        </a>
       </header>
 
       <form method="get" className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 grid gap-3 sm:grid-cols-4">
