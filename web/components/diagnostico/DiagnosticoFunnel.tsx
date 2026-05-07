@@ -121,6 +121,37 @@ type FormData = {
 
 type Step = 1 | 2 | 3 | 4 | "low_budget_exit" | 5 | 6;
 
+/**
+ * Combina country code + número local en E.164 protegiéndose de los
+ * casos típicos en que el usuario tipea el número con el código país
+ * incluido (caso real Juan José 2026-05-07: select="+34" + input="34
+ * 615 541 087" → resultado "+3434615541087" que rompía Evolution).
+ *
+ * Reglas de saneo:
+ *  1. Strip non-digits.
+ *  2. Si el número empieza por "00", interpreta como prefijo internacional
+ *     y descarta los dos ceros (ej. "0034611..." → "34611...").
+ *  3. Si los dígitos restantes empiezan por el country-code numérico Y
+ *     son lo suficientemente largos para considerarse duplicados, lo
+ *     elimina.
+ *  4. Quita 0 inicial nacional ("0611..." en muchos países = trunk).
+ *  5. Concatena `+` + ccDigits + localDigits.
+ */
+export function combineE164(countryCode: string, localInput: string): string {
+  const ccDigits = countryCode.replace(/\D/g, "");
+  let digits = (localInput ?? "").replace(/\D/g, "");
+  // (2) prefijo "00" → quitarlo y volver a iterar
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  // (3) si ya viene con CC y queda un número plausible (≥6 dígitos) tras
+  //     quitarlo, lo descartamos para no duplicar.
+  if (ccDigits && digits.startsWith(ccDigits) && digits.length - ccDigits.length >= 6) {
+    digits = digits.slice(ccDigits.length);
+  }
+  // (4) trunk nacional 0
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  return `+${ccDigits}${digits}`;
+}
+
 export function DiagnosticoFunnel() {
   const [step, setStep]       = useState<Step>(1);
   const [answers, setAnswers] = useState<Answers>({
@@ -187,9 +218,14 @@ export function DiagnosticoFunnel() {
     setSubmitting(true);
     setSubmitErr(null);
     try {
-      // Normalizar whatsapp a E.164: countryCode + dígitos locales
-      const localDigits = form.whatsapp.replace(/\D/g, "");
-      const whatsappE164 = `${form.countryCode.startsWith("+") ? form.countryCode : "+" + form.countryCode}${localDigits}`;
+      // Normalizar whatsapp a E.164. El usuario puede teclear el número
+      // de varias formas — limpiamos para evitar el bug "+34" + "+34..."
+      // = "+3434...":
+      //   1. Quitar todo lo que no sean dígitos
+      //   2. Si los dígitos ya empiezan por el country code numérico,
+      //      quitarlo (caso: usuario seleccionó +34 y tecleó "34611...")
+      //   3. Quitar 0 inicial (prefijo nacional típico)
+      const whatsappE164 = combineE164(form.countryCode, form.whatsapp);
 
       const body = {
         name:          form.name.trim(),
@@ -737,9 +773,8 @@ function CalendarStep({
         "Crecimiento personal":          "travel",
       };
 
-      const localDigits  = form.whatsapp.replace(/\D/g, "");
       const cc           = form.countryCode.startsWith("+") ? form.countryCode : `+${form.countryCode}`;
-      const whatsappE164 = `${cc}${localDigits}`;
+      const whatsappE164 = combineE164(form.countryCode, form.whatsapp);
 
       const res = await fetch("/api/public/book-trial", {
         method:  "POST",

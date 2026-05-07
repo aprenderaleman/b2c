@@ -43,6 +43,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z }                          from "zod";
 import { supabaseAdmin }              from "@/lib/supabase";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
+import { sanitizeE164 }                  from "@/lib/phone";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -158,8 +159,11 @@ export async function POST(req: NextRequest) {
   }
   const b = parsed.data;
 
-  // Normalizar el WhatsApp a E.164 con `+` al inicio.
-  const whatsappE164 = b.whatsapp_e164.startsWith("+") ? b.whatsapp_e164 : `+${b.whatsapp_e164}`;
+  // Normalizar el WhatsApp a E.164 con `+` al inicio. Defense in depth:
+  // si el cliente nos pasó algo malformado (caso real "+3434615541087"
+  // por country-code duplicado), saneamos colapsando un código repetido
+  // al inicio.
+  const whatsappE164 = sanitizeE164(b.whatsapp_e164);
 
   const sb = supabaseAdmin();
 

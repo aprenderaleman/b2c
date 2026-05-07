@@ -79,6 +79,37 @@ export function isValidE164(phone: string): boolean {
   return /^\+\d{8,15}$/.test(phone || "");
 }
 
+/**
+ * Saneo defensivo de un E.164 que ya viene con `+`. Pensado para los
+ * endpoints públicos que reciben el número ya armado por el frontend
+ * pero pueden recibir formas malformadas:
+ *   - Country code duplicado: "+3434615541087" → "+34615541087"
+ *     (caso real Juan José 2026-05-07)
+ *   - Espacios / guiones / paréntesis al guardarlos
+ *   - Prefijo "00" en vez de "+"
+ *
+ * Aplica una heurística común: prueba con cada país conocido y si
+ * detecta un duplicado de su código al inicio, lo colapsa.
+ */
+export function sanitizeE164(input: string): string {
+  let s = (input ?? "").trim();
+  if (!s) return s;
+  s = "+" + s.replace(/^\+/, "").replace(/\D/g, "");
+  if (s === "+") return s;
+  if (s.startsWith("+00")) s = "+" + s.slice(3);
+  const digits = s.slice(1);
+  // Probar con todos los códigos conocidos (1-3 dígitos), ordenados de
+  // más largo a más corto para preferir match con el CC más específico.
+  const ccs = Array.from(new Set(KNOWN_CC)).sort((a, b) => b.length - a.length);
+  for (const cc of ccs) {
+    const doubled = cc + cc;
+    if (digits.startsWith(doubled) && digits.length - cc.length >= 8) {
+      return "+" + digits.slice(cc.length);
+    }
+  }
+  return s;
+}
+
 export const COUNTRY_CODES: Array<{ code: string; label: string; flag: string }> = [
   { code: "+49", label: "Deutschland",  flag: "🇩🇪" },
   { code: "+34", label: "España",       flag: "🇪🇸" },

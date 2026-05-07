@@ -8,6 +8,7 @@ import { sendTrialConfirmationEmail } from "@/lib/email/send";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { createTrialEvent } from "@/lib/google-calendar";
+import { sanitizeE164 } from "@/lib/phone";
 import { buildTrialIcs } from "@/lib/ics";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
@@ -115,6 +116,11 @@ export async function POST(req: Request) {
     );
   }
   const b = parsed.data;
+  // Defense-in-depth: sanea el WhatsApp E.164 contra el bug de doble
+  // country code (caso Juan José 2026-05-07: "+3434615541087"). El
+  // frontend ya lo hace pero este endpoint también lo llaman otras
+  // entradas (mobile dev, WP plugin, etc.).
+  b.whatsapp_e164 = sanitizeE164(b.whatsapp_e164);
   const sb = supabaseAdmin();
 
   // ── 1. Already a registered student? Reject.
