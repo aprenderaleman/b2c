@@ -987,8 +987,16 @@ function wrapPreviewHtml(markdown: string, subject: string): string {
 <body style="margin:0;padding:0;background:#fff7ed;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;line-height:1.55;">
 <div style="max-width:560px;margin:20px auto;background:#ffffff;border-radius:20px;overflow:hidden;border:1px solid #fed7aa;">
   <div style="padding:20px 24px;background:linear-gradient(135deg,#fb923c 0%,#f97316 100%);color:white;">
-    <div style="font-size:18px;font-weight:800;">Aprender-Aleman.de</div>
-    <div style="font-size:12px;color:#ffedd5;margin-top:2px;">Academia Premium Online</div>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+      <tr>
+        <td style="padding-right:10px;vertical-align:middle;line-height:0;">
+          <img src="https://b2c.aprender-aleman.de/Logonewwithbg.png"
+               width="36" height="36" alt="Aprender-Aleman.de"
+               style="border:0;display:block;border-radius:9px;">
+        </td>
+        <td style="vertical-align:middle;font-size:18px;font-weight:800;">Aprender-Aleman.de</td>
+      </tr>
+    </table>
   </div>
   <div style="padding:20px 24px;">
     <div style="font-size:12px;color:#94a3b8;margin-bottom:10px;">Asunto: <strong style="color:#0f172a;">${safeSubject}</strong></div>

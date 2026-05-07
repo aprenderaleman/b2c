@@ -35,9 +35,23 @@ export function renderEnvelope(body: string, footerNote: string): string {
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#fff7ed;">
       <tr><td align="center" style="padding:32px 16px;">
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 10px 30px -10px rgba(249,115,22,0.20);border:1px solid #fed7aa;">
-          <tr><td style="padding:28px 28px 16px 28px;border-bottom:1px solid #fed7aa;background:linear-gradient(135deg,#fb923c 0%,#f97316 100%);">
-            <div style="color:#ffffff;font-size:20px;font-weight:800;letter-spacing:-0.02em;">Aprender-Aleman.de</div>
-            <div style="color:#ffedd5;font-size:13px;margin-top:2px;">Academia Premium Online</div>
+          <tr><td style="padding:24px 28px;border-bottom:1px solid #fed7aa;background:linear-gradient(135deg,#fb923c 0%,#f97316 100%);">
+            <!-- Marca: logo + wordmark. Tabla por compatibilidad con
+                 clientes email viejos (Outlook web/desktop) — flexbox no
+                 es fiable. La imagen se sirve desde producción para que
+                 cualquier cliente la cargue sin necesidad de attachment. -->
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+              <tr>
+                <td style="padding-right:12px;vertical-align:middle;line-height:0;">
+                  <img src="https://b2c.aprender-aleman.de/Logonewwithbg.png"
+                       width="40" height="40" alt="Aprender-Aleman.de"
+                       style="border:0;display:block;border-radius:10px;">
+                </td>
+                <td style="vertical-align:middle;color:#ffffff;font-size:20px;font-weight:800;letter-spacing:-0.02em;">
+                  Aprender-Aleman.de
+                </td>
+              </tr>
+            </table>
           </td></tr>
           <tr><td style="padding:28px;">
             ${body}
