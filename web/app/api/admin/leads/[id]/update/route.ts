@@ -136,5 +136,57 @@ export async function POST(
     metadata: { diff },
   });
 
+  // ── Auto-reenvío de confirmación si cambió el WhatsApp ──
+  // Caso real Juan José 2026-05-08: doble +34 → falló confirmación →
+  // admin corrigió el número → nadie reenvió → lead se queda sin
+  // WhatsApp para siempre. Ahora lo cubrimos automáticamente.
+  if (diff.whatsapp_normalized && cur.whatsapp_normalized !== diff.whatsapp_normalized.to) {
+    try {
+      const { data: lastFailures } = await sb
+        .from("lead_timeline")
+        .select("timestamp, metadata")
+        .eq("lead_id", id)
+        .eq("type", "send_failed")
+        .order("timestamp", { ascending: false })
+        .limit(20);
+      const lastFail = (lastFailures ?? []).find(r => {
+        const m = r.metadata as { kind?: string } | null;
+        return m?.kind === "trial_confirmation";
+      });
+      if (lastFail) {
+        // Verificar que no se ha resuelto ya
+        const { data: succ } = await sb
+          .from("lead_timeline")
+          .select("metadata")
+          .eq("lead_id", id)
+          .eq("type", "system_message_sent")
+          .gte("timestamp", lastFail.timestamp);
+        const alreadyOk = (succ ?? []).some(r => {
+          const m = r.metadata as { kind?: string; channel?: string } | null;
+          return m?.channel === "whatsapp" &&
+            (m.kind === "trial_confirmation" || m.kind === "trial_confirmation_resend");
+        });
+        if (!alreadyOk) {
+          // Disparar el endpoint de reenvío internamente. No bloqueamos
+          // la respuesta — best-effort: si falla, el banner del panel
+          // seguirá visible y el admin puede clicar manualmente.
+          const proto = req.headers.get("x-forwarded-proto") ?? "https";
+          const host = req.headers.get("host");
+          const internalUrl = host ? `${proto}://${host}/api/admin/leads/${id}/resend-confirmation` : null;
+          if (internalUrl) {
+            // Reusamos la cookie del request para autenticarnos en el
+            // endpoint admin (NextAuth session pasa por cookies).
+            const cookie = req.headers.get("cookie") ?? "";
+            // No esperamos la respuesta — fire-and-forget.
+            fetch(internalUrl, { method: "POST", headers: { cookie } }).catch(() => {});
+          }
+        }
+      }
+    } catch (e) {
+      // No bloqueante. El admin verá el banner y puede reenviar manualmente.
+      console.error("[lead-update] auto-resend hook failed:", e instanceof Error ? e.message : e);
+    }
+  }
+
   return NextResponse.json({ ok: true, changed: true, diff });
 }

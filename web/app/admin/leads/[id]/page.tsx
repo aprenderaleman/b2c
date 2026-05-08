@@ -74,6 +74,37 @@ export default async function LeadDetail({
   // un banner con botón para recrearlo (caso Alice Redfern 2026-05-08).
   const trialMissingGcal = activeTrial && !(activeTrial as { google_calendar_event_id: string | null }).google_calendar_event_id;
 
+  // Detectar si el WhatsApp de confirmación de trial falló y NO se ha
+  // reenviado con éxito. Para activarlo: existe un send_failed con
+  // kind=trial_confirmation y NO existe un system_message_sent
+  // posterior con kind=trial_confirmation o kind=trial_confirmation_resend.
+  // Caso real Juan José 2026-05-08 con doble +34.
+  let waConfirmationFailed = false;
+  if (activeTrial) {
+    const { data: failures } = await sb.from("lead_timeline")
+      .select("timestamp, metadata")
+      .eq("lead_id", lead.id)
+      .eq("type", "send_failed")
+      .order("timestamp", { ascending: false });
+    const lastFailure = (failures ?? []).find(r => {
+      const meta = r.metadata as { kind?: string } | null;
+      return meta?.kind === "trial_confirmation";
+    });
+    if (lastFailure) {
+      const { data: succ } = await sb.from("lead_timeline")
+        .select("metadata")
+        .eq("lead_id", lead.id)
+        .eq("type", "system_message_sent")
+        .gte("timestamp", lastFailure.timestamp);
+      const recovered = (succ ?? []).some(r => {
+        const meta = r.metadata as { kind?: string; channel?: string } | null;
+        return meta?.channel === "whatsapp" &&
+          (meta.kind === "trial_confirmation" || meta.kind === "trial_confirmation_resend");
+      });
+      waConfirmationFailed = !recovered;
+    }
+  }
+
   return (
     <main className="space-y-5">
       <Link href="/admin/leads" className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400">
@@ -169,6 +200,17 @@ export default async function LeadDetail({
                     📅 Crear evento en Calendar
                   </button>
                 </form>
+              </div>
+            )}
+            {waConfirmationFailed && (
+              <div className="mt-2 rounded-xl border border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 p-3 text-xs">
+                <p className="font-semibold text-red-800 dark:text-red-200">
+                  ⚠ El lead NO ha recibido la confirmación por WhatsApp
+                </p>
+                <p className="mt-1 text-red-700 dark:text-red-300">
+                  El envío inicial falló (número inválido, Evolution caída, etc.) y todavía no se ha reenviado.
+                  Pulsa <strong>💬 Reenviar confirmación</strong> en la barra de acciones para enviarlo ahora.
+                </p>
               </div>
             )}
             <Kv k="RGPD aceptado"      v={lead.gdpr_accepted ? `Sí · ${lead.gdpr_accepted_at ? new Date(lead.gdpr_accepted_at).toLocaleDateString("es-ES") : ""}` : "No"} />
