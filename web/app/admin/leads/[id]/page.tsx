@@ -63,13 +63,16 @@ export default async function LeadDetail({
   const sb = supabaseAdmin();
   const { data: trialRows } = await sb
     .from("classes")
-    .select("id, scheduled_at, duration_minutes, short_code, status")
+    .select("id, scheduled_at, duration_minutes, short_code, status, google_calendar_event_id")
     .eq("lead_id", lead.id)
     .eq("is_trial", true)
     .in("status", ["scheduled", "live", "completed"])
     .order("scheduled_at", { ascending: true });
   const activeTrial = (trialRows ?? []).find(c => c.status === "scheduled" || c.status === "live") ?? null;
   const trialCount  = (trialRows ?? []).filter(c => c.status === "scheduled" || c.status === "live").length;
+  // Si el trial activo no tiene evento espejo en Google Calendar, mostramos
+  // un banner con botón para recrearlo (caso Alice Redfern 2026-05-08).
+  const trialMissingGcal = activeTrial && !(activeTrial as { google_calendar_event_id: string | null }).google_calendar_event_id;
 
   return (
     <main className="space-y-5">
@@ -152,6 +155,21 @@ export default async function LeadDetail({
             )}
             {activeTrial && (
               <Kv k="Enlace de la clase" v={`/c/${activeTrial.short_code}`} />
+            )}
+            {trialMissingGcal && (
+              <div className="mt-2 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-3 text-xs">
+                <p className="font-semibold text-amber-800 dark:text-amber-200">
+                  ⚠ Esta clase no tiene evento en tu Google Calendar
+                </p>
+                <p className="mt-1 text-amber-700 dark:text-amber-300">
+                  El espejo en Calendar falló al reservar. Pulsa el botón para crearlo ahora.
+                </p>
+                <form action={`/api/admin/classes/${activeTrial.id}/gcal-create`} method="post" className="mt-2">
+                  <button type="submit" className="text-xs font-semibold rounded-lg bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5">
+                    📅 Crear evento en Calendar
+                  </button>
+                </form>
+              </div>
             )}
             <Kv k="RGPD aceptado"      v={lead.gdpr_accepted ? `Sí · ${lead.gdpr_accepted_at ? new Date(lead.gdpr_accepted_at).toLocaleDateString("es-ES") : ""}` : "No"} />
           </Panel>

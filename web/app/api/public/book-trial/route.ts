@@ -402,11 +402,25 @@ export async function POST(req: Request) {
         content: `📅 Evento creado en Google Calendar (${gcalResult.value.eventId.slice(0, 12)}…)`,
         metadata: { kind: "google_calendar_event", event_id: gcalResult.value.eventId, class_id: classId },
       });
-    } else if (gcalResult.status === "rejected") {
-      // No bloqueante — sólo log + nota interna. La clase y el email
-      // del lead salen igual.
-      console.error("[book-trial] google calendar create failed:",
-        gcalResult.reason instanceof Error ? gcalResult.reason.message : gcalResult.reason);
+    } else {
+      // (gcalResult.status === "rejected") O (fulfilled con value=null).
+      // El segundo caso ocurre cuando createTrialEvent capturó un error
+      // en su try/catch interno y devolvió null silenciosamente. Hasta
+      // ahora se perdía: el admin no veía la clase en su agenda y no
+      // tenía pista de por qué. Caso real Alice Redfern 2026-05-08.
+      // Ahora logueamos al timeline para que aparezca en /admin/leads/[id]
+      // y dispare el banner de salud del sistema.
+      const reason = gcalResult.status === "rejected"
+        ? (gcalResult.reason instanceof Error ? gcalResult.reason.message : String(gcalResult.reason))
+        : "createTrialEvent_returned_null";
+      console.error("[book-trial] google calendar create failed:", reason);
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "send_failed",
+        author:  "system",
+        content: `📅 Falló crear evento en Google Calendar — la clase NO aparecerá en el calendario hasta que un admin la cree manualmente`,
+        metadata: { kind: "google_calendar_failed", class_id: classId, reason },
+      });
     }
 
     // ── Email timeline log ──
