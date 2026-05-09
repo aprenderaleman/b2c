@@ -113,6 +113,8 @@ const URGENCY_TO_ENUM: Record<typeof URGENCY_OPTIONS[number], "asap" | "under_3_
   "Sin fecha definida":         "just_looking",
 };
 
+const MOTIVOS = ["particulares","intensivo","certificado","profesional","otro"] as const;
+
 const BodySchema = z.object({
   name:          z.string().trim().min(2).max(100),
   email:         z.string().trim().toLowerCase().email(),
@@ -120,6 +122,10 @@ const BodySchema = z.object({
   country:       z.string().trim().length(2).toUpperCase(),
   language:      z.enum(["es", "de"]).optional().default("es"),
   gdpr_accepted: z.literal(true, { errorMap: () => ({ message: "Aceptación GDPR obligatoria" }) }),
+  // Paso 1 nuevo (motivo_inicial). Opcional para no romper compat con
+  // clientes viejos que aún no envían el campo.
+  session_id:     z.string().trim().min(8).max(64).optional(),
+  motivo_inicial: z.enum(MOTIVOS).optional(),
   answers: z.object({
     level:   z.enum(LEVEL_OPTIONS),
     goal:    z.enum(GOAL_OPTIONS),
@@ -206,7 +212,7 @@ export async function POST(req: NextRequest) {
   const enumGoal     = GOAL_TO_ENUM    [b.answers.goal];
   const enumUrgency  = URGENCY_TO_ENUM [b.answers.urgency];
 
-  const baseFields = {
+  const baseFields: Record<string, unknown> = {
     name:                     b.name,
     email:                    b.email,
     whatsapp_normalized:      whatsappE164,
@@ -224,6 +230,9 @@ export async function POST(req: NextRequest) {
     source:                   "diagnostico",
     updated_at:               new Date().toISOString(),
   };
+  // Solo escribimos motivo_inicial si vino — preservamos el valor previo
+  // de leads existentes que no lo tengan.
+  if (b.motivo_inicial) baseFields.motivo_inicial = b.motivo_inicial;
 
   let leadId: string;
 
@@ -272,14 +281,25 @@ export async function POST(req: NextRequest) {
     leadId = inserted.id;
   }
 
+  // Enlazar la fila tempana de lead_motivo_inicial (si existe) con el
+  // lead recién creado/actualizado.
+  if (b.session_id) {
+    await sb
+      .from("lead_motivo_inicial")
+      .update({ lead_id: leadId })
+      .eq("session_id", b.session_id)
+      .is("lead_id", null);
+  }
+
   // Timeline note — útil para Gelfis cuando inspeccione un lead en
   // `/admin/leads/[id]` y vea de dónde viene.
+  const motivoTxt = b.motivo_inicial ? `, motivo: ${b.motivo_inicial}` : "";
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type:    "agent_note",
     author:  "system",
-    content: `📋 Diagnóstico completado — nivel: ${b.answers.level}, objetivo: ${b.answers.goal}, urgencia: ${b.answers.urgency}, presupuesto: ${b.answers.budget}, país: ${b.country}`,
-    metadata: { kind: "diagnostico_register", answers: b.answers, country: b.country },
+    content: `📋 Diagnóstico completado — nivel: ${b.answers.level}, objetivo: ${b.answers.goal}, urgencia: ${b.answers.urgency}, presupuesto: ${b.answers.budget}, país: ${b.country}${motivoTxt}`,
+    metadata: { kind: "diagnostico_register", answers: b.answers, country: b.country, motivo_inicial: b.motivo_inicial ?? null },
   });
 
   // Welcome (email + WA) NO se manda inmediato — decisión Gelfis

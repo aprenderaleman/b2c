@@ -116,7 +116,7 @@ export default async function LeadDetail({
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div className="min-w-0">
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">{lead.name || "Lead sin nombre"}</h1>
-            <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
+            <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 flex-wrap">
               {waNumber ? (
                 <a
                   href={`https://wa.me/${waNumber}`}
@@ -139,8 +139,18 @@ export default async function LeadDetail({
               <span>·</span>
               <span>{(lead.language ?? "es").toUpperCase()}</span>
               <span>·</span>
+              <span className="text-slate-500 dark:text-slate-400">{lead.source ?? "—"}</span>
+              <span>·</span>
               <StatusBadge status={lead.status} />
             </div>
+            {lead.motivo_inicial && (
+              <div className="mt-2 inline-flex items-center gap-1.5 rounded-full
+                              bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300
+                              px-3 py-1 text-xs font-semibold">
+                <span aria-hidden>🎯</span>
+                {motivoInicialLabel(lead.motivo_inicial)}
+              </div>
+            )}
           </div>
           <LeadActions
             lead={{
@@ -269,6 +279,17 @@ export default async function LeadDetail({
       </div>
     </main>
   );
+}
+
+function motivoInicialLabel(m: NonNullable<Awaited<ReturnType<typeof getLeadById>>>["motivo_inicial"]): string {
+  switch (m) {
+    case "particulares": return "Clases particulares online";
+    case "intensivo":    return "Curso intensivo online";
+    case "certificado":  return "Certificado oficial (TELC, FIDE, Goethe)";
+    case "profesional":  return "Alemán para trabajar";
+    case "otro":         return "Otro motivo";
+    default:             return "—";
+  }
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {

@@ -103,7 +103,28 @@ const COUNTRY_OPTIONS: { code: string; name: string }[] = [
   { code: "XX", name: "Otro" },
 ];
 
+// Paso 1 nuevo (Quality Score Google Ads): keywords objetivo en
+// etiquetas semánticas <h1>/<h2>/<h3> del primer paint server-side.
+const MOTIVO_OPTIONS = [
+  { id: "particulares", h3: "Clases particulares de alemán online" },
+  { id: "intensivo",    h3: "Curso intensivo de alemán online" },
+  { id: "certificado",  h3: "Cursos de alemán con certificado oficial (TELC, FIDE, Goethe)" },
+  { id: "profesional",  h3: "Alemán para trabajar (profesionales)" },
+  { id: "otro",         h3: "Tengo otro motivo" },
+] as const;
+
+type MotivoId = typeof MOTIVO_OPTIONS[number]["id"];
+
+const MOTIVO_PERSONALIZED_H2: Record<MotivoId, string> = {
+  particulares: "Perfecto, vamos a encontrar tu profesor para clases particulares",
+  intensivo:    "Perfecto, te preparamos un curso intensivo a tu medida",
+  certificado:  "Perfecto, te ayudamos a obtener tu certificado oficial",
+  profesional:  "Perfecto, te preparamos el alemán que necesitas para tu profesión",
+  otro:         "Cuéntanos un poco más y adaptamos el plan",
+};
+
 type Answers = {
+  motivo:  MotivoId | null;
   level:   typeof LEVEL_OPTIONS[number]["id"]   | null;
   goal:    typeof GOAL_OPTIONS[number]["id"]    | null;
   urgency: typeof URGENCY_OPTIONS[number]["id"] | null;
@@ -119,7 +140,16 @@ type FormData = {
   gdpr:         boolean;
 };
 
-type Step = 1 | 2 | 3 | 4 | "low_budget_exit" | 5 | 6;
+// Pasos del funnel. Tras introducir motivo_inicial el orden es:
+//   1: motivo (nuevo, Q.Score)
+//   2: nivel (era el viejo paso 1, ahora con H2 personalizado encima)
+//   3: objetivo
+//   4: urgencia
+//   5: presupuesto
+//   "low_budget_exit": pantalla SCHULE (no cuenta visualmente)
+//   6: captura de datos
+//   7: resumen + calendario
+type Step = 1 | 2 | 3 | 4 | 5 | "low_budget_exit" | 6 | 7;
 
 /**
  * Combina country code + número local en E.164 protegiéndose de los
@@ -155,7 +185,7 @@ export function combineE164(countryCode: string, localInput: string): string {
 export function DiagnosticoFunnel() {
   const [step, setStep]       = useState<Step>(1);
   const [answers, setAnswers] = useState<Answers>({
-    level: null, goal: null, urgency: null, budget: null,
+    motivo: null, level: null, goal: null, urgency: null, budget: null,
   });
   const [form, setForm] = useState<FormData>({
     name: "", email: "", whatsapp: "", countryCode: "+34", country: "ES", gdpr: false,
@@ -164,6 +194,7 @@ export function DiagnosticoFunnel() {
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
   const [alreadyRegistered, setAlreadyRegistered] = useState<{ loginUrl: string } | null>(null);
   const [leadId,     setLeadId]     = useState<string | null>(null);
+  const [sessionId,  setSessionId]  = useState<string | null>(null);
 
   // Theme color para la barra de estado en móvil
   useEffect(() => {
@@ -175,38 +206,69 @@ export function DiagnosticoFunnel() {
     return () => { meta.remove(); };
   }, []);
 
-  // Progreso visual — 5 pasos visibles (la pantalla SCHULE no cuenta)
+  // session_id persistente para enlazar la respuesta del paso 1
+  // (motivo_inicial) con el lead final cuando se cree.
+  useEffect(() => {
+    try {
+      let sid = sessionStorage.getItem("b2c.diagnostico.sid");
+      if (!sid) {
+        sid = (typeof crypto !== "undefined" && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : `sid_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        sessionStorage.setItem("b2c.diagnostico.sid", sid);
+      }
+      setSessionId(sid);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Progreso visual — 6 pasos visibles (la pantalla SCHULE no cuenta)
   const visualStepNum =
-    step === "low_budget_exit" ? 4 :
-    step === 5 ? 5 :
-    step === 6 ? 5 :
+    step === "low_budget_exit" ? 5 :
+    step === 6 ? 6 :
+    step === 7 ? 6 :
     step;
-  const totalSteps = 5;
+  const totalSteps = 6;
   const progressPct = (visualStepNum / totalSteps) * 100;
 
   // Handlers ────────────────────────────────────────────────────
 
+  async function pickMotivo(id: MotivoId) {
+    setAnswers(a => ({ ...a, motivo: id }));
+    setStep(2);
+    // Persist a la BD via session_id. Fire-and-forget para no
+    // bloquear la transición visual.
+    if (sessionId) {
+      try {
+        await fetch("/api/public/motivo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, motivo: id }),
+        });
+      } catch { /* silencioso */ }
+    }
+  }
   function pickLevel(id: typeof LEVEL_OPTIONS[number]["id"]) {
     setAnswers(a => ({ ...a, level: id }));
-    setStep(2);
+    setStep(3);
   }
   function pickGoal(id: typeof GOAL_OPTIONS[number]["id"]) {
     setAnswers(a => ({ ...a, goal: id }));
-    setStep(3);
+    setStep(4);
   }
   function pickUrgency(id: typeof URGENCY_OPTIONS[number]["id"]) {
     setAnswers(a => ({ ...a, urgency: id }));
-    setStep(4);
+    setStep(5);
   }
   function pickBudget(id: typeof BUDGET_OPTIONS[number]["id"], lowBudget: boolean) {
     setAnswers(a => ({ ...a, budget: id }));
-    setStep(lowBudget ? "low_budget_exit" : 5);
+    setStep(lowBudget ? "low_budget_exit" : 6);
   }
 
   function goBack() {
-    if (step === 6) return; // no hay back desde resumen
-    if (step === 5) setStep(4);
-    else if (step === "low_budget_exit") setStep(4);
+    if (step === 7) return; // no hay back desde resumen
+    if (step === 6) setStep(5);
+    else if (step === "low_budget_exit") setStep(5);
+    else if (step === 5) setStep(4);
     else if (step === 4) setStep(3);
     else if (step === 3) setStep(2);
     else if (step === 2) setStep(1);
@@ -228,12 +290,16 @@ export function DiagnosticoFunnel() {
       const whatsappE164 = combineE164(form.countryCode, form.whatsapp);
 
       const body = {
-        name:          form.name.trim(),
-        email:         form.email.trim().toLowerCase(),
-        whatsapp_e164: whatsappE164,
-        country:       form.country,
-        language:      "es",
-        gdpr_accepted: true,
+        name:           form.name.trim(),
+        email:          form.email.trim().toLowerCase(),
+        whatsapp_e164:  whatsappE164,
+        country:        form.country,
+        language:       "es",
+        gdpr_accepted:  true,
+        // Paso 1 nuevo (motivo_inicial) + session_id para que el
+        // backend enlace lead_motivo_inicial.lead_id.
+        session_id:     sessionId ?? undefined,
+        motivo_inicial: answers.motivo ?? undefined,
         answers: {
           level:   answers.level,
           goal:    answers.goal,
@@ -310,7 +376,7 @@ export function DiagnosticoFunnel() {
       } catch { /* ignore */ }
 
       setLeadId(json.lead_id);
-      setStep(6);
+      setStep(7);
     } catch (e) {
       console.error("[diagnostico] submit failed:", e);
       setSubmitErr("Error de conexión. Inténtalo de nuevo.");
@@ -332,7 +398,7 @@ export function DiagnosticoFunnel() {
           <button
             type="button"
             onClick={goBack}
-            disabled={step === 1 || step === 6}
+            disabled={step === 1 || step === 7}
             className="h-10 w-10 inline-flex items-center justify-center rounded-full
                        text-white/85 hover:bg-white/10 active:scale-95 transition
                        disabled:opacity-30 disabled:active:scale-100"
@@ -357,9 +423,9 @@ export function DiagnosticoFunnel() {
           </Link>
 
           {/* Indicador discreto de paso en el slot derecho. Para los
-              pasos sin número (low_budget_exit, 6) lo escondemos. */}
+              pasos sin número (low_budget_exit, 7) lo escondemos. */}
           <div className="h-10 w-10 inline-flex items-center justify-end pr-1">
-            {step !== "low_budget_exit" && step !== 6 && (
+            {step !== "low_budget_exit" && step !== 7 && (
               <span className="text-[11px] font-semibold tracking-wide text-white/55 tabular-nums">
                 {visualStepNum}/{totalSteps}
               </span>
@@ -376,14 +442,21 @@ export function DiagnosticoFunnel() {
 
       <main className="flex-1 mx-auto w-full max-w-xl">
         {step === 1 && (
+          <MotivoInicialStep
+            selected={answers.motivo}
+            onPick={pickMotivo}
+          />
+        )}
+        {step === 2 && (
           <QuizStep
             title="¿Cuál es tu nivel actual de alemán?"
+            personalizedH2={answers.motivo ? MOTIVO_PERSONALIZED_H2[answers.motivo] : null}
             options={LEVEL_OPTIONS.map(o => ({ id: o.id, label: o.id, emoji: o.emoji }))}
             selected={answers.level}
             onPick={(id) => pickLevel(id as typeof LEVEL_OPTIONS[number]["id"])}
           />
         )}
-        {step === 2 && (
+        {step === 3 && (
           <QuizStep
             title="¿Para qué necesitas el alemán?"
             options={GOAL_OPTIONS.map(o => ({ id: o.id, label: o.id, emoji: o.emoji }))}
@@ -391,7 +464,7 @@ export function DiagnosticoFunnel() {
             onPick={(id) => pickGoal(id as typeof GOAL_OPTIONS[number]["id"])}
           />
         )}
-        {step === 3 && (
+        {step === 4 && (
           <QuizStep
             title="¿En cuánto tiempo quieres alcanzar tu objetivo?"
             options={URGENCY_OPTIONS.map(o => ({ id: o.id, label: o.id, emoji: o.emoji }))}
@@ -399,7 +472,7 @@ export function DiagnosticoFunnel() {
             onPick={(id) => pickUrgency(id as typeof URGENCY_OPTIONS[number]["id"])}
           />
         )}
-        {step === 4 && (
+        {step === 5 && (
           <QuizStep
             title="¿Cuánto puedes invertir mensualmente en aprender alemán?"
             options={BUDGET_OPTIONS.map(o => ({ id: o.id, label: o.id, emoji: o.emoji }))}
@@ -410,8 +483,8 @@ export function DiagnosticoFunnel() {
             }}
           />
         )}
-        {step === "low_budget_exit" && <LowBudgetExit onBack={() => setStep(4)} />}
-        {step === 5 && (
+        {step === "low_budget_exit" && <LowBudgetExit onBack={() => setStep(5)} />}
+        {step === 6 && (
           alreadyRegistered ? (
             <AlreadyRegisteredScreen
               loginUrl={alreadyRegistered.loginUrl}
@@ -428,7 +501,7 @@ export function DiagnosticoFunnel() {
             />
           )
         )}
-        {step === 6 && leadId && (
+        {step === 7 && leadId && (
           <CalendarStep
             name={form.name.trim().split(/\s+/)[0] || "tú"}
             answers={answers}
@@ -445,16 +518,86 @@ export function DiagnosticoFunnel() {
 // Sub-componentes
 // ────────────────────────────────────────────────────────────────
 
+/**
+ * Paso 1 nuevo (Quality Score Google Ads).
+ *
+ * Render con etiquetas semánticas estrictas — H1, H2, ULRadiogroup,
+ * <button> con <h3> dentro. NO depende de cookies, fetch, animaciones
+ * retardadas ni user gestures: el primer paint server-side ya contiene
+ * los textos-keyword en el HTML que devuelve el servidor.
+ *
+ * Above-the-fold en móviles 375px: H1 (compacto) + H2 + 5 opciones
+ * compactas caben sin scroll porque cada opción es ~52px y dejamos
+ * mínima separación. El click del botón llama a onPick, que persiste
+ * en BD via /api/public/motivo y avanza al paso 2.
+ */
+function MotivoInicialStep({
+  selected, onPick,
+}: {
+  selected: MotivoId | null;
+  onPick: (id: MotivoId) => void;
+}) {
+  return (
+    <div className="px-5 pt-5 pb-10">
+      <h1 className="text-[24px] sm:text-3xl font-extrabold tracking-tight text-white leading-tight">
+        Aprende alemán con profesores nativos
+      </h1>
+      <h2
+        id="motivo-inicial-question"
+        className="mt-3 text-[18px] sm:text-xl font-semibold text-white/90 leading-snug"
+      >
+        ¿Qué tipo de clases de alemán buscas?
+      </h2>
+      <ul
+        role="radiogroup"
+        aria-labelledby="motivo-inicial-question"
+        className="mt-4 space-y-2"
+      >
+        {MOTIVO_OPTIONS.map(opt => {
+          const isSelected = selected === opt.id;
+          return (
+            <li key={opt.id}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                data-choice={opt.id}
+                onClick={() => onPick(opt.id)}
+                className={`w-full flex items-center px-4 min-h-[52px] py-2 rounded-2xl
+                            text-left text-white
+                            border transition active:scale-[0.99]
+                            ${isSelected
+                              ? "border-warm bg-warm/15"
+                              : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+              >
+                <h3 className="text-[14px] sm:text-[15px] leading-snug font-medium m-0">
+                  {opt.h3}
+                </h3>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function QuizStep({
-  title, options, selected, onPick,
+  title, options, selected, onPick, personalizedH2,
 }: {
   title: string;
   options: { id: string; label: string; emoji: string }[];
   selected: string | null;
   onPick: (id: string) => void;
+  personalizedH2?: string | null;
 }) {
   return (
     <div className="px-5 pt-6 pb-12">
+      {personalizedH2 && (
+        <h2 className="mb-4 text-[18px] sm:text-xl font-semibold text-warm leading-snug">
+          {personalizedH2}
+        </h2>
+      )}
       <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
         {title}
       </h1>

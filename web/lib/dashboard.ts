@@ -24,6 +24,9 @@ export type LeadRow = {
   last_message_seen_at: string | null;
   messages_seen_count: number;
   converted_to_user_id: string | null;
+  // Respuesta del nuevo paso 1 del funnel (Q.Score). NULL para leads
+  // previos al cambio.
+  motivo_inicial: "particulares" | "intensivo" | "certificado" | "profesional" | "otro" | null;
 };
 
 export type TimelineRow = {
