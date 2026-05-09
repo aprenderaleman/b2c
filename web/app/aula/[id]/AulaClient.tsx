@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LiveKitRoom,
+  PreJoin,
   ControlBar,
   GridLayout,
   FocusLayout,
@@ -20,6 +21,7 @@ import {
   useLocalParticipant,
   type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
+import type { LocalUserChoices } from "@livekit/components-core";
 import { RoomEvent, Track, ParticipantEvent, type Participant } from "livekit-client";
 import { VirtualBackgroundButton } from "./VirtualBackgroundButton";
 
@@ -64,69 +66,17 @@ export function AulaClient(p: Props) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [chatOpen,  setChatOpen]  = useState(false);
 
-  // Detect available input devices BEFORE connecting, so a user on a
-  // laptop with no webcam (or a headless phone) doesn't get rejected by
-  // LiveKit's getUserMedia({video:true}) with "Client initiated disconnect".
-  // Null = still probing. Objects once the check finishes.
-  const [media, setMedia] = useState<{ video: boolean; audio: boolean } | null>(null);
+  // PreJoin screen — el usuario ve preview de su cámara, mide nivel
+  // del micro, escoge dispositivos y decide entrar con cam/mic on/off
+  // ANTES de conectar a LiveKit. Igual al "Listo para unirte" de
+  // Google Meet. Hasta que `userChoices` no esté seteado, no
+  // montamos `<LiveKitRoom>`.
+  //
+  // Antes hacíamos un probe propio con getUserMedia + cascada de
+  // fallbacks. PreJoin hace lo mismo internamente y además da
+  // controles UI al usuario, así que el probe se elimina.
+  const [userChoices, setUserChoices] = useState<LocalUserChoices | null>(null);
   const [mediaWarning, setMediaWarning] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      // Real probe: actually try to acquire each track and immediately
-      // stop it. enumerateDevices lies in the "camera listed but OS
-      // permission denied / hardware busy" case — the only reliable
-      // signal is a getUserMedia round-trip.
-      //
-      // Sequence: (video+audio) → (audio only) → (video only) → none.
-      // Tracks are stopped right after acquisition so we don't hold the
-      // hardware open during the LiveKit handshake.
-      async function probe(constraints: MediaStreamConstraints): Promise<boolean> {
-        try {
-          const s = await navigator.mediaDevices.getUserMedia(constraints);
-          s.getTracks().forEach(t => t.stop());
-          return true;
-        } catch (e) {
-          console.warn(`[aula] getUserMedia failed for ${JSON.stringify(constraints)}:`, e);
-          return false;
-        }
-      }
-
-      // Small helper: keep last failure message to show the user.
-      let lastError: string | null = null;
-
-      const bothOk = await probe({ video: true, audio: true });
-      if (cancelled) return;
-      if (bothOk) { setMedia({ video: true, audio: true }); return; }
-
-      const audioOk = await probe({ audio: true });
-      if (cancelled) return;
-      if (audioOk) {
-        setMedia({ video: false, audio: true });
-        setMediaWarning("No se pudo activar la cámara. Entrarás solo con audio.");
-        return;
-      }
-
-      const videoOk = await probe({ video: true });
-      if (cancelled) return;
-      if (videoOk) {
-        setMedia({ video: true, audio: false });
-        setMediaWarning("No se pudo activar el micrófono. Entrarás solo con vídeo.");
-        return;
-      }
-
-      if (!cancelled) {
-        setMedia({ video: false, audio: false });
-        setMediaWarning(
-          lastError ??
-          "Tu navegador no permitió usar cámara ni micrófono. Entrarás como espectador (ves y escuchas a los demás). " +
-          "Si es un problema de permisos, recarga la página y pulsa 'Permitir'.",
-        );
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,7 +100,37 @@ export function AulaClient(p: Props) {
   }, [p.classId]);
 
   if (error) return <ErrorScreen reason={error} backHref={p.backHref} />;
-  if (!token || !serverUrl || !media) return <LoadingScreen classTitle={p.classTitle} />;
+  if (!token || !serverUrl) return <LoadingScreen classTitle={p.classTitle} />;
+
+  // Pre-join: el usuario verifica cámara/mic + escoge dispositivos
+  // antes de conectar. Estilo Google Meet "Ready to join".
+  if (!userChoices) {
+    return (
+      <AulaPreJoin
+        classTitle={p.classTitle}
+        defaultName={p.displayName}
+        backHref={p.backHref}
+        onSubmit={(choices) => setUserChoices(choices)}
+        onError={(e) => {
+          console.warn("[aula/prejoin] media error:", e);
+          setMediaWarning(
+            "Tu navegador no permitió usar cámara o micrófono. " +
+            "Puedes entrar como espectador o recargar y pulsar 'Permitir'.",
+          );
+        }}
+      />
+    );
+  }
+
+  // Mapeamos las elecciones del usuario en PreJoin → opciones de
+  // captura de LiveKit. Si el usuario seleccionó un device específico,
+  // pasamos `{ deviceId: ... }`; si no, pasamos `true`/`false`.
+  const audioCapture = userChoices.audioEnabled
+    ? (userChoices.audioDeviceId ? { deviceId: userChoices.audioDeviceId } : true)
+    : false;
+  const videoCapture = userChoices.videoEnabled
+    ? (userChoices.videoDeviceId ? { deviceId: userChoices.videoDeviceId } : true)
+    : false;
 
   return (
     <main className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
@@ -158,8 +138,8 @@ export function AulaClient(p: Props) {
         token={token}
         serverUrl={serverUrl}
         connect={true}
-        video={media.video}
-        audio={media.audio}
+        video={videoCapture}
+        audio={audioCapture}
         data-lk-theme="default"
         onError={(e) => setError(e.message)}
         onMediaDeviceFailure={(failure) => {
@@ -232,14 +212,17 @@ export function AulaClient(p: Props) {
           <div className="flex items-center justify-center gap-3 flex-wrap">
             <ControlBar
               controls={{
-                microphone:  media.audio,          // hide mic button on devices without mic
-                camera:      media.video,          // hide camera button on devices without camera
+                // Mostrar siempre los toggles. Si el usuario entró con
+                // cam/mic apagados desde PreJoin puede prenderlos aquí
+                // mid-call; LiveKit lidia con el getUserMedia tardío.
+                microphone:  true,
+                camera:      true,
                 screenShare: true,                 // enabled for everyone — students can share too
                 chat:        false,                // we render our own ChatPanel
                 leave:       true,
               }}
             />
-            <VirtualBackgroundButton canCamera={media.video} />
+            <VirtualBackgroundButton canCamera={userChoices.videoEnabled} />
           </div>
         </div>
         <RoomAudioRenderer />
@@ -851,6 +834,89 @@ function LoadingScreen({ classTitle }: { classTitle: string }) {
             Pulsa <strong>“Permitir”</strong> — sin eso el profesor no podrá
             oírte ni verte.
           </p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * Pre-join screen — preview de cámara + micro + selector de
+ * dispositivos antes de conectar al aula. Igual que el "Listo para
+ * unirte" de Google Meet. Se muestra una vez (mientras `userChoices`
+ * en el padre sea null).
+ *
+ * Usa `<PreJoin>` de @livekit/components-react que ya cubre:
+ *  - preview de cámara
+ *  - meter de nivel del micrófono
+ *  - selector de cámara/mic/altavoz
+ *  - toggles para entrar con cam/mic apagado
+ *  - manejo de "No hay dispositivo" / "Permisos denegados"
+ *
+ * Lo wrapeamos en nuestro chrome (header con título de la clase +
+ * link "volver") y dejamos `data-lk-theme="default"` para que el
+ * styling oscuro de @livekit/components-styles aplique.
+ */
+function AulaPreJoin({
+  classTitle, defaultName, backHref, onSubmit, onError,
+}: {
+  classTitle:  string;
+  defaultName: string;
+  backHref:    string;
+  onSubmit:    (choices: LocalUserChoices) => void;
+  onError?:    (e: Error) => void;
+}) {
+  return (
+    <main
+      data-lk-theme="default"
+      className="min-h-screen w-full flex flex-col bg-slate-950 text-slate-100"
+    >
+      {/* Header propio — mantiene la marca aunque PreJoin sea un
+          componente externo. */}
+      <header className="flex items-center gap-3 px-4 py-3 border-b border-slate-800/80">
+        <Link
+          href={backHref}
+          className="inline-flex items-center justify-center w-9 h-9 rounded-full
+                     hover:bg-white/10 active:scale-95 transition text-slate-300"
+          aria-label="Volver"
+        >
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor"
+               strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </Link>
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Aprender-Aleman.de
+          </div>
+          <div className="text-sm font-semibold truncate">{classTitle}</div>
+        </div>
+      </header>
+
+      {/* Cuerpo: PreJoin centrado. max-width para que en desktop no
+          se estire indefinidamente. */}
+      <div className="flex-1 flex items-center justify-center px-4 py-6">
+        <div className="w-full max-w-3xl">
+          <h1 className="text-xl sm:text-2xl font-bold text-center mb-1">
+            Listo para unirte
+          </h1>
+          <p className="text-center text-sm text-slate-400 mb-6">
+            Comprueba tu cámara y micrófono antes de entrar.
+          </p>
+          <PreJoin
+            defaults={{
+              username:      defaultName,
+              videoEnabled:  true,
+              audioEnabled:  true,
+            }}
+            onSubmit={onSubmit}
+            onError={onError}
+            joinLabel="Unirme a la clase"
+            micLabel="Micrófono"
+            camLabel="Cámara"
+            userLabel="Tu nombre"
+            persistUserChoices={false}
+          />
         </div>
       </div>
     </main>
