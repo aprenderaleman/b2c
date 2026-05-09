@@ -97,12 +97,19 @@ export async function authorizeAulaAccess(
   const teacher = (cls as { teacher: unknown }).teacher;
   const tFlat = (Array.isArray(teacher) ? teacher[0] : teacher) as { user_id: string } | null;
 
-  // Admins and superadmins can always join any room as observers (host
-  // privileges reserved for the actual teacher though).
+  // Admins and superadmins can always join any room. Por defecto entran
+  // como observers (NO host) en clases de otros profes — eso preserva
+  // el rol pedagógico. PERO si además son el teacher asignado de ESTA
+  // clase, deben entrar como host: si no, no se inicia la grabación
+  // (RecordingAutoStart está gated a isHost) y pierden los controles
+  // de profesor. Bug detectado 2026-05-07: Gelfis (superadmin) daba
+  // sus propias trials y NINGUNA se grababa porque caía aquí como
+  // participant antes de evaluar la rama "teacher" de abajo.
   if (role === "superadmin" || role === "admin") {
+    const isAlsoTeacherOfThisClass = tFlat?.user_id === userId;
     return {
       ok: true,
-      role: "participant",
+      role: isAlsoTeacherOfThisClass ? "host" : "participant",
       roomName,
       canEnterNow,
       opensAt,
