@@ -394,7 +394,7 @@ export function DiagnosticoFunnel() {
         className="sticky top-0 z-40 backdrop-blur bg-navy-900/95 border-b border-white/5"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <div className="mx-auto max-w-xl flex items-center justify-between gap-2 h-14 px-3">
+        <div className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl flex items-center justify-between gap-2 h-14 md:h-16 px-3">
           <button
             type="button"
             onClick={goBack}
@@ -414,10 +414,11 @@ export function DiagnosticoFunnel() {
           <Link
             href="/"
             aria-label="Aprender-Aleman.de"
-            className="flex items-center gap-1.5 text-white/90 active:scale-[0.97] transition"
+            className="flex items-center gap-1.5 md:gap-2 text-white/90 active:scale-[0.97] transition"
           >
-            <RobotMark size={26} />
-            <span className="text-[13px] sm:text-sm font-semibold tracking-tight">
+            <span className="md:hidden"><RobotMark size={26} /></span>
+            <span className="hidden md:inline-block"><RobotMark size={32} /></span>
+            <span className="text-[13px] sm:text-sm md:text-base lg:text-lg font-semibold tracking-tight">
               Aprender-Aleman<span className="text-warm">.de</span>
             </span>
           </Link>
@@ -440,7 +441,7 @@ export function DiagnosticoFunnel() {
         </div>
       </header>
 
-      <main className="flex-1 mx-auto w-full max-w-xl">
+      <main className="flex-1 mx-auto w-full max-w-xl md:max-w-2xl lg:max-w-3xl">
         {step === 1 && (
           <MotivoInicialStep
             selected={answers.motivo}
@@ -538,13 +539,13 @@ function MotivoInicialStep({
   onPick: (id: MotivoId) => void;
 }) {
   return (
-    <div className="px-5 pt-5 pb-10">
-      <h1 className="text-[24px] sm:text-3xl font-extrabold tracking-tight text-white leading-tight">
+    <div className="px-5 md:px-8 pt-5 md:pt-10 lg:pt-14 pb-10 md:pb-16">
+      <h1 className="text-[24px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white leading-tight">
         Aprende alemán con profesores nativos
       </h1>
       <h2
         id="motivo-inicial-question"
-        className="mt-3 text-[18px] sm:text-xl font-semibold text-white/90 leading-snug"
+        className="mt-3 md:mt-4 text-[18px] sm:text-xl md:text-2xl lg:text-[26px] font-semibold text-white/90 leading-snug"
       >
         ¿Qué tipo de clases de alemán buscas?
       </h2>
@@ -563,14 +564,14 @@ function MotivoInicialStep({
                 aria-checked={isSelected}
                 data-choice={opt.id}
                 onClick={() => onPick(opt.id)}
-                className={`w-full flex items-center px-4 min-h-[52px] py-2 rounded-2xl
+                className={`w-full flex items-center px-4 md:px-5 min-h-[52px] md:min-h-[64px] lg:min-h-[72px] py-2 md:py-3 rounded-2xl
                             text-left text-white
                             border transition active:scale-[0.99]
                             ${isSelected
                               ? "border-warm bg-warm/15"
                               : "border-white/10 bg-white/5 hover:bg-white/10"}`}
               >
-                <h3 className="text-[14px] sm:text-[15px] leading-snug font-medium m-0">
+                <h3 className="text-[14px] sm:text-[15px] md:text-base lg:text-lg leading-snug font-medium m-0">
                   {opt.h3}
                 </h3>
               </button>
@@ -592,13 +593,13 @@ function QuizStep({
   personalizedH2?: string | null;
 }) {
   return (
-    <div className="px-5 pt-6 pb-12">
+    <div className="px-5 md:px-8 pt-6 md:pt-10 lg:pt-14 pb-12 md:pb-16">
       {personalizedH2 && (
-        <h2 className="mb-4 text-[18px] sm:text-xl font-semibold text-warm leading-snug">
+        <h2 className="mb-4 md:mb-5 text-[18px] sm:text-xl md:text-2xl lg:text-[26px] font-semibold text-warm leading-snug">
           {personalizedH2}
         </h2>
       )}
-      <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
         {title}
       </h1>
       <ul className="mt-6 space-y-3">
@@ -609,15 +610,15 @@ function QuizStep({
               <button
                 type="button"
                 onClick={() => onPick(opt.id)}
-                className={`w-full flex items-center gap-3 px-4 h-16 rounded-2xl
+                className={`w-full flex items-center gap-3 md:gap-4 px-4 md:px-5 h-16 md:h-[72px] lg:h-20 rounded-2xl
                             text-left text-white font-medium
                             border transition active:scale-[0.99]
                             ${isSelected
                               ? "border-warm bg-warm/15"
                               : "border-white/10 bg-white/5 hover:bg-white/10"}`}
               >
-                <span className="text-2xl" aria-hidden>{opt.emoji}</span>
-                <span className="text-[15px] leading-snug">{opt.label}</span>
+                <span className="text-2xl md:text-3xl" aria-hidden>{opt.emoji}</span>
+                <span className="text-[15px] md:text-base lg:text-lg leading-snug">{opt.label}</span>
               </button>
             </li>
           );
@@ -629,11 +630,11 @@ function QuizStep({
 
 function LowBudgetExit({ onBack }: { onBack: () => void }) {
   return (
-    <div className="px-5 pt-8 pb-12">
-      <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
+    <div className="px-5 md:px-8 pt-8 md:pt-12 lg:pt-16 pb-12 md:pb-16">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
         Gracias por contarnos tu situación
       </h1>
-      <p className="mt-4 text-[15px] text-white/80 leading-relaxed">
+      <p className="mt-4 text-[15px] md:text-base lg:text-lg text-white/80 leading-relaxed">
         Nuestras clases con profesores empiezan desde 285€/mes, así que probablemente
         no encajemos con tu momento actual. Pero no te quedes sin avanzar — empieza
         con Schule, nuestra plataforma de auto-estudio impulsada por IA.
@@ -693,10 +694,10 @@ function DataCaptureStep({
 
   return (
     <div className="px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)]">
-      <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
         ¡Estamos creando tu plan!
       </h1>
-      <p className="mt-2 text-[15px] text-white/70 leading-relaxed">
+      <p className="mt-2 text-[15px] md:text-base lg:text-lg text-white/70 leading-relaxed">
         Para enviártelo y agendar tu clase de prueba, necesitamos tus datos:
       </p>
 
@@ -707,7 +708,7 @@ function DataCaptureStep({
             autoComplete="name"
             value={form.name}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            className="w-full h-12 px-4 rounded-xl bg-white/5 border border-white/10
+            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
                        text-white placeholder:text-white/40
                        focus:outline-none focus:border-warm focus:bg-white/10"
             placeholder="Tu nombre y apellido"
@@ -720,7 +721,7 @@ function DataCaptureStep({
             autoComplete="email"
             value={form.email}
             onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            className="w-full h-12 px-4 rounded-xl bg-white/5 border border-white/10
+            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
                        text-white placeholder:text-white/40
                        focus:outline-none focus:border-warm focus:bg-white/10"
             placeholder="tu@email.com"
@@ -734,7 +735,7 @@ function DataCaptureStep({
               inputMode="tel"
               value={form.countryCode}
               onChange={e => setForm(f => ({ ...f, countryCode: e.target.value.replace(/[^0-9+]/g, "") }))}
-              className="w-20 h-12 px-3 rounded-xl bg-white/5 border border-white/10
+              className="w-20 md:w-24 h-12 md:h-14 px-3 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
                          text-white text-center
                          focus:outline-none focus:border-warm focus:bg-white/10"
               placeholder="+34"
@@ -745,7 +746,7 @@ function DataCaptureStep({
               autoComplete="tel"
               value={form.whatsapp}
               onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
-              className="flex-1 h-12 px-4 rounded-xl bg-white/5 border border-white/10
+              className="flex-1 h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
                          text-white placeholder:text-white/40
                          focus:outline-none focus:border-warm focus:bg-white/10"
               placeholder="611 22 33 44"
@@ -757,7 +758,7 @@ function DataCaptureStep({
           <select
             value={form.country}
             onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
-            className="w-full h-12 px-3 rounded-xl bg-white/5 border border-white/10
+            className="w-full h-12 md:h-14 px-3 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
                        text-white
                        focus:outline-none focus:border-warm focus:bg-white/10"
           >
@@ -798,13 +799,13 @@ function DataCaptureStep({
 
       <div className="fixed bottom-0 left-0 right-0 z-30
                       bg-gradient-to-t from-navy-900 via-navy-900/95 to-navy-900/0 pt-6">
-        <div className="mx-auto max-w-xl px-5 pb-4"
+        <div className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pb-4"
              style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}>
           <button
             type="button"
             onClick={onSubmit}
             disabled={!canSubmit}
-            className="w-full h-12 rounded-2xl bg-warm text-warm-foreground font-semibold text-base
+            className="w-full h-12 md:h-14 lg:h-16 rounded-2xl bg-warm text-warm-foreground font-semibold text-base md:text-lg lg:text-xl
                        shadow-lg shadow-warm/20 active:scale-[0.98] transition
                        disabled:opacity-50 disabled:active:scale-100"
           >
@@ -998,7 +999,7 @@ function CalendarStep({
 
   return (
     <div className={`px-5 pt-6 ${selectedSlot ? "pb-[calc(env(safe-area-inset-bottom)+5.5rem)]" : "pb-12"}`}>
-      <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
         ¡Tu plan está listo, {name}!
       </h1>
 
@@ -1008,7 +1009,7 @@ function CalendarStep({
         <SummaryRow label="Plazo"    value={answers.urgency} />
       </div>
 
-      <p className="mt-6 text-[15px] text-white/85 leading-relaxed">
+      <p className="mt-6 text-[15px] md:text-base lg:text-lg text-white/85 leading-relaxed">
         Reserva ahora tu clase de <strong>alemán</strong> prueba <strong>GRATIS de 30 min</strong> con tu profesor alemán nativo que también habla español:
       </p>
 
@@ -1081,29 +1082,29 @@ function CalendarStep({
                      pt-6"
         >
           <div
-            className="mx-auto max-w-xl px-5 pb-4"
+            className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pb-4"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
           >
             <button
               type="button"
               onClick={confirmBooking}
               disabled={submitting}
-              className="w-full h-14 rounded-2xl bg-warm text-warm-foreground font-semibold
+              className="w-full h-14 md:h-16 lg:h-[68px] rounded-2xl bg-warm text-warm-foreground font-semibold
                          shadow-lg shadow-warm/20 active:scale-[0.98] transition
                          disabled:opacity-60 disabled:active:scale-100
                          flex flex-col items-center justify-center gap-0.5"
             >
               {submitting ? (
-                <span className="flex items-center gap-2 text-base">
+                <span className="flex items-center gap-2 text-base md:text-lg">
                   <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
                   Confirmando…
                 </span>
               ) : (
                 <>
-                  <span className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-75">
+                  <span className="text-[11px] md:text-xs font-semibold uppercase tracking-[0.14em] opacity-75">
                     Confirmar
                   </span>
-                  <span className="text-[15px] font-bold capitalize">
+                  <span className="text-[15px] md:text-lg lg:text-xl font-bold capitalize">
                     {confirmLabel}
                   </span>
                 </>
@@ -1118,11 +1119,11 @@ function CalendarStep({
 
 function AlreadyRegisteredScreen({ loginUrl, onBack }: { loginUrl: string; onBack: () => void }) {
   return (
-    <div className="px-5 pt-8 pb-12">
-      <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
+    <div className="px-5 md:px-8 pt-8 md:pt-12 lg:pt-16 pb-12 md:pb-16">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
         Ese email ya tiene cuenta
       </h1>
-      <p className="mt-4 text-[15px] text-white/80 leading-relaxed">
+      <p className="mt-4 text-[15px] md:text-base lg:text-lg text-white/80 leading-relaxed">
         Detectamos que ya eres parte de Aprender-Aleman.de con ese email.
         Inicia sesión y agenda tu clase desde tu panel.
       </p>
