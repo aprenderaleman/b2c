@@ -1,18 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 /**
  * Botón "Reagendar clase de prueba" en /admin/leads/[id]. Abre un
  * modal con un input <datetime-local>, valida y envía POST a
- * /api/admin/leads/[id]/reschedule-trial. En éxito refresca la página
- * para que el nuevo horario aparezca en el panel de "Datos del funnel".
+ * /api/admin/leads/[id]/reschedule-trial. En éxito refresca la página.
  *
- * UX deliberadamente simple: un solo input. El admin tiene libertad
- * de poner cualquier hora futura — el endpoint valida que no haya
- * colisión con otras clases del mismo profesor pero NO restringe a
- * la disponibilidad declarada (admin override).
+ * UX:
+ *   - Un solo input de fecha/hora.
+ *   - Al cambiarlo, debounced GET al endpoint /check para detectar:
+ *     · Colisión con otra clase del mismo profe (BLOQUEA confirm)
+ *     · Fuera de la disponibilidad declarada en /profesor/disponibilidad
+ *       → muestra warning amarillo, NO bloquea
+ *     · Solapa con un evento de Google Calendar de Gelfis (cuando el
+ *       profe es Gelfis) → warning amarillo, NO bloquea
+ *   - Si hay warnings (no colisión), botón se renombra a "Reagendar
+ *     de todas formas" y queda en color ámbar para que se note.
  */
 export function RescheduleTrialButton({
   leadId,
@@ -30,6 +35,48 @@ export function RescheduleTrialButton({
   const [submitting, setSubmitting]   = useState(false);
   const [err, setErr]                 = useState<string | null>(null);
   const [newDt, setNewDt]             = useState<string>(() => isoToLocalInput(currentScheduledAtIso));
+
+  type CheckState =
+    | { kind: "idle" }
+    | { kind: "loading" }
+    | { kind: "ok";       warnings: string[]; collision: boolean; collisionTitles: string[] };
+  const [check, setCheck] = useState<CheckState>({ kind: "idle" });
+
+  // Debounced check al cambiar el input — pega al backend para
+  // detectar colisión / fuera-de-disponibilidad / busy de calendar.
+  useEffect(() => {
+    if (!open) return;
+    const newIso = localInputToIso(newDt);
+    if (!newIso) { setCheck({ kind: "idle" }); return; }
+    if (new Date(newIso).getTime() <= Date.now()) {
+      setCheck({ kind: "idle" }); return;
+    }
+    setCheck({ kind: "loading" });
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      try {
+        const u = new URL(`/api/admin/leads/${leadId}/reschedule-trial/check`, window.location.origin);
+        u.searchParams.set("class_id",      classId);
+        u.searchParams.set("new_start_iso", newIso);
+        const res = await fetch(u.toString());
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok || !data.ok) {
+          setCheck({ kind: "idle" });
+          return;
+        }
+        setCheck({
+          kind:      "ok",
+          warnings:  data.warnings ?? [],
+          collision: !!data.collision,
+          collisionTitles: (data.collision_with ?? []).map((x: { title?: string }) => x.title || "(otra clase)"),
+        });
+      } catch {
+        if (!cancelled) setCheck({ kind: "idle" });
+      }
+    }, 350);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [open, newDt, classId, leadId]);
 
   async function submit() {
     setErr(null);
@@ -99,6 +146,38 @@ export function RescheduleTrialButton({
               className="mt-1.5 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-60"
             />
 
+            {/* Resultado del check de disponibilidad */}
+            {check.kind === "loading" && (
+              <p className="mt-3 text-xs text-slate-500 dark:text-slate-400 inline-flex items-center gap-2">
+                <span className="inline-block h-3 w-3 rounded-full border-2 border-slate-400 border-t-transparent animate-spin" aria-hidden />
+                Comprobando disponibilidad…
+              </p>
+            )}
+            {check.kind === "ok" && check.collision && (
+              <div className="mt-3 rounded-lg border border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-200">
+                <p className="font-semibold">⛔ Conflicto bloqueante</p>
+                <p className="mt-1">
+                  El profesor ya tiene otra clase agendada a esa hora
+                  {check.collisionTitles.length > 0 && (
+                    <> (<em>{check.collisionTitles.join(", ")}</em>)</>
+                  )}
+                  . Elige otro horario.
+                </p>
+              </div>
+            )}
+            {check.kind === "ok" && !check.collision && check.warnings.length > 0 && (
+              <div className="mt-3 rounded-lg border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+                <p className="font-semibold">⚠ Atención</p>
+                <ul className="mt-1 space-y-1 list-disc list-inside">
+                  {check.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                </ul>
+                <p className="mt-2 text-[11px] opacity-80">
+                  Puedes reagendar igualmente — solo es un aviso para que decidas
+                  con la información completa.
+                </p>
+              </div>
+            )}
+
             {err && (
               <p className="mt-3 text-xs text-red-600 dark:text-red-400">
                 {err}
@@ -111,27 +190,39 @@ export function RescheduleTrialButton({
               que confirme.
             </p>
 
-            <div className="mt-5 flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                disabled={submitting}
-                className="text-sm rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={submit}
-                disabled={submitting}
-                className="text-sm font-semibold rounded-lg bg-sky-600 hover:bg-sky-700 text-white px-3 py-1.5 disabled:opacity-60 inline-flex items-center gap-2"
-              >
-                {submitting && (
-                  <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" aria-hidden />
-                )}
-                Reagendar y notificar
-              </button>
-            </div>
+            {(() => {
+              const blocked   = check.kind === "ok" && check.collision;
+              const hasWarn   = check.kind === "ok" && !check.collision && check.warnings.length > 0;
+              const btnLabel  = hasWarn ? "Reagendar de todas formas" : "Reagendar y notificar";
+              const btnColor  = blocked
+                ? "bg-slate-400 cursor-not-allowed"
+                : hasWarn
+                  ? "bg-amber-600 hover:bg-amber-700"
+                  : "bg-sky-600 hover:bg-sky-700";
+              return (
+                <div className="mt-5 flex gap-2 justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    disabled={submitting}
+                    className="text-sm rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submit}
+                    disabled={submitting || blocked}
+                    className={`text-sm font-semibold rounded-lg ${btnColor} text-white px-3 py-1.5 disabled:opacity-60 inline-flex items-center gap-2`}
+                  >
+                    {submitting && (
+                      <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-white border-t-transparent animate-spin" aria-hidden />
+                    )}
+                    {btnLabel}
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
