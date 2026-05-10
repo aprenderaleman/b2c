@@ -6,6 +6,7 @@ import { formatBerlinFull } from "@/lib/time";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { LeadActions } from "@/components/admin/LeadActions";
 import { WaQuickActions } from "@/components/admin/WaQuickActions";
+import { RescheduleTrialButton } from "./RescheduleTrialButton";
 
 export const dynamic = "force-dynamic";
 
@@ -196,6 +197,19 @@ export default async function LeadDetail({
             )}
             {activeTrial && (
               <Kv k="Enlace de la clase" v={`/c/${activeTrial.short_code}`} />
+            )}
+            {activeTrial && (
+              <div className="mt-3">
+                <RescheduleTrialButton
+                  leadId={lead.id}
+                  classId={activeTrial.id as string}
+                  currentScheduledAtIso={activeTrial.scheduled_at as string}
+                  currentScheduledLabel={formatBerlinFull(
+                    activeTrial.scheduled_at as string,
+                    (lead.language as "es" | "de") ?? "es",
+                  )}
+                />
+              </div>
             )}
             {trialMissingGcal && (
               <div className="mt-2 rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-3 text-xs">

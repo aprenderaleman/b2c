@@ -24,6 +24,10 @@ import {
   type ClassLifecycleVars,
 } from "./templates/class-lifecycle";
 import {
+  renderTrialRescheduled,
+  type TrialRescheduledVars,
+} from "./templates/trial-rescheduled";
+import {
   renderGroupAdded,
   type GroupAddedVars,
 } from "./templates/group-added";
@@ -251,6 +255,19 @@ export async function sendTrialReminderEmail(
   vars: TrialReminderVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderTrialReminder(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Aviso al lead de que admin/Stiv ha cambiado fecha/hora de su trial.
+ * Envío directo (no gated por LIFECYCLE_EMAILS_ENABLED) — el lead
+ * tiene que saberlo si o si para que no se quede sin asistir.
+ */
+export async function sendTrialRescheduledEmail(
+  to: string,
+  vars: TrialRescheduledVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTrialRescheduled(vars);
   return sendRaw(to, subject, html, text);
 }
 
