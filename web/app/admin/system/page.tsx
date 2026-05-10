@@ -23,6 +23,11 @@ type Health = {
   failed24h: number;
   stuckLeads: number;
   queue?:    { queued: number; sent: number; failed_permanent: number };
+  queueOverflow?: boolean;
+  // Phase 1+2 watchdogs (2026-04-30)
+  unmatchedInbounds24h?: number;
+  inboundQueue?:        { pending: number; processing: number; failed_permanent: number };
+  silentInbounds?:      number;
   overall: "ok" | "warn";
 };
 
@@ -161,15 +166,21 @@ export default function SystemPage() {
               {h.queue && h.queue.queued >= 0 && (
                 <>
                   <Row label="Cola: pendientes">
-                    <span className={`font-bold ${h.queue.queued > 0 ? "text-amber-500" : "text-emerald-500"}`}>
-                      {h.queue.queued}
+                    <span className={`font-bold ${h.queueOverflow ? "text-red-500" : h.queue.queued > 0 ? "text-amber-500" : "text-emerald-500"}`}>
+                      {h.queue.queued.toLocaleString("es-ES")}
                     </span>
                   </Row>
                   <Row label="Cola: fallos permanentes">
-                    <span className={`font-bold ${h.queue.failed_permanent > 0 ? "text-red-500" : "text-emerald-500"}`}>
-                      {h.queue.failed_permanent}
+                    <span className={`font-bold ${h.queueOverflow ? "text-red-500" : h.queue.failed_permanent > 0 ? "text-amber-500" : "text-emerald-500"}`}>
+                      {h.queue.failed_permanent.toLocaleString("es-ES")}
                     </span>
                   </Row>
+                  {h.queueOverflow && (
+                    <div className="mt-2 rounded-lg border border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 p-2 text-xs text-red-800 dark:text-red-200">
+                      ⚠ <strong>Queue desbordada</strong> (&gt;5000). Posible loop del productor.
+                      Revisa logs de aa_agents_scheduler en VPS.
+                    </div>
+                  )}
                 </>
               )}
               <Link href="/admin/leads" className="block mt-2 text-xs text-brand-600 hover:underline">Ver lista de leads →</Link>
@@ -177,6 +188,52 @@ export default function SystemPage() {
           ) : <Skel />}
         </Card>
       </div>
+
+      {/* Watchdogs (Phase 1+2) */}
+      {h && (
+        <div className="grid gap-5 md:grid-cols-3">
+          <Card title="Inbounds silenciosos" highlight={(h.silentInbounds ?? 0) > 0}>
+            <Row label="Pendientes de respuesta">
+              <span className={`font-bold text-lg ${(h.silentInbounds ?? 0) > 0 ? "text-amber-500" : "text-emerald-500"}`}>
+                {h.silentInbounds ?? "—"}
+              </span>
+            </Row>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              Leads que escribieron hace &gt;15 min y nadie respondió. El bot avisa a Gelfis cada 5 min vía WhatsApp.
+            </p>
+          </Card>
+
+          <Card title="LIDs no asociados (24h)" highlight={(h.unmatchedInbounds24h ?? 0) > 0}>
+            <Row label="Sin resolver">
+              <span className={`font-bold text-lg ${(h.unmatchedInbounds24h ?? 0) > 0 ? "text-amber-500" : "text-emerald-500"}`}>
+                {h.unmatchedInbounds24h ?? "—"}
+              </span>
+            </Row>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">
+              Mensajes WhatsApp sin matchear a un lead conocido. Revisar manualmente.
+            </p>
+          </Card>
+
+          <Card title="Cola inbound (procesamiento)" highlight={
+            (h.inboundQueue?.failed_permanent ?? 0) > 0
+            || (h.inboundQueue?.pending ?? 0) > 5
+          }>
+            <Row label="Pendientes">
+              <span className={`font-bold ${(h.inboundQueue?.pending ?? 0) > 0 ? "text-amber-500" : "text-emerald-500"}`}>
+                {h.inboundQueue?.pending ?? "—"}
+              </span>
+            </Row>
+            <Row label="Procesando ahora">
+              <span className="font-bold text-slate-600 dark:text-slate-300">{h.inboundQueue?.processing ?? "—"}</span>
+            </Row>
+            <Row label="Fallos permanentes">
+              <span className={`font-bold ${(h.inboundQueue?.failed_permanent ?? 0) > 0 ? "text-red-500" : "text-emerald-500"}`}>
+                {h.inboundQueue?.failed_permanent ?? "—"}
+              </span>
+            </Row>
+          </Card>
+        </div>
+      )}
 
       {/* Recovery actions */}
       <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">

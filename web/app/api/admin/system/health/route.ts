@@ -66,7 +66,34 @@ export async function GET() {
       return counts;
     }, () => ({ queued: -1, sent: -1, failed_permanent: -1 }));   // -1 = table missing
 
-  const [evo, lastInbound, lastOutbound, failed24h, stuckLeads, queue] = await Promise.all([
+  // Tablas nuevas (Phase 1+2 plan 2026-04-30): pueden no existir en
+  // entornos antes de aplicar las migraciones — tolerar.
+  const unmatchedPromise = sb
+    .from("unmatched_inbounds")
+    .select("id", { count: "exact", head: true })
+    .is("resolved_at", null)
+    .gte("received_at", new Date(now - 24 * 3600_000).toISOString())
+    .then(r => r, () => ({ count: -1 }));
+
+  const inboundQueuePromise = sb
+    .from("inbound_processing_queue")
+    .select("status")
+    .then(({ data }) => {
+      const c: Record<string, number> = { pending: 0, processing: 0, failed_permanent: 0 };
+      for (const r of (data ?? []) as Array<{ status: string }>) {
+        c[r.status] = (c[r.status] ?? 0) + 1;
+      }
+      return c;
+    }, () => ({ pending: -1, processing: -1, failed_permanent: -1 }));
+
+  // Inbound silenciosos: leads con lead_message_received hace >15min y <1h
+  // y sin respuesta del bot después.
+  const silentInboundsPromise = sb.rpc("count_silent_inbounds")
+    .then(r => ({ count: (r.data as number | null) ?? 0 }),
+          () => ({ count: -1 }));
+
+  const [evo, lastInbound, lastOutbound, failed24h, stuckLeads, queue,
+         unmatched, inboundQueue, silent] = await Promise.all([
     probeEvolution(),
     sb.from("lead_timeline")
       .select("timestamp")
@@ -87,6 +114,9 @@ export async function GET() {
     // "Stuck" = status active + last lead_timeline event > 24h ago.
     sb.rpc("admin_stuck_leads_count").then(r => r, () => ({ data: null, error: { message: "rpc_missing" } })),
     queuePromise,
+    unmatchedPromise,
+    inboundQueuePromise,
+    silentInboundsPromise,
   ]);
 
   const lastInboundIso  = (lastInbound.data  as { timestamp?: string } | null)?.timestamp ?? null;
@@ -113,6 +143,17 @@ export async function GET() {
   const inboundConcern  = inboundAgeMs  !== null && inboundAgeMs  > 6 * 3600_000;
   const outboundConcern = outboundAgeMs !== null && outboundAgeMs > 6 * 3600_000;
 
+  const unmatchedCount = (unmatched as { count?: number } | null)?.count ?? 0;
+  const silentCount    = (silent    as { count?: number } | null)?.count ?? 0;
+  const failedPermInbound = (inboundQueue as { failed_permanent?: number })?.failed_permanent ?? 0;
+
+  // Queue overflow: caso real Gelfis 2026-05-10: la queue creció a 456k
+  // por un loop. El threshold 5000 da margen para una mañana movida sin
+  // alertar pero detecta runaways tempranos.
+  const queueQueued = queue?.queued ?? 0;
+  const queueFailedPerm = queue?.failed_permanent ?? 0;
+  const queueOverflow = queueQueued > 5000 || queueFailedPerm > 5000;
+
   return NextResponse.json({
     ok: true,
     now: new Date(now).toISOString(),
@@ -130,6 +171,20 @@ export async function GET() {
     failed24h: failedCount,
     stuckLeads: stuck,
     queue,
-    overall: evolutionOk && !inboundConcern && !outboundConcern && failedCount < 3 && (queue?.queued ?? 0) === 0 ? "ok" : "warn",
+    queueOverflow,
+    // Métricas nuevas (Phase 1+2)
+    unmatchedInbounds24h: unmatchedCount,
+    inboundQueue,
+    silentInbounds:       silentCount,
+    overall:
+      evolutionOk
+      && !inboundConcern
+      && !outboundConcern
+      && failedCount < 3
+      && !queueOverflow
+      && unmatchedCount === 0
+      && silentCount === 0
+      && failedPermInbound === 0
+        ? "ok" : "warn",
   });
 }

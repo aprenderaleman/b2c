@@ -43,6 +43,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/queue-cleanup",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/cron/close-stale-classes",
       "schedule": "0 * * * *"
     },

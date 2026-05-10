@@ -75,16 +75,24 @@ def enqueue_for_retry(
 
     next_at = datetime.utcnow() + timedelta(seconds=BACKOFF_SECONDS[1])
     with get_conn() as conn, conn.cursor() as cur:
+        # ON CONFLICT contra el índice parcial 048: si ya hay una fila
+        # queued con el MISMO (phone+body), no insertamos otra. El driver
+        # del scheduler ya está procesando esa fila — duplicarla solo
+        # llena la tabla sin acelerar el send.
         cur.execute(
             """
             INSERT INTO outbound_queue (lead_id, phone_e164, body, kind, attempts, next_attempt_at, last_error)
             VALUES (%s, %s, %s, %s, 0, %s, %s)
+            ON CONFLICT (phone_e164, body) WHERE status = 'queued' DO NOTHING
             RETURNING id::text
             """,
             (lead_id, phone_e164, body, kind, next_at, (error or "")[:500]),
         )
         row = cur.fetchone()
-    return row["id"] if row else None
+    if row is None:
+        log.info("Skipped duplicate enqueue for %s (already queued)", phone_e164)
+        return None
+    return row["id"]
 
 
 def drain(send_fn, batch_size: int = 20) -> dict:
