@@ -39,6 +39,10 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/reschedule-followup",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/close-stale-classes",
       "schedule": "0 * * * *"
     },
