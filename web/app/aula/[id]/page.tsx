@@ -7,11 +7,7 @@ import { livekitConfigured } from "@/lib/livekit";
 import { getTrialSession } from "@/lib/trial-token";
 import { supabaseAdmin } from "@/lib/supabase";
 import { AulaClient } from "./AulaClient";
-import {
-  SCHULE_MAINTENANCE,
-  SCHULE_MAINTENANCE_TITLE_ES,
-  SCHULE_MAINTENANCE_BODY_ES,
-} from "@/lib/schule-maintenance";
+import { WaitingForAula } from "./WaitingForAula";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Aula virtual · Aprender-Aleman.de" };
@@ -156,50 +152,35 @@ function ClosedScreen({
 }) {
   const now = new Date();
   const isBefore = now < opensAt;
+
+  // Antes de abrir → countdown + auto-recarga (decisión Gelfis 2026-05-10:
+  // sustituimos el CTA a SCHULE — confundía a los leads — por una
+  // pantalla limpia con cuenta atrás y botón Recargar).
+  if (isBefore) {
+    return (
+      <WaitingForAula
+        opensAtIso={opensAt.toISOString()}
+        classTitle={classTitle}
+        startTimeBerlinFormatted={formatClassTimeEs(opensAt) + " (Berlín)"}
+      />
+    );
+  }
+
+  // Después del cierre — la clase ya pasó. Mensaje + back link.
   return (
     <Frame>
-      <div className="text-5xl mb-4" aria-hidden>{isBefore ? "⏳" : "🔒"}</div>
+      <div className="text-5xl mb-4" aria-hidden>🔒</div>
       <h1 className="text-2xl font-bold">{classTitle}</h1>
       <p className="mt-3 text-slate-300">
-        {isBefore
-          ? <>El aula abrirá 15 minutos antes del inicio.<br/>Disponible a las <strong className="text-brand-300">{formatClassTimeEs(opensAt)}</strong> (Berlín).</>
-          : <>El aula ya ha cerrado para esta clase (30 min después del final).</>}
+        El aula ya ha cerrado para esta clase (30 min después del final).
       </p>
       <p className="mt-6 text-xs text-slate-400">
         Cierre total: {formatClassTimeEs(closesAt)} (Berlín)
       </p>
-
       {isTrial ? (
-        SCHULE_MAINTENANCE ? (
-          // Mientras SCHULE está en mantenimiento, sustituimos el botón
-          // promocional por un aviso. El lead sigue viendo la fecha de
-          // su clase con el ClosedScreen original arriba.
-          <div className="mt-8 rounded-2xl border border-amber-300/40 bg-amber-500/10 p-4">
-            <p className="text-sm text-amber-100 font-semibold">
-              🛠️ {SCHULE_MAINTENANCE_TITLE_ES}
-            </p>
-            <p className="mt-1 text-xs text-amber-100/85">
-              {SCHULE_MAINTENANCE_BODY_ES}
-            </p>
-          </div>
-        ) : (
-          // The lead is just sitting on /aula/{id} too early. Send them to
-          // SCHULE so they can start practising while they wait, instead
-          // of bouncing them back to the marketing home.
-          <>
-            <a
-              href="https://schule.aprender-aleman.de"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-primary mt-8 inline-flex"
-            >
-              🎓 Empezar ahora con SCHULE
-            </a>
-            <p className="mt-3 text-xs text-slate-400">
-              Practica gratis los cursos online de SCHULE mientras esperas tu clase.
-            </p>
-          </>
-        )
+        <p className="mt-8 text-sm text-slate-300">
+          Si tienes alguna duda, escríbenos por WhatsApp y te ayudamos.
+        </p>
       ) : (
         <Link href={homeHref} className="btn-primary mt-8 inline-flex">
           Volver al inicio
