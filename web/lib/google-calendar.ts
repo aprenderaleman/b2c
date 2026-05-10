@@ -238,14 +238,28 @@ export type BusyInterval = { startMs: number; endMs: number };
 
 type CacheEntry = { intervals: BusyInterval[]; expiresAtMs: number };
 const busyCache = new Map<string, CacheEntry>();
-const BUSY_CACHE_TTL_MS = 5 * 60_000;
+// 60 segundos. Suficientemente alto para amortizar las múltiples
+// llamadas concurrentes del slot picker (cada visitante del funnel
+// pega), suficientemente bajo para que un evento añadido al calendar
+// se refleje rápidamente en el funnel — Decisión Gelfis 2026-05-07:
+// "el lead solo debe poder ver los huecos que verdaderamente esten
+// disponibles". Antes era 5 min lo que dejaba pasar slots ocupados
+// durante hasta 5 min después de bloquear la hora en GCal.
+const BUSY_CACHE_TTL_MS = 60_000;
 
 function cacheKey(timeMinIso: string, timeMaxIso: string): string {
-  // Round both timestamps to the hour so we get cache hits across
-  // close-enough calls.
-  const min = new Date(timeMinIso); min.setUTCMinutes(0, 0, 0);
-  const max = new Date(timeMaxIso); max.setUTCMinutes(0, 0, 0);
-  return `${min.toISOString()}|${max.toISOString()}`;
+  // Redondeo a 5-minute buckets en lugar de hora completa. Antes
+  // redondeábamos a la hora — significaba que una request a las 14:01
+  // y otra a las 14:59 compartían cache; cualquier evento añadido al
+  // calendar a las 14:30 era invisible hasta las 15:00. Con buckets
+  // de 5 min el peor delay es 5+60 = ~65 s.
+  const round = (iso: string) => {
+    const d = new Date(iso);
+    const m = d.getUTCMinutes();
+    d.setUTCMinutes(m - (m % 5), 0, 0);
+    return d.toISOString();
+  };
+  return `${round(timeMinIso)}|${round(timeMaxIso)}`;
 }
 
 /**
