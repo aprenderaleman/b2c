@@ -77,6 +77,13 @@ export const authConfig: NextAuthConfig = {
       if (isTrialOpenRoute) {
         const trialCookie = request.cookies.get("aa_trial_session")?.value;
         if (trialCookie) return true;
+        // Fallback magic-link: `?t=<token>` en la URL. Algunos in-app
+        // browsers descartan cookies seteadas durante 302s (WhatsApp/IG
+        // en iOS son los principales infractores); el token también
+        // viaja en el query string como red de seguridad. La page-level
+        // code en /aula/[id] valida HMAC server-side — la edge
+        // middleware solo gatekeepea presencia para no rechazar al lead.
+        if (request.nextUrl.searchParams.get("t")) return true;
       }
 
       if (!auth?.user) return false;   // NextAuth will redirect to /login

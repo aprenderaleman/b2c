@@ -58,7 +58,12 @@ export async function GET(
 
   // Cookie value is the same signed token we just verified — no need
   // to re-encode. The aula auth check decodes it again from the cookie.
+  // ALSO pasamos el token en el query string: algunos in-app browsers
+  // (WhatsApp/IG en iOS) descartan cookies seteadas durante 302s. El
+  // fallback `?t=` en /aula/[id]/page.tsx rescata ese caso sin pedir
+  // login al lead.
   const aulaUrl = new URL(`/aula/${classId}`, req.url);
+  aulaUrl.searchParams.set("t", t);
   const res = NextResponse.redirect(aulaUrl);
   res.cookies.set(TRIAL_COOKIE, t, {
     httpOnly: true,

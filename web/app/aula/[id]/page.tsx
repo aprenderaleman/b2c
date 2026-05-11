@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { authorizeAulaAccess, authorizeTrialAulaAccess } from "@/lib/aula";
 import { getClassById, formatClassTimeEs } from "@/lib/classes";
 import { livekitConfigured } from "@/lib/livekit";
-import { getTrialSession } from "@/lib/trial-token";
+import { getTrialSession, verifyTrialToken } from "@/lib/trial-token";
 import { supabaseAdmin } from "@/lib/supabase";
 import { AulaClient } from "./AulaClient";
 import { WaitingForAula } from "./WaitingForAula";
@@ -19,16 +19,33 @@ export const metadata = { title: "Aula virtual · Aprender-Aleman.de" };
  */
 export default async function AulaPage({
   params,
+  searchParams,
 }: {
-  params: Promise<{ id: string }>;
+  params:       Promise<{ id: string }>;
+  searchParams: Promise<{ t?: string }>;
 }) {
-  const { id } = await params;
-  const session = await auth();
-  const trial   = !session?.user ? await getTrialSession() : null;
+  const { id }   = await params;
+  const { t }    = await searchParams;
+  const session  = await auth();
 
   // Two paths into the aula:
   //   - logged-in user (admin / teacher / student)
   //   - trial-magic-link lead (no user row, cookie-based)
+  //
+  // Para el lead probamos dos credenciales en orden:
+  //   1. Cookie aa_trial_session (preferida — sobrevive recargas
+  //      sin URL contaminado de token).
+  //   2. Query string ?t=<token> (fallback). Cuando WhatsApp/IG en
+  //      iOS descartan la cookie del 302 redirect, el token también
+  //      viaja en la URL como red de seguridad. La HMAC se valida
+  //      igual de estricta — pasar el token en URL no abre nuevas
+  //      superficies de ataque (el lead ya tenía el shortcode con
+  //      el mismo nivel de "secreto").
+  let trial = !session?.user ? await getTrialSession() : null;
+  if (!session?.user && !trial && t) {
+    const fromUrl = verifyTrialToken(t);
+    if (fromUrl && fromUrl.class_id === id) trial = fromUrl;
+  }
   if (!session?.user && !trial) redirect("/login");
 
   const cls = await getClassById(id);

@@ -64,7 +64,13 @@ export async function GET(
   if (ageDays > 30) return expiredRedirect(req, "bad_or_expired");
 
   const token = buildTrialToken(c.lead_id, c.id);
+  // Belt-and-suspenders: setamos el cookie Y pasamos el token en el
+  // query string. Algunos in-app browsers (WhatsApp/Instagram en iOS
+  // sobre todo) descartan cookies seteadas durante un 302 redirect.
+  // Si el cookie se pierde, /aula/[id]/page.tsx usa `?t=` como
+  // fallback — el URL mismo autentica.
   const aulaUrl = new URL(`/aula/${c.id}`, req.url);
+  aulaUrl.searchParams.set("t", token);
   const res = NextResponse.redirect(aulaUrl);
   // 7-day cookie matches buildTrialToken's TTL.
   res.cookies.set(TRIAL_COOKIE, token, {
