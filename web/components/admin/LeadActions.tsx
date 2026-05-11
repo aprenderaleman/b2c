@@ -198,7 +198,11 @@ export function LeadActions({ lead }: { lead: Lead }) {
               if (!confirm(
                 "Marcar el lead como NO ASISTIÓ a la clase de prueba.\n\n" +
                 "• Pasa a estado 'trial_absent'.\n" +
-                "• En 24h, 4 días y 10 días el sistema le manda follow-ups automáticos. Si no responde, lo marca como 'lost'.\n\n" +
+                "• El sistema le manda 3 follow-ups por WhatsApp:\n" +
+                "    – En menos de 1 h: \"¿todo bien? ¿reagendamos?\"\n" +
+                "    – +3 días: \"vuelvo a escribirte, si te interesa dímelo\"\n" +
+                "    – +9 días: último mensaje · si no responde, queda 'lost'\n\n" +
+                "Si responde en cualquier momento, los follow-ups paran.\n\n" +
                 "¿Continuar?"
               )) e.preventDefault();
             }}
