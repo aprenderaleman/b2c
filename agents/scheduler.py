@@ -30,8 +30,148 @@ from agents.agent_0_watcher import tick as agent_0_tick
 from agents.agent_5_guardian import tick_absent_followups
 from agents.shared.outbound_queue import drain as drain_outbound_queue
 from agents.whatsapp_health import tick_webhook_self_heal, tick_inbound_replay
+from agents.shared.db import get_conn as _dedup_get_conn
+
+
+def _cleanup_inbound_dedup() -> None:
+    """Borrar entries de inbound_dedup más viejas de 7 días. La tabla solo
+    sirve como protección anti-retry; un mensaje >7 días ya no va a
+    re-entrar por los retries de Evolution (su buffer es mucho más corto)."""
+    try:
+        with _dedup_get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM inbound_dedup WHERE received_at < NOW() - INTERVAL '7 days'"
+            )
+            log.info("[dedup_cleanup] purged rows older than 7 days (rowcount=%s)",
+                     cur.rowcount)
+    except Exception as e:                              # noqa: BLE001
+        log.warning("[dedup_cleanup] failed: %s", e)
+
+
+def _drain_inbound_queue() -> int:
+    """Cada 1 min: procesa filas 'pending' en inbound_processing_queue cuyo
+    next_attempt_at <= NOW. Si Agent 4 falla, incrementa retry_count y
+    aplaza con backoff exponencial. Tras 3 fallos, marca 'failed_permanent'
+    y registra una escalación a Gelfis vía notifications."""
+    try:
+        with _dedup_get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, lead_id, text, wa_message_id, retry_count
+                  FROM inbound_processing_queue
+                 WHERE status = 'pending' AND next_attempt_at <= NOW()
+                 ORDER BY queued_at
+                 LIMIT 10
+                """
+            )
+            jobs = list(cur.fetchall())
+    except Exception as e:                              # noqa: BLE001
+        log.warning("[drain_inbound] read failed: %s", e)
+        return 0
+
+    if not jobs:
+        return 0
+
+    from agents.agent_4_conversation import handle_incoming_message
+    from agents.shared.leads import get_lead
+
+    processed = 0
+    for j in jobs:
+        with _dedup_get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE inbound_processing_queue SET status='processing', last_attempt_at=NOW() WHERE id=%s",
+                (j["id"],),
+            )
+        try:
+            lead = get_lead(j["lead_id"])
+            if not lead:
+                raise RuntimeError("lead not found")
+            handle_incoming_message(lead, j["text"])
+            with _dedup_get_conn() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE inbound_processing_queue SET status='done' WHERE id=%s",
+                    (j["id"],),
+                )
+            processed += 1
+        except Exception as e:                          # noqa: BLE001
+            err = str(e)[:500]
+            log.warning("[drain_inbound] retry on lead=%s err=%s",
+                        str(j["lead_id"])[:8], err)
+            new_retry = j["retry_count"] + 1
+            if new_retry >= 3:
+                with _dedup_get_conn() as conn, conn.cursor() as cur:
+                    cur.execute(
+                        """UPDATE inbound_processing_queue
+                              SET status='failed_permanent', retry_count=%s,
+                                  last_error=%s
+                            WHERE id=%s""",
+                        (new_retry, err, j["id"]),
+                    )
+                # Escalar a Gelfis
+                try:
+                    from agents.notifications import notify_send_failed
+                    notify_send_failed(
+                        {"id": j["lead_id"], "name": "?",
+                         "whatsapp_normalized": "?", "goal": "?", "urgency": "?"},
+                        f"Inbound queue: 3 retries failed. Last error: {err}",
+                    )
+                except Exception:                       # noqa: BLE001
+                    pass
+            else:
+                # Backoff: 1m, 5m
+                delay_min = [1, 5][new_retry - 1] if new_retry < 3 else 5
+                with _dedup_get_conn() as conn, conn.cursor() as cur:
+                    cur.execute(
+                        """UPDATE inbound_processing_queue
+                              SET status='pending', retry_count=%s, last_error=%s,
+                                  next_attempt_at = NOW() + (%s || ' minutes')::interval
+                            WHERE id=%s""",
+                        (new_retry, err, str(delay_min), j["id"]),
+                    )
+    if processed:
+        log.info("[drain_inbound] processed=%d", processed)
+    return processed
+
+
+def _reactivate_orphaned_leads() -> int:
+    """Cron diario 09:00 Berlin: rescata leads en post-engagement
+    (link_sent / in_conversation) que se quedaron sin next_contact_date.
+
+    Esto cubre dos casos:
+      1. Leads pre-migración 041 que nunca tuvieron next_contact_date setteado.
+      2. Cualquier bug futuro donde el flow no calce next_contact_date al
+         transicionar a estos estados.
+
+    Setea next_contact_date a NOW()+30min de forma que el siguiente
+    Agent 0 tick los recoja. La política de límites (rc<2 link_sent,
+    rc<1 in_conversation) la aplica compose_message naturalmente.
+    """
+    try:
+        with _dedup_get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE leads
+                   SET next_contact_date = NOW() + INTERVAL '30 minutes'
+                 WHERE status IN ('link_sent', 'in_conversation')
+                   AND next_contact_date IS NULL
+                   AND (ai_paused_until IS NULL OR ai_paused_until <= NOW())
+                """
+            )
+            n = cur.rowcount
+        if n > 0:
+            log.info("[reactivate_orphans] %d leads rescued for next Agent-0 tick", n)
+        return n
+    except Exception as e:                              # noqa: BLE001
+        log.warning("[reactivate_orphans] failed: %s", e)
+        return 0
 from agents.janitor import run as janitor_run
-from agents.notifications import notify_daily_summary, scan_escalations_and_notify
+from agents.notifications import (
+    notify_daily_summary,
+    scan_escalations_and_notify,
+    scan_silent_inbounds_and_alert,
+    scan_unmatched_lids_and_alert,
+    scan_evolution_health_and_alert,
+)
 from agents.shared.db import get_conn
 from agents.shared.heartbeat import beat
 from agents.shared.leads import log_timeline
@@ -77,13 +217,14 @@ def _notify_trials_30min() -> None:
                 c.scheduled_at,
                 c.duration_minutes,
                 c.notes_admin,
+                c.short_code      AS class_short_code,
                 l.id              AS lead_id,
                 l.name            AS lead_name,
                 l.language        AS lead_language,
                 l.whatsapp_normalized AS lead_whatsapp,
                 tu.full_name      AS teacher_name,
                 tu.email          AS teacher_email,
-                tu.whatsapp_e164  AS teacher_whatsapp
+                tu.phone          AS teacher_whatsapp
               FROM classes c
               JOIN leads     l  ON l.id  = c.lead_id
               JOIN teachers  t  ON t.id  = c.teacher_id
@@ -103,8 +244,17 @@ def _notify_trials_30min() -> None:
 
         scheduled_at = r["scheduled_at"]
         time_label = _format_class_time_30m(scheduled_at, r["lead_language"])
-        join_url_lead    = f"https://b2c.aprender-aleman.de/aula/{r['class_id']}"
-        join_url_teacher = join_url_lead
+        # CRITICAL: el lead NO tiene NextAuth session. El bare URL
+        # `/aula/{id}` lo rebotaria a /login. Usar shortcode si hay,
+        # o el fallback /trial/{id}?t=... (todas las trials desde
+        # migration 036 tienen short_code, asi que el else es defense
+        # in depth). El teacher SI tiene session — bare URL OK.
+        short_code = r.get("class_short_code")
+        if short_code:
+            join_url_lead = f"https://b2c.aprender-aleman.de/c/{short_code}"
+        else:
+            join_url_lead = f"https://b2c.aprender-aleman.de/trial/{r['class_id']}"
+        join_url_teacher = f"https://b2c.aprender-aleman.de/aula/{r['class_id']}"
 
         # ── Lead message (short) ──
         lang = r["lead_language"] or "es"
@@ -303,6 +453,64 @@ def main() -> int:
         tick_inbound_replay,
         IntervalTrigger(minutes=10, timezone=BERLIN),
         id="whatsapp_inbound_replay",
+        max_instances=1, coalesce=True,
+    )
+
+    # Cleanup de inbound_dedup cada 6h.
+    sched.add_job(
+        _cleanup_inbound_dedup,
+        IntervalTrigger(hours=6, timezone=BERLIN),
+        id="inbound_dedup_cleanup",
+        max_instances=1, coalesce=True,
+    )
+
+    # Rescate diario de leads en link_sent / in_conversation sin
+    # next_contact_date (cubre pre-migración 041 + cualquier futuro hueco).
+    sched.add_job(
+        _reactivate_orphaned_leads,
+        CronTrigger(hour=9, minute=0, timezone=BERLIN),
+        id="reactivate_orphaned_leads",
+        max_instances=1, coalesce=True,
+    )
+
+    # Drainer de la cola persistente de inbounds (retry-safe).
+    sched.add_job(
+        _drain_inbound_queue,
+        IntervalTrigger(minutes=1, timezone=BERLIN),
+        id="drain_inbound_queue",
+        max_instances=1, coalesce=True,
+    )
+
+    # ─── RELIABILITY WATCHDOGS (Phase 1 plan, 2026-04-30) ──────────────
+    # Inbound silencioso (lead escribió, bot no respondió >15min).
+    sched.add_job(
+        scan_silent_inbounds_and_alert,
+        IntervalTrigger(minutes=5, timezone=BERLIN),
+        id="watchdog_silent_inbound",
+        max_instances=1, coalesce=True,
+    )
+    # LIDs no asociados a lead — escalar a Gelfis con candidatos.
+    sched.add_job(
+        scan_unmatched_lids_and_alert,
+        IntervalTrigger(minutes=10, timezone=BERLIN),
+        id="watchdog_unmatched_lids",
+        max_instances=1, coalesce=True,
+    )
+    # Sesión de WhatsApp en Evolution caída.
+    sched.add_job(
+        scan_evolution_health_and_alert,
+        IntervalTrigger(minutes=10, timezone=BERLIN),
+        id="watchdog_evolution_health",
+        max_instances=1, coalesce=True,
+    )
+
+    # Test sintético end-to-end diario a las 09:30 Berlin (después del
+    # rescate de huérfanos de 09:00 para que no compita).
+    from agents.synthetic_monitor import run_synthetic_check
+    sched.add_job(
+        run_synthetic_check,
+        CronTrigger(hour=9, minute=30, timezone=BERLIN),
+        id="synthetic_monitor_daily",
         max_instances=1, coalesce=True,
     )
 

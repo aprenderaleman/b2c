@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
 import { listTrialSlots } from "@/lib/trial-slots";
-import { buildTrialToken } from "@/lib/trial-token";
+import { buildTrialToken, buildLeadJoinUrl } from "@/lib/trial-token";
 import { sendTrialConfirmationEmail } from "@/lib/email/send";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
@@ -296,8 +296,16 @@ export async function POST(req: Request) {
   const token = buildTrialToken(leadId, classId);
   const magicLinkUrl = `${PLATFORM_URL}/trial/${classId}?t=${encodeURIComponent(token)}`;
   // Short URL — used in WhatsApp + email so messages don't carry a
-  // 250-char signed token that looks like phishing.
-  const shortLinkUrl = `${PLATFORM_URL}/c/${shortCode}`;
+  // 250-char signed token that looks like phishing. Construido vía
+  // buildLeadJoinUrl() (devuelve LeadJoinUrl branded) para que los
+  // templates trial-confirmation / trial-rescheduled lo acepten —
+  // garantía estructural de no mandar bare /aula/{id} al lead.
+  const shortLinkUrl = buildLeadJoinUrl({
+    classId:   classId,
+    leadId:    leadId,
+    shortCode: shortCode,
+    baseUrl:   PLATFORM_URL,
+  });
 
   // Stash the short URL on the lead row so any code path that reads
   // `leads.trial_zoom_link` (e.g. the legacy agent_5 reminder still

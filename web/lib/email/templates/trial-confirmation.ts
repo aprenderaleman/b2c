@@ -1,4 +1,5 @@
 import { button, escapeHtml, h2, kvBlock, p, renderEnvelope, type RenderedEmail } from "./base";
+import type { LeadJoinUrl } from "@/lib/trial-token";
 
 /**
  * Confirmation email sent the second a lead books their trial class
@@ -11,7 +12,7 @@ export type TrialConfirmationVars = {
   startDate:      string;          // pre-formatted "viernes 26 de abril, 17:00 (Berlín)"
   durationMin:    number;          // 45
   teacherName:    string;
-  joinUrl:        string;          // https://b2c.aprender-aleman.de/trial/{classId}?t={token}
+  joinUrl:        LeadJoinUrl;     // OBLIGATORIO: construir vía buildLeadJoinUrl()
   language:       "es" | "de";
 };
 
@@ -27,7 +28,6 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
     ${kvBlock([
       ["📅 Fecha",     escapeHtml(v.startDate)],
       ["⏱ Duración",   `${v.durationMin} minutos`],
-      ["👤 Con",       escapeHtml(v.teacherName)],
     ])}
     <div style="text-align:center;margin:24px 0 8px 0;">
       ${button(v.joinUrl, "Entrar al aula →")}
@@ -53,8 +53,7 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
     `¡Hola ${v.leadName}!`, ``,
     `Tu clase de prueba gratuita de alemán está confirmada.`,
     `Fecha: ${v.startDate}`,
-    `Duración: ${v.durationMin} min`,
-    `Con: ${v.teacherName}`, ``,
+    `Duración: ${v.durationMin} min`, ``,
     `Entrar al aula: ${v.joinUrl}`,
     `(este enlace es exclusivo para ti — no requiere contraseña)`, ``,
     `⚠️ IMPORTANTE: al abrir el enlace, tu navegador te pedirá permiso para usar`,
@@ -80,7 +79,6 @@ function renderDE(v: TrialConfirmationVars): RenderedEmail {
     ${kvBlock([
       ["📅 Datum",     escapeHtml(v.startDate)],
       ["⏱ Dauer",      `${v.durationMin} Minuten`],
-      ["👤 Mit",       escapeHtml(v.teacherName)],
     ])}
     <div style="text-align:center;margin:24px 0 8px 0;">
       ${button(v.joinUrl, "Zum Klassenzimmer →")}
@@ -106,8 +104,7 @@ function renderDE(v: TrialConfirmationVars): RenderedEmail {
     `Hallo ${v.leadName}!`, ``,
     `Deine kostenlose Probestunde Deutsch ist bestätigt.`,
     `Datum: ${v.startDate}`,
-    `Dauer: ${v.durationMin} Min`,
-    `Mit: ${v.teacherName}`, ``,
+    `Dauer: ${v.durationMin} Min`, ``,
     `Zum Klassenzimmer: ${v.joinUrl}`,
     `(dieser Link ist nur für dich — kein Passwort nötig)`, ``,
     `⚠️ WICHTIG: Beim Öffnen des Links fragt dein Browser nach Mikrofon- und`,

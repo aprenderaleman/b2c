@@ -254,6 +254,14 @@ export async function sendTrialReminderEmail(
   to: string,
   vars: TrialReminderVars,
 ): Promise<SendResult> {
+  // Runtime guard: el template comparte tipo entre lead/teacher así
+  // que joinUrl es string genérico. Cuando vamos al lead, validamos
+  // que NO sea un bare /aula/{id} (que bouncearía a /login). Bug
+  // recurrente — ver lib/trial-token.ts assertLeadJoinUrl.
+  if (vars.audience === "lead") {
+    const { assertLeadJoinUrl } = await import("@/lib/trial-token");
+    assertLeadJoinUrl(vars.joinUrl, "sendTrialReminderEmail/lead");
+  }
   const { subject, html, text } = renderTrialReminder(vars);
   return sendRaw(to, subject, html, text);
 }

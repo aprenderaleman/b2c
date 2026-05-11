@@ -94,26 +94,49 @@ export async function clearTrialSession() {
   jar.delete(TRIAL_COOKIE);
 }
 
+// Branded type — un `LeadJoinUrl` solo se obtiene llamando a
+// `buildLeadJoinUrl()`. Los emails/WhatsApp del lead aceptan ESTE
+// tipo, no un `string` cualquiera. Si alguien escribe nuevo código
+// que pasa un URL bare `/aula/{id}` al template del lead, TypeScript
+// falla en compile-time. Garantía estructural contra el bug que
+// reapareció dos veces (2026-05-11) por escribir URLs a mano.
+declare const __leadJoinUrlBrand: unique symbol;
+export type LeadJoinUrl = string & { readonly [__leadJoinUrlBrand]: true };
+
 /**
  * Construye el URL que damos al LEAD para que entre al aula sin
  * login. Preferimos el shortcode (`/c/{code}`) porque es corto y se
  * lee bien en WhatsApp; si la clase no tiene shortcode (datos viejos
  * pre-migración 036) caemos al URL signed `/trial/{id}?t={token}`.
  *
- * Usar SIEMPRE este helper para construir URLs lead-facing — el
- * URL bare `/aula/{id}` SIN token rebota a /login y arruina el
- * recordatorio. Bug reportado 2026-05-11: los crons de trial-
- * reminders mandaban el bare URL.
+ * ÚNICA forma soportada de obtener un LeadJoinUrl. NO hagas cast
+ * desde string — eso burla la garantía de tipos y rompemos a los
+ * leads otra vez.
  */
 export function buildLeadJoinUrl(opts: {
   classId:    string;
   leadId:     string;
   shortCode?: string | null;
   baseUrl?:   string;
-}): string {
+}): LeadJoinUrl {
   const base = (opts.baseUrl ?? process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de")
     .replace(/\/$/, "");
-  if (opts.shortCode) return `${base}/c/${opts.shortCode}`;
-  const token = buildTrialToken(opts.leadId, opts.classId);
-  return `${base}/trial/${opts.classId}?t=${encodeURIComponent(token)}`;
+  const raw = opts.shortCode
+    ? `${base}/c/${opts.shortCode}`
+    : `${base}/trial/${opts.classId}?t=${encodeURIComponent(buildTrialToken(opts.leadId, opts.classId))}`;
+  return raw as LeadJoinUrl;
+}
+
+/**
+ * Runtime guard adicional. Llama desde los wrappers de email/WhatsApp
+ * que reciben joinUrl: string (no se puede tipar a LeadJoinUrl por
+ * compat con otros callers). Lanza si detecta el patrón bare.
+ */
+export function assertLeadJoinUrl(url: string, context: string): void {
+  if (/\/aula\/[a-f0-9-]+(?:\b|$)/i.test(url) && !url.includes("?t=") && !url.includes("/c/")) {
+    throw new Error(
+      `[${context}] El URL para el lead es bare /aula/{id} — bouncea a /login. ` +
+      `Usa buildLeadJoinUrl(). URL recibido: ${url.slice(0, 120)}`,
+    );
+  }
 }

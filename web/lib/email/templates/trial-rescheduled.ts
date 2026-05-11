@@ -1,4 +1,5 @@
 import { button, escapeHtml, h2, kvBlock, p, renderEnvelope, type RenderedEmail } from "./base";
+import type { LeadJoinUrl } from "@/lib/trial-token";
 
 /**
  * trial-rescheduled — el lead recibe este mail cuando admin/Stiv mueve
@@ -12,7 +13,7 @@ export type TrialRescheduledVars = {
   leadName:    string;       // first name
   newStartDate: string;      // "viernes 9 de mayo, 17:00 (Berlín)"
   durationMin: number;
-  joinUrl:     string;       // magic-link al aula
+  joinUrl:     LeadJoinUrl;  // OBLIGATORIO: construir vía buildLeadJoinUrl()
   language:    "es" | "de";
 };
 
