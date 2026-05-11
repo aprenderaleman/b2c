@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendWhatsappText } from "@/lib/whatsapp";
+import { buildLeadJoinUrl } from "@/lib/trial-token";
 
 /**
  * GET/POST /api/cron/trial-reminders-30m
@@ -55,7 +56,7 @@ async function run(req: Request) {
   const { data: classes } = await sb
     .from("classes")
     .select(`
-      id, scheduled_at, duration_minutes, notes_admin,
+      id, scheduled_at, duration_minutes, notes_admin, short_code,
       teacher:teachers!inner(users!inner(full_name, email)),
       lead:leads!inner(id, name, language, whatsapp_normalized, ai_paused_until)
     `)
@@ -65,7 +66,7 @@ async function run(req: Request) {
     .lte("scheduled_at", hi);
 
   type Row = {
-    id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null;
+    id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null; short_code: string | null;
     teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
     lead: { id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null; ai_paused_until: string | null } |
@@ -97,7 +98,11 @@ async function run(req: Request) {
 
     const leadFirst   = (lead.name || "").split(/\s+/)[0] || lead.name || "";
     const teacherName = tu?.full_name ?? "tu profesor/a";
-    const joinUrl     = `${PLATFORM_URL}/aula/${r.id}`;
+    // Usar shortcode (/c/{code}) — el bare /aula/{id} bouncea al lead
+    // a /login porque no trae token. Bug reportado 2026-05-11.
+    const joinUrl     = buildLeadJoinUrl({
+      classId:   r.id, leadId: lead.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
+    });
 
     const text = lead.language === "de"
       ? `Hallo ${leadFirst}! 👋\n\n` +

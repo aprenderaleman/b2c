@@ -6,6 +6,7 @@ import { patchTrialEvent } from "@/lib/google-calendar";
 import { sendTrialRescheduledEmail } from "@/lib/email/send";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { formatBerlinFull } from "@/lib/time";
+import { buildLeadJoinUrl } from "@/lib/trial-token";
 
 /**
  * POST /api/admin/leads/[id]/reschedule-trial
@@ -208,9 +209,12 @@ export async function POST(
   const lang      = (lr.language === "de" ? "de" : "es") as "es" | "de";
   const leadFirst = (lr.name ?? "").trim().split(/\s+/)[0] || "";
   const startDate = formatBerlinFull(newStart, lang);
-  const joinUrl   = c.short_code
-    ? `${PLATFORM_URL}/c/${c.short_code}`
-    : `${PLATFORM_URL}/aula/${c.id}`;
+  const joinUrl   = buildLeadJoinUrl({
+    classId:   c.id,
+    leadId:    leadId,
+    shortCode: c.short_code,
+    baseUrl:   PLATFORM_URL,
+  });
 
   // 6) Notificar — email + WA en paralelo, fire-and-forget.
   const waText = lang === "de"

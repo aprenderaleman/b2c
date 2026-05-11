@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTrialReminderEmail } from "@/lib/email/send";
+import { buildLeadJoinUrl } from "@/lib/trial-token";
 
 /**
  * GET/POST /api/cron/trial-reminders-morning
@@ -84,7 +85,7 @@ async function run(req: Request) {
   const { data: classes } = await sb
     .from("classes")
     .select(`
-      id, scheduled_at, duration_minutes, notes_admin,
+      id, scheduled_at, duration_minutes, notes_admin, short_code,
       teacher:teachers!inner(users!inner(full_name, email)),
       lead:leads!inner(id, name, language, email, ai_paused_until)
     `)
@@ -94,7 +95,7 @@ async function run(req: Request) {
     .lte("scheduled_at", hi);
 
   type Row = {
-    id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null;
+    id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null; short_code: string | null;
     teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
     lead: { id: string; name: string; language: "es" | "de"; email: string | null; ai_paused_until: string | null } |
@@ -129,7 +130,11 @@ async function run(req: Request) {
       },
     ) + (lead.language === "de" ? " (Berlin)" : " (Berlín)");
 
-    const leadJoinUrl    = `${PLATFORM_URL}/aula/${r.id}`;
+    // Lead: shortcode / token URL — bare /aula/{id} bouncea a /login.
+    // Bug reportado 2026-05-11.
+    const leadJoinUrl    = buildLeadJoinUrl({
+      classId:   r.id, leadId: lead.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
+    });
     const teacherJoinUrl = `${PLATFORM_URL}/aula/${r.id}`;
 
     let leadDelivered = false;

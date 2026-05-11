@@ -93,3 +93,27 @@ export async function clearTrialSession() {
   const jar = await cookies();
   jar.delete(TRIAL_COOKIE);
 }
+
+/**
+ * Construye el URL que damos al LEAD para que entre al aula sin
+ * login. Preferimos el shortcode (`/c/{code}`) porque es corto y se
+ * lee bien en WhatsApp; si la clase no tiene shortcode (datos viejos
+ * pre-migración 036) caemos al URL signed `/trial/{id}?t={token}`.
+ *
+ * Usar SIEMPRE este helper para construir URLs lead-facing — el
+ * URL bare `/aula/{id}` SIN token rebota a /login y arruina el
+ * recordatorio. Bug reportado 2026-05-11: los crons de trial-
+ * reminders mandaban el bare URL.
+ */
+export function buildLeadJoinUrl(opts: {
+  classId:    string;
+  leadId:     string;
+  shortCode?: string | null;
+  baseUrl?:   string;
+}): string {
+  const base = (opts.baseUrl ?? process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de")
+    .replace(/\/$/, "");
+  if (opts.shortCode) return `${base}/c/${opts.shortCode}`;
+  const token = buildTrialToken(opts.leadId, opts.classId);
+  return `${base}/trial/${opts.classId}?t=${encodeURIComponent(token)}`;
+}
