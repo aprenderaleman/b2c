@@ -234,6 +234,11 @@ export async function sendTrialConfirmationEmail(
    *  own calendar with one click. Built by lib/ics.ts in book-trial. */
   ics?: { content: Buffer | string; filename?: string },
 ): Promise<SendResult> {
+  // Runtime guard contra el bug "lead recibe bare /aula/{id}".
+  // El tipo `joinUrl: LeadJoinUrl` ya lo protege en compile-time;
+  // este es defensa adicional contra `as LeadJoinUrl` casts.
+  const { assertLeadJoinUrl } = await import("@/lib/trial-token");
+  assertLeadJoinUrl(vars.joinUrl, "sendTrialConfirmationEmail");
   const { subject, html, text } = renderTrialConfirmation(vars);
   const attachments: EmailAttachment[] | undefined = ics
     ? [{
@@ -275,6 +280,8 @@ export async function sendTrialRescheduledEmail(
   to: string,
   vars: TrialRescheduledVars,
 ): Promise<SendResult> {
+  const { assertLeadJoinUrl } = await import("@/lib/trial-token");
+  assertLeadJoinUrl(vars.joinUrl, "sendTrialRescheduledEmail");
   const { subject, html, text } = renderTrialRescheduled(vars);
   return sendRaw(to, subject, html, text);
 }
