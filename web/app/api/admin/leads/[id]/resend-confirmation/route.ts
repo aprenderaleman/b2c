@@ -119,6 +119,35 @@ export async function POST(
         `— Aprender-Aleman.de`
       );
 
+  // Dedupe: si en los últimos 60s ya se envió una confirmación (o
+  // reenvío) por WhatsApp para este lead, NO mandar otra. Cubre el
+  // race condition reportado 2026-05-11:
+  //   1. Admin corrige el whatsapp_normalized
+  //   2. /update auto-dispara /resend-confirmation (fire-and-forget)
+  //   3. Admin ve el banner viejo y clickea "Reenviar" manualmente
+  //   4. Lead recibe 2 mensajes.
+  // Con este check, la segunda llamada devuelve ok:true sin re-enviar.
+  const { data: recentSends } = await sb
+    .from("lead_timeline")
+    .select("metadata, timestamp")
+    .eq("lead_id", id)
+    .eq("type", "system_message_sent")
+    .gte("timestamp", new Date(Date.now() - 60_000).toISOString())
+    .order("timestamp", { ascending: false })
+    .limit(10);
+  const recentDup = (recentSends ?? []).some(r => {
+    const m = r.metadata as { kind?: string; channel?: string } | null;
+    return m?.channel === "whatsapp" &&
+      (m.kind === "trial_confirmation" || m.kind === "trial_confirmation_resend");
+  });
+  if (recentDup) {
+    return NextResponse.json({
+      ok:          true,
+      already_sent: true,
+      message:     "Ya se envió una confirmación a este lead en los últimos 60 segundos. Sin re-envío.",
+    });
+  }
+
   const result = await sendWhatsappText(l.whatsapp_normalized, text);
 
   if (result.ok) {

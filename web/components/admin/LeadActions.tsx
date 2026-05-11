@@ -56,7 +56,13 @@ export function LeadActions({ lead }: { lead: Lead }) {
       const res = await fetch(`/api/admin/leads/${lead.id}/resend-confirmation`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setResendNotice("✓ Reenviado");
+        if (data.already_sent) {
+          // El endpoint deduplicó — ya hay un envío reciente (típicamente
+          // disparado por /update tras corregir el WhatsApp del lead).
+          setResendNotice("ℹ Ya enviado hace segundos");
+        } else {
+          setResendNotice("✓ Reenviado");
+        }
       } else {
         setResendNotice("✗ " + (data.reason || data.error || "Error"));
       }
