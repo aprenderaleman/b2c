@@ -72,23 +72,33 @@ SIGN_OFF_DE = "\n\n— Stiv · Aprender-Aleman.de"
 
 
 def _template_contact_1(lead: dict) -> str:
-    name, ctx = _first_name(lead), _goal_context(lead)
+    """
+    Primer contacto a leads que se registraron en el funnel pero NO
+    agendaron clase de prueba. Decisión Gelfis 2026-05-12: ofrecemos
+    una llamada de 15 min (no clase de prueba) — la llamada convierte
+    mejor con leads que se quedaron parados en el funnel.
+    Firma: Gelfis Horn (humano), no Stiv (bot).
+    """
+    name = _first_name(lead)
     if lead["language"] == "de":
         return (
-            f"Hallo {name}! 👋\n\n"
-            f"Ich bin Stiv von Aprender-Aleman.de — wir haben deine Anfrage erhalten.\n\n"
-            f"Wir würden dich gerne zu einer *kostenlosen Probestunde* einladen, "
-            f"um dein Niveau zu prüfen und einen persönlichen Plan für {ctx} zu erstellen.\n\n"
-            f"Soll ich dir den Link zum Terminbuchen schicken?"
-            + SIGN_OFF_DE
+            f"Hallo {name}!\n\n"
+            f"Schön dich zu kennen — ich bin Gelfis Horn von der Akademie "
+            f"Aprender-Aleman.de. 👋\n\n"
+            f"Wir haben dein Interesse, Deutsch zu lernen, erhalten. Hättest "
+            f"du Lust, 15 Minuten zu sprechen, damit ich dir erkläre, wie wir "
+            f"dir dabei helfen können?\n\n"
+            f"Wann passt es dir, dass ich dich heute oder morgen anrufe?\n\n"
+            f"— Gelfis Horn · Aprender-Aleman.de"
         )
     return (
-        f"¡Hola {name}! 👋\n\n"
-        f"Soy Stiv de Aprender-Aleman.de — recibimos tu solicitud.\n\n"
-        f"Nos gustaría invitarte a una *clase de prueba gratuita* para conocer tu nivel "
-        f"y diseñarte un plan personalizado para {ctx}.\n\n"
-        f"¿Te envío el enlace para que elijas el horario que mejor te venga?"
-        + SIGN_OFF_ES
+        f"¡Hola {name}!\n\n"
+        f"Es un gusto saludarte, soy Gelfis Horn de la academia "
+        f"Aprender-Aleman.de. 👋\n\n"
+        f"Recibimos tu interés para aprender alemán. ¿Te parece si hablamos "
+        f"15 minutos para contarte cómo podemos ayudarte a lograrlo?\n\n"
+        f"¿A qué hora te vendría bien que te llame hoy o mañana?\n\n"
+        f"— Gelfis Horn · Aprender-Aleman.de"
     )
 
 
