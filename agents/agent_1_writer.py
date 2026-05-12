@@ -83,22 +83,22 @@ def _template_contact_1(lead: dict) -> str:
     if lead["language"] == "de":
         return (
             f"Hallo {name}!\n\n"
-            f"Schön dich zu kennen — ich bin Gelfis Horn von der Akademie "
+            f"Schön dich zu kennen — ich bin Stiv von der Akademie "
             f"Aprender-Aleman.de. 👋\n\n"
             f"Wir haben dein Interesse, Deutsch zu lernen, erhalten. Hättest "
             f"du Lust, 15 Minuten zu sprechen, damit ich dir erkläre, wie wir "
             f"dir dabei helfen können?\n\n"
-            f"Wann passt es dir, dass ich dich heute oder morgen anrufe?\n\n"
-            f"— Gelfis Horn · Aprender-Aleman.de"
+            f"Wann passt es dir, dass ich dich heute oder morgen anrufe?"
+            + SIGN_OFF_DE
         )
     return (
         f"¡Hola {name}!\n\n"
-        f"Es un gusto saludarte, soy Gelfis Horn de la academia "
+        f"Es un gusto saludarte, soy Stiv de la academia "
         f"Aprender-Aleman.de. 👋\n\n"
         f"Recibimos tu interés para aprender alemán. ¿Te parece si hablamos "
         f"15 minutos para contarte cómo podemos ayudarte a lograrlo?\n\n"
-        f"¿A qué hora te vendría bien que te llame hoy o mañana?\n\n"
-        f"— Gelfis Horn · Aprender-Aleman.de"
+        f"¿A qué hora te vendría bien que te llame hoy o mañana?"
+        + SIGN_OFF_ES
     )
 
 
