@@ -64,7 +64,14 @@ ALTER TABLE teachers
     ADD COLUMN IF NOT EXISTS iban                   TEXT,
     ADD COLUMN IF NOT EXISTS registered_self        BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN IF NOT EXISTS approved_at            TIMESTAMPTZ,
-    ADD COLUMN IF NOT EXISTS approved_by            UUID REFERENCES users(id);
+    -- approved_by SIN FK a users.id intencionalmente. Si añadimos la FK
+    -- se crea una segunda relación teachers↔users (la primera es
+    -- user_id) y PostgREST falla con PGRST201 ("more than one
+    -- relationship") en TODOS los embeds `users!inner(...)` que hace la
+    -- app sobre teachers (≥30 sitios). Para evitar tocar todos esos
+    -- queries dejamos approved_by como UUID puro — solo nos sirve de
+    -- audit trail, no necesita integridad referencial estricta.
+    ADD COLUMN IF NOT EXISTS approved_by            UUID;
 
 -- Índice para que el admin pueda listar rápido los "pendientes"
 -- (filtra teachers donde registered_self=TRUE y approved_at IS NULL).
