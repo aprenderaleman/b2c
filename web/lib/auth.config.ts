@@ -60,11 +60,11 @@ export const authConfig: NextAuthConfig = {
       // redirect handler (app/admin/login/page.tsx) can fire.
       if (pathname === "/admin/login") return true;
 
-      // Auto-registro público de profesores. La página y su endpoint son
-      // intencionalmente accesibles sin auth — el code de invitación es
-      // la credencial. Sin esta excepción el middleware bouncearía a
-      // /login y los candidatos no podrían rellenar el formulario.
-      if (pathname === "/profesor/registro") return true;
+      // Auto-registro público de profesores vive en /registro-profesor
+      // (fuera de /profesor/* para evitar el layout que pide sesión de
+      // teacher). La ruta NO está en PROTECTED así que el middleware no
+      // la bloquea por defecto; esta línea queda como documentación.
+      if (pathname === "/registro-profesor") return true;
 
       const gate = PROTECTED.find(g => pathname.startsWith(g.prefix));
       if (!gate) return true;   // public route

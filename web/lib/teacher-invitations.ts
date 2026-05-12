@@ -60,7 +60,7 @@ export async function createInvitation(opts: {
   const base = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
   return {
     invitation: inv,
-    url:        `${base}/profesor/registro?code=${encodeURIComponent(inv.code)}`,
+    url:        `${base}/registro-profesor?code=${encodeURIComponent(inv.code)}`,
   };
 }
 
@@ -156,5 +156,5 @@ function generateCode(): string {
  */
 export function buildInvitationUrl(code: string): string {
   const base = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
-  return `${base}/profesor/registro?code=${encodeURIComponent(code)}`;
+  return `${base}/registro-profesor?code=${encodeURIComponent(code)}`;
 }
