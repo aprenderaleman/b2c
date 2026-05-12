@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification, reminderAlreadySent } from "@/lib/notifications";
 import { sendClassReminder30mEmail } from "@/lib/email/send";
+import { buildTrialClassUrl } from "@/lib/trial-token";
 
 /**
  * GET/POST /api/cron/class-reminders
@@ -63,7 +64,7 @@ async function runCron(req: Request) {
   const { data: classes } = await sb
     .from("classes")
     .select(`
-      id, scheduled_at, duration_minutes, title, teacher_id,
+      id, scheduled_at, duration_minutes, title, teacher_id, is_trial, short_code,
       teacher:teachers!inner(
         user_id,
         users!inner(email, full_name, language_preference, notifications_opt_out)
@@ -135,7 +136,17 @@ async function runCron(req: Request) {
       minute:   "2-digit",
     }) + " (Berlín)";
 
-    const classUrl = `${PLATFORM_URL.replace(/\/$/, "")}/aula/${c.id}`;
+    // Para trials, TODOS los recipients (profesor + alumnos) reciben
+    // `/c/{short_code}` por petición de Gelfis (2026-05-12): unifica
+    // el link entre canales (email/WhatsApp/in-app) y permite que el
+    // mismo URL sirva para lead-sin-cuenta y profesor autenticado.
+    // Bug original: aquí siempre se generaba bare `/aula/{id}`.
+    const isTrial = Boolean((c as { is_trial: boolean | null }).is_trial);
+    const shortCode = (c as { short_code: string | null }).short_code;
+    const classUrl = isTrial
+      ? buildTrialClassUrl({ classId: c.id as string, shortCode, baseUrl: PLATFORM_URL })
+      : `${PLATFORM_URL.replace(/\/$/, "")}/aula/${c.id}`;
+    const inAppLink = isTrial && shortCode ? `/c/${shortCode}` : `/aula/${c.id}`;
     const classTitle = (c.title as string | null) ?? "Tu clase";
 
     // ── Teacher email (skipped entirely if teacher is opted out)
@@ -149,7 +160,7 @@ async function runCron(req: Request) {
           type:     REMINDER_TYPE,
           title:    "Tu clase empieza en 30 minutos",
           body:     `${classTitle} · ${startTime}`,
-          link:     `/aula/${c.id}`,
+          link:     inAppLink,
           class_id: c.id as string,
         });
         await sendClassReminder30mEmail(teacherUser.email, {

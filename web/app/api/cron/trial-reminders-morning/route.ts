@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTrialReminderEmail } from "@/lib/email/send";
-import { buildLeadJoinUrl } from "@/lib/trial-token";
+import { buildLeadJoinUrl, buildTrialClassUrl } from "@/lib/trial-token";
 
 /**
  * GET/POST /api/cron/trial-reminders-morning
@@ -135,7 +135,12 @@ async function run(req: Request) {
     const leadJoinUrl    = buildLeadJoinUrl({
       classId:   r.id, leadId: lead.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
     });
-    const teacherJoinUrl = `${PLATFORM_URL}/aula/${r.id}`;
+    // Profesor recibe también `/c/{short_code}` para que todos los
+    // canales de un trial usen el MISMO link. Bug reportado 2026-05-12
+    // por Gelfis: recibía bare /aula/{id} en el email de su trial.
+    const teacherJoinUrl = buildTrialClassUrl({
+      classId: r.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
+    });
 
     let leadDelivered = false;
     if (lead.email) {

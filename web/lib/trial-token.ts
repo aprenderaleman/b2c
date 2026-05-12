@@ -140,3 +140,28 @@ export function assertLeadJoinUrl(url: string, context: string): void {
     );
   }
 }
+
+/**
+ * URL para clases de prueba (is_trial=true) destinado a CUALQUIER
+ * recipient (profesor, lead, admin). Prefiere `/c/{short_code}` porque:
+ *
+ *  - El lead lo necesita (entra sin auth).
+ *  - El profesor también lo recibe — si bien `/aula/{id}` le funciona
+ *    autenticado, Gelfis pidió que TODAS las notificaciones de trial
+ *    lleven el short-code para que el link sea uniforme entre canales
+ *    (email, WhatsApp, in-app) y entre destinatarios.
+ *
+ * Fallback a `/aula/{id}` solo si por alguna razón la clase no tiene
+ * short_code (datos pre-migración 036 — no debería pasar en producción).
+ */
+export function buildTrialClassUrl(opts: {
+  classId:    string;
+  shortCode:  string | null | undefined;
+  baseUrl?:   string;
+}): string {
+  const base = (opts.baseUrl ?? process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de")
+    .replace(/\/$/, "");
+  return opts.shortCode
+    ? `${base}/c/${opts.shortCode}`
+    : `${base}/aula/${opts.classId}`;
+}

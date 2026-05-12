@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTrialReminderEmail } from "@/lib/email/send";
-import { buildLeadJoinUrl } from "@/lib/trial-token";
+import { buildLeadJoinUrl, buildTrialClassUrl } from "@/lib/trial-token";
 
 /**
  * GET/POST /api/cron/trial-reminders-24h
@@ -96,13 +96,14 @@ async function run(req: Request) {
       },
     ) + (lead.language === "de" ? " (Berlin)" : " (Berlín)");
 
-    // Lead: usa shortcode (/c/{code}) ó /trial/{id}?t=... — NUNCA el
-    // bare /aula/{id} (bouncea a /login). Para el profe el bare URL
-    // está bien: tiene NextAuth session.
+    // Para trials, todos los recipients reciben /c/{short_code} —
+    // unificación de link a petición de Gelfis (2026-05-12).
     const leadJoinUrl    = buildLeadJoinUrl({
       classId:   r.id, leadId: lead.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
     });
-    const teacherJoinUrl = `${PLATFORM_URL}/aula/${r.id}`;
+    const teacherJoinUrl = buildTrialClassUrl({
+      classId: r.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
+    });
 
     // ── Lead email
     let leadDelivered = false;
