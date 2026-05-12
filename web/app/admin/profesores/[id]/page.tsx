@@ -8,6 +8,7 @@ import { listAdminNotes } from "@/lib/admin-notes";
 import { NotesCard } from "@/components/admin/NotesCard";
 import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOutToggle";
 import { supabaseAdmin } from "@/lib/supabase";
+import { PendingApprovalCard } from "./PendingApprovalCard";
 
 export const dynamic = "force-dynamic";
 
@@ -35,11 +36,33 @@ export default async function TeacherDetailPage({
 
   const waDigits = teacher.phone?.replace(/\D/g, "") ?? "";
 
+  const isPending = teacher.registered_self === true && !teacher.approved_at;
+
   return (
     <main className="space-y-5">
       <Link href="/admin/profesores" className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400">
         ← Volver a profesores
       </Link>
+
+      {isPending && (
+        <PendingApprovalCard
+          teacher={{
+            id:                     teacher.id,
+            full_name:              teacher.full_name,
+            email:                  teacher.email,
+            phone:                  teacher.phone,
+            address:                teacher.address ?? null,
+            country:                teacher.country ?? null,
+            languages_spoken:       teacher.languages_spoken,
+            specialties:            teacher.specialties,
+            levels_taught:          teacher.levels_taught ?? [],
+            hourly_rate_group:      teacher.hourly_rate_group ?? null,
+            hourly_rate_individual: teacher.hourly_rate_individual ?? null,
+            iban:                   teacher.iban ?? null,
+            created_at:             teacher.created_at,
+          }}
+        />
+      )}
 
       <header className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">

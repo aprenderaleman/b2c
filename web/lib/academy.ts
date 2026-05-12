@@ -49,6 +49,19 @@ export type TeacherRow = {
   /** Whether this teacher is in the trial-class rotation pool. */
   accepts_trials:        boolean;
   created_at:            string;
+  // Campos del flujo de auto-registro (migration 049). Opcionales en
+  // el tipo porque getTeachers() y getTeacherByUserId() no los
+  // seleccionan — solo getTeacherById() los rellena. Si en el futuro
+  // alguna función los necesita, extender el SELECT correspondiente.
+  address?:                 string | null;
+  country?:                 string | null;
+  levels_taught?:           string[];
+  hourly_rate_group?:       string | null;
+  hourly_rate_individual?:  string | null;
+  iban?:                    string | null;
+  registered_self?:         boolean;
+  approved_at?:             string | null;
+  user_active?:             boolean;
 };
 
 // =============================================================================
@@ -333,6 +346,8 @@ export async function getTeacherById(id: string): Promise<TeacherRow | null> {
     .select(`
       id, user_id, bio, languages_spoken, specialties,
       hourly_rate, currency, payment_method, notes, active, accepts_trials, created_at,
+      address, country, levels_taught, hourly_rate_group, hourly_rate_individual,
+      iban, registered_self, approved_at,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("id", id)
@@ -361,6 +376,15 @@ export async function getTeacherById(id: string): Promise<TeacherRow | null> {
     notes:                (data.notes as string | null) ?? null,
     accepts_trials:       Boolean(data.accepts_trials),
     created_at:           data.created_at as string,
+    address:                (data.address as string | null) ?? null,
+    country:                (data.country as string | null) ?? null,
+    levels_taught:          (data.levels_taught as string[]) ?? [],
+    hourly_rate_group:      (data.hourly_rate_group as string | null) ?? null,
+    hourly_rate_individual: (data.hourly_rate_individual as string | null) ?? null,
+    iban:                   (data.iban as string | null) ?? null,
+    registered_self:        Boolean(data.registered_self),
+    approved_at:            (data.approved_at as string | null) ?? null,
+    user_active:            Boolean(uu?.active),
   };
 }
 
