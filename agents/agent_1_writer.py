@@ -1,3 +1,4 @@
+# Touch: 2026-05-12 — verificar auto-deploy cron en VPS.
 """
 Agent 1 — MESSAGE WRITER (El Redactor).
 
