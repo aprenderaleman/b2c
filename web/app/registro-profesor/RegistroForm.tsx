@@ -248,7 +248,7 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
         <label className="flex items-start gap-3 cursor-pointer">
           <input type="checkbox" checked={form.gdpr} onChange={e => toggle("gdpr", e.target.checked)} className="mt-1 h-4 w-4 accent-brand-500" />
           <span className="text-sm text-slate-700 leading-relaxed">
-            Acepto la <Link href="/privacy" target="_blank" className="text-brand-600 underline">política de privacidad</Link>.
+            Acepto la <a href="https://www.aprender-aleman.de/datenschutz" target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">política de privacidad</a>.
           </span>
         </label>
         <label className="flex items-start gap-3 cursor-pointer mt-2">
