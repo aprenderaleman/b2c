@@ -15,6 +15,10 @@ export type NotificationType =
   | "recording_ready"
   | "homework_new"
   | "homework_reviewed"
+  // Disparada por /api/public/teacher-register tras un auto-registro.
+  // Destinada a superadmins para que entren a /admin/usuarios/[id] y
+  // aprueben/rechacen el perfil pendiente.
+  | "teacher_pending_approval"
   | "generic";
 
 export type NotificationRow = {

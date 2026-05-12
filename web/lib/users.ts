@@ -8,6 +8,11 @@ export type CreateUserInput = {
   phone:     string | null;
   language:  "es" | "de";
   role:      "admin" | "teacher";
+  // Si true, el usuario se crea con active=false (necesita aprobación
+  // manual del admin antes de poder loguearse). Usado por el flujo
+  // de auto-registro de profesores. Por defecto false → activo de
+  // inmediato (compat con el flujo admin manual).
+  inactive?: boolean;
   // Teacher-only fields (ignored when role='admin')
   teacherProfile?: {
     bio:              string | null;
@@ -17,6 +22,15 @@ export type CreateUserInput = {
     currency:         "EUR" | "USD" | "CHF";
     paymentMethod:    string | null;
     notes:            string | null;
+    // Campos nuevos del flujo de auto-registro (migration 049).
+    // Opcionales en compat con el admin-manual viejo que no los pasa.
+    address?:               string | null;
+    country?:               string | null;
+    levelsTaught?:          string[];
+    hourlyRateGroup?:       number | null;
+    hourlyRateIndividual?:  number | null;
+    iban?:                  string | null;
+    registeredSelf?:        boolean;       // true cuando viene del form público
   };
 };
 
@@ -47,7 +61,10 @@ export async function createUser(input: CreateUserInput): Promise<CreatedUser> {
       phone:                input.phone,
       language_preference:  input.language,
       must_change_password: true,
-      active:               true,
+      // active=false cuando se llama desde el auto-registro de profe;
+      // ahí el admin debe aprobar manualmente. Default true (admin
+      // manual desde /admin/usuarios/nuevo crea ya operativo).
+      active:               !input.inactive,
     })
     .select("id")
     .single();
@@ -65,15 +82,26 @@ export async function createUser(input: CreateUserInput): Promise<CreatedUser> {
     const { data: teacher, error: tErr } = await sb
       .from("teachers")
       .insert({
-        user_id:           user.id,
-        bio:               p.bio,
-        languages_spoken:  p.languagesSpoken,
-        specialties:       p.specialties,
-        hourly_rate:       p.hourlyRate,
-        currency:          p.currency,
-        payment_method:    p.paymentMethod,
-        notes:             p.notes,
-        active:            true,
+        user_id:                 user.id,
+        bio:                     p.bio,
+        languages_spoken:        p.languagesSpoken,
+        specialties:             p.specialties,
+        hourly_rate:             p.hourlyRate,
+        currency:                p.currency,
+        payment_method:          p.paymentMethod,
+        notes:                   p.notes,
+        // active=false cuando hay que aprobar manualmente. Solo
+        // bloquea matchmaking — el user.active es el que gatekeeping
+        // del login. Marcamos los dos coherentes.
+        active:                  !input.inactive,
+        // Campos nuevos del flujo de auto-registro (migration 049)
+        address:                 p.address               ?? null,
+        country:                 p.country               ?? null,
+        levels_taught:           p.levelsTaught          ?? [],
+        hourly_rate_group:       p.hourlyRateGroup       ?? null,
+        hourly_rate_individual:  p.hourlyRateIndividual  ?? null,
+        iban:                    p.iban                  ?? null,
+        registered_self:         p.registeredSelf        ?? false,
       })
       .select("id")
       .single();
