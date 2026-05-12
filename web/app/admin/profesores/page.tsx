@@ -16,9 +16,17 @@ export default async function TeachersListPage() {
             {rows.length.toLocaleString("es-ES")} profesor{rows.length === 1 ? "" : "es"}
           </p>
         </div>
-        <Link href="/admin/profesores/nuevo" className="btn-primary text-sm">
-          + Añadir profesor
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/profesores/invitar"
+            className="text-sm rounded-lg border border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10 px-3 py-1.5 text-brand-700 dark:text-brand-200 hover:bg-brand-100 dark:hover:bg-brand-500/20"
+          >
+            ✉ Invitar profesor
+          </Link>
+          <Link href="/admin/profesores/nuevo" className="btn-primary text-sm">
+            + Añadir profesor
+          </Link>
+        </div>
       </header>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
