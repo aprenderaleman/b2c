@@ -32,7 +32,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from agents.shared.db import get_conn
-from agents.shared.leads import log_timeline
+from agents.shared.leads import handle_reactivation_sent, log_timeline
 from agents.shared.rate_limits import BERLIN, in_send_window
 from agents.whatsapp_service import WhatsAppError, WhatsAppService
 
@@ -50,7 +50,18 @@ PAUSED_STATUSES = (
     "lost",
     "trial_scheduled",
     "trial_reminded",
+    # Estos los maneja tick_absent_followups (agent_5_guardian) en su propio
+    # cron; Agent 0 no debe tocarlos para no duplicar mensajes.
+    "trial_absent",
+    "absent_followup_1",
+    "absent_followup_2",
 )
+
+# Estados post-engagement: Agent 1 sí compone reactivaciones, pero Agent 0
+# debe tratarlos diferente (no avanzar current_followup_number; en su lugar,
+# llamar handle_reactivation_sent para incrementar reactivation_count y
+# decidir si seguir o marcar cold).
+POST_ENGAGEMENT_STATUSES = ("link_sent", "in_conversation")
 
 
 def _leads_due() -> list[dict]:
@@ -71,13 +82,16 @@ def _leads_due() -> list[dict]:
             f"""
             SELECT id, name, whatsapp_normalized, language, german_level,
                    goal, urgency, status, current_followup_number,
-                   next_contact_date, messages_seen_count
+                   next_contact_date, messages_seen_count,
+                   reactivation_count, ai_paused_until
               FROM leads
              WHERE (status = 'new' AND next_contact_date IS NULL)
                 OR (
                        next_contact_date IS NOT NULL
                    AND next_contact_date <= NOW()
                    AND status NOT IN ({",".join(["%s"] * len(PAUSED_STATUSES))})
+                   -- Respetar pausa manual de admin
+                   AND (ai_paused_until IS NULL OR ai_paused_until <= NOW())
                 )
              ORDER BY
                  CASE WHEN status = 'new' THEN 0 ELSE 1 END,
@@ -160,11 +174,27 @@ def tick() -> None:
             if wa is None:
                 wa = WhatsAppService()
             is_new = lead["status"] == "new"
-            result = send_approved(lead, draft.text, is_new_conversation=is_new, wa=wa)
+            is_reactivation = lead["status"] in POST_ENGAGEMENT_STATUSES
+            # Reactivaciones post-engagement: NO avanzar current_followup_number
+            # (no son parte de la cadena cold-outreach). Tras enviar, llamamos
+            # handle_reactivation_sent para incrementar reactivation_count y
+            # decidir si seguir o marcar cold.
+            result = send_approved(
+                lead, draft.text,
+                is_new_conversation=is_new,
+                advance_followup=not is_reactivation,
+                wa=wa,
+            )
             if not result.success:
                 errors += 1
-            else:
-                processed += 1
+                continue
+            processed += 1
+            if is_reactivation:
+                handle_reactivation_sent(
+                    lead["id"],
+                    status=lead["status"],
+                    current_count=int(lead.get("reactivation_count") or 0),
+                )
         except WhatsAppError as e:
             errors += 1
             log.error("Lead %s: WhatsApp error — %s", lead["id"], e)

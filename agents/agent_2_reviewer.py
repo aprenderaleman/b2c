@@ -40,6 +40,13 @@ _AUTO_APPROVE_KINDS = {
     "template_contact_1",
     "template_contact_2",
     "ai_fallback_reengagement",
+    # Reactivaciones post-engagement (migración 041, política Gelfis 2026-04-29).
+    # Plantillas fijas con variables previsibles (nombre + URL del funnel) →
+    # se auto-aprueban para evitar que el reviewer Haiku alucine reglas
+    # inconsistentes (p.ej. rechazar /agendar o el formato de firma).
+    "template_link_reminder_1",
+    "template_link_reminder_2",
+    "template_conversation_revive",
 }
 
 

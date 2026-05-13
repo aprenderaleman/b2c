@@ -138,10 +138,41 @@ def _seen_in_timeline(phone: str, ts: datetime) -> bool:
         return cur.fetchone() is not None
 
 
+def _claim_inbound_for_replay(msg_id: str) -> bool:
+    """Same idempotency primitive as webhook_server._claim_inbound, but
+    inlined here to avoid import cycles. Returns True if the row was
+    inserted (first sighting) and False if it was already there
+    (already processed by the live webhook or a previous replay)."""
+    try:
+        from psycopg.errors import UniqueViolation
+    except Exception:                                       # noqa: BLE001
+        try:
+            from psycopg2.errors import UniqueViolation
+        except Exception:                                   # noqa: BLE001
+            UniqueViolation = Exception                     # type: ignore[misc,assignment]
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO inbound_dedup (wa_message_id) VALUES (%s)",
+                (msg_id,),
+            )
+        return True
+    except UniqueViolation:
+        return False
+    except Exception:                                       # noqa: BLE001
+        log.exception("[inbound_replay] claim failed for %s — failing open", msg_id)
+        return True
+
+
 def tick_inbound_replay() -> dict:
     """Pull last-6h inbound messages from Evolution; for each one not
     represented in lead_timeline, hand it off to the existing webhook
-    handler so it goes through the same pipeline a real webhook would."""
+    handler so it goes through the same pipeline a real webhook would.
+
+    Dedup: uses the per-message inbound_dedup table (atomic INSERT-or-fail
+    on `wa_message_id`). The previous timestamp ±90 s heuristic was loose
+    and could re-process messages that the live webhook had already handled
+    when two distinct messages arrived in the same minute."""
     instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
     cutoff = datetime.now(timezone.utc) - REPLAY_WINDOW
 
@@ -171,7 +202,15 @@ def tick_inbound_replay() -> dict:
             mts_raw = m.get("messageTimestamp")
             if not mts_raw:
                 continue
-            mts_int = int(mts_raw if isinstance(mts_raw, (int, float)) else mts_raw)
+            # Evolution v1.8 a veces serializa BigInt como dict {"low":N,"high":N}
+            # (long.js format). Soportamos int, float, str y dict.
+            if isinstance(mts_raw, dict):
+                low  = mts_raw.get("low") or 0
+                high = mts_raw.get("high") or 0
+                # high<<32 | low&0xFFFFFFFF (unsigned low)
+                mts_int = (high << 32) | (low & 0xFFFFFFFF)
+            else:
+                mts_int = int(mts_raw)
             if mts_int > 1_000_000_000_000:           # ms not s
                 mts_int = mts_int // 1000
             mts = datetime.fromtimestamp(mts_int, tz=timezone.utc)
@@ -190,7 +229,18 @@ def tick_inbound_replay() -> dict:
             except ValueError:
                 continue
 
-            if _seen_in_timeline(phone, mts):
+            # Primary dedup: the inbound_dedup table (mismo mecanismo que
+            # usa el webhook en vivo). Si ya está, el live webhook ya lo
+            # procesó o un replay anterior lo hizo.
+            msg_id = key.get("id")
+            if msg_id and not _claim_inbound_for_replay(msg_id):
+                skipped += 1
+                continue
+
+            # Secondary safety: si por algún motivo no había key.id en el
+            # payload de Evolution, aún hacemos el viejo dedup por timestamp
+            # para no replayear sobre lo que el webhook ya procesó.
+            if not msg_id and _seen_in_timeline(phone, mts):
                 skipped += 1
                 continue
 

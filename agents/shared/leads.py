@@ -177,6 +177,91 @@ def schedule_next_contact(
     return next_status
 
 
+def handle_reactivation_sent(lead_id: str, *, status: str, current_count: int) -> str:
+    """
+    Llamado por Agent 0 después de un envío exitoso de mensaje de
+    reactivación a un lead en estado post-engagement (link_sent /
+    in_conversation). Política Gelfis 2026-04-29:
+
+      link_sent + rc=0 → tras enviar primer reminder, schedule final +5d
+      link_sent + rc=1 → tras enviar último reminder, mark cold
+      in_conversation + rc=0 → tras enviar única reactivación, mark cold
+
+    Devuelve el nuevo status (puede ser el mismo, o 'cold').
+    """
+    new_count = current_count + 1
+    if status == "link_sent":
+        if new_count >= 2:
+            with get_conn() as conn, conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE leads
+                       SET reactivation_count = %s,
+                           status             = 'cold',
+                           next_contact_date  = NULL
+                     WHERE id = %s
+                    """,
+                    (new_count, lead_id),
+                )
+            log_timeline(
+                lead_id, type="status_change", author="agent_0",
+                content=f"Cold — link_sent: 2 reactivaciones sin booking.",
+            )
+            return "cold"
+        # Primer reminder enviado → programar segundo en +5d
+        next_dt = datetime.utcnow() + timedelta(days=5)
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE leads
+                   SET reactivation_count = %s,
+                       next_contact_date  = %s
+                 WHERE id = %s
+                """,
+                (new_count, next_dt, lead_id),
+            )
+        return "link_sent"
+
+    if status == "in_conversation":
+        # 1 reactivación es el máximo → tras enviarla, cold
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE leads
+                   SET reactivation_count = %s,
+                       status             = 'cold',
+                       next_contact_date  = NULL
+                 WHERE id = %s
+                """,
+                (new_count, lead_id),
+            )
+        log_timeline(
+            lead_id, type="status_change", author="agent_0",
+            content="Cold — in_conversation: sin respuesta tras reactivación.",
+        )
+        return "cold"
+
+    # Statuses no contemplados — solo incrementamos el contador y devolvemos
+    # el status actual (no debería ocurrir si compose_message está bien).
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE leads SET reactivation_count = %s WHERE id = %s",
+            (new_count, lead_id),
+        )
+    return status
+
+
+def reset_reactivation_count(lead_id: str) -> None:
+    """Llamado por Agent 4 cuando el lead vuelve a escribir. El lead se
+    considera 'engaged' otra vez, así que reseteamos el contador para que
+    una futura inactividad arranque desde cero."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE leads SET reactivation_count = 0 WHERE id = %s AND reactivation_count > 0",
+            (lead_id,),
+        )
+
+
 def _mark_cold(lead_id: str, *, reason: str) -> None:
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
