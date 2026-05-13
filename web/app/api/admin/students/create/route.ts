@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
+import { randomBytes } from "node:crypto";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { normalizePhone } from "@/lib/phone";
+
+function generateTempPassword(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = randomBytes(12);
+  let out = "";
+  for (let i = 0; i < 12; i++) out += alphabet[bytes[i] % alphabet.length];
+  return out;
+}
 
 /**
  * POST /api/admin/students/create
@@ -83,16 +93,22 @@ export async function POST(req: Request) {
       }, { status: 409 });
     }
   } else {
-    // Crear user
+    // Crear user con password temporal (must_change_password=true).
+    // El alumno usa el flujo de "olvidé mi contraseña" para establecer
+    // la suya cuando entra por primera vez. Lo mismo hace approve-teacher.
+    const tempPassword = generateTempPassword();
+    const passwordHash = await bcrypt.hash(tempPassword, 12);
     const { data: newUser, error: ue } = await sb
       .from("users")
       .insert({
-        email:                emailLower,
-        full_name:            b.full_name,
+        email:                 emailLower,
+        full_name:             b.full_name,
         phone,
-        role:                 "student",
-        language_preference:  b.language_preference,
-        active:               true,
+        role:                  "student",
+        language_preference:   b.language_preference,
+        active:                true,
+        password_hash:         passwordHash,
+        must_change_password:  true,
       })
       .select("id")
       .single();
