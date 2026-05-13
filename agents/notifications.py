@@ -33,6 +33,12 @@ NotificationKind = Literal[
     "reviewer_rejected_twice",
     "send_failed",
     "daily_summary",
+    # Reliability watchdogs (Phase 1 plan 2026-04-30)
+    "silent_inbound",
+    "unmatched_lid",
+    "evolution_down",
+    "trial_attended_pending",
+    "synthetic_test_failed",
 ]
 
 _SUPPRESSION_WINDOWS: dict[NotificationKind, timedelta] = {
@@ -41,6 +47,11 @@ _SUPPRESSION_WINDOWS: dict[NotificationKind, timedelta] = {
     "reviewer_rejected_twice": timedelta(hours=24),
     "send_failed":             timedelta(hours=6),
     "daily_summary":           timedelta(hours=12),
+    "silent_inbound":          timedelta(hours=2),     # 1 ping cada 2h por lead
+    "unmatched_lid":           timedelta(hours=6),
+    "evolution_down":          timedelta(minutes=30),  # alerta cada 30m mientras dure
+    "trial_attended_pending":  timedelta(hours=12),    # caso Sara: avisar 1×/12h
+    "synthetic_test_failed":   timedelta(hours=2),
 }
 
 
@@ -74,18 +85,27 @@ def _gelfis_number() -> str | None:
 def _recently_sent(kind: NotificationKind, lead_id: str | None) -> bool:
     window = _SUPPRESSION_WINDOWS[kind]
     cutoff = datetime.utcnow() - window
+    # Cast explícito a UUID para evitar IndeterminateDatatype cuando
+    # lead_id es None (psycopg v3 no infiere tipo de None en disjunción).
     with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT 1
-              FROM gelfis_notifications
-             WHERE kind = %s
-               AND sent_at >= %s
-               AND (lead_id = %s OR (lead_id IS NULL AND %s IS NULL))
-             LIMIT 1
-            """,
-            (kind, cutoff, lead_id, lead_id),
-        )
+        if lead_id is None:
+            cur.execute(
+                """
+                SELECT 1 FROM gelfis_notifications
+                 WHERE kind = %s AND sent_at >= %s AND lead_id IS NULL
+                 LIMIT 1
+                """,
+                (kind, cutoff),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT 1 FROM gelfis_notifications
+                 WHERE kind = %s AND sent_at >= %s AND lead_id = %s
+                 LIMIT 1
+                """,
+                (kind, cutoff, lead_id),
+            )
         return cur.fetchone() is not None
 
 
@@ -198,18 +218,63 @@ def notify_daily_summary() -> bool:
                                             AND updated_at >= NOW() - INTERVAL '7 days') AS conv_week,
               (SELECT COUNT(*) FROM leads WHERE status = 'trial_scheduled'
                                             AND trial_scheduled_at >= NOW()
-                                            AND trial_scheduled_at < NOW() + INTERVAL '1 day') AS trials_tomorrow
-        """, (today,))
+                                            AND trial_scheduled_at < NOW() + INTERVAL '1 day') AS trials_tomorrow,
+              (SELECT COUNT(*) FROM lead_timeline
+                WHERE type='lead_message_received' AND timestamp >= %s)                  AS inbounds_today,
+              (SELECT COUNT(*) FROM lead_timeline
+                WHERE type='system_message_sent' AND timestamp >= %s)                    AS outbounds_today,
+              (SELECT COUNT(*) FROM lead_timeline
+                WHERE type='send_failed' AND timestamp >= %s)                            AS send_failed_today,
+              count_silent_inbounds()                                                     AS silent_now
+        """, (today, today, today, today))
         row = cur.fetchone() or {}
 
+        # Tablas Phase 1+2 (no romper si aún no existen)
+        try:
+            cur.execute("""
+                SELECT
+                  COUNT(*) FILTER (WHERE resolved_at IS NULL
+                                  AND received_at >= %s)                                 AS unmatched_today,
+                  COUNT(*) FILTER (WHERE resolved_at IS NULL)                             AS unmatched_unresolved
+                  FROM unmatched_inbounds
+            """, (today,))
+            unm = cur.fetchone() or {}
+        except Exception:                                  # noqa: BLE001
+            unm = {"unmatched_today": 0, "unmatched_unresolved": 0}
+
+        try:
+            cur.execute("""
+                SELECT
+                  COUNT(*) FILTER (WHERE status='pending')                                AS q_pending,
+                  COUNT(*) FILTER (WHERE status='failed_permanent')                       AS q_failed
+                  FROM inbound_processing_queue
+            """)
+            q = cur.fetchone() or {}
+        except Exception:                                  # noqa: BLE001
+            q = {"q_pending": 0, "q_failed": 0}
+
+    health = "🟢" if (
+        (row.get("silent_now") or 0) == 0
+        and (unm.get("unmatched_unresolved") or 0) == 0
+        and (q.get("q_failed") or 0) == 0
+        and (row.get("send_failed_today") or 0) == 0
+    ) else "🟡"
+
     body = (
-        f"📊 Resumen del día\n"
+        f"📊 Resumen del día {health}\n"
         f"Nuevos leads hoy: {row.get('new_today', 0)}\n"
         f"En conversación: {row.get('active', 0)}\n"
         f"Esperándote (humano): {row.get('waiting', 0)}\n"
         f"Conversiones 7d: {row.get('conv_week', 0)}\n"
         f"Clases mañana: {row.get('trials_tomorrow', 0)}\n"
-        f"→ {_dash_link('') or os.environ.get('PUBLIC_SITE_URL', '') + '/admin'}"
+        f"\n📨 Mensajería\n"
+        f"Inbounds: {row.get('inbounds_today', 0)} · Outbounds: {row.get('outbounds_today', 0)}\n"
+        f"Fallos envío: {row.get('send_failed_today', 0)}\n"
+        f"\n🛡 Watchdogs\n"
+        f"Inbounds silenciosos AHORA: {row.get('silent_now', 0)}\n"
+        f"LIDs sin asociar (24h): {unm.get('unmatched_today', 0)} · acumulados: {unm.get('unmatched_unresolved', 0)}\n"
+        f"Cola inbound: {q.get('q_pending', 0)} pendientes · {q.get('q_failed', 0)} fallos perm.\n"
+        f"\n→ {_dash_link('') or os.environ.get('PUBLIC_SITE_URL', '') + '/admin'}"
     )
     return _send("daily_summary", body)
 
@@ -255,3 +320,186 @@ def scan_escalations_and_notify() -> int:
             if notify_needs_human(lead):
                 sent += 1
     return sent
+
+
+# =============================================================================
+# RELIABILITY WATCHDOGS (Phase 1 plan, 2026-04-30)
+# =============================================================================
+#
+# Estos jobs corren en el scheduler y detectan/escalan los modos de falla
+# que no se autodetectan por las escalaciones normales:
+#
+#   scan_silent_inbounds_and_alert  →  inbound del lead sin respuesta del bot
+#   scan_unmatched_lids_and_alert   →  LIDs nuevos que no resolvimos
+#   scan_evolution_health_and_alert →  sesión WhatsApp caída por X minutos
+#
+# Cada uno usa _send() con su NotificationKind y suppression window.
+# =============================================================================
+
+
+def scan_silent_inbounds_and_alert() -> int:
+    """
+    Detecta leads que escribieron en última 1h pero el bot NO respondió en
+    los siguientes 15 min, y avisa a Gelfis. Cubre el escenario 'Christian:
+    el inbound se loggeó pero handle_incoming_message falló silenciosamente'.
+
+    Filtros:
+      - status NOT IN (lost, converted, needs_human, cold)
+        → cold leads ya no nos interesan; needs_human ya tiene su propio ping
+      - ai_paused_until pasado o NULL
+      - El último lead_message_received del lead es >15min y <60min
+      - No hay system_message_sent / status_change / escalation DESPUÉS
+
+    Devuelve cantidad de notificaciones enviadas (después de suppression).
+    """
+    _ensure_table()
+    sent = 0
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            WITH last_inbound AS (
+                SELECT lt.lead_id, MAX(lt.timestamp) AS last_at
+                  FROM lead_timeline lt
+                 WHERE lt.type = 'lead_message_received'
+                   AND lt.timestamp > NOW() - INTERVAL '1 hour'
+                   AND lt.timestamp < NOW() - INTERVAL '15 minutes'
+                 GROUP BY lt.lead_id
+            )
+            SELECT li.lead_id, li.last_at,
+                   l.name, l.whatsapp_normalized, l.status, l.goal, l.urgency,
+                   (SELECT lt2.content FROM lead_timeline lt2
+                     WHERE lt2.lead_id = li.lead_id AND lt2.type='lead_message_received'
+                     ORDER BY lt2.timestamp DESC LIMIT 1) AS last_msg
+              FROM last_inbound li
+              JOIN leads l ON l.id = li.lead_id
+             WHERE l.status NOT IN ('lost','converted','needs_human','cold')
+               AND (l.ai_paused_until IS NULL OR l.ai_paused_until <= NOW())
+               AND NOT EXISTS (
+                   SELECT 1 FROM lead_timeline lt3
+                    WHERE lt3.lead_id = li.lead_id
+                      AND lt3.timestamp > li.last_at
+                      AND lt3.type IN ('system_message_sent','status_change','escalation')
+               )
+            """
+        )
+        rows = list(cur.fetchall())
+
+    for r in rows:
+        body = (
+            f"🔇 Lead escribió y nadie respondió\n"
+            f"{r['name']} — {r['whatsapp_normalized']}\n"
+            f"Status: {r['status']} · Hace {_minutes_since(r['last_at'])} min\n"
+            f"Mensaje: \"{(r['last_msg'] or '')[:120]}\"\n"
+            f"→ {_dash_link(r['lead_id'])}"
+        )
+        if _send("silent_inbound", body, lead_id=r["lead_id"]):
+            sent += 1
+    if sent:
+        log.info("[silent_inbound_watchdog] alerted Gelfis on %d lead(s)", sent)
+    return sent
+
+
+def scan_unmatched_lids_and_alert() -> int:
+    """
+    Si _resolve_lead_for_lid devolvió None y registró el caso en
+    unmatched_inbounds, alertar a Gelfis con los candidatos de outbound
+    reciente para que pueda mapearlo manualmente desde /admin.
+    """
+    _ensure_table()
+    sent = 0
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, jid, push_name, content_preview, received_at, candidates
+                  FROM unmatched_inbounds
+                 WHERE resolved_at IS NULL
+                   AND received_at > NOW() - INTERVAL '24 hours'
+                   AND received_at < NOW() - INTERVAL '5 minutes'
+                """
+            )
+            rows = list(cur.fetchall())
+    except Exception as e:                              # noqa: BLE001
+        # Tabla no existe aún (primer arranque) — no es crítico
+        log.info("unmatched_inbounds table not ready: %s", e)
+        return 0
+
+    for r in rows:
+        body = (
+            f"❓ Inbound sin matchear lead\n"
+            f"JID: {r['jid']} · push: \"{r['push_name'] or '—'}\"\n"
+            f"Hace {_minutes_since(r['received_at'])} min\n"
+            f"Mensaje: \"{(r['content_preview'] or '')[:80]}\"\n"
+            f"Candidatos: {r['candidates'] or '(ninguno)'}\n"
+            f"→ /admin/leads (revisar manualmente)"
+        )
+        if _send("unmatched_lid", body, lead_id=None):
+            sent += 1
+    if sent:
+        log.info("[unmatched_lid_watchdog] alerted Gelfis on %d unmatched(s)", sent)
+    return sent
+
+
+def scan_evolution_health_and_alert() -> int:
+    """
+    Si la sesión de Evolution está close/connecting/unknown por más de 5 min,
+    alertar Gelfis para que reescanee el QR (o mire los logs).
+    """
+    _ensure_table()
+    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    try:
+        wa = WhatsAppService()
+        state = wa.get_connection_state(instance)
+    except Exception as e:                              # noqa: BLE001
+        state = "unknown"
+        log.warning("[evolution_health] couldn't fetch state: %s", e)
+
+    if state == "open":
+        return 0
+
+    body = (
+        f"📵 Evolution session NO está conectada\n"
+        f"Estado actual: {state}\n"
+        f"Instance: {instance}\n"
+        f"→ /admin/system → revisa QR si hace falta"
+    )
+    return 1 if _send("evolution_down", body, lead_id=None) else 0
+
+
+def notify_trial_attended_pending(lead: dict) -> bool:
+    """
+    Caso Sara 2026-04-30: lead asistió al trial, status=trial_attended,
+    Gelfis tiene que decidir si convertir o lost. El bot NO debe auto-
+    mensajear estos leads. Aviso una vez cuando entran a este estado.
+    """
+    name = lead.get("name") or "(sin nombre)"
+    body = (
+        f"✋ Decisión pendiente sobre lead\n"
+        f"{name} — {lead.get('whatsapp_normalized')}\n"
+        f"Asistió al trial. ¿Convertir o lost?\n"
+        f"→ {_dash_link(lead['id'])}"
+    )
+    return _send("trial_attended_pending", body, lead_id=lead["id"])
+
+
+def notify_synthetic_test_failed(reason: str) -> bool:
+    """
+    Cron diario sintético detectó un fallo en el flujo end-to-end.
+    Esto es CRÍTICO — significa que el sistema no está procesando bien.
+    """
+    body = (
+        f"🚨 Test sintético FALLÓ\n"
+        f"Razón: {reason[:300]}\n"
+        f"→ /admin/system para diagnosticar"
+    )
+    return _send("synthetic_test_failed", body, lead_id=None)
+
+
+def _minutes_since(dt: datetime) -> int:
+    if dt is None:
+        return 0
+    if dt.tzinfo is None:
+        from datetime import timezone
+        dt = dt.replace(tzinfo=timezone.utc)
+    delta = datetime.now(dt.tzinfo) - dt
+    return max(0, int(delta.total_seconds() / 60))
