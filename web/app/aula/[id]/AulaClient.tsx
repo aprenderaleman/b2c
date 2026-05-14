@@ -155,10 +155,13 @@ export function AulaClient(p: Props) {
         onDisconnected={() => {
           // Decide where to send the user when LiveKit disconnects:
           //   host    → /profesor (handled by HostTeardown via custom event)
-          //   student → SCHULE (keep the learning loop tight — Gelfis spec)
-          //   lead    → /confirmacion is already in their history; bounce
-          //             them to the public site so they don't get stuck on
-          //             a half-loaded /aula screen.
+          //   student → su dashboard /estudiante (decisión Gelfis 2026-05-14:
+          //             antes los mandábamos a SCHULE como "keep the
+          //             learning loop tight", pero confundía — preferimos
+          //             devolverlos al dashboard donde ven sus próximas
+          //             clases, materiales, grabaciones, etc.)
+          //   lead    → bounce al público para que no se queden en
+          //             /aula colgado.
           if (p.isHost) {
             // HostTeardown handles this branch with router.push so SSR
             // state survives. Just emit the legacy event for it.
@@ -171,8 +174,8 @@ export function AulaClient(p: Props) {
             window.location.href = "https://aprender-aleman.de";
             return;
           }
-          // Default = student. SSO into SCHULE keeps them learning.
-          window.location.href = "/api/entitlements/schule-open";
+          // Default = student → dashboard del alumno.
+          window.location.href = "/estudiante";
         }}
         className="flex-1 min-h-0 flex flex-col"
       >
