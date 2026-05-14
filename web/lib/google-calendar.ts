@@ -148,6 +148,69 @@ export async function createTrialEvent(a: CreateArgs): Promise<CreatedEvent | nu
 
 
 /**
+ * Crea un evento de "llamada informativa de 15 min" en el calendar
+ * de Gelfis. Usado por el flujo de propuesta de llamada que se ofrece
+ * a los leads que no agendan clase de prueba.
+ *
+ * No incluye joinUrl (la llamada es por WhatsApp/teléfono, no en aula
+ * virtual). La descripción lleva los datos básicos del lead para que
+ * Gelfis llegue preparado a la llamada.
+ */
+export async function createInfoCallEvent(a: {
+  leadName:        string;
+  startIso:        string;
+  durationMinutes: number;            // 15 por defecto
+  leadEmail:       string | null;
+  leadWhatsapp:    string | null;
+  germanLevel:     string | null;
+  goal:            string | null;
+  motivoInicial:   string | null;
+}): Promise<CreatedEvent | null> {
+  const cal = await getCalendarClient();
+  if (!cal) return null;
+
+  const calendarId = process.env.GOOGLE_CALENDAR_ID!;
+  const start = new Date(a.startIso);
+  const end   = new Date(start.getTime() + a.durationMinutes * 60_000);
+
+  const leadFirst = (a.leadName || "").split(/\s+/)[0] || a.leadName || "Lead";
+
+  const lines: string[] = [
+    `Llamada informativa de ${a.durationMinutes} min con un lead que se registró pero aún no agendó clase de prueba.`,
+    "",
+    "—",
+    `Lead: ${a.leadName}`,
+    a.leadEmail    ? `Email: ${a.leadEmail}` : null,
+    a.leadWhatsapp ? `WhatsApp: ${a.leadWhatsapp}` : null,
+    a.germanLevel  ? `Nivel: ${a.germanLevel}` : null,
+    a.goal         ? `Objetivo: ${a.goal}` : null,
+    a.motivoInicial ? `Motivo inicial: ${a.motivoInicial}` : null,
+  ].filter(Boolean) as string[];
+
+  try {
+    const res = await cal.events.insert({
+      calendarId,
+      requestBody: {
+        summary:     `📞 Llamada ${leadFirst} (${a.durationMinutes} min)`,
+        description: lines.join("\n"),
+        start: { dateTime: start.toISOString(), timeZone: "Europe/Berlin" },
+        end:   { dateTime: end.toISOString(),   timeZone: "Europe/Berlin" },
+        reminders: { useDefault: false, overrides: [] },
+      },
+    });
+    const data = res.data;
+    if (!data.id) {
+      console.warn("[gcal] info-call insert returned no event id");
+      return null;
+    }
+    return { eventId: data.id, htmlLink: data.htmlLink ?? null };
+  } catch (e) {
+    console.error("[gcal] info-call insert failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
  * Mueve un evento existente a un nuevo horario. Usado por el flujo de
  * "cambio de hora" del trial (agents/reschedule_flow.py). Idempotente:
  * si el evento no existe (404) lo logueamos y devolvemos false para que

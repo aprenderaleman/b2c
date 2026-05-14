@@ -131,27 +131,31 @@ async function runCron(req: Request) {
         // los dos sale, contamos el msg como entregado y avanzamos
         // last_drip_msg_n. Loguamos los fallos individuales en
         // timeline para diagnóstico.
+        //
+        // Cambio 2026-05-14: en lugar de empujar al lead al funnel de
+        // agendar clase de prueba, le ofrecemos una llamada de 15 min
+        // con Gelfis. La respuesta del lead la maneja agent_4 con un
+        // handler nuevo (`_handle_call_time_proposal`) que parsea la
+        // hora vía Claude y la agenda en Google Calendar si está libre.
         kind = "wa+email";
         const waText = lead.language === "de"
           ? [
-              `Hallo ${firstName}, hier ist Stiv von Aprender-Aleman.de 👋`,
+              `Hallo ${firstName}! 👋`,
               ``,
-              `Dein persönlicher Deutschplan ist fertig. Um ihn zu starten, lade ich dich zu einer kostenlosen 30-Min-Probestunde mit einer muttersprachlichen Lehrkraft ein.`,
+              `Schön, dich kennenzulernen, ich bin Stiv von der Akademie Aprender-Aleman.de.`,
               ``,
-              `📅 Hier buchen: ${bookUrl}`,
+              `Wir haben dein Interesse am Deutschlernen erhalten. Hast du Lust auf ein 15-Minuten-Gespräch, damit ich dir erkläre, wie wir dir helfen können?`,
               ``,
-              `Bei Fragen schreib mir einfach hier.`,
-              `— Stiv`,
+              `Wann würde es dir heute oder morgen passen, dass ich dich anrufe?`,
             ].join("\n")
           : [
-              `Hola ${firstName}, soy Stiv de Aprender-Aleman.de 👋`,
+              `¡Hola ${firstName}!`,
               ``,
-              `Tu plan personalizado de alemán está listo. Para activarlo te invito a una clase de prueba GRATIS de 30 min con un profesor nativo certificado.`,
+              `Es un gusto saludarte, soy Stiv de la academia Aprender-Aleman.de. 👋`,
               ``,
-              `📅 Agenda aquí: ${bookUrl}`,
+              `Recibimos tu interés para aprender alemán. ¿Te parece si hablamos 15 minutos para contarte cómo podemos ayudarte a lograrlo?`,
               ``,
-              `Cualquier duda, escríbeme por aquí.`,
-              `— Stiv`,
+              `¿A qué hora te vendría bien que te llame hoy o mañana?`,
             ].join("\n");
 
         const sendEmail = lead.email

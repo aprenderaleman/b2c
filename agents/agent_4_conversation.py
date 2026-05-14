@@ -402,6 +402,19 @@ def handle_incoming_message(
     if status in ("trial_scheduled", "trial_reminded"):
         return _handle_trial_already_booked(lead, text, wa)
 
+    # INFO-CALL TIME PROPOSAL — el msg 1 del drip ahora le propone al lead
+    # una llamada informativa de 15 min con Gelfis (cambio 2026-05-14). Si
+    # el lead respondió con una hora ("mañana a las 10", "hoy a las 18:30",
+    # etc.) parseamos vía Claude y agendamos en Google Calendar.
+    #
+    # Gate: status='registered' (drip activo) AND last_drip_msg_n >= 1
+    # (msg 1 ya salió). El handler devuelve None si no parece propuesta de
+    # hora → caemos al flujo normal.
+    if status == "registered" and (lead.get("last_drip_msg_n") or 0) >= 1:
+        res = _try_handle_call_time_proposal(lead, text, wa)
+        if res is not None:
+            return res
+
     # LAYER 1 — keywords (zero AI cost). Order matters: info-call wins
     # over booking ("quiero una llamada" mustn't fire booking on "quiero").
     if _has_phrase(text_norm, INFO_CALL_WORDS[lang] + INFO_CALL_WORDS[other_lang]):
@@ -656,6 +669,194 @@ def _handle_booking(lead: dict, wa: WhatsAppService | None) -> HandleResult:
     update_status(lead["id"], "in_conversation", author="agent_4")
     result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
     return HandleResult("booking", sent=result.success, message_sent=body)
+
+
+def _try_handle_call_time_proposal(
+    lead: dict, text: str, wa: WhatsAppService | None,
+) -> HandleResult | None:
+    """Lead respondió al msg 1 del drip de followups proponiendo una hora.
+
+    Pasos:
+      1. Pedirle a Claude (Haiku) que extraiga un datetime ISO desde el
+         texto del lead, usando "ahora" en Europe/Berlin como ancla.
+      2. Si Claude devuelve un horario válido → llamar al endpoint
+         /api/internal/info-call/book.
+      3. Confirmar al lead o pedir otra hora si está ocupado.
+
+    Devuelve `None` (= "no era una propuesta de hora") si Claude no
+    detecta intención de proponer horario — el caller cae al flujo normal.
+    """
+    import json as _json
+    import os as _os
+    from datetime import timedelta
+    import httpx
+
+    from agents.shared.claude_client import MODEL_HAIKU, complete_json
+
+    lang = lead.get("language", "es")
+    name_first = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
+
+    # 1) Parsear hora con Claude
+    now_berlin = datetime.now(BERLIN)
+    schema = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["proposes_time", "datetime_iso", "ambiguous", "reasoning"],
+        "properties": {
+            "proposes_time": {
+                "type": "boolean",
+                "description": "True solo si el mensaje propone una hora/momento concreto para una llamada o pregunta sobre disponibilidad. False si es una pregunta, queja, negativa, o tema no relacionado.",
+            },
+            "datetime_iso": {
+                "type": ["string", "null"],
+                "description": "ISO 8601 con offset Europe/Berlin (ej '2026-05-15T10:00:00+02:00'). Null si proposes_time=false o si la hora es demasiado vaga.",
+            },
+            "ambiguous": {
+                "type": "boolean",
+                "description": "True si la hora es ambigua (ej 'por la tarde' sin hora concreta, 'cuando puedas').",
+            },
+            "reasoning": { "type": "string", "description": "Breve explicación (≤ 80 chars)." },
+        },
+    }
+    system = (
+        f"Eres un parser de fechas en español/alemán. Dado un mensaje de WhatsApp de un lead, "
+        f"determina si propone una hora concreta para una llamada de 15 min.\n\n"
+        f"ANCLA TEMPORAL: ahora son las {now_berlin.strftime('%Y-%m-%d %H:%M')} hora de Berlín "
+        f"({now_berlin.strftime('%A')}). Resuelve frases relativas ('hoy', 'mañana', 'pasado mañana', "
+        f"'el lunes', 'esta tarde', 'a las 5') a partir de este momento.\n\n"
+        f"REGLAS:\n"
+        f"- 'por la tarde' / 'cuando puedas' / 'en cualquier momento' → ambiguous=true, datetime_iso=null.\n"
+        f"- 'mañana a las 10' (sin AM/PM en contexto laboral) → 10:00 si es razonable (10am).\n"
+        f"- 'a las 5 de la tarde' → 17:00. 'a las 5' sin contexto → 17:00 (asumimos laboral).\n"
+        f"- Si el lead solo dice 'sí', 'ok', 'vale', 'no gracias' → proposes_time=false.\n"
+        f"- Si hace una pregunta sin proponer hora (ej '¿cuánto cuesta?') → proposes_time=false."
+    )
+    user = f"Idioma del lead: {lang}\nMensaje:\n{text.strip()[:500]}"
+
+    try:
+        parsed, _ = complete_json(
+            model=MODEL_HAIKU, system=system, user=user, schema=schema,
+            max_tokens=200, cache_system=False,
+        )
+    except Exception as e:                                       # noqa: BLE001
+        log.warning("[call_time] claude parse failed lead=%s: %s", lead["id"], e)
+        return None
+
+    if not parsed.get("proposes_time"):
+        return None  # No es una propuesta — caer al flujo normal
+
+    # 2) Hora ambigua → pedir aclaración. Cuenta como "manejado" (no caer).
+    if parsed.get("ambiguous") or not parsed.get("datetime_iso"):
+        body = (
+            f"Hallo {name_first}, kannst du mir eine konkrete Uhrzeit nennen? "
+            f"Z.B. 'morgen 10:00' oder 'heute 17:30'.\n\n{_sig(lang)}"
+            if lang == "de"
+            else
+            f"¡Hola {name_first}! ¿Podrías darme una hora concreta? "
+            f"Por ejemplo: 'mañana a las 10:00' o 'hoy 17:30'.\n\n{_sig(lang)}"
+        )
+        result = send_approved(lead, body, is_new_conversation=False,
+                               advance_followup=False, wa=wa)
+        log_timeline(
+            lead["id"], type="agent_note", author="agent_4",
+            content="Propuesta de hora ambigua — pidiendo concreción.",
+            metadata={"kind": "call_time_ambiguous", "raw_text": text[:300],
+                      "parser_reasoning": parsed.get("reasoning", "")},
+        )
+        return HandleResult("ai_reply", sent=result.success, message_sent=body)
+
+    # 3) Hora válida → intentar agendar
+    try:
+        start = datetime.fromisoformat(str(parsed["datetime_iso"]).replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        log.warning("[call_time] claude returned unparseable iso: %r", parsed.get("datetime_iso"))
+        return None
+
+    cron_secret = _os.environ.get("CRON_SECRET")
+    if not cron_secret:
+        log.error("[call_time] CRON_SECRET missing — no puedo llamar al endpoint de booking")
+        return None
+
+    payload = {"lead_id": lead["id"], "start_iso": start.isoformat(), "duration_minutes": 15}
+    try:
+        r = httpx.post(
+            f"{WEB_BASE}/api/internal/info-call/book",
+            json=payload,
+            headers={"Authorization": f"Bearer {cron_secret}"},
+            timeout=15.0,
+        )
+    except Exception as e:                                       # noqa: BLE001
+        log.error("[call_time] booking request failed: %s", e)
+        return None
+
+    # Format pretty time for the reply
+    nice_time = start.astimezone(BERLIN).strftime("%A %d/%m a las %H:%M")
+    # Capitalize weekday in es: lunes → Lunes
+    nice_time = nice_time[:1].upper() + nice_time[1:]
+
+    if r.status_code == 200:
+        # ¡Agendada!
+        body = (
+            f"Super, {name_first}! Termin gespeichert: {nice_time} (Berliner Zeit). "
+            f"Ich rufe dich pünktlich auf WhatsApp an.\n\n{_sig(lang)}"
+            if lang == "de"
+            else
+            f"¡Perfecto, {name_first}! Te llamo el {nice_time} (hora Berlín). "
+            f"Te marco por WhatsApp puntual.\n\n{_sig(lang)}"
+        )
+        result = send_approved(lead, body, is_new_conversation=False,
+                               advance_followup=False, wa=wa)
+        return HandleResult("ai_reply", sent=result.success, message_sent=body)
+
+    if r.status_code == 409:
+        # Ocupado — pedir otra hora
+        body = (
+            f"Ay, {name_first}, justo a esa hora ya tengo otra cosa. "
+            f"¿Me das otra alternativa de hoy o mañana?\n\n{_sig(lang)}"
+            if lang != "de"
+            else
+            f"Hallo {name_first}, zu der Uhrzeit habe ich leider schon einen Termin. "
+            f"Hast du eine andere Option für heute oder morgen?\n\n{_sig(lang)}"
+        )
+        result = send_approved(lead, body, is_new_conversation=False,
+                               advance_followup=False, wa=wa)
+        log_timeline(
+            lead["id"], type="agent_note", author="agent_4",
+            content=f"Hora propuesta ocupada ({nice_time}) — pidiendo alternativa.",
+            metadata={"kind": "call_time_busy", "proposed_iso": start.isoformat()},
+        )
+        return HandleResult("ai_reply", sent=result.success, message_sent=body)
+
+    # Otros errores: log + caer al flujo normal para que la IA general gestione
+    try:
+        err_body = r.json()
+    except Exception:                                            # noqa: BLE001
+        err_body = {"raw": r.text[:200]}
+    log.error("[call_time] booking failed status=%d body=%r", r.status_code, err_body)
+    # Para casos como in_the_past, too_far_in_future devolvemos un mensaje
+    # específico y consideramos manejado:
+    if r.status_code == 400 and err_body.get("error") == "in_the_past":
+        body = (
+            f"Esa hora ya pasó, {name_first} 😅. ¿Otra opción para hoy o mañana?\n\n{_sig(lang)}"
+            if lang != "de"
+            else
+            f"Diese Uhrzeit ist schon vorbei, {name_first} 😅. Hast du eine andere Option für heute oder morgen?\n\n{_sig(lang)}"
+        )
+        result = send_approved(lead, body, is_new_conversation=False,
+                               advance_followup=False, wa=wa)
+        return HandleResult("ai_reply", sent=result.success, message_sent=body)
+    if r.status_code == 400 and err_body.get("error") == "too_far_in_future":
+        body = (
+            f"Mejor agendamos esta semana o la próxima. ¿Te viene bien hoy o mañana, {name_first}?\n\n{_sig(lang)}"
+            if lang != "de"
+            else
+            f"Buchen wir lieber diese oder nächste Woche. Geht heute oder morgen, {name_first}?\n\n{_sig(lang)}"
+        )
+        result = send_approved(lead, body, is_new_conversation=False,
+                               advance_followup=False, wa=wa)
+        return HandleResult("ai_reply", sent=result.success, message_sent=body)
+
+    return None  # error inesperado → caer al flujo normal (LLM intentará)
 
 
 def _handle_info_call_request(lead: dict, wa: WhatsAppService | None) -> HandleResult:
