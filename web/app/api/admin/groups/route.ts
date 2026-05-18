@@ -14,8 +14,11 @@ const Body = z.object({
   class_type:   z.enum(["group", "individual"]),
   level:        z.enum(["A0","A1","A2","B1","B2","C1","C2"]).nullable().optional(),
   teacher_id:   z.string().uuid().nullable().optional(),
-  meet_link:    z.string().url().nullable().optional(),
-  document_url: z.string().url().nullable().optional(),
+  // URLs: aceptamos string libre + normalizamos abajo (auto-prepend
+  // https:// si falta). El .url() estricto rechazaba copy-paste de
+  // Google Docs sin esquema y la UI solo mostraba "Error al guardar".
+  meet_link:    z.string().trim().max(500).nullable().optional(),
+  document_url: z.string().trim().max(500).nullable().optional(),
   capacity:     z.coerce.number().int().min(1).max(50).default(10),
   notes:        z.string().trim().max(2000).nullable().optional(),
   total_sessions: z.coerce.number().int().min(1).max(500).nullable().optional(),
@@ -39,14 +42,25 @@ export async function POST(req: Request) {
   }
   const b = parsed.data;
 
+  // Auto-prepend https:// si falta esquema (Google Docs share links se
+  // copian sin scheme con frecuencia).
+  const normalizeUrl = (v: string | null | undefined): string | null => {
+    if (!v) return null;
+    const s = v.trim();
+    if (!s) return null;
+    if (/^https?:\/\//i.test(s)) return s;
+    if (s.startsWith("//")) return `https:${s}`;
+    return `https://${s}`;
+  };
+
   const sb = supabaseAdmin();
   const { data, error } = await sb.from("student_groups").insert({
     name:         b.name,
     class_type:   b.class_type,
     level:        b.level ?? null,
     teacher_id:   b.teacher_id ?? null,
-    meet_link:    b.meet_link ?? null,
-    document_url: b.document_url ?? null,
+    meet_link:    normalizeUrl(b.meet_link),
+    document_url: normalizeUrl(b.document_url),
     capacity:     b.capacity,
     notes:        b.notes ?? null,
     total_sessions: b.total_sessions ?? null,

@@ -20,8 +20,13 @@ const Body = z.object({
    *  sync to the first array element so older queries still work. */
   levels:       z.array(CEFR).max(7).optional(),
   teacher_id:   z.string().uuid().nullable().optional(),
-  meet_link:    z.string().url().nullable().optional().or(z.literal("")),
-  document_url: z.string().url().nullable().optional().or(z.literal("")),
+  // URLs: aceptamos string libre, no validamos formato. Antes con
+  // `.url()` estricto el Zod rechazaba URLs sin esquema (típico al
+  // copiar de Google Docs sin "https://") y la UI solo mostraba
+  // "Error al guardar". El normalizador de abajo añade el esquema
+  // si falta. Riesgo XSS no aplica: el valor se usa solo en href.
+  meet_link:    z.string().trim().max(500).nullable().optional().or(z.literal("")),
+  document_url: z.string().trim().max(500).nullable().optional().or(z.literal("")),
   capacity:     z.coerce.number().int().min(1).max(50).optional(),
   notes:        z.string().trim().max(2000).nullable().optional(),
   active:       z.boolean().optional(),
@@ -58,10 +63,21 @@ export async function PATCH(
   }
   const b = parsed.data;
 
-  // Normalise empty strings to null for URL fields
+  // Normalise URL fields:
+  //   empty/whitespace → null
+  //   sin esquema (ej. "docs.google.com/..." al copy-paste) → prepend
+  //   "https://" para que href funcione correctamente.
+  const normalizeUrl = (v: unknown): string | null => {
+    if (typeof v !== "string") return null;
+    const s = v.trim();
+    if (!s) return null;
+    if (/^https?:\/\//i.test(s)) return s;
+    if (s.startsWith("//")) return `https:${s}`;
+    return `https://${s}`;
+  };
   const update: Record<string, unknown> = { ...b };
-  if (update.meet_link    === "") update.meet_link    = null;
-  if (update.document_url === "") update.document_url = null;
+  if ("meet_link"    in b) update.meet_link    = normalizeUrl(b.meet_link);
+  if ("document_url" in b) update.document_url = normalizeUrl(b.document_url);
 
   // If `levels` is provided, keep the legacy single-column `level` in sync
   // with the first array element (or null if the array is empty) so older

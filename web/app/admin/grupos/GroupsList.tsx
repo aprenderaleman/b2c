@@ -314,7 +314,21 @@ function GroupModal({
         body:    JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data?.message ?? data?.error ?? "Error al guardar"); return; }
+      if (!res.ok) {
+        // Si Zod devuelve `details.fieldErrors`, mostramos qué campo
+        // falló — útil cuando un URL no parsea, antes solo veíamos
+        // "Error al guardar" sin pista.
+        const fieldErrs = data?.details?.fieldErrors as Record<string, string[]> | undefined;
+        if (fieldErrs) {
+          const msgs = Object.entries(fieldErrs)
+            .map(([k, v]) => `${k}: ${(v ?? []).join(", ")}`)
+            .join(" · ");
+          setError(msgs || data?.message || data?.error || "Error al guardar");
+        } else {
+          setError(data?.message ?? data?.error ?? "Error al guardar");
+        }
+        return;
+      }
       onSaved();
     });
   };
