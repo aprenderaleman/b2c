@@ -14,6 +14,8 @@ export type TeacherGroup = {
   notes:          string | null;
   total_sessions: number | null;
   members:        GroupMember[];
+  document_url:   string | null;
+  meet_link:      string | null;
 };
 
 export function TeacherGroupsList({ groups }: { groups: TeacherGroup[] }) {
@@ -85,6 +87,8 @@ export function TeacherGroupsList({ groups }: { groups: TeacherGroup[] }) {
             notes:          editing.notes,
             total_sessions: editing.total_sessions,
             members:        editing.members,
+            document_url:   editing.document_url ?? null,
+            meet_link:      editing.meet_link    ?? null,
           }}
           onClose={() => setEditing(null)}
           onSaved={() => setEditing(null)}

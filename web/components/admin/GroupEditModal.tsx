@@ -41,6 +41,10 @@ export function GroupEditModal({
     notes:          string | null;
     total_sessions: number | null;
     members:        GroupMember[];
+    // Opcionales — si el caller los pasa, mostramos los campos
+    // editables. Si no, simplemente no aparecen (legacy / restringido).
+    document_url?:  string | null;
+    meet_link?:     string | null;
   };
   onSaved?: () => void;
 }) {
@@ -51,6 +55,11 @@ export function GroupEditModal({
   const [totalSessions, setTotalSessions] = useState<number | "">(group.total_sessions ?? "");
   const [notes,    setNotes]    = useState(group.notes ?? "");
   const [members,  setMembers]  = useState<GroupMember[]>(group.members);
+  // URLs editables (solo se renderizan si el caller pasó el campo,
+  // ver `showUrls` abajo).
+  const showUrls = group.document_url !== undefined || group.meet_link !== undefined;
+  const [documentUrl, setDocumentUrl] = useState(group.document_url ?? "");
+  const [meetLink,    setMeetLink]    = useState(group.meet_link ?? "");
 
   const [pool,     setPool]     = useState<GroupMember[]>([]);
   const [poolLoaded, setPoolLoaded] = useState(false);
@@ -68,6 +77,8 @@ export function GroupEditModal({
     setTotalSessions(group.total_sessions ?? "");
     setNotes(group.notes ?? "");
     setMembers(group.members);
+    setDocumentUrl(group.document_url ?? "");
+    setMeetLink(group.meet_link ?? "");
     setError(null);
     setPoolQuery("");
   }, [open, group]);
@@ -152,6 +163,13 @@ export function GroupEditModal({
     };
     if (capacity !== "")        payload.capacity        = Number(capacity);
     payload.total_sessions = totalSessions === "" ? null : Number(totalSessions);
+    // URLs solo si el modal las renderizó (el caller las pasó). Si
+    // no, no las tocamos — evitamos accidentes tipo "edito desde un
+    // sitio que no las muestra y se borran".
+    if (showUrls) {
+      payload.document_url = documentUrl.trim() || null;
+      payload.meet_link    = meetLink.trim()    || null;
+    }
 
     start(async () => {
       const res = await fetch(apiBase, {
@@ -271,6 +289,39 @@ export function GroupEditModal({
               rows={2} className="input-text w-full resize-y"
             />
           </Field>
+
+          {/* URLs (solo cuando el caller los habilita) */}
+          {showUrls && (
+            <>
+              <Field label="Google Doc (URL)">
+                <input
+                  type="text"
+                  value={documentUrl}
+                  onChange={e => setDocumentUrl(e.target.value)}
+                  className="input-text w-full"
+                  placeholder="https://docs.google.com/document/d/…/edit"
+                />
+                {documentUrl && (
+                  <a
+                    href={/^https?:\/\//i.test(documentUrl.trim()) ? documentUrl.trim() : `https://${documentUrl.trim()}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="mt-1 inline-block text-xs text-brand-600 dark:text-brand-400 hover:underline"
+                  >
+                    Abrir para probar →
+                  </a>
+                )}
+              </Field>
+              <Field label="Google Meet / Zoom (URL, opcional)">
+                <input
+                  type="text"
+                  value={meetLink}
+                  onChange={e => setMeetLink(e.target.value)}
+                  className="input-text w-full"
+                  placeholder="https://meet.google.com/abc-defg-hij"
+                />
+              </Field>
+            </>
+          )}
 
           {/* Members */}
           <section className="pt-3 border-t border-slate-100 dark:border-slate-800">

@@ -36,6 +36,7 @@ export default async function TeacherGroupsPage() {
     .from("student_groups")
     .select(`
       id, name, class_type, level, levels, capacity, notes, active, total_sessions,
+      document_url, meet_link,
       student_group_members(
         student:students!inner(
           id, current_level,
@@ -52,6 +53,7 @@ export default async function TeacherGroupsPage() {
     level: string | null; levels: Level[] | null;
     capacity: number | null; notes: string | null; active: boolean;
     total_sessions: number | null;
+    document_url: string | null; meet_link: string | null;
     student_group_members: Array<{
       student: { id: string; current_level: string | null;
                  users: { full_name: string | null; email: string } |
@@ -88,6 +90,8 @@ export default async function TeacherGroupsPage() {
       notes:          g.notes,
       total_sessions: g.total_sessions,
       members,
+      document_url:   g.document_url,
+      meet_link:      g.meet_link,
     };
   });
 

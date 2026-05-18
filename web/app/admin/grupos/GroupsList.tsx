@@ -147,6 +147,8 @@ export function GroupsList({
             notes:          editing.notes,
             total_sessions: editing.total_sessions,
             members:        editing.members,
+            document_url:   editing.document_url ?? null,
+            meet_link:      editing.meet_link    ?? null,
           }}
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); router.refresh(); }}

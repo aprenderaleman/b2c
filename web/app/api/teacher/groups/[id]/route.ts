@@ -23,8 +23,10 @@ const Body = z.object({
   name:         z.string().trim().min(2).max(200).optional(),
   levels:       z.array(CEFR).max(7).optional(),
   capacity:     z.coerce.number().int().min(1).max(50).optional(),
-  meet_link:    z.string().url().nullable().optional().or(z.literal("")),
-  document_url: z.string().url().nullable().optional().or(z.literal("")),
+  // URLs flexibles + normalización abajo (auto-prepend https://).
+  // Mismo fix que /api/admin/groups/[id] (2026-05-13) por consistencia.
+  meet_link:    z.string().trim().max(500).nullable().optional().or(z.literal("")),
+  document_url: z.string().trim().max(500).nullable().optional().or(z.literal("")),
   notes:        z.string().trim().max(2000).nullable().optional(),
 }).refine(b => Object.keys(b).length > 0, { message: "no_changes" });
 
@@ -72,8 +74,17 @@ export async function PATCH(
 
   const b = parsed.data;
   const update: Record<string, unknown> = { ...b };
-  if (update.meet_link    === "") update.meet_link    = null;
-  if (update.document_url === "") update.document_url = null;
+  // Normalizar URLs: vacío → null, sin esquema → "https://..."
+  const normalizeUrl = (v: unknown): string | null => {
+    if (typeof v !== "string") return null;
+    const s = v.trim();
+    if (!s) return null;
+    if (/^https?:\/\//i.test(s)) return s;
+    if (s.startsWith("//")) return `https:${s}`;
+    return `https://${s}`;
+  };
+  if ("meet_link"    in b) update.meet_link    = normalizeUrl(b.meet_link);
+  if ("document_url" in b) update.document_url = normalizeUrl(b.document_url);
   if (Array.isArray(b.levels)) update.level = b.levels[0] ?? null;
 
   const { error } = await sb.from("student_groups").update(update).eq("id", id);
