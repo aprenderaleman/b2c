@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
@@ -111,6 +111,40 @@ export async function signRecordingUrl(
  * false only when R2 is configured but the delete errored, so the
  * caller can decide whether to also drop the DB row.
  */
+/**
+ * Sube un objeto arbitrario a R2 y devuelve la URL pública (no firmada).
+ * Para reproducción/descarga posterior, se firma con signRecordingUrl.
+ *
+ * @param key   Object key dentro del bucket (sin slash inicial). P.ej.
+ *              "teacher-resources/<teacher_id>/<uuid>-archivo.pdf".
+ * @param body  Buffer del archivo.
+ * @param contentType  MIME type del archivo.
+ * @returns URL https://<account>.r2.cloudflarestorage.com/<bucket>/<key>
+ */
+export async function uploadObject(
+  key: string,
+  body: Buffer,
+  contentType: string,
+): Promise<{ ok: true; url: string; bucket: string; key: string } | { ok: false; error: string }> {
+  const c = client();
+  if (!c) return { ok: false, error: "r2_not_configured" };
+  const bucket = process.env.R2_BUCKET || DEFAULT_BUCKET;
+  const cmd = new PutObjectCommand({
+    Bucket: bucket,
+    Key:    key,
+    Body:   body,
+    ContentType: contentType,
+  });
+  try {
+    await c.send(cmd);
+    const accountId = process.env.R2_ACCOUNT_ID!;
+    const url = `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${key}`;
+    return { ok: true, url, bucket, key };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "unknown" };
+  }
+}
+
 export async function deleteRecordingObject(fileUrl: string): Promise<boolean> {
   const c = client();
   if (!c) {

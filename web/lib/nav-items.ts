@@ -47,6 +47,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
     { label: "Ganancias",        href: "/profesor/ganancias",       icon: "wallet",         priority: 4 },
     { label: "Disponibilidad",   href: "/profesor/disponibilidad",  icon: "clock",          priority: 5 },
     { label: "Materiales",       href: "/profesor/materiales",      icon: "folder",         priority: 6 },
+    { label: "Recursos",         href: "/profesor/recursos",        icon: "bookOpen",       priority: 6.2 },
     { label: "Grabaciones",      href: "/profesor/grabaciones",     icon: "video",          priority: 6.5 },
     { label: "Chat",             href: "/chat",                      icon: "messageCircle",  priority: 7 },
   ],
