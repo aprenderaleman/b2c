@@ -31,11 +31,30 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
   const [err,  setErr]  = useState<string | null>(null);
   const [done, setDone] = useState<null | { tempPassword: string | null; emailSent: boolean }>(null);
 
+  // Tarifas editables (pre-rellenadas con lo que envió el profe). Admin
+  // puede ajustar ANTES de aprobar. Caso real Gelfis 2026-05-19: profe
+  // se auto-registra con su tarifa propuesta, admin la revisa contra el
+  // mercado y la ajusta si toca.
+  const [rateInd, setRateInd] = useState<string>(teacher.hourly_rate_individual ?? "");
+  const [rateGrp, setRateGrp] = useState<string>(teacher.hourly_rate_group ?? "");
+
   async function approve() {
-    if (!confirm(`Aprobar a ${teacher.full_name ?? teacher.email}?\n\nSe le enviará un email con su login y contraseña temporal.`)) return;
+    const ri = Number(rateInd);
+    const rg = Number(rateGrp);
+    if (!Number.isFinite(ri) || ri <= 0) { setErr("Tarifa individual inválida (€/h, > 0)."); return; }
+    if (!Number.isFinite(rg) || rg <= 0) { setErr("Tarifa grupal inválida (€/h, > 0).");    return; }
+    if (!confirm(
+      `Aprobar a ${teacher.full_name ?? teacher.email}?\n\n` +
+      `Tarifas:\n  Individual: ${ri} €/h\n  Grupal:     ${rg} €/h\n\n` +
+      `Se le enviará un email con su login y contraseña temporal.`,
+    )) return;
     setBusy("approve"); setErr(null);
     try {
-      const res = await fetch(`/api/admin/teachers/${teacher.id}/approve`, { method: "POST" });
+      const res = await fetch(`/api/admin/teachers/${teacher.id}/approve`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ rate_individual: ri, rate_group: rg }),
+      });
       const data = await res.json();
       if (!res.ok || !data.ok) {
         setErr(data.message ?? data.error ?? "No se pudo aprobar.");
@@ -43,7 +62,6 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
         return;
       }
       setDone({ tempPassword: data.tempPassword ?? null, emailSent: !!data.email_sent });
-      // No refresh aún — dejamos que admin vea el confirm.
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error de conexión.");
       setBusy(null);
@@ -118,10 +136,36 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
         <Kv k="Idiomas"           v={teacher.languages_spoken.join(", ") || "—"} full />
         <Kv k="Especialidades"    v={teacher.specialties.join(", ") || "—"}      full />
         <Kv k="Niveles que enseña" v={teacher.levels_taught.join(", ") || "—"} />
-        <Kv k="Tarifa grupal"     v={teacher.hourly_rate_group ? `${teacher.hourly_rate_group} €/h` : "—"} />
-        <Kv k="Tarifa individual" v={teacher.hourly_rate_individual ? `${teacher.hourly_rate_individual} €/h` : "—"} />
         <Kv k="IBAN"              v={teacher.iban ?? "—"}        mono full />
       </dl>
+
+      <div className="mt-5 rounded-xl bg-white/60 dark:bg-slate-900/50 border border-amber-300 dark:border-amber-500/30 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-200">
+          Tarifas (revísalas antes de aprobar)
+        </p>
+        <div className="mt-3 grid sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-200">Individual €/h</span>
+            <input
+              type="number" min={0} step={0.5} value={rateInd}
+              onChange={e => setRateInd(e.target.value)}
+              className="input-text w-full mt-1"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-200">Grupal €/h</span>
+            <input
+              type="number" min={0} step={0.5} value={rateGrp}
+              onChange={e => setRateGrp(e.target.value)}
+              className="input-text w-full mt-1"
+            />
+          </label>
+        </div>
+        <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">
+          Lo que envió en el formulario: <strong>{teacher.hourly_rate_individual ?? "—"} €/h</strong> individual ·
+          <strong> {teacher.hourly_rate_group ?? "—"} €/h</strong> grupal. Ajusta si toca.
+        </p>
+      </div>
 
       {err && (
         <div className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">

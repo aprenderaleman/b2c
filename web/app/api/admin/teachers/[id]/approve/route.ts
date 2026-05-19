@@ -25,7 +25,7 @@ export const dynamic  = "force-dynamic";
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
@@ -35,6 +35,15 @@ export async function POST(
   }
   const adminId = (session.user as { id: string }).id;
   const { id: teacherId } = await params;
+
+  // Body opcional: rate_individual y rate_group (€/h). Si vienen,
+  // override de los valores que el profe puso en el form de
+  // auto-registro. Decisión Gelfis 2026-05-19: admin revisa la
+  // tarifa antes de aprobar y puede ajustarla.
+  let rateOverride: { rate_individual?: number; rate_group?: number } = {};
+  if ((req.headers.get("content-type") ?? "").includes("application/json")) {
+    try { rateOverride = await req.json(); } catch { /* no body */ }
+  }
 
   const sb = supabaseAdmin();
   const { data: teacher } = await sb
@@ -76,14 +85,27 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "user_update_failed", reason: uErr.message }, { status: 500 });
   }
 
-  // Activar teacher + marcar approved.
+  // Activar teacher + marcar approved + setear tarifas (override admin
+  // si vinieron, si no se quedan como el profe puso en el form). El
+  // sistema de payroll lee rate_*_cents, así que escribimos ambos sets:
+  // hourly_rate_* (€ NUMERIC legacy) y rate_*_cents (céntimos INTEGER).
+  const teacherUpdate: Record<string, unknown> = {
+    active:       true,
+    approved_at:  new Date().toISOString(),
+    approved_by:  adminId,
+  };
+  if (Number.isFinite(rateOverride.rate_individual) && (rateOverride.rate_individual as number) > 0) {
+    teacherUpdate.hourly_rate            = rateOverride.rate_individual;
+    teacherUpdate.hourly_rate_individual = rateOverride.rate_individual;
+    teacherUpdate.rate_individual_cents  = Math.round((rateOverride.rate_individual as number) * 100);
+  }
+  if (Number.isFinite(rateOverride.rate_group) && (rateOverride.rate_group as number) > 0) {
+    teacherUpdate.hourly_rate_group = rateOverride.rate_group;
+    teacherUpdate.rate_group_cents  = Math.round((rateOverride.rate_group as number) * 100);
+  }
   const { error: tErr } = await sb
     .from("teachers")
-    .update({
-      active:       true,
-      approved_at:  new Date().toISOString(),
-      approved_by:  adminId,
-    })
+    .update(teacherUpdate)
     .eq("id", t.id);
   if (tErr) {
     return NextResponse.json({ ok: false, error: "teacher_update_failed", reason: tErr.message }, { status: 500 });
