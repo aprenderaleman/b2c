@@ -63,3 +63,6 @@ supabase/.temp
 credentials/
 *.pem
 *.key
+
+# Materiales didácticos generados (binarios pesados — regenerables con scripts/materiales/generate.mjs)
+/materiales/
