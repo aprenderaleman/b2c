@@ -100,6 +100,17 @@ export async function createUser(input: CreateUserInput): Promise<CreatedUser> {
         levels_taught:           p.levelsTaught          ?? [],
         hourly_rate_group:       p.hourlyRateGroup       ?? null,
         hourly_rate_individual:  p.hourlyRateIndividual  ?? null,
+        // El sistema de payroll lee rate_*_cents (INTEGER céntimos).
+        // Los campos hourly_rate_* legacy son NUMERIC en € y se
+        // quedaban desincronizados. Caso real Simon 2026-05-19:
+        // ganaba 0€ porque rate_individual_cents quedaba en 0 aunque
+        // hubiera puesto 13€ en el form. Ahora escribimos ambos.
+        rate_individual_cents:   p.hourlyRateIndividual != null
+                                   ? Math.round(p.hourlyRateIndividual * 100)
+                                   : null,
+        rate_group_cents:        p.hourlyRateGroup != null
+                                   ? Math.round(p.hourlyRateGroup * 100)
+                                   : null,
         iban:                    p.iban                  ?? null,
         registered_self:         p.registeredSelf        ?? false,
       })
