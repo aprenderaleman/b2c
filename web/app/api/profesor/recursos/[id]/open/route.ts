@@ -27,7 +27,7 @@ export async function GET(
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const role = (session.user as { role: string }).role;
-  if (role !== "teacher" && role !== "admin" && role !== "superadmin") {
+  if (role !== "teacher" && role !== "admin" && role !== "superadmin" && role !== "student") {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -35,14 +35,22 @@ export async function GET(
   const sb = supabaseAdmin();
   const { data, error } = await sb
     .from("teacher_resources")
-    .select("id, kind, file_url, external_url")
+    .select("id, kind, file_url, external_url, student_visible")
     .eq("id", id)
     .maybeSingle();
 
   if (error || !data) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const r = data as { id: string; kind: string; file_url: string | null; external_url: string | null };
+  const r = data as {
+    id: string; kind: string;
+    file_url: string | null; external_url: string | null;
+    student_visible: boolean;
+  };
+  // Los alumnos solo pueden abrir recursos marcados visible-para-alumnos.
+  if (role === "student" && !r.student_visible) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   let openUrl: string | null = null;
   if (r.kind === "pdf" || r.kind === "doc") {

@@ -33,14 +33,18 @@ export type TeacherResource = {
   external_url:    string | null;
   tags:            string[];
   open_count:      number;
+  student_visible: boolean;
   created_at:      string;
 };
 
 export type ListFilters = {
-  level?:  ResourceLevel | null;
-  kind?:   ResourceKind | null;
-  topic?:  string | null;
-  q?:      string | null;             // búsqueda libre en título/descripción
+  level?:           ResourceLevel | null;
+  kind?:            ResourceKind | null;
+  kinds?:           ResourceKind[] | null;   // OR-filter para varios tipos
+  topic?:           string | null;
+  q?:               string | null;            // búsqueda libre en título/descripción
+  studentVisible?:  boolean | null;            // si true: solo visible a alumnos
+  levelsIn?:        ResourceLevel[] | null;    // OR-filter por niveles (para alumnos: su nivel + inferiores)
 };
 
 export async function listResources(f: ListFilters = {}): Promise<TeacherResource[]> {
@@ -50,14 +54,17 @@ export async function listResources(f: ListFilters = {}): Promise<TeacherResourc
     .select(`
       id, uploaded_by, title, description, level, topic, kind,
       file_url, file_name, file_size_bytes, storage_key, external_url,
-      tags, open_count, created_at,
+      tags, open_count, student_visible, created_at,
       uploader:teachers!teacher_resources_uploaded_by_fkey(users(full_name, email))
     `)
     .order("created_at", { ascending: false });
 
   if (f.level && f.level !== "XX") q = q.eq("level", f.level);
+  if (f.levelsIn && f.levelsIn.length > 0) q = q.in("level", f.levelsIn);
   if (f.kind)  q = q.eq("kind", f.kind);
+  if (f.kinds && f.kinds.length > 0) q = q.in("kind", f.kinds);
   if (f.topic) q = q.ilike("topic", `%${f.topic.replace(/%/g, "")}%`);
+  if (f.studentVisible === true) q = q.eq("student_visible", true);
   if (f.q) {
     const safe = f.q.replace(/%/g, "");
     q = q.or(`title.ilike.%${safe}%,description.ilike.%${safe}%`);
@@ -90,9 +97,23 @@ export async function listResources(f: ListFilters = {}): Promise<TeacherResourc
       external_url:    (r.external_url as string | null) ?? null,
       tags:            (r.tags as string[]) ?? [],
       open_count:      (r.open_count as number) ?? 0,
+      student_visible: Boolean(r.student_visible),
       created_at:      r.created_at as string,
     };
   });
+}
+
+/**
+ * Niveles visibles al alumno: su nivel actual + todos los inferiores.
+ * Si current=C2 → todos. Si current=A1 → solo A0+A1. XX (todos) siempre
+ * se muestra. Si el alumno no tiene nivel, devolvemos sólo A1 + XX.
+ */
+export function levelsForStudent(currentLevel: string | null): ResourceLevel[] {
+  const order: ResourceLevel[] = ["A0","A1","A2","B1","B2","C1","C2"];
+  const normalized = (currentLevel ?? "A1").toUpperCase();
+  const idx = order.findIndex(l => l === normalized);
+  if (idx < 0) return ["A1","XX"];
+  return [...order.slice(0, idx + 1), "XX"];
 }
 
 export async function bumpOpenCount(id: string): Promise<void> {

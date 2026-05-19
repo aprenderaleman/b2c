@@ -239,6 +239,11 @@ function ResourceCard({ r, onOpen, onDelete, canDelete }: {
             #{t}
           </span>
         ))}
+        {r.student_visible && (
+          <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 font-medium">
+            👀 Alumnos
+          </span>
+        )}
       </div>
       <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400 pt-1 mt-auto">
         <span className="truncate">
@@ -279,6 +284,7 @@ function UploadModal({
   const [tags, setTags]               = useState("");
   const [file, setFile]               = useState<File | null>(null);
   const [externalUrl, setExternalUrl] = useState("");
+  const [studentVisible, setStudentVisible] = useState(false);
   const [submitting, setSubmitting]   = useState(false);
   const [error, setError]             = useState<string | null>(null);
 
@@ -303,6 +309,7 @@ function UploadModal({
       fd.set("tags", tags.trim());
       if (isFileKind && file) fd.set("file", file);
       if (!isFileKind) fd.set("external_url", externalUrl.trim());
+      fd.set("student_visible", studentVisible ? "true" : "false");
 
       const r = await fetch("/api/profesor/recursos", { method: "POST", body: fd });
       const j = await r.json();
@@ -330,6 +337,7 @@ function UploadModal({
         external_url:    isFileKind ? null : externalUrl.trim(),
         tags:            tags ? tags.split(",").map(t => t.trim()).filter(Boolean) : [],
         open_count:      0,
+        student_visible: studentVisible,
         created_at:      new Date().toISOString(),
       });
     } catch (e) {
@@ -421,6 +429,21 @@ function UploadModal({
               />
             </Field>
           )}
+
+          <label className="flex items-start gap-2 cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={studentVisible}
+              onChange={e => setStudentVisible(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-brand-600"
+            />
+            <span className="text-xs text-slate-700 dark:text-slate-300 leading-snug">
+              <strong>Visible para alumnos</strong>
+              <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                Aparecerá en su biblioteca filtrado por nivel. Útil para vídeos y enlaces de estudio.
+              </span>
+            </span>
+          </label>
         </div>
 
         {error && (

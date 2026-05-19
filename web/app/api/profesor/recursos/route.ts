@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
   const tagsRaw     = String(form.get("tags") || "").trim();
   const externalUrl = String(form.get("external_url") || "").trim() || null;
   const fileEntry   = form.get("file");
+  const studentVisible = String(form.get("student_visible") || "").trim().toLowerCase() === "true";
 
   // Validación básica
   if (!title || title.length > 200) {
@@ -166,6 +167,7 @@ export async function POST(req: NextRequest) {
     file_size_bytes: fileMeta?.size ?? null,
     storage_key:     fileMeta?.key ?? null,
     external_url:    isLinkKind ? externalUrl : null,
+    student_visible: studentVisible,
   }).select("id").single();
 
   if (error || !data) {
