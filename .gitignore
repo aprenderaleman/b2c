@@ -69,5 +69,8 @@ credentials/
 *.pem
 *.key
 
-# Materiales didácticos generados (binarios pesados — regenerables con scripts/materiales/generate.mjs)
-/materiales/
+# Materiales: solo ignoramos los .docx fuente de la presentación
+# (intermedios, regenerables). Los PDFs y los cuadernos sí van al
+# repo para que el endpoint /api/admin/seed-materiales los descargue
+# y los suba a R2.
+/materiales/**/*-presentacion.docx
