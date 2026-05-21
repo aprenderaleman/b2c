@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTeacherById } from "@/lib/academy";
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
+import { EditTeacherButton } from "@/components/admin/EditTeacherButton";
 import { AcceptsTrialsToggle } from "./AcceptsTrialsToggle";
 import { requireRole } from "@/lib/rbac";
 import { listAdminNotes } from "@/lib/admin-notes";
@@ -22,14 +23,22 @@ export default async function TeacherDetailPage({
   const teacher = await getTeacherById(id);
   if (!teacher) notFound();
 
-  const [notes, optOutRow] = await Promise.all([
+  const [notes, optOutRow, futureClassesRes] = await Promise.all([
     listAdminNotes("teacher", id),
     supabaseAdmin()
       .from("users")
       .select("notifications_opt_out")
       .eq("id", teacher.user_id)
       .maybeSingle(),
+    // Para el warning del modal de edición cuando admin desactive.
+    supabaseAdmin()
+      .from("classes")
+      .select("id", { count: "exact", head: true })
+      .eq("teacher_id", id)
+      .eq("status", "scheduled")
+      .gt("scheduled_at", new Date().toISOString()),
   ]);
+  const scheduledFutureClasses = futureClassesRes.count ?? 0;
   const optOut = Boolean(
     (optOutRow.data as { notifications_opt_out?: boolean } | null)?.notifications_opt_out,
   );
@@ -89,11 +98,37 @@ export default async function TeacherDetailPage({
               <span>{teacher.language_preference.toUpperCase()}</span>
             </div>
           </div>
-          <ImpersonateButton
-            userId={teacher.user_id}
-            userName={teacher.full_name ?? teacher.email}
-            role="teacher"
-          />
+          <div className="flex items-center gap-2 flex-wrap">
+            {!isPending && (
+              <EditTeacherButton teacher={{
+                id:                     teacher.id,
+                full_name:              teacher.full_name,
+                email:                  teacher.email,
+                phone:                  teacher.phone,
+                language_preference:    teacher.language_preference,
+                active:                 teacher.active,
+                notifications_opt_out:  optOut,
+                bio:                    teacher.bio ?? null,
+                languages_spoken:       teacher.languages_spoken ?? [],
+                specialties:            teacher.specialties ?? [],
+                levels_taught:          teacher.levels_taught ?? [],
+                country:                teacher.country ?? null,
+                address:                teacher.address ?? null,
+                hourly_rate_individual: teacher.hourly_rate_individual != null ? Number(teacher.hourly_rate_individual) : null,
+                hourly_rate_group:      teacher.hourly_rate_group      != null ? Number(teacher.hourly_rate_group)      : null,
+                currency:               teacher.currency ?? "EUR",
+                iban:                   teacher.iban ?? null,
+                payment_method:         teacher.payment_method ?? null,
+                notes:                  teacher.notes ?? null,
+                scheduledFutureClasses,
+              }} />
+            )}
+            <ImpersonateButton
+              userId={teacher.user_id}
+              userName={teacher.full_name ?? teacher.email}
+              role="teacher"
+            />
+          </div>
         </div>
       </header>
 
