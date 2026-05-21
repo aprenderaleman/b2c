@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 import { uploadObject } from "@/lib/r2";
 
@@ -45,8 +44,23 @@ const LECCIONES = [
 
 const RAW_BASE = "https://raw.githubusercontent.com/aprenderaleman/b2c/main/materiales";
 
-export async function GET() {
-  await requireRole(["superadmin"]);
+function authorised(req: Request): boolean {
+  const expected = process.env.CRON_SECRET;
+  if (!expected) return false;
+  const bearer = req.headers.get("authorization");
+  if (bearer && bearer.toLowerCase().startsWith("bearer ")) {
+    if (bearer.slice(7).trim() === expected) return true;
+  }
+  return req.headers.get("x-cron-secret") === expected;
+}
+
+export async function GET(req: Request) {
+  if (!process.env.CRON_SECRET) {
+    return NextResponse.json({ error: "cron_not_configured" }, { status: 503 });
+  }
+  if (!authorised(req)) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
 
   const sb = supabaseAdmin();
 
