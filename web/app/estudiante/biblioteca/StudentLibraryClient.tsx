@@ -43,6 +43,7 @@ export function StudentLibraryClient({
     if (opts?.all === false) p.delete("all");
     startTransition(() => {
       router.replace(`/estudiante/biblioteca${p.toString() ? "?" + p.toString() : ""}`);
+      router.refresh();
     });
   }
 
@@ -161,13 +162,60 @@ export function StudentLibraryClient({
           </p>
         </div>
       ) : (
-        <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {initialResources.map(r => (
-            <StudentResourceCard key={r.id} r={r} onOpen={() => openResource(r.id)} />
-          ))}
-        </ul>
+        <div className="space-y-6">
+          {(() => {
+            const cuadernos = initialResources.filter(r => r.kind === "doc");
+            const lecciones = initialResources.filter(r => r.kind === "pdf");
+            const videos    = initialResources.filter(r => r.kind === "video_link");
+            const enlaces   = initialResources.filter(r => r.kind === "source_link");
+            return (
+              <>
+                {cuadernos.length > 0 && (
+                  <StudentSection title="📝 Cuadernos de ejercicios" items={cuadernos} accent="emerald" onOpen={openResource} />
+                )}
+                {lecciones.length > 0 && (
+                  <StudentSection title="📄 Lecciones" items={lecciones} accent="blue" onOpen={openResource} />
+                )}
+                {videos.length > 0 && (
+                  <StudentSection title="🎬 Vídeos" items={videos} accent="amber" onOpen={openResource} />
+                )}
+                {enlaces.length > 0 && (
+                  <StudentSection title="🔗 Enlaces" items={enlaces} accent="slate" onOpen={openResource} />
+                )}
+              </>
+            );
+          })()}
+        </div>
       )}
     </div>
+  );
+}
+
+function StudentSection({ title, items, accent, onOpen }: {
+  title: string;
+  items: TeacherResource[];
+  accent: "blue" | "emerald" | "amber" | "slate";
+  onOpen: (id: string) => void;
+}) {
+  const accentCls =
+    accent === "blue"    ? "text-blue-700 dark:text-blue-300" :
+    accent === "emerald" ? "text-emerald-700 dark:text-emerald-300" :
+    accent === "amber"   ? "text-amber-700 dark:text-amber-300" :
+                            "text-slate-700 dark:text-slate-300";
+  return (
+    <section>
+      <header className="mb-3 flex items-center gap-2">
+        <h2 className={`text-sm font-bold tracking-tight ${accentCls}`}>{title}</h2>
+        <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          {items.length}
+        </span>
+      </header>
+      <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {items.map(r => (
+          <StudentResourceCard key={r.id} r={r} onOpen={() => onOpen(r.id)} />
+        ))}
+      </ul>
+    </section>
   );
 }
 

@@ -27,7 +27,10 @@ export function ResourcesClient({
   const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [showUpload, setShowUpload] = useState(false);
-  const [resources, setResources]   = useState(initialResources);
+  // OJO: trabajamos directo con initialResources (vienen del server). Cualquier
+  // cambio (filtrar, subir, borrar) dispara router.refresh() y Next.js
+  // re-renderiza con los datos frescos. El bug anterior era tener un
+  // useState local que NUNCA se re-inicializaba al cambiar las URL params.
   const [filters, setFilters]       = useState<Filters>(initialFilters);
 
   function applyFilters(next: Filters) {
@@ -39,6 +42,8 @@ export function ResourcesClient({
     if (next.q)     p.set("q", next.q);          else p.delete("q");
     startTransition(() => {
       router.replace(`/profesor/recursos${p.toString() ? "?" + p.toString() : ""}`);
+      // Fuerza re-fetch del Server Component aunque la URL no cambie.
+      router.refresh();
     });
   }
 
@@ -60,10 +65,24 @@ export function ResourcesClient({
       alert(j.message ?? j.error ?? "No se pudo borrar");
       return;
     }
-    setResources(prev => prev.filter(x => x.id !== id));
+    router.refresh();
   }
 
-  const visible = useMemo(() => resources, [resources]);
+  // Agrupar por sección visual:
+  //   - "Lecciones"  = kind=pdf (presentaciones para clase)
+  //   - "Cuadernos"  = kind=doc (cuadernos para alumnos)
+  //   - "Vídeos y enlaces" = video_link + source_link
+  const grouped = useMemo(() => {
+    const lecciones:    TeacherResource[] = [];
+    const cuadernos:    TeacherResource[] = [];
+    const enlaces:      TeacherResource[] = [];
+    for (const r of initialResources) {
+      if (r.kind === "pdf") lecciones.push(r);
+      else if (r.kind === "doc") cuadernos.push(r);
+      else enlaces.push(r);
+    }
+    return { lecciones, cuadernos, enlaces };
+  }, [initialResources]);
 
   return (
     <div className="space-y-5">
@@ -171,8 +190,10 @@ export function ResourcesClient({
         </div>
       </section>
 
-      {/* Lista */}
-      {visible.length === 0 ? (
+      {/* Lista en 3 secciones: lecciones (PDF), cuadernos (DOC),
+          vídeos/enlaces. Las que no tienen items se ocultan. Si todo
+          está vacío, mensaje único. */}
+      {initialResources.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-10 text-center">
           <div className="text-4xl">📚</div>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
@@ -180,30 +201,94 @@ export function ResourcesClient({
           </p>
         </div>
       ) : (
-        <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {visible.map(r => (
-            <ResourceCard
-              key={r.id}
-              r={r}
-              onOpen={() => openResource(r.id)}
-              onDelete={() => deleteResource(r.id)}
-              canDelete={isStaff || Boolean(myTeacherId && r.uploaded_by === myTeacherId)}
+        <div className="space-y-6">
+          {grouped.lecciones.length > 0 && (
+            <ResourceSection
+              title="📄 Lecciones (presentaciones para clase)"
+              count={grouped.lecciones.length}
+              items={grouped.lecciones}
+              tone="lecciones"
+              onOpen={openResource}
+              onDelete={deleteResource}
+              myTeacherId={myTeacherId}
+              isStaff={isStaff}
             />
-          ))}
-        </ul>
+          )}
+          {grouped.cuadernos.length > 0 && (
+            <ResourceSection
+              title="📝 Cuadernos (para alumnos)"
+              count={grouped.cuadernos.length}
+              items={grouped.cuadernos}
+              tone="cuadernos"
+              onOpen={openResource}
+              onDelete={deleteResource}
+              myTeacherId={myTeacherId}
+              isStaff={isStaff}
+            />
+          )}
+          {grouped.enlaces.length > 0 && (
+            <ResourceSection
+              title="🎬 Vídeos y enlaces"
+              count={grouped.enlaces.length}
+              items={grouped.enlaces}
+              tone="enlaces"
+              onOpen={openResource}
+              onDelete={deleteResource}
+              myTeacherId={myTeacherId}
+              isStaff={isStaff}
+            />
+          )}
+        </div>
       )}
 
       {/* Modal subida */}
       {showUpload && (
         <UploadModal
           onClose={() => setShowUpload(false)}
-          onUploaded={(newOne) => {
-            setResources(prev => [newOne, ...prev]);
+          onUploaded={() => {
             setShowUpload(false);
+            router.refresh();
           }}
         />
       )}
     </div>
+  );
+}
+
+function ResourceSection({ title, count, items, tone, onOpen, onDelete, myTeacherId, isStaff }: {
+  title: string;
+  count: number;
+  items: TeacherResource[];
+  tone: "lecciones" | "cuadernos" | "enlaces";
+  onOpen: (id: string) => void;
+  onDelete: (id: string) => void;
+  myTeacherId: string | null;
+  isStaff: boolean;
+}) {
+  const accent =
+    tone === "lecciones" ? "text-blue-700 dark:text-blue-300" :
+    tone === "cuadernos" ? "text-emerald-700 dark:text-emerald-300" :
+                            "text-amber-700 dark:text-amber-300";
+  return (
+    <section>
+      <header className="mb-3 flex items-center gap-2">
+        <h2 className={`text-sm font-bold tracking-tight ${accent}`}>{title}</h2>
+        <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+          {count}
+        </span>
+      </header>
+      <ul className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {items.map(r => (
+          <ResourceCard
+            key={r.id}
+            r={r}
+            onOpen={() => onOpen(r.id)}
+            onDelete={() => onDelete(r.id)}
+            canDelete={isStaff || Boolean(myTeacherId && r.uploaded_by === myTeacherId)}
+          />
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -273,8 +358,8 @@ function ResourceCard({ r, onOpen, onDelete, canDelete }: {
 function UploadModal({
   onClose, onUploaded,
 }: {
-  onClose: () => void;
-  onUploaded: (r: TeacherResource) => void;
+  onClose:    () => void;
+  onUploaded: () => void;            // ahora simple — el padre refresca la página
 }) {
   const [kind, setKind]               = useState<ResourceKind>("pdf");
   const [title, setTitle]             = useState("");
@@ -318,28 +403,9 @@ function UploadModal({
         setSubmitting(false);
         return;
       }
-      // Optimistic: añadir a la lista con datos mínimos. El refresh
-      // de la página puede sustituirlo por el real con todos los campos
-      // computados.
-      onUploaded({
-        id:              j.id,
-        uploaded_by:     null,
-        uploader_name:   "Tú",
-        title:           title.trim(),
-        description:     description.trim() || null,
-        level,
-        topic:           topic.trim(),
-        kind,
-        file_url:        null,
-        file_name:       file?.name ?? null,
-        file_size_bytes: file?.size ?? null,
-        storage_key:     null,
-        external_url:    isFileKind ? null : externalUrl.trim(),
-        tags:            tags ? tags.split(",").map(t => t.trim()).filter(Boolean) : [],
-        open_count:      0,
-        student_visible: studentVisible,
-        created_at:      new Date().toISOString(),
-      });
+      // Refrescamos la página — el server vuelve a leer la BD y todas
+      // las tarjetas se renderizan con los datos definitivos.
+      onUploaded();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red");
       setSubmitting(false);
