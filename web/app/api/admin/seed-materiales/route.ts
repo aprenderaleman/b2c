@@ -79,20 +79,37 @@ export async function GET(req: Request) {
   let uploaded = 0, skipped = 0, failed = 0;
 
   for (const L of LECCIONES) {
-    const items: Array<{ kind: "pdf" | "doc"; filename: string; title: string; topic: string; description: string }> = [
+    const items: Array<{
+      kind: "pdf" | "doc";
+      filename: string;
+      title: string;
+      topic: string;
+      description: string;
+      studentVisible: boolean;
+    }> = [
       {
         kind: "pdf",
         filename: `${L.level}-leccion-${L.n}-${L.slug}-presentacion.pdf`,
         title: `${L.level} · Lektion ${L.n} — ${L.title}`,
         topic: "presentación oficial",
         description: `Presentación oficial para clase en vivo. Tema: ${L.title}. Incluye objetivos, vocabulario, gramática, ejemplos y ejercicio guiado.`,
+        studentVisible: false,                      // solo profes
+      },
+      {
+        kind: "pdf",
+        filename: `${L.level}-leccion-${L.n}-${L.slug}-cuaderno.pdf`,
+        title: `${L.level} · Cuaderno Lektion ${L.n} — ${L.title} (PDF)`,
+        topic: "cuaderno alumno",
+        description: `Cuaderno del alumno (PDF para imprimir o leer en pantalla). ${L.title}. 5 ejercicios + vocabulario + espacio para notas.`,
+        studentVisible: true,                       // PDF se abre en el navegador
       },
       {
         kind: "doc",
         filename: `${L.level}-leccion-${L.n}-${L.slug}-cuaderno.docx`,
-        title: `${L.level} · Cuaderno Lektion ${L.n} — ${L.title}`,
+        title: `${L.level} · Cuaderno Lektion ${L.n} — ${L.title} (Word)`,
         topic: "cuaderno alumno",
-        description: `Cuaderno del alumno para Lektion ${L.n} (${L.title}). Vocabulario, espacio para notas y 5 ejercicios.`,
+        description: `Cuaderno del alumno en Word (editable, para descargar y rellenar). ${L.title}.`,
+        studentVisible: true,                       // .docx para editar
       },
     ];
 
@@ -145,8 +162,8 @@ export async function GET(req: Request) {
           file_name:       item.filename,
           file_size_bytes: buf.length,
           storage_key:     up.key,
-          tags:            ["oficial", item.kind === "pdf" ? "presentación" : "cuaderno", L.level.toLowerCase(), L.slug],
-          student_visible: item.kind === "doc",   // cuadernos también visibles a alumnos por defecto
+          tags:            ["oficial", item.topic === "presentación oficial" ? "presentación" : "cuaderno", L.level.toLowerCase(), L.slug],
+          student_visible: item.studentVisible,
         });
         if (insErr) {
           results.push({ title: item.title, status: "failed", reason: `db ${insErr.message}` });
