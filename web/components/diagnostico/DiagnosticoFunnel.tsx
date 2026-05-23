@@ -106,11 +106,11 @@ const COUNTRY_OPTIONS: { code: string; name: string }[] = [
 // Paso 1 nuevo (Quality Score Google Ads): keywords objetivo en
 // etiquetas semánticas <h1>/<h2>/<h3> del primer paint server-side.
 const MOTIVO_OPTIONS = [
-  { id: "particulares", h3: "Clases particulares de alemán online" },
-  { id: "intensivo",    h3: "Curso intensivo de alemán online" },
-  { id: "certificado",  h3: "Cursos de alemán con certificado oficial (TELC, FIDE, Goethe)" },
-  { id: "profesional",  h3: "Alemán para trabajar (profesionales)" },
-  { id: "otro",         h3: "Tengo otro motivo" },
+  { id: "particulares", emoji: "👨‍🏫", h3: "Clases particulares de alemán online" },
+  { id: "intensivo",    emoji: "🚀", h3: "Curso intensivo de alemán online" },
+  { id: "certificado",  emoji: "🏅", h3: "Cursos de alemán con certificado oficial (TELC, FIDE, Goethe)" },
+  { id: "profesional",  emoji: "💼", h3: "Alemán para trabajar (profesionales)" },
+  { id: "otro",         emoji: "💭", h3: "Tengo otro motivo" },
 ] as const;
 
 type MotivoId = typeof MOTIVO_OPTIONS[number]["id"];
@@ -540,19 +540,27 @@ function MotivoInicialStep({
 }) {
   return (
     <div className="px-5 md:px-8 pt-5 md:pt-10 lg:pt-14 pb-10 md:pb-16">
-      <h1 className="text-[24px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white leading-tight">
+      {/* Título centrado, +10% en móvil (text-[27px] vs antes 24).
+          Tracking más cerrado para que el centrado se vea balanced. */}
+      <h1 className="text-center text-[27px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white leading-tight">
         Aprende alemán con profesores nativos
       </h1>
+      {/* +10% en móvil (text-[20px] vs antes 18). Centrado para
+          coherencia con el h1. Aumento margen superior — antes era
+          mt-3, ahora mt-7/mt-8 (móvil) y mt-12 (desktop) para dejar
+          respirar el título. */}
       <h2
         id="motivo-inicial-question"
-        className="mt-3 md:mt-4 text-[18px] sm:text-xl md:text-2xl lg:text-[26px] font-semibold text-white/90 leading-snug"
+        className="mt-7 md:mt-12 lg:mt-16 text-center text-[20px] sm:text-xl md:text-2xl lg:text-[26px] font-semibold text-white/90 leading-snug"
       >
         ¿Qué tipo de clases de alemán buscas?
       </h2>
+      {/* Margen extra entre la pregunta y las opciones (mt-7 mobile,
+          mt-10 desktop) — antes mt-4. */}
       <ul
         role="radiogroup"
         aria-labelledby="motivo-inicial-question"
-        className="mt-4 space-y-2"
+        className="mt-7 md:mt-10 space-y-2"
       >
         {MOTIVO_OPTIONS.map(opt => {
           const isSelected = selected === opt.id;
@@ -564,14 +572,18 @@ function MotivoInicialStep({
                 aria-checked={isSelected}
                 data-choice={opt.id}
                 onClick={() => onPick(opt.id)}
-                className={`w-full flex items-center px-4 md:px-5 min-h-[52px] md:min-h-[64px] lg:min-h-[72px] py-2 md:py-3 rounded-2xl
+                className={`w-full flex items-center gap-3 md:gap-4 px-4 md:px-5 min-h-[52px] md:min-h-[64px] lg:min-h-[72px] py-2 md:py-3 rounded-2xl
                             text-left text-white
                             border transition active:scale-[0.99]
                             ${isSelected
                               ? "border-warm bg-warm/15"
                               : "border-white/10 bg-white/5 hover:bg-white/10"}`}
               >
-                <h3 className="text-[14px] sm:text-[15px] md:text-base lg:text-lg leading-snug font-medium m-0">
+                <span className="text-[22px] sm:text-xl md:text-2xl leading-none shrink-0" aria-hidden>
+                  {opt.emoji}
+                </span>
+                {/* +10% en móvil (text-[15.5px] vs antes 14) */}
+                <h3 className="text-[15.5px] sm:text-[15px] md:text-base lg:text-lg leading-snug font-medium m-0">
                   {opt.h3}
                 </h3>
               </button>
