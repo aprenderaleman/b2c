@@ -858,6 +858,12 @@ function CalendarStep({
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
+  // Compromisos del lead. Aparecen tras seleccionar slot. El botón
+  // "Confirmar" se habilita solo cuando ambos están marcados.
+  // Decisión Gelfis 2026-05-22: aumentar la asistencia haciendo que
+  // el lead reconozca el valor (€30) y explícitamente se comprometa.
+  const [commitValue,    setCommitValue]    = useState(false);
+  const [commitAttend,   setCommitAttend]   = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -914,8 +920,14 @@ function CalendarStep({
     }
   };
 
+  const canConfirm = !!selectedSlot && commitValue && commitAttend && !submitting;
+
   const confirmBooking = async () => {
     if (submitting || !selectedSlot) return;
+    if (!commitValue || !commitAttend) {
+      setSubmitErr("Marca ambas casillas de compromiso para confirmar tu reserva.");
+      return;
+    }
     const s = selectedSlot;
     setSubmitting(true);
     setSubmitErr(null);
@@ -1016,7 +1028,7 @@ function CalendarStep({
   })();
 
   return (
-    <div className={`px-5 pt-6 ${selectedSlot ? "pb-[calc(env(safe-area-inset-bottom)+5.5rem)]" : "pb-12"}`}>
+    <div className={`px-5 pt-6 ${selectedSlot ? "pb-[calc(env(safe-area-inset-bottom)+19rem)] md:pb-[calc(env(safe-area-inset-bottom)+17rem)]" : "pb-12"}`}>
       <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
         ¡Tu plan está listo, {name}!
       </h1>
@@ -1092,7 +1104,11 @@ function CalendarStep({
       </div>
 
       {/* CTA sticky de confirmación. Solo se muestra cuando el lead ha
-          escogido un slot — antes no hay nada que confirmar. */}
+          escogido un slot. Incluye:
+            1. Tarjeta de valor (30 € · regalo si asiste) — refuerzo
+               comercial pre-decisión.
+            2. Dos checkboxes de compromiso (valor + asistencia).
+            3. Botón Confirmar, deshabilitado hasta ambos checks. */}
       {selectedSlot && confirmLabel && (
         <div
           className="fixed bottom-0 left-0 right-0 z-30
@@ -1100,16 +1116,60 @@ function CalendarStep({
                      pt-6"
         >
           <div
-            className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pb-4"
+            className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pb-4 space-y-3"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
           >
+            {/* Tarjeta de valor */}
+            <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3">
+              <div className="flex items-start gap-2.5">
+                <span className="text-lg leading-none mt-0.5" aria-hidden>💎</span>
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold uppercase tracking-wider text-amber-200">
+                    Valor de tu clase
+                  </p>
+                  <p className="mt-1 text-[14px] md:text-[15px] text-amber-50 leading-snug">
+                    Esta clase con un profesor nativo certificado tiene un
+                    valor de <strong>30 €</strong>. <strong>Te la regalamos</strong> si
+                    asistes a tu primera clase.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Compromisos del lead */}
+            <div className="space-y-2.5 px-1">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={commitValue}
+                  onChange={e => setCommitValue(e.target.checked)}
+                  className="mt-0.5 h-5 w-5 accent-warm shrink-0 cursor-pointer"
+                />
+                <span className="text-[13px] md:text-sm text-white/85 leading-snug">
+                  Entiendo que esta clase tiene un valor de <strong>30 €</strong> y
+                  que la recibo como regalo.
+                </span>
+              </label>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={commitAttend}
+                  onChange={e => setCommitAttend(e.target.checked)}
+                  className="mt-0.5 h-5 w-5 accent-warm shrink-0 cursor-pointer"
+                />
+                <span className="text-[13px] md:text-sm text-white/85 leading-snug">
+                  Me comprometo a asistir el <strong className="capitalize">{confirmLabel}</strong>.
+                </span>
+              </label>
+            </div>
+
             <button
               type="button"
               onClick={confirmBooking}
-              disabled={submitting}
+              disabled={!canConfirm}
               className="w-full h-14 md:h-16 lg:h-[68px] rounded-2xl bg-warm text-warm-foreground font-semibold
                          shadow-lg shadow-warm/20 active:scale-[0.98] transition
-                         disabled:opacity-60 disabled:active:scale-100
+                         disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
                          flex flex-col items-center justify-center gap-0.5"
             >
               {submitting ? (
