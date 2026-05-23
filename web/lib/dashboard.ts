@@ -126,6 +126,9 @@ export type LeadsFilter = {
   german_level?: string[];
   language?: "es" | "de";
   has_trial?: "yes" | "no";
+  // Motivo inicial (paso 0 del funnel diagnóstico). Si se filtra,
+  // solo devuelve leads cuyo motivo_inicial está en el set.
+  motivo?: string[];
   q?: string;   // free text on name / phone
   limit?: number;
   offset?: number;
@@ -142,6 +145,7 @@ export async function getLeads(filter: LeadsFilter = {}): Promise<{ rows: LeadRo
   if (filter.language)             query = query.eq("language", filter.language);
   if (filter.has_trial === "yes")  query = query.not("trial_scheduled_at", "is", null);
   if (filter.has_trial === "no")   query = query.is("trial_scheduled_at", null);
+  if (filter.motivo?.length)       query = query.in("motivo_inicial", filter.motivo);
   if (filter.q) {
     const like = `%${filter.q.replace(/[%_]/g, "")}%`;
     query = query.or(`name.ilike.${like},whatsapp_normalized.ilike.${like}`);

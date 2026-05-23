@@ -47,6 +47,16 @@ const URGENCY_LABELS: Record<string, string> = {
   just_looking: "Solo viendo",
 };
 
+// Motivo inicial (paso 0 del funnel) — sincronizado con el enum
+// definido en components/diagnostico/DiagnosticoFunnel.tsx.
+const MOTIVO_LABELS: Record<string, string> = {
+  particulares: "👨‍🏫 Clases particulares",
+  intensivo:    "🚀 Intensivo",
+  certificado:  "🏅 Con certificado",
+  profesional:  "💼 Profesional",
+  otro:         "💭 Otro motivo",
+};
+
 export default async function AllLeadsPage({
   searchParams,
 }: {
@@ -69,6 +79,7 @@ export default async function AllLeadsPage({
     german_level:  toArray(sp.level),
     language:      sp.lang === "es" || sp.lang === "de" ? sp.lang : undefined,
     has_trial:     sp.trial === "yes" || sp.trial === "no" ? sp.trial : undefined,
+    motivo:        toArray(sp.motivo),
     q:             typeof sp.q === "string" ? sp.q : undefined,
     limit:         PAGE_SIZE,
     offset:        (page - 1) * PAGE_SIZE,
@@ -132,6 +143,11 @@ export default async function AllLeadsPage({
           <option value="yes">Con clase</option>
           <option value="no">Sin clase</option>
         </select>
+        <select name="motivo" defaultValue={(filter.motivo?.[0] ?? "") as string} className="input-text">
+          <option value="">Todos los motivos</option>
+          {["particulares","intensivo","certificado","profesional","otro"]
+            .map((m) => <option key={m} value={m}>{MOTIVO_LABELS[m] ?? m}</option>)}
+        </select>
         <button type="submit" className="btn-primary">Filtrar</button>
       </form>
 
@@ -142,6 +158,7 @@ export default async function AllLeadsPage({
               <Th>Nombre</Th>
               <Th>WhatsApp</Th>
               <Th>Estado</Th>
+              <Th>Motivo</Th>
               <Th>Nivel</Th>
               <Th>Objetivo</Th>
               <Th>Urgencia</Th>
@@ -153,7 +170,7 @@ export default async function AllLeadsPage({
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
             {rows.length === 0 && (
-              <tr><td colSpan={10} className="p-6 text-center text-slate-500 dark:text-slate-400">No hay leads que coincidan.</td></tr>
+              <tr><td colSpan={11} className="p-6 text-center text-slate-500 dark:text-slate-400">No hay leads que coincidan.</td></tr>
             )}
             {rows.map((l) => (
               <tr key={l.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
@@ -164,6 +181,7 @@ export default async function AllLeadsPage({
                 </Td>
                 <Td><code className="text-xs">{l.whatsapp_normalized ?? l.email ?? "—"}</code></Td>
                 <Td><StatusBadge status={l.status} /></Td>
+                <Td>{l.motivo_inicial ? (MOTIVO_LABELS[l.motivo_inicial] ?? l.motivo_inicial) : "—"}</Td>
                 <Td>{l.german_level ?? "—"}</Td>
                 <Td>{l.goal ? (GOAL_LABELS[l.goal] ?? l.goal) : "—"}</Td>
                 <Td>{l.urgency ? (URGENCY_LABELS[l.urgency] ?? l.urgency) : "—"}</Td>
