@@ -164,17 +164,26 @@ export function StudentLibraryClient({
       ) : (
         <div className="space-y-6">
           {(() => {
-            const cuadernos = initialResources.filter(r => r.kind === "doc");
-            const lecciones = initialResources.filter(r => r.kind === "pdf");
+            // Cuaderno = recurso de ejercicios (PDF o Word, ambos son cuadernos).
+            // Lección = recurso de estudio teórico (presentación, apuntes…).
+            // Distinguimos por `topic` porque kind solo dice el formato.
+            const isCuaderno = (r: TeacherResource) =>
+              (r.topic || "").toLowerCase().includes("cuaderno");
+            const cuadernos = initialResources.filter(r =>
+              (r.kind === "doc" || r.kind === "pdf") && isCuaderno(r)
+            );
+            const lecciones = initialResources.filter(r =>
+              (r.kind === "doc" || r.kind === "pdf") && !isCuaderno(r)
+            );
             const videos    = initialResources.filter(r => r.kind === "video_link");
             const enlaces   = initialResources.filter(r => r.kind === "source_link");
             return (
               <>
-                {cuadernos.length > 0 && (
-                  <StudentSection title="📝 Cuadernos de ejercicios" items={cuadernos} accent="emerald" onOpen={openResource} />
-                )}
                 {lecciones.length > 0 && (
                   <StudentSection title="📄 Lecciones" items={lecciones} accent="blue" onOpen={openResource} />
+                )}
+                {cuadernos.length > 0 && (
+                  <StudentSection title="📝 Cuadernos de ejercicios" items={cuadernos} accent="emerald" onOpen={openResource} />
                 )}
                 {videos.length > 0 && (
                   <StudentSection title="🎬 Vídeos" items={videos} accent="amber" onOpen={openResource} />
@@ -263,6 +272,17 @@ function StudentResourceCard({ r, onOpen }: {
               ? "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300"
               : "bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300"
           }`}>{r.level === "XX" ? "Todos los niveles" : r.level}</span>
+          {/* Badge de formato — distingue PDF (se abre en navegador) de Word (descarga) */}
+          {r.kind === "pdf" && (
+            <span className="px-2 py-0.5 rounded-full font-semibold bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300">
+              PDF
+            </span>
+          )}
+          {r.kind === "doc" && (
+            <span className="px-2 py-0.5 rounded-full font-semibold bg-blue-100 dark:bg-blue-500/20 text-blue-800 dark:text-blue-300">
+              Word
+            </span>
+          )}
           <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
             {r.topic}
           </span>
