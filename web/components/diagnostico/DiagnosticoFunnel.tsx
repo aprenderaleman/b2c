@@ -188,7 +188,9 @@ export function DiagnosticoFunnel() {
     motivo: null, level: null, goal: null, urgency: null, budget: null,
   });
   const [form, setForm] = useState<FormData>({
-    name: "", email: "", whatsapp: "", countryCode: "+34", country: "ES", gdpr: false,
+    // Defaults DE/+49 (Gelfis 2026-05-22). La mayoría del tráfico esperado
+    // está en territorio DACH; el lead puede cambiar el país en el dropdown.
+    name: "", email: "", whatsapp: "", countryCode: "+49", country: "DE", gdpr: false,
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
@@ -750,7 +752,7 @@ function DataCaptureStep({
               className="w-20 md:w-24 h-12 md:h-14 px-3 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
                          text-white text-center
                          focus:outline-none focus:border-warm focus:bg-white/10"
-              placeholder="+34"
+              placeholder="+49"
             />
             <input
               type="tel"
@@ -761,9 +763,13 @@ function DataCaptureStep({
               className="flex-1 h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
                          text-white placeholder:text-white/40
                          focus:outline-none focus:border-warm focus:bg-white/10"
-              placeholder="611 22 33 44"
+              placeholder="152 123 4567"
             />
           </div>
+          <p className="mt-2 text-[12px] sm:text-xs text-white/55 leading-snug">
+            Verifica que tu número sea correcto — ahí enviaremos el
+            enlace para tu clase.
+          </p>
         </Field>
 
         <Field label="País de residencia">
