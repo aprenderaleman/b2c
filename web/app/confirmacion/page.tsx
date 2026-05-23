@@ -3,11 +3,6 @@ import { redirect } from "next/navigation";
 import { Header } from "@/components/Header";
 import { supabaseAdmin } from "@/lib/supabase";
 import { verifyTrialToken } from "@/lib/trial-token";
-import {
-  SCHULE_MAINTENANCE,
-  SCHULE_MAINTENANCE_TITLE_ES,
-  SCHULE_MAINTENANCE_BODY_ES,
-} from "@/lib/schule-maintenance";
 
 /**
  * GET /confirmacion?c={classId}&t={token}
@@ -22,13 +17,12 @@ import {
  * the aula on the day of the class. We verify it server-side and
  * refuse to render anything sensitive if it's missing or invalid.
  *
- * The PRIMARY CTA points the lead to SCHULE so they can start
- * learning German immediately while waiting for the trial day.
+ * El PRIMARY CTA apunta al catálogo de cursos en la web pública
+ * (decisión Gelfis 2026-05-22). Antes apuntaba a SCHULE — los imports
+ * SCHULE_MAINTENANCE y el const SCHULE_URL ya no se usan aquí.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const SCHULE_URL = "https://schule.aprender-aleman.de";
 
 type Search = { c?: string; t?: string };
 
@@ -118,8 +112,27 @@ export default async function ConfirmacionPage({
             clase entrarás directamente con el enlace que te llegó — sin contraseña.
           </p>
 
+          {/* Bloque "valor 30 €" destacado — refuerzo de asistencia.
+              Va ARRIBA del summary para que sea lo primero que vea el
+              lead al aterrizar tras confirmar. Decisión Gelfis
+              2026-05-22. */}
+          <div className="mt-8 rounded-2xl border-2 border-amber-300 bg-amber-50 text-left p-5">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl leading-none mt-0.5" aria-hidden>💎</span>
+              <div className="min-w-0">
+                <p className="text-[12px] font-bold uppercase tracking-wider text-amber-900">
+                  Tu clase tiene valor de 30 €
+                </p>
+                <p className="mt-1.5 text-[15px] text-amber-900 leading-snug">
+                  Te la regalamos por asistir. Te esperamos
+                  el <strong className="capitalize">{startDate}</strong>.
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* Booking summary card */}
-          <div className="mt-8 rounded-2xl bg-white border border-border shadow-sm p-6 text-left space-y-3">
+          <div className="mt-5 rounded-2xl bg-white border border-border shadow-sm p-6 text-left space-y-3">
             <SummaryRow k="Fecha"     v={startDate} cap />
             <SummaryRow k="Profesor"  v={teacherName} />
             <SummaryRow k="Duración"  v={`${r.duration_minutes ?? 45} minutos`} />
@@ -127,43 +140,35 @@ export default async function ConfirmacionPage({
         </div>
       </section>
 
-      {/* ── NAVY: PRIMARY CTA — start learning with SCHULE ── */}
+      {/* ── NAVY: PRIMARY CTA — ver detalles y precios de los cursos.
+              Antes apuntaba a SCHULE; decisión Gelfis 2026-05-22:
+              direccionar al catálogo público de cursos en la web
+              principal porque el lead aún no ha probado la clase y
+              SCHULE le pide cuenta. ── */}
       <section className="section-navy section-pad">
         <div className="container-x text-center max-w-3xl">
           <span className="eyebrow-on-navy">Mientras esperas tu clase</span>
           <h2 className="mt-3 text-[30px] md:text-[42px] font-bold tracking-tight text-white leading-[1.1]">
-            Empieza a aprender alemán hoy mismo
+            Conoce nuestros cursos y tarifas
           </h2>
           <p className="mt-4 text-base md:text-lg text-white/75 leading-relaxed">
-            Entra a <strong className="text-white">SCHULE</strong>, nuestra plataforma
-            online: clases interactivas, ejercicios por nivel, gramática y audios
-            para que avances a tu ritmo desde el primer día.
+            Visita nuestra web para ver todos los detalles, niveles y
+            precios de los packs disponibles.
           </p>
           <div className="mt-8">
-            {SCHULE_MAINTENANCE ? (
-              <div className="inline-flex flex-col items-center gap-1 rounded-2xl border border-amber-300/40 bg-amber-500/10 px-5 py-4">
-                <span className="text-sm font-semibold text-amber-100">
-                  🛠️ {SCHULE_MAINTENANCE_TITLE_ES}
-                </span>
-                <span className="text-xs text-amber-100/80">
-                  {SCHULE_MAINTENANCE_BODY_ES}
-                </span>
-              </div>
-            ) : (
-              <a
-                href={SCHULE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-primary-lg"
-              >
-                Empezar ahora con SCHULE
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                  <polyline points="12 5 19 12 12 19"/>
-                </svg>
-              </a>
-            )}
+            <a
+              href="https://www.aprender-aleman.de/es/cursos"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-primary-lg"
+            >
+              Ver cursos y precios
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+                <polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </a>
           </div>
         </div>
       </section>
