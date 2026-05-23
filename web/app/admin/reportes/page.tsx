@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
 import { computeRiskAlerts, getStudentsAttendance } from "@/lib/reports";
+import { getMotivoDistribution, type MotivoBucket } from "@/lib/dashboard";
+
+const MOTIVO_LABELS: Record<string, string> = {
+  particulares: "👨‍🏫 Clases particulares",
+  intensivo:    "🚀 Intensivo",
+  certificado:  "🏅 Con certificado",
+  profesional:  "💼 Profesional",
+  otro:         "💭 Otro motivo",
+};
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Reportes · Admin" };
@@ -21,10 +30,13 @@ export default async function ReportsPage({
   const days = Number(sp.days ?? 30);
   const activeDays = RANGES.some(r => r.days === days) ? days : 30;
 
-  const [attendance, alerts] = await Promise.all([
+  const [attendance, alerts, motivoDist] = await Promise.all([
     getStudentsAttendance(activeDays),
     computeRiskAlerts(),
+    getMotivoDistribution(activeDays),
   ]);
+
+  const motivoTotal = motivoDist.reduce((acc, b) => acc + b.count, 0);
 
   const flagged = attendance.filter(a => a.total >= 3 && a.attendance_pct < 70);
 
@@ -83,6 +95,23 @@ export default async function ReportsPage({
         </section>
       )}
 
+      {/* Distribución de motivos del paso 0 — barras horizontales */}
+      <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Motivo inicial · últimos {activeDays} días
+        </h2>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          Qué buscan los leads cuando entran al funnel. {motivoTotal.toLocaleString("es-ES")} respuestas.
+        </p>
+        {motivoTotal === 0 ? (
+          <p className="mt-4 text-sm text-slate-500 dark:text-slate-400 italic">
+            Aún sin datos para este rango.
+          </p>
+        ) : (
+          <MotivoChart buckets={motivoDist} total={motivoTotal} />
+        )}
+      </section>
+
       <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
         <div className="px-5 pt-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
@@ -133,6 +162,36 @@ export default async function ReportsPage({
         </div>
       </section>
     </main>
+  );
+}
+
+function MotivoChart({ buckets, total }: { buckets: MotivoBucket[]; total: number }) {
+  // Barras horizontales puras CSS, ordenadas desc por count.
+  // Cada barra ocupa el % proporcional sobre el total. Sin chart libs.
+  return (
+    <ul className="mt-5 space-y-3">
+      {buckets.map(b => {
+        const pct = total > 0 ? (b.count / total) * 100 : 0;
+        return (
+          <li key={b.motivo}>
+            <div className="flex items-baseline justify-between gap-3 mb-1">
+              <span className="text-sm text-slate-800 dark:text-slate-100 font-medium">
+                {MOTIVO_LABELS[b.motivo] ?? b.motivo}
+              </span>
+              <span className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                {b.count.toLocaleString("es-ES")} · <strong className="text-slate-700 dark:text-slate-200">{pct.toFixed(1)}%</strong>
+              </span>
+            </div>
+            <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400"
+                style={{ width: `${Math.max(pct, 2)}%` }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

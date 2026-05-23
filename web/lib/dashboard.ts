@@ -193,3 +193,34 @@ export async function getGelfisNotes(leadId: string): Promise<GelfisNote[]> {
   if (error) throw error;
   return (data ?? []) as GelfisNote[];
 }
+
+// ── Reportes: distribución de motivo_inicial ─────────────
+//
+// Cuenta los leads agrupados por el motivo que escogieron en el paso 0
+// del funnel diagnóstico, dentro de un rango de N días. Usado por
+// /admin/reportes para entender el mix de demanda y orientar pricing
+// y campañas Google Ads. Excluye leads sin motivo (los que entraron
+// vía canales antiguos pre-funnel-paso-0).
+
+export type MotivoBucket = {
+  motivo: "particulares" | "intensivo" | "certificado" | "profesional" | "otro";
+  count:  number;
+};
+
+export async function getMotivoDistribution(days: number): Promise<MotivoBucket[]> {
+  const sb = supabaseAdmin();
+  const since = new Date(Date.now() - days * 86_400_000).toISOString();
+  const { data, error } = await sb
+    .from("leads")
+    .select("motivo_inicial")
+    .gte("created_at", since)
+    .not("motivo_inicial", "is", null);
+  if (error) throw error;
+  const counts = new Map<string, number>();
+  for (const r of (data ?? []) as Array<{ motivo_inicial: string }>) {
+    counts.set(r.motivo_inicial, (counts.get(r.motivo_inicial) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([motivo, count]) => ({ motivo, count }) as MotivoBucket)
+    .sort((a, b) => b.count - a.count);
+}
