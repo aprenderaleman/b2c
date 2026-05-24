@@ -3,8 +3,11 @@ import { supabaseAdmin }  from "@/lib/supabase";
 import {
   sendDiagnosticoWelcomeEmail,
   sendDiagnosticoFollowupEmail,
+  sendDiagnosticoFollowupPdfEmail,
 } from "@/lib/email/send";
-import { sendWhatsappText }             from "@/lib/whatsapp";
+import { sendWhatsappText, sendWhatsappDocument } from "@/lib/whatsapp";
+import { signRecordingUrl } from "@/lib/r2";
+import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 /**
  * GET/POST /api/cron/diagnostico-followups
@@ -22,7 +25,12 @@ import { sendWhatsappText }             from "@/lib/whatsapp";
  *                          mandaba register: damos 15 min de margen
  *                          para que el lead pueda completar el booking
  *                          sin recibir mensajes redundantes.
- *   msg 2   →  T+24h   →  Email reminder_24h (recordatorio)
+ *   msg 2   →  T+24h   →  WhatsApp + Email con PDF gratis adaptado al nivel
+ *                          del lead (A0 / A1.1 / A2.1 / A2.2). Regalo de
+ *                          valor sin pedir nada — convierte el follow-up
+ *                          frío en touchpoint cálido. PDF servido desde R2,
+ *                          descargado y adjuntado al email; WA recibe URL
+ *                          firmada (Evolution descarga).
  *   msg 3   →  T+3d    →  WhatsApp última llamada
  *   msg 4   →  T+7d    →  Email final_7d  + status='cold'
  *
@@ -73,9 +81,93 @@ type LeadRow = {
   email:                    string | null;
   whatsapp_normalized:      string;
   language:                 "es" | "de";
+  german_level:             string | null;
   diagnostico_completed_at: string;
   last_drip_msg_n:          number;
 };
+
+// ── PDF mapping por nivel ────────────────────────────────────
+// El R2 contiene los 5 PDFs en marketing/v1/<slug>.pdf. El cron firma
+// la URL para WhatsApp (Evolution descarga) y descarga el buffer para
+// adjuntar al email.
+type PdfMeta = {
+  slug:     string;
+  level:    string;            // display label
+  title:    string;
+  r2Key:    string;
+  fileName: string;
+};
+
+const PDF_BY_LEVEL: Record<string, PdfMeta> = {
+  "A0": {
+    slug: "a0", level: "A0",
+    title: "Tus primeros pasos en alemán",
+    r2Key: "marketing/v1/a0-primeros-pasos.pdf",
+    fileName: "Aprender-Aleman-Guia-A0.pdf",
+  },
+  "A1-A2": {
+    slug: "a1-1", level: "A1.1",
+    title: "Hablar de ti y tu día a día",
+    r2Key: "marketing/v1/a1-1-dia-a-dia.pdf",
+    fileName: "Aprender-Aleman-Guia-A1.1.pdf",
+  },
+  "B1": {
+    slug: "a2-1", level: "A2.1",
+    title: "Hablar del pasado: el Perfekt",
+    r2Key: "marketing/v1/a2-1-perfekt.pdf",
+    fileName: "Aprender-Aleman-Guia-A2.1.pdf",
+  },
+  "B2+": {
+    slug: "a2-2", level: "A2.2",
+    title: "Planes y obligaciones: modales + futuro",
+    r2Key: "marketing/v1/a2-2-modales-futuro.pdf",
+    fileName: "Aprender-Aleman-Guia-A2.2.pdf",
+  },
+  "unsure": {
+    slug: "a0", level: "A0",
+    title: "Tus primeros pasos en alemán",
+    r2Key: "marketing/v1/a0-primeros-pasos.pdf",
+    fileName: "Aprender-Aleman-Guia-A0.pdf",
+  },
+};
+
+function pdfForLead(germanLevel: string | null): PdfMeta {
+  if (!germanLevel) return PDF_BY_LEVEL["A0"];
+  return PDF_BY_LEVEL[germanLevel] ?? PDF_BY_LEVEL["A0"];
+}
+
+// Cliente R2 perezoso — solo se crea cuando se necesita descargar el PDF
+// para adjuntarlo al email.
+function r2Client(): S3Client | null {
+  const accountId = process.env.R2_ACCOUNT_ID;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+  if (!accountId || !accessKeyId || !secretAccessKey) return null;
+  return new S3Client({
+    region: "auto",
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: { accessKeyId, secretAccessKey },
+  });
+}
+
+/** Descarga el PDF de R2 y devuelve el Buffer. null si R2 no configurado. */
+async function downloadPdfBuffer(r2Key: string): Promise<Buffer | null> {
+  const c = r2Client();
+  const bucket = process.env.R2_BUCKET || "aprender-aleman-recordings";
+  if (!c) return null;
+  try {
+    const r = await c.send(new GetObjectCommand({ Bucket: bucket, Key: r2Key }));
+    const stream = r.Body as NodeJS.ReadableStream;
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk as Buffer);
+    }
+    return Buffer.concat(chunks);
+  } catch (e) {
+    console.error("[diagnostico-followups] R2 download failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
 
 export async function GET(req: Request) { return runCron(req); }
 export async function POST(req: Request) { return runCron(req); }
@@ -98,7 +190,7 @@ async function runCron(req: Request) {
   // pero defendemos en cliente igual.
   const { data, error } = await sb
     .from("leads")
-    .select("id, name, email, whatsapp_normalized, language, diagnostico_completed_at, last_drip_msg_n")
+    .select("id, name, email, whatsapp_normalized, language, german_level, diagnostico_completed_at, last_drip_msg_n")
     .eq("status", "registered")
     .lt("last_drip_msg_n", 4)
     .not("diagnostico_completed_at", "is", null);
@@ -188,16 +280,87 @@ async function runCron(req: Request) {
           console.error(`[diagnostico-followups] welcome email failed lead=${lead.id}:`, err);
         }
       } else if (nextN === 2) {
-        // Email reminder 24h
-        kind = "email";
-        if (!lead.email) { skipped++; continue; }
-        const r = await sendDiagnosticoFollowupEmail(lead.email, {
-          leadName: firstName,
-          bookUrl,
-          language: lead.language,
-          variant:  "reminder_24h",
-        });
-        ok = r.ok;
+        // T+24h — Regalo: PDF adaptado al nivel del lead.
+        // Doble canal: WhatsApp (con documento adjunto) + Email (PDF
+        // attached). Si AL MENOS UNO sale, contamos como entregado.
+        kind = "wa+email";
+
+        const pdf = pdfForLead(lead.german_level);
+        const captionWa = lead.language === "de"
+          ? [
+              `Hallo ${firstName}! 👋  Stiv nochmal.`,
+              ``,
+              `Da wir uns noch nicht gesprochen haben, hier ein kleines Geschenk:`,
+              `📄 „${pdf.title}“ — ein 5-Seiten-Guide für dein Niveau ${pdf.level}.`,
+              ``,
+              `Wenn du danach Lust auf ein 15-Min-Gespräch hast, schreib mir hier.`,
+              ``,
+              `Bis bald! 🇩🇪`,
+            ].join("\n")
+          : [
+              `¡Hola ${firstName}! 👋  Stiv otra vez.`,
+              ``,
+              `Como aún no pudimos hablar, te dejo un regalo:`,
+              `📄 «${pdf.title}» — una guía de 5 páginas para tu nivel ${pdf.level}.`,
+              ``,
+              `Si después de leerla te animas a una llamada de 15 min, escríbeme aquí. Sin presión.`,
+              ``,
+              `Bis bald! 🇩🇪`,
+            ].join("\n");
+
+        // 1) WhatsApp: firmamos URL R2 corta y la pasamos a Evolution.
+        //    Buffer del PDF lo usaremos para email (en paralelo).
+        const fileUrl = `https://${process.env.R2_ACCOUNT_ID ?? ""}.r2.cloudflarestorage.com/${process.env.R2_BUCKET ?? "aprender-aleman-recordings"}/${pdf.r2Key}`;
+        const signedUrl = await signRecordingUrl(fileUrl, 24 * 3600);
+
+        // 2) Email: descargamos PDF y lo adjuntamos.
+        const pdfBuffer = lead.email ? await downloadPdfBuffer(pdf.r2Key) : null;
+
+        const sendWaTextThenDoc = async () => {
+          // Primero el texto de contexto (sin link), luego el documento.
+          // Si el texto falla pero el documento sale, el contexto se pierde
+          // pero el lead recibe el PDF — aceptable.
+          await sendWhatsappText(lead.whatsapp_normalized, captionWa);
+          return sendWhatsappDocument(
+            lead.whatsapp_normalized, signedUrl, pdf.fileName,
+            { caption: "", kind: "diagnostico_pdf_t24h", leadId: lead.id },
+          );
+        };
+
+        const sendEmailWithPdf = async () => {
+          if (!lead.email || !pdfBuffer) {
+            return { ok: false as const, error: "no_email_or_pdf" };
+          }
+          return sendDiagnosticoFollowupPdfEmail(lead.email, {
+            leadName: firstName,
+            level:    pdf.level,
+            pdfTitle: pdf.title,
+            language: lead.language,
+            bookUrl,
+          }, { fileName: pdf.fileName, buffer: pdfBuffer });
+        };
+
+        const [waRes, emailRes] = await Promise.allSettled([
+          sendWaTextThenDoc(),
+          sendEmailWithPdf(),
+        ]);
+        const waOk = waRes.status === "fulfilled" && waRes.value.ok;
+        const emailOk = emailRes.status === "fulfilled" &&
+          (emailRes.value as { ok: boolean }).ok;
+        ok = waOk || emailOk;
+
+        if (!waOk) {
+          const err = waRes.status === "rejected"
+            ? (waRes.reason instanceof Error ? waRes.reason.message : String(waRes.reason))
+            : "send_failed";
+          console.error(`[diagnostico-followups] msg2 WA failed lead=${lead.id} pdf=${pdf.slug}:`, err);
+        }
+        if (!emailOk) {
+          const err = emailRes.status === "rejected"
+            ? (emailRes.reason instanceof Error ? emailRes.reason.message : String(emailRes.reason))
+            : (emailRes.value as { ok: false; error: string }).error;
+          console.error(`[diagnostico-followups] msg2 email failed lead=${lead.id} pdf=${pdf.slug}:`, err);
+        }
       } else if (nextN === 3) {
         // WhatsApp última llamada
         kind = "wa";

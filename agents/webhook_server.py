@@ -607,6 +607,62 @@ async def internal_send_text(request: Request):
     return {"ok": True, "messageId": message_id}
 
 
+@app.post("/internal/send-document")
+async def internal_send_document(request: Request):
+    """
+    Envía un documento (PDF) por WhatsApp.
+
+    POST body: {
+      "phone":     "+4915...",
+      "media_url": "https://...firmada.../guia.pdf",
+      "file_name": "guia-A0.pdf",
+      "caption":   "Aquí tu guía gratis 🎁",     // opcional
+      "kind":      "diagnostico_pdf",            // opcional
+      "lead_id":   "uuid"                         // opcional
+    }
+    Auth: X-Internal-Secret.
+    """
+    expected = os.environ.get("AGENTS_INTERNAL_SECRET")
+    if not expected:
+        raise HTTPException(status_code=503, detail="internal_secret_not_configured")
+    provided = request.headers.get("x-internal-secret")
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid_json")
+
+    phone     = (body.get("phone") or "").strip()
+    media_url = (body.get("media_url") or "").strip()
+    file_name = (body.get("file_name") or "guia.pdf").strip()
+    caption   = (body.get("caption") or "").strip()
+    kind      = (body.get("kind") or "manual")[:60]
+    lead_id   = body.get("lead_id") or None
+
+    if not phone or not media_url:
+        raise HTTPException(status_code=400, detail="missing_phone_or_media_url")
+    try:
+        normalized = normalize_phone(phone)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"invalid_phone:{e}")
+
+    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    wa = WhatsAppService()
+
+    try:
+        message_id = wa.send_document(
+            instance, normalized, media_url, file_name,
+            caption=caption, kind=kind, lead_id=lead_id,
+        )
+    except WhatsAppError as e:
+        log.warning("internal/send-document failed: %s", e)
+        raise HTTPException(status_code=502, detail=f"whatsapp_error:{e}")
+
+    return {"ok": True, "messageId": message_id}
+
+
 # ──────────────────────────────────────────────────────────
 # /internal/whatsapp-status — used by /admin/system dashboard
 # ──────────────────────────────────────────────────────────

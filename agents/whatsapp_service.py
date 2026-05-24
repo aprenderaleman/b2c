@@ -244,6 +244,48 @@ class WhatsAppService:
             # silently lose visibility.
             pass
 
+    def send_document(
+        self,
+        name: str,
+        to_e164: str,
+        media_url: str,
+        file_name: str,
+        *,
+        caption: str = "",
+        kind:    str = "manual",
+        lead_id: str | None = None,
+    ) -> str:
+        """
+        Envía un documento (PDF, doc, etc.) por WhatsApp via Evolution.
+
+        Evolution API endpoint /message/sendMedia/{instance}. Acepta
+        media via URL (servidor descarga). Mimetype: application/pdf.
+
+        Returns Evolution message id on success. Raises WhatsAppError otherwise.
+        """
+        payload = {
+            "number": self._to_jid(to_e164),
+            "options": {"delay": 1200, "presence": "composing"},
+            "mediaMessage": {
+                "mediatype": "document",
+                "mimetype":  "application/pdf",
+                "fileName":  file_name,
+                "media":     media_url,
+                "caption":   caption,
+            },
+        }
+        try:
+            res = self._request("POST", f"/message/sendMedia/{name}", json=payload)
+        except WhatsAppError as e:
+            # Para documentos no usamos la cola de retry de texto (la cola
+            # asume text body). Loguamos y dejamos que el caller decida.
+            log.warning("send_document failed: %s", e)
+            raise
+        if isinstance(res, dict):
+            key = res.get("key") or {}
+            return key.get("id") or res.get("messageId") or "sent"
+        return "sent"
+
     def is_number_on_whatsapp(self, name: str, to_e164: str) -> bool:
         numbers = [self._to_jid(to_e164)]
         res = self._request(

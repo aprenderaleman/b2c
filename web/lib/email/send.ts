@@ -47,6 +47,10 @@ import {
   renderDiagnosticoFollowup,
   type DiagnosticoFollowupVars,
 } from "./templates/diagnostico-followup";
+import {
+  renderDiagnosticoFollowupPdf,
+  type DiagnosticoFollowupPdfVars,
+} from "./templates/diagnostico-followup-pdf";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -368,4 +372,20 @@ export async function sendDiagnosticoFollowupEmail(
 ): Promise<SendResult> {
   const { subject, html, text } = renderDiagnosticoFollowup(vars);
   return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Msg 2 del drip (T+24h) con PDF adjunto adaptado al nivel del lead.
+ * El caller pasa el Buffer del PDF (ya descargado de R2) + el nombre
+ * del archivo. La adjunción funciona tanto con Resend como con SMTP.
+ */
+export async function sendDiagnosticoFollowupPdfEmail(
+  to: string,
+  vars: DiagnosticoFollowupPdfVars,
+  pdf: { fileName: string; buffer: Buffer },
+): Promise<SendResult> {
+  const { subject, html, text } = renderDiagnosticoFollowupPdf(vars);
+  return sendRaw(to, subject, html, text, [
+    { filename: pdf.fileName, content: pdf.buffer },
+  ]);
 }

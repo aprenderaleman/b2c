@@ -62,3 +62,54 @@ export async function sendWhatsappText(
     return { ok: false, reason: e instanceof Error ? e.message : "unknown" };
   }
 }
+
+/**
+ * Envía un documento (PDF) por WhatsApp via Evolution API.
+ *
+ * @param phoneE164    Destinatario en E.164.
+ * @param mediaUrl     URL pública o firmada del PDF (Evolution descarga).
+ * @param fileName     Nombre que verá el receptor.
+ * @param caption      Texto que acompaña al documento (opcional).
+ * @param kind         Etiqueta para logging/retry.
+ * @param leadId       Para tracking en timeline.
+ */
+export async function sendWhatsappDocument(
+  phoneE164: string,
+  mediaUrl: string,
+  fileName: string,
+  opts: { caption?: string; kind?: string; leadId?: string } = {},
+): Promise<WhatsappResult> {
+  const baseUrl = process.env.AGENTS_BASE_URL?.replace(/\/$/, "");
+  const secret  = process.env.AGENTS_INTERNAL_SECRET;
+  if (!baseUrl || !secret) {
+    console.warn(
+      "[whatsapp] agent env missing — document NOT sent. Would have sent to %s: %s",
+      phoneE164, mediaUrl.slice(0, 80),
+    );
+    return { ok: false, reason: "missing_agent_env" };
+  }
+
+  try {
+    const res = await fetch(`${baseUrl}/internal/send-document`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Internal-Secret": secret },
+      body: JSON.stringify({
+        phone:     phoneE164,
+        media_url: mediaUrl,
+        file_name: fileName,
+        caption:   opts.caption ?? "",
+        kind:      opts.kind ?? "document",
+        lead_id:   opts.leadId ?? null,
+      }),
+      signal: AbortSignal.timeout(120_000),  // 2 min — descarga + envío
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return { ok: false, reason: `http_${res.status}:${body.slice(0, 200)}` };
+    }
+    const data = (await res.json().catch(() => ({}))) as { messageId?: string };
+    return { ok: true, messageId: data.messageId ?? null };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : "unknown" };
+  }
+}
