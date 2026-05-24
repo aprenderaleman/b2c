@@ -166,6 +166,9 @@ export type StudentsFilter = {
   status?:              string;                  // subscription_status filter
   subscription_type?:   string;
   level?:               string;
+  // Inactivos = users.active=false (dados de baja). Por defecto los
+  // escondemos del listado; ?inactivos=1 los muestra.
+  include_inactive?:    boolean;
   limit?:               number;
   offset?:              number;
 };
@@ -192,6 +195,8 @@ export async function getStudents(
   if (f.status)            q = q.eq("subscription_status", f.status);
   if (f.subscription_type) q = q.eq("subscription_type",   f.subscription_type);
   if (f.level)             q = q.eq("current_level",       f.level);
+  // Ocultar dados de baja salvo que el admin lo pida explícitamente.
+  if (!f.include_inactive) q = q.eq("users.active", true);
 
   // For text search on joined table columns we rely on the view-style OR filter:
   //   users.email.ilike.%q% OR users.full_name.ilike.%q%

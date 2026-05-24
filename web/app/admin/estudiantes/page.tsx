@@ -21,6 +21,7 @@ export default async function StudentsListPage({
     status:            typeof sp.status === "string" ? sp.status : undefined,
     subscription_type: typeof sp.type   === "string" ? sp.type   : undefined,
     level:             typeof sp.level  === "string" ? sp.level  : undefined,
+    include_inactive:  sp.inactivos === "1",
     limit:             PAGE_SIZE,
     offset:            (page - 1) * PAGE_SIZE,
   };
@@ -72,6 +73,16 @@ export default async function StudentsListPage({
             <option key={l} value={l}>{l}</option>
           ))}
         </select>
+        <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 sm:col-span-3">
+          <input
+            type="checkbox"
+            name="inactivos"
+            value="1"
+            defaultChecked={filter.include_inactive}
+            className="rounded border-slate-300 dark:border-slate-700"
+          />
+          Mostrar también estudiantes dados de baja
+        </label>
         <button type="submit" className="btn-primary">Filtrar</button>
       </form>
 

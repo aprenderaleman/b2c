@@ -8,6 +8,7 @@ import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 import { AdjustClassesButton } from "@/components/admin/AdjustClassesButton";
 import { EditPackButton } from "@/components/admin/EditPackButton";
 import { EditStudentButton } from "@/components/admin/EditStudentButton";
+import { DeactivateStudentButton } from "@/components/admin/DeactivateStudentButton";
 import { NotesCard } from "@/components/admin/NotesCard";
 import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOutToggle";
 import { listStudentCertificates } from "@/lib/certificates";
@@ -47,6 +48,15 @@ export default async function StudentDetailPage({
     .select("classes_purchased, classes_adjustment, classes_consumed, classes_remaining")
     .eq("student_id", id)
     .maybeSingle();
+
+  // Future scheduled classes — sólo para mostrar el conteo en el modal
+  // de baja. Cubre 1:1 y grupales (todo lo que esté en class_participants).
+  const { count: futureClassesCount } = await supabaseAdmin()
+    .from("class_participants")
+    .select("class_id, classes!inner(status, scheduled_at)", { count: "exact", head: true })
+    .eq("student_id", id)
+    .eq("classes.status", "scheduled")
+    .gte("classes.scheduled_at", new Date().toISOString());
   const packRow = pack as {
     classes_purchased: number; classes_adjustment: number;
     classes_consumed:  number; classes_remaining: number;
@@ -83,6 +93,14 @@ export default async function StudentDetailPage({
               <span>{student.language_preference.toUpperCase()}</span>
               <span>·</span>
               <StatusBadge status={student.subscription_status} />
+              {!student.active && (
+                <>
+                  <span>·</span>
+                  <span className="inline-flex items-center rounded-full border border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 px-2.5 py-0.5 text-xs font-medium text-red-700 dark:text-red-300">
+                    Acceso bloqueado
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -103,6 +121,12 @@ export default async function StudentDetailPage({
               userId={student.user_id}
               userName={student.full_name ?? student.email}
               role="student"
+            />
+            <DeactivateStudentButton
+              studentId={student.id}
+              studentName={student.full_name ?? student.email}
+              isInactive={!student.active}
+              futureClassesCount={futureClassesCount ?? 0}
             />
             {packRow && (
               <>
