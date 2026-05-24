@@ -74,3 +74,5 @@ credentials/
 # repo para que el endpoint /api/admin/seed-materiales los descargue
 # y los suba a R2.
 /materiales/**/*-presentacion.docx
+/materiales-premium-all/
+/materiales-premium/
