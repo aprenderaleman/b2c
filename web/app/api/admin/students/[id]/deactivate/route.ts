@@ -167,10 +167,17 @@ export async function POST(
   if (te) return NextResponse.json({ error: "students_update_failed", message: te.message }, { status: 500 });
 
   // 6. Notificar a profes (best-effort, no rompe la respuesta).
+  //    Mensaje breve: NO listamos las fechas — el profe las ve en su
+  //    calendario actualizado. Gelfis lo pidió explícitamente
+  //    (caso Florian/Luis Emilio, 30 fechas era mucho ruido).
   const studentName = u.full_name ?? u.email;
   for (const [, notif] of teacherNotifs) {
-    const list = notif.events.map(e => `  · ${e}`).join("\n");
-    const msg = `Hola ${notif.teacherName}, te aviso: ${studentName} ha sido dado de baja por administración. Las siguientes clases quedan canceladas (o el alumno removido si es grupal):\n${list}\n\nNo necesitas hacer nada — el calendario ya está actualizado.`;
+    const total = notif.events.length;
+    const msg =
+      `Hola ${notif.teacherName}, te aviso: ${studentName} ha sido dado de baja por administración. ` +
+      `Sus ${total} clase${total === 1 ? "" : "s"} futura${total === 1 ? "" : "s"} ya ` +
+      `${total === 1 ? "fue cancelada / se quitó del grupo" : "fueron canceladas / se quitó del grupo"} ` +
+      `en tu calendario. No necesitas hacer nada.`;
     sendWhatsappText(notif.phone, msg).catch(() => {});
   }
 
