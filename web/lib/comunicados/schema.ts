@@ -9,6 +9,8 @@ const leadStatusGroup = z.enum([
   "new", "in_conversation", "trial_scheduled", "trial_absent", "needs_human", "cold_lost",
 ]);
 
+const leadLevel = z.enum(["A0", "A1-A2", "B1", "B2+", "unsure"]);
+
 export const audienceFilterSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("all_students"), status, language }),
   z.object({ kind: z.literal("all_teachers"), language }),
@@ -17,6 +19,7 @@ export const audienceFilterSchema = z.discriminatedUnion("kind", [
   z.object({
     kind:          z.literal("leads"),
     status_groups: z.array(leadStatusGroup).optional(),
+    levels:        z.array(leadLevel).optional(),
     language,
   }),
   z.object({

@@ -5,6 +5,7 @@ import {
   LEAD_STATUS_GROUPS_DEFAULT,
   type AudienceFilter,
   type Language,
+  type LeadLevel,
   type LeadStatusGroup,
   type Recipient,
 } from "./types";
@@ -30,7 +31,7 @@ export async function resolveRecipients(
   }
 
   if (filter.kind === "leads") {
-    return resolveLeads(filter.status_groups, filter.language);
+    return resolveLeads(filter.status_groups, filter.levels, filter.language);
   }
 
   // Everything else pulls from users via a role/status scope.
@@ -221,7 +222,8 @@ function uniq<T>(xs: T[]): T[] { return [...new Set(xs)]; }
  */
 async function resolveLeads(
   groups:   LeadStatusGroup[] | undefined,
-  language: Language | undefined,
+  levels:   LeadLevel[]       | undefined,
+  language: Language          | undefined,
 ): Promise<Recipient[]> {
   const sb = supabaseAdmin();
 
@@ -239,6 +241,7 @@ async function resolveLeads(
     .is("converted_to_user_id", null)
     .in("status", rawStatuses);
 
+  if (levels && levels.length > 0) q = q.in("german_level", levels);
   if (language) q = q.eq("language", language);
 
   const { data } = await q;

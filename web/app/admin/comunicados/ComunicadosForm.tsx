@@ -3,11 +3,13 @@
 import { useMemo, useRef, useState, useTransition } from "react";
 import {
   ATTACHMENT_LIMITS,
+  LEAD_LEVELS,
   LEAD_STATUS_GROUPS,
   LEAD_STATUS_GROUPS_DEFAULT,
   type Attachment,
   type AudienceFilter,
   type Channel,
+  type LeadLevel,
   type LeadStatusGroup,
   type Recipient,
   type SendResultRow,
@@ -78,6 +80,7 @@ export function ComunicadosForm({
   const [groupId, setGroupId] = useState<string>(initial.groupId);
   const [language, setLanguage] = useState<LanguageChoice>(initial.language);
   const [leadStatusGroups, setLeadStatusGroups] = useState<LeadStatusGroup[]>(initial.leadStatusGroups);
+  const [leadLevels, setLeadLevels] = useState<LeadLevel[]>(initial.leadLevels);
   const [customEmails, setCustomEmails] = useState(initial.customEmails);
   const [customPhones, setCustomPhones] = useState(initial.customPhones);
 
@@ -120,14 +123,14 @@ export function ComunicadosForm({
       case "all_teachers": return { kind: "all_teachers", language: lang };
       case "level":        return { kind: "level", level, status, language: lang };
       case "group":        return { kind: "group", group_id: groupId, language: lang };
-      case "leads":        return { kind: "leads", status_groups: leadStatusGroups, language: lang };
+      case "leads":        return { kind: "leads", status_groups: leadStatusGroups, levels: leadLevels.length > 0 ? leadLevels : undefined, language: lang };
       case "custom":       return {
         kind: "custom",
         custom_emails: splitList(customEmails),
         custom_phones: splitList(customPhones),
       };
     }
-  }, [kind, status, level, groupId, language, leadStatusGroups, customEmails, customPhones]);
+  }, [kind, status, level, groupId, language, leadStatusGroups, leadLevels, customEmails, customPhones]);
 
   const canPreview = channels.length > 0 && (
     kind === "custom"
@@ -420,6 +423,60 @@ export function ComunicadosForm({
                   );
                 })}
               </div>
+              {/* Level filter for leads */}
+              <div className="mt-4">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Nivel de alemán (opcional)</span>
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setLeadLevels(LEAD_LEVELS.map(l => l.value))}
+                      className="text-brand-600 hover:underline"
+                    >
+                      Todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLeadLevels([])}
+                      className="text-slate-500 hover:underline"
+                    >
+                      Sin filtro
+                    </button>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {LEAD_LEVELS.map(({ value, label, emoji }) => {
+                    const checked = leadLevels.length === 0 || leadLevels.includes(value);
+                    const selected = leadLevels.includes(value);
+                    return (
+                      <label
+                        key={value}
+                        className={`flex items-center gap-1.5 rounded-xl border px-3 py-1.5 cursor-pointer transition-colors text-sm ${
+                          selected
+                            ? "border-brand-500 bg-brand-50 dark:bg-brand-500/10"
+                            : "border-slate-200 dark:border-slate-700 hover:border-brand-400"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => {
+                            setLeadLevels(prev =>
+                              prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value],
+                            );
+                          }}
+                          className="h-3.5 w-3.5 accent-orange-500"
+                        />
+                        <span>{emoji} <span className="font-medium text-slate-800 dark:text-slate-100">{label}</span></span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  {leadLevels.length === 0 ? "Sin filtro de nivel — se incluyen todos los niveles." : `Filtrando por ${leadLevels.length} nivel${leadLevels.length === 1 ? "" : "es"}.`}
+                </p>
+              </div>
+
               <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
                 Excluye automáticamente leads ya convertidos a alumno y los que no aceptaron GDPR.
               </p>
@@ -906,6 +963,7 @@ function hydrateFromEditing(
   groupId:          string;
   language:         LanguageChoice;
   leadStatusGroups: LeadStatusGroup[];
+  leadLevels:       LeadLevel[];
   customEmails:     string;
   customPhones:     string;
   subject:          string;
@@ -924,6 +982,7 @@ function hydrateFromEditing(
       groupId:          groups[0]?.id ?? "",
       language:         "",
       leadStatusGroups: LEAD_STATUS_GROUPS_DEFAULT,
+      leadLevels:       [],
       customEmails:     "",
       customPhones:     "",
       subject:          "",
@@ -946,6 +1005,10 @@ function hydrateFromEditing(
     ("status_groups" in f && Array.isArray(f.status_groups))
       ? (f.status_groups as LeadStatusGroup[])
       : LEAD_STATUS_GROUPS_DEFAULT;
+  const leadLevelsVal: LeadLevel[] =
+    ("levels" in f && Array.isArray(f.levels))
+      ? (f.levels as LeadLevel[])
+      : [];
   const emails               = ("custom_emails" in f ? f.custom_emails ?? [] : []) as string[];
   const phones               = ("custom_phones" in f ? f.custom_phones ?? [] : []) as string[];
 
@@ -956,6 +1019,7 @@ function hydrateFromEditing(
     groupId:          groupIdVal,
     language:         languageVal,
     leadStatusGroups: leadGroupsVal,
+    leadLevels:       leadLevelsVal,
     customEmails:     emails.join(", "),
     customPhones:     phones.join(", "),
     subject:          e.subject,

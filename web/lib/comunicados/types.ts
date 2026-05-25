@@ -47,9 +47,10 @@ export type AudienceFilter =
       language?: Language;
     }
   | {
-      kind:        "leads";
-      status_groups?: LeadStatusGroup[];  // empty/undefined = all "active" groups
-      language?:   Language;
+      kind:           "leads";
+      status_groups?: LeadStatusGroup[];   // empty/undefined = all "active" groups
+      levels?:        LeadLevel[];         // empty/undefined = any german_level
+      language?:      Language;
     }
   | {
       kind:           "custom";
@@ -87,6 +88,22 @@ export const LEAD_STATUS_GROUPS: Record<LeadStatusGroup, {
 /** Default selection in the UI (everything except cold/lost). */
 export const LEAD_STATUS_GROUPS_DEFAULT: LeadStatusGroup[] = [
   "new", "in_conversation", "trial_scheduled", "trial_absent", "needs_human",
+];
+
+/**
+ * Coarse level buckets actually used by the lead funnel — these are the
+ * exact `german_level` enum values in Postgres. The funnel uses ranges
+ * (not A1/A2/B1/B2/C1/C2 individually) because leads rarely know their
+ * level precisely at intake.
+ */
+export type LeadLevel = "A0" | "A1-A2" | "B1" | "B2+" | "unsure";
+
+export const LEAD_LEVELS: { value: LeadLevel; label: string; emoji: string }[] = [
+  { value: "A0",     label: "A0 (principiante)",       emoji: "🌱" },
+  { value: "A1-A2",  label: "A1–A2 (básico)",          emoji: "📗" },
+  { value: "B1",     label: "B1 (intermedio)",         emoji: "📘" },
+  { value: "B2+",    label: "B2+ (intermedio alto)",   emoji: "📕" },
+  { value: "unsure", label: "No sabe / sin definir",   emoji: "❓" },
 ];
 
 export type Recipient = {
