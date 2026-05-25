@@ -10,11 +10,17 @@ import { useBookingState, type GermanLevel } from "@/lib/booking-state";
  * Step 3 — German level self-assessment. Tap to pick + auto-advance.
  * Four cards, big tap targets, icon + headline + sublabel.
  */
+// Sub-niveles granulares — sincronizado con el enum `german_level` y
+// con el mapping PDF_BY_LEVEL en el cron de followups, para que cada
+// lead reciba el PDF de nurturing de su nivel real.
 const LEVELS: { id: GermanLevel; emoji: string; title: string; sub: string }[] = [
-  { id: "A0",    emoji: "🌱", title: "No sé nada todavía", sub: "Empezamos desde cero contigo" },
-  { id: "A1-A2", emoji: "📘", title: "A1 – A2",            sub: "Lo básico: presentarme, frases cortas" },
-  { id: "B1",    emoji: "📗", title: "B1",                 sub: "Conversación cotidiana" },
-  { id: "B2+",   emoji: "📕", title: "B2 o superior",      sub: "Avanzado, fluido" },
+  { id: "A0",   emoji: "🌱", title: "No sé nada todavía",  sub: "Empezamos desde cero contigo" },
+  { id: "A1.1", emoji: "📗", title: "A1.1",                sub: "Saludos, números, frases muy básicas" },
+  { id: "A1.2", emoji: "📘", title: "A1.2",                sub: "Conversaciones simples, hablar de mí" },
+  { id: "A2.1", emoji: "📙", title: "A2.1",                sub: "Hablar del pasado (Perfekt)" },
+  { id: "A2.2", emoji: "📕", title: "A2.2",                sub: "Planes, obligaciones, futuro" },
+  { id: "B1",   emoji: "💬", title: "B1",                  sub: "Conversación cotidiana, opinar" },
+  { id: "B2",   emoji: "🎯", title: "B2 o superior",       sub: "Avanzado, fluido, argumentar" },
 ];
 
 export default function StepNivel() {

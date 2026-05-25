@@ -110,29 +110,70 @@ type PdfMeta = {
 };
 
 const PDF_BY_LEVEL: Record<string, PdfMeta> = {
+  // Niveles granulares — el funnel los escribe directamente y cada
+  // lead recibe el PDF más cercano a su nivel real.
   "A0": {
     slug: "a0", level: "A0",
     title: "Tus primeros pasos en alemán",
     r2Key: "marketing/v1/a0-primeros-pasos.pdf",
     fileName: "Aprender-Aleman-Guia-A0.pdf",
   },
+  "A1.1": {
+    slug: "a1-1", level: "A1.1",
+    title: "Hablar de ti y tu día a día",
+    r2Key: "marketing/v1/a1-1-dia-a-dia.pdf",
+    fileName: "Aprender-Aleman-Guia-A1.1.pdf",
+  },
+  "A1.2": {
+    slug: "a1-2", level: "A1.2",
+    title: "Formar frases y hacer preguntas",
+    r2Key: "marketing/v1/a1-2-frases-preguntas.pdf",
+    fileName: "Aprender-Aleman-Guia-A1.2.pdf",
+  },
+  "A2.1": {
+    slug: "a2-1", level: "A2.1",
+    title: "Hablar del pasado: el Perfekt",
+    r2Key: "marketing/v1/a2-1-perfekt.pdf",
+    fileName: "Aprender-Aleman-Guia-A2.1.pdf",
+  },
+  "A2.2": {
+    slug: "a2-2", level: "A2.2",
+    title: "Planes y obligaciones: modales + futuro",
+    r2Key: "marketing/v1/a2-2-modales-futuro.pdf",
+    fileName: "Aprender-Aleman-Guia-A2.2.pdf",
+  },
+  // TODO(2026-05-25): los PDFs de B1 y B2 están generados pero aún no
+  // subidos al R2 (necesitamos token nuevo de Cloudflare). Mientras
+  // tanto, los leads B1/B2 reciben el PDF A2.2 (modales + futuro) que
+  // sigue siendo útil. Cuando se suban a R2 cambiar las dos entradas
+  // a los archivos b1-konjunktiv-ii.pdf y b2-pasiva-conectores.pdf
+  // (los DOCX existen en materiales-marketing/B*.docx).
+  "B1": {
+    slug: "a2-2", level: "A2.2 (fallback B1)",
+    title: "Planes y obligaciones: modales + futuro",
+    r2Key: "marketing/v1/a2-2-modales-futuro.pdf",
+    fileName: "Aprender-Aleman-Guia-A2.2.pdf",
+  },
+  "B2": {
+    slug: "a2-2", level: "A2.2 (fallback B2)",
+    title: "Planes y obligaciones: modales + futuro",
+    r2Key: "marketing/v1/a2-2-modales-futuro.pdf",
+    fileName: "Aprender-Aleman-Guia-A2.2.pdf",
+  },
+
+  // Legacy / fallback — leads viejos creados antes de migrar al enum
+  // granular, o leads que escogieron "no estoy seguro".
   "A1-A2": {
     slug: "a1-1", level: "A1.1",
     title: "Hablar de ti y tu día a día",
     r2Key: "marketing/v1/a1-1-dia-a-dia.pdf",
     fileName: "Aprender-Aleman-Guia-A1.1.pdf",
   },
-  "B1": {
-    slug: "a2-1", level: "A2.1",
-    title: "Hablar del pasado: el Perfekt",
-    r2Key: "marketing/v1/a2-1-perfekt.pdf",
-    fileName: "Aprender-Aleman-Guia-A2.1.pdf",
-  },
   "B2+": {
-    slug: "a2-2", level: "A2.2",
-    title: "Planes y obligaciones: modales + futuro",
-    r2Key: "marketing/v1/a2-2-modales-futuro.pdf",
-    fileName: "Aprender-Aleman-Guia-A2.2.pdf",
+    slug: "b2", level: "B2",
+    title: "Argumenta y convence: pasiva + conectores",
+    r2Key: "marketing/v1/b2-pasiva-conectores.pdf",
+    fileName: "Aprender-Aleman-Guia-B2.pdf",
   },
   "unsure": {
     slug: "a0", level: "A0",
@@ -298,26 +339,26 @@ async function runCron(req: Request) {
         kind = "wa+email";
 
         const pdf = pdfForLead(lead.german_level);
+        // Copia unificada Gelfis voice 2026-05-25. PDF llega como
+        // adjunto en WhatsApp (Evolution doc) y email — no link.
         const captionWa = lead.language === "de"
           ? [
-              `Hallo ${firstName}! 👋  Stiv nochmal.`,
+              `Hallo ${firstName}!`,
               ``,
-              `Da wir uns noch nicht gesprochen haben, hier ein kleines Geschenk:`,
-              `📄 „${pdf.title}“ — ein 5-Seiten-Guide für dein Niveau ${pdf.level}.`,
+              `Ich weiß, du interessierst dich für Deutsch — deshalb habe ich dir etwas vorbereitet: ein kostenloses PDF mit Übungen für dein Niveau ${pdf.level}, damit du heute mit dem Üben anfangen kannst. Du findest es als Anhang in dieser Nachricht.`,
               ``,
-              `Wenn du danach Lust auf ein 15-Min-Gespräch hast, schreib mir hier.`,
+              `Ich hoffe, es hilft dir! 💪`,
               ``,
-              `Bis bald! 🇩🇪`,
+              `Gelfis | Aprender-Aleman.de`,
             ].join("\n")
           : [
-              `¡Hola ${firstName}! 👋  Stiv otra vez.`,
+              `¡Hola ${firstName}!`,
               ``,
-              `Como aún no pudimos hablar, te dejo un regalo:`,
-              `📄 «${pdf.title}» — una guía de 5 páginas para tu nivel ${pdf.level}.`,
+              `Sé que estás interesado/a en aprender alemán, así que te he preparado algo: un PDF gratuito con ejercicios adaptados a tu nivel ${pdf.level} para que empieces a practicar desde hoy. Lo encuentras adjunto a este mensaje.`,
               ``,
-              `Si después de leerla te animas a una llamada de 15 min, escríbeme aquí. Sin presión.`,
+              `¡Espero que te sea útil! 💪`,
               ``,
-              `Bis bald! 🇩🇪`,
+              `Gelfis | Aprender-Aleman.de`,
             ].join("\n");
 
         // 1) WhatsApp: firmamos URL R2 corta y la pasamos a Evolution.
@@ -399,27 +440,28 @@ async function runCron(req: Request) {
         const r = await sendWhatsappText(lead.whatsapp_normalized, text);
         ok = r.ok;
       } else if (nextN === 4) {
-        // T+3d — 24h después del test: ¿descubriste tu nivel? + hora.
-        // WhatsApp + Email en paralelo. Al menos uno cuenta.
+        // T+3d — Follow-up tras PDF (msg 2). Pregunta si le sirvió y
+        // pide hora para llamada de 15 min hoy/mañana. WhatsApp +
+        // Email en paralelo. Al menos uno cuenta.
         kind = "wa+email";
         const waText = lead.language === "de"
           ? [
               `Hallo ${firstName}!`,
               ``,
-              `Konntest du gestern den Niveau-Test machen? Falls ja, würde ich gern 15 Min mit dir sprechen, um dir zu erklären, welcher Weg dir am meisten hilft.`,
+              `Ich hoffe, dir hat das PDF geholfen. Sag mir: hast du noch Interesse, Deutsch zu lernen?`,
               ``,
-              `Wann passt es dir heute oder morgen, dass ich dich anrufe?`,
+              `Wann hättest du heute oder morgen 15 Minuten Zeit für ein Gespräch, damit wir dir einen maßgeschneiderten Plan erstellen?`,
               ``,
-              `Falls du den Test noch nicht gemacht hast: ${testUrl}`,
+              `Gelfis | Aprender-Aleman.de`,
             ].join("\n")
           : [
               `¡Hola ${firstName}!`,
               ``,
-              `¿Pudiste hacer el test de nivel ayer? Si ya tienes tu resultado, me encantaría hablar 15 minutos contigo para explicarte qué camino te conviene más desde ahí.`,
+              `Espero que te haya servido el PDF. Cuéntame: ¿aún mantienes interés en aprender alemán?`,
               ``,
-              `¿A qué hora te vendría bien hoy o mañana que te llame?`,
+              `¿A qué hora tienes 15 minutos hoy o mañana para una llamada y diseñarte un plan a medida?`,
               ``,
-              `Si aún no hiciste el test: ${testUrl}`,
+              `Gelfis | Aprender-Aleman.de`,
             ].join("\n");
 
         const sendEmail = lead.email

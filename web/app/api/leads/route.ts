@@ -11,7 +11,7 @@ import { isValidE164, normalizePhone } from "@/lib/phone";
 // the value but it no longer drives prioritisation meaningfully.
 const LeadSchema = z.object({
   name:                z.string().trim().min(2).max(80),
-  german_level:        z.enum(["A0", "A1-A2", "B1", "B2+"]),
+  german_level:        z.enum(["A0", "A1.1", "A1.2", "A2.1", "A2.2", "B1", "B2", "A1-A2", "B2+"]),
   goal:                z.enum(["work", "visa", "studies", "exam", "travel", "already_in_dach"]),
   urgency:             z.enum(["asap", "under_3_months", "in_6_months", "next_year", "just_looking"]).optional(),
   budget:              z.enum(["under_100", "100_500", "500_1000", "1000_3000", "over_3000", "not_sure"]).nullable().optional(),

@@ -27,7 +27,7 @@ const Body = z.object({
   whatsapp_normalized: z.string().trim().min(4).max(40).nullable().optional(),
   whatsapp_country:    z.string().trim().regex(/^\+?\d{1,4}$/).optional(),
   language:            z.enum(["es", "de"]).optional(),
-  german_level:        z.enum(["A0", "A1-A2", "B1", "B2+"]).nullable().optional(),
+  german_level:        z.enum(["A0", "A1.1", "A1.2", "A2.1", "A2.2", "B1", "B2", "A1-A2", "B2+"]).nullable().optional(),
   goal:                z.string().trim().max(40).nullable().optional(),
 });
 

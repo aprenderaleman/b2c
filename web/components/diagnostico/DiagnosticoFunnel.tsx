@@ -34,12 +34,20 @@ import { RobotMark }                    from "@/components/RobotMark";
 //    /api/public/diagnostico/register — si cambias texto aquí cámbialo
 //    también allá o el server rechazará el body) ──────────────────
 
+// Opciones del quiz — sub-niveles granulares para que el drip de
+// followups pueda enviar el PDF gratis adaptado al nivel real.
+// Cada opción incluye una descripción corta para que el lead se
+// auto-evalúe con precisión. Mantén estas en sync 1-a-1 con el
+// endpoint /api/public/diagnostico/register o el server rechaza el body.
 const LEVEL_OPTIONS = [
-  { id: "Cero / no sé nada",     emoji: "🌱" },
-  { id: "Básico (A1-A2)",        emoji: "📘" },
-  { id: "Intermedio (B1-B2)",    emoji: "💬" },
-  { id: "Avanzado (C1+)",        emoji: "🎯" },
-  { id: "No estoy seguro",       emoji: "🤔" },
+  { id: "Cero / no sé nada",                                 emoji: "🌱" },
+  { id: "Conozco lo básico (saludos, números) — A1.1",       emoji: "📗" },
+  { id: "Puedo conversaciones simples — A1.2",               emoji: "📘" },
+  { id: "Sé hablar del pasado (Perfekt) — A2.1",             emoji: "📙" },
+  { id: "Puedo hablar de planes y obligaciones — A2.2",      emoji: "📕" },
+  { id: "Conversaciones cotidianas (B1)",                    emoji: "💬" },
+  { id: "Avanzado (B2 o más)",                                emoji: "🎯" },
+  { id: "No estoy seguro",                                    emoji: "🤔" },
 ] as const;
 
 const GOAL_OPTIONS = [
@@ -341,12 +349,15 @@ export function DiagnosticoFunnel() {
       // página `/agendar/cuando` que tras escoger horario haga submit
       // directo a /api/public/book-trial sin pasar por /tu /nivel
       // /objetivo.
-      const levelMap: Record<string, "A0" | "A1-A2" | "B1" | "B2+"> = {
-        "Cero / no sé nada":     "A0",
-        "Básico (A1-A2)":        "A1-A2",
-        "Intermedio (B1-B2)":    "B1",
-        "Avanzado (C1+)":        "B2+",
-        "No estoy seguro":       "A0",
+      const levelMap: Record<string, "A0" | "A1.1" | "A1.2" | "A2.1" | "A2.2" | "B1" | "B2"> = {
+        "Cero / no sé nada":                                 "A0",
+        "Conozco lo básico (saludos, números) — A1.1":       "A1.1",
+        "Puedo conversaciones simples — A1.2":               "A1.2",
+        "Sé hablar del pasado (Perfekt) — A2.1":             "A2.1",
+        "Puedo hablar de planes y obligaciones — A2.2":      "A2.2",
+        "Conversaciones cotidianas (B1)":                    "B1",
+        "Avanzado (B2 o más)":                                "B2",
+        "No estoy seguro":                                    "A0",
       };
       const goalMap: Record<string, "work" | "studies" | "already_in_dach" | "exam" | "travel"> = {
         "Trabajo":                       "work",
@@ -932,12 +943,15 @@ function CalendarStep({
     setSubmitting(true);
     setSubmitErr(null);
     try {
-      const levelMap: Record<string, "A0" | "A1-A2" | "B1" | "B2+"> = {
-        "Cero / no sé nada":     "A0",
-        "Básico (A1-A2)":        "A1-A2",
-        "Intermedio (B1-B2)":    "B1",
-        "Avanzado (C1+)":        "B2+",
-        "No estoy seguro":       "A0",
+      const levelMap: Record<string, "A0" | "A1.1" | "A1.2" | "A2.1" | "A2.2" | "B1" | "B2"> = {
+        "Cero / no sé nada":                                 "A0",
+        "Conozco lo básico (saludos, números) — A1.1":       "A1.1",
+        "Puedo conversaciones simples — A1.2":               "A1.2",
+        "Sé hablar del pasado (Perfekt) — A2.1":             "A2.1",
+        "Puedo hablar de planes y obligaciones — A2.2":      "A2.2",
+        "Conversaciones cotidianas (B1)":                    "B1",
+        "Avanzado (B2 o más)":                                "B2",
+        "No estoy seguro":                                    "A0",
       };
       const goalMap: Record<string, string> = {
         "Trabajo":                       "work",

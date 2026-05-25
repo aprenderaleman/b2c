@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { COUNTRY_CODES } from "@/lib/phone";
 
-const LEVELS = ["A0","A1-A2","B1","B2+"] as const;
+const LEVELS = ["A0","A1.1","A1.2","A2.1","A2.2","B1","B2"] as const;
 const SOURCES = ["manual","instagram","referido","email","llamada","otros"] as const;
 
 export function CreateLeadForm() {

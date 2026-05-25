@@ -53,6 +53,10 @@
     {
       "path": "/api/cron/data-integrity-check",
       "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/bulk-pdf-reactivation",
+      "schedule": "0 6 * * *"
     }
   ]
 }

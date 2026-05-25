@@ -58,9 +58,12 @@ export const dynamic = "force-dynamic";
 
 const LEVEL_OPTIONS = [
   "Cero / no sé nada",
-  "Básico (A1-A2)",
-  "Intermedio (B1-B2)",
-  "Avanzado (C1+)",
+  "Conozco lo básico (saludos, números) — A1.1",
+  "Puedo conversaciones simples — A1.2",
+  "Sé hablar del pasado (Perfekt) — A2.1",
+  "Puedo hablar de planes y obligaciones — A2.2",
+  "Conversaciones cotidianas (B1)",
+  "Avanzado (B2 o más)",
   "No estoy seguro",
 ] as const;
 
@@ -89,12 +92,16 @@ const BUDGET_OPTIONS = [
   "Estoy evaluando",
 ] as const;
 
-const LEVEL_TO_ENUM: Record<typeof LEVEL_OPTIONS[number], "A0" | "A1-A2" | "B1" | "B2+" | "unsure"> = {
-  "Cero / no sé nada":     "A0",
-  "Básico (A1-A2)":        "A1-A2",
-  "Intermedio (B1-B2)":    "B1",
-  "Avanzado (C1+)":        "B2+",
-  "No estoy seguro":       "unsure",
+type GermanLevelEnum = "A0" | "A1.1" | "A1.2" | "A2.1" | "A2.2" | "B1" | "B2" | "unsure";
+const LEVEL_TO_ENUM: Record<typeof LEVEL_OPTIONS[number], GermanLevelEnum> = {
+  "Cero / no sé nada":                                 "A0",
+  "Conozco lo básico (saludos, números) — A1.1":       "A1.1",
+  "Puedo conversaciones simples — A1.2":               "A1.2",
+  "Sé hablar del pasado (Perfekt) — A2.1":             "A2.1",
+  "Puedo hablar de planes y obligaciones — A2.2":      "A2.2",
+  "Conversaciones cotidianas (B1)":                    "B1",
+  "Avanzado (B2 o más)":                                "B2",
+  "No estoy seguro":                                    "unsure",
 };
 
 const GOAL_TO_ENUM: Record<typeof GOAL_OPTIONS[number], "work" | "studies" | "already_in_dach" | "exam" | "personal_growth"> = {

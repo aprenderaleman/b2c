@@ -21,49 +21,42 @@ export function renderDiagnosticoFollowupPdf(v: DiagnosticoFollowupPdfVars): Ren
 }
 
 function renderES(v: DiagnosticoFollowupPdfVars): RenderedEmail {
-  const subject = `🎁 ${v.leadName}, tu guía gratis de alemán (${v.level}) está aquí`;
+  const subject = `${v.leadName}, tu PDF gratuito de alemán (${v.level}) 🎁`;
   const body = `
-    ${h2(`¡Hola ${escapeHtml(v.leadName)}! 👋`)}
-    ${p(`Soy Stiv otra vez. Como aún no pudimos hablar, te dejo un <strong>regalo</strong>:`)}
-    ${p(`📄 <strong>${escapeHtml(v.pdfTitle)}</strong> — una guía de 5 páginas con lo más útil para tu nivel <strong>${escapeHtml(v.level)}</strong>. Sin teoría aburrida. Frases reales, gramática esencial y un mini-diálogo divertido.`)}
-    ${p(`<em style="color:#64748b;">📎 La guía va <strong>adjunta</strong> a este correo.</em>`)}
-    ${p(`Si después de leerla te animas a una llamada de 15 min para que veamos juntos cómo avanzar más rápido, escríbeme por WhatsApp o reserva aquí:`)}
+    ${h2(`¡Hola ${escapeHtml(v.leadName)}!`)}
+    ${p(`Sé que estás interesado/a en aprender alemán, así que te he preparado algo: un <strong>PDF gratuito con ejercicios adaptados a tu nivel ${escapeHtml(v.level)}</strong> para que empieces a practicar desde hoy.`)}
+    ${p(`📎 Lo encuentras <strong>adjunto a este mensaje</strong>.`)}
+    ${p(`¡Espero que te sea útil! 💪`)}
     <div style="text-align:center;margin:24px 0 8px 0;">
       <a href="${escapeHtml(v.bookUrl)}"
          style="display:inline-block;background:#F4A261;color:#0F2847;font-weight:bold;
                 padding:12px 28px;border-radius:12px;text-decoration:none;font-size:16px;">
-        Reservar una llamada de 15 min →
+        Reservar llamada de 15 min →
       </a>
     </div>
-    ${p(`<em style="color:#64748b;">Sin presión. Solo cuando estés listo.</em>`)}
-    ${p(`Bis bald! 🇩🇪`)}
-    ${p(`<em style="color:#64748b;">— Stiv · Aprender-Aleman.de</em>`)}
+    ${p(`<em style="color:#64748b;">Sin presión. Solo cuando estés listo/a.</em>`)}
+    ${p(`<strong>Gelfis | Aprender-Aleman.de</strong>`)}
   `;
   const footerNote =
-    "Recibes este correo porque hace 24h creaste tu plan en Aprender-Aleman.de.";
+    "Recibes este correo porque creaste tu plan en Aprender-Aleman.de.";
   const text = [
     `¡Hola ${v.leadName}!`, ``,
-    `Soy Stiv otra vez. Como aún no pudimos hablar, te dejo un regalo:`, ``,
-    `📄 ${v.pdfTitle} — una guía de 5 páginas con lo más útil para tu nivel ${v.level}.`,
-    `Sin teoría aburrida. Frases reales, gramática esencial y un mini-diálogo divertido.`, ``,
-    `La guía va ADJUNTA a este correo.`, ``,
-    `Si después de leerla te animas a una llamada de 15 min para que veamos juntos cómo avanzar más rápido, escríbeme por WhatsApp o reserva aquí:`, ``,
-    `${v.bookUrl}`, ``,
-    `Sin presión. Solo cuando estés listo.`, ``,
-    `Bis bald! 🇩🇪`,
-    `— Stiv · Aprender-Aleman.de`,
+    `Sé que estás interesado/a en aprender alemán, así que te he preparado algo: un PDF gratuito con ejercicios adaptados a tu nivel ${v.level} para que empieces a practicar desde hoy.`, ``,
+    `Lo encuentras ADJUNTO a este mensaje.`, ``,
+    `¡Espero que te sea útil! 💪`, ``,
+    `Si quieres, podemos hablar 15 min para diseñarte un plan a medida: ${v.bookUrl}`, ``,
+    `Gelfis | Aprender-Aleman.de`,
   ].join("\n");
   return { subject, html: renderEnvelope(body, footerNote), text };
 }
 
 function renderDE(v: DiagnosticoFollowupPdfVars): RenderedEmail {
-  const subject = `🎁 ${v.leadName}, dein gratis Deutsch-Guide (${v.level}) ist da`;
+  const subject = `${v.leadName}, dein gratis Deutsch-PDF (${v.level}) 🎁`;
   const body = `
-    ${h2(`Hallo ${escapeHtml(v.leadName)}! 👋`)}
-    ${p(`Stiv nochmal hier. Da wir uns noch nicht gesprochen haben, schenke ich dir etwas:`)}
-    ${p(`📄 <strong>${escapeHtml(v.pdfTitle)}</strong> — ein 5-Seiten-Guide mit dem Wichtigsten für dein Niveau <strong>${escapeHtml(v.level)}</strong>. Keine trockene Theorie. Echte Sätze, essenzielle Grammatik, ein lustiger Mini-Dialog.`)}
-    ${p(`<em style="color:#64748b;">📎 Der Guide ist diesem Mail <strong>angehängt</strong>.</em>`)}
-    ${p(`Wenn du danach Lust auf ein 15-Minuten-Gespräch hast, antworte per WhatsApp oder buche hier:`)}
+    ${h2(`Hallo ${escapeHtml(v.leadName)}!`)}
+    ${p(`Ich weiß, du interessierst dich für Deutsch — deshalb habe ich dir etwas vorbereitet: ein <strong>kostenloses PDF mit Übungen für dein Niveau ${escapeHtml(v.level)}</strong>, damit du heute mit dem Üben anfangen kannst.`)}
+    ${p(`📎 Du findest es <strong>als Anhang in dieser Nachricht</strong>.`)}
+    ${p(`Ich hoffe, es hilft dir! 💪`)}
     <div style="text-align:center;margin:24px 0 8px 0;">
       <a href="${escapeHtml(v.bookUrl)}"
          style="display:inline-block;background:#F4A261;color:#0F2847;font-weight:bold;
@@ -72,18 +65,16 @@ function renderDE(v: DiagnosticoFollowupPdfVars): RenderedEmail {
       </a>
     </div>
     ${p(`<em style="color:#64748b;">Kein Druck. Nur wenn du bereit bist.</em>`)}
-    ${p(`Bis bald! 🇩🇪`)}
-    ${p(`<em style="color:#64748b;">— Stiv · Aprender-Aleman.de</em>`)}
+    ${p(`<strong>Gelfis | Aprender-Aleman.de</strong>`)}
   `;
-  const footerNote = "Du erhältst diese Mail, weil du vor 24h deinen Plan auf Aprender-Aleman.de erstellt hast.";
+  const footerNote = "Du erhältst diese Mail, weil du deinen Plan auf Aprender-Aleman.de erstellt hast.";
   const text = [
     `Hallo ${v.leadName}!`, ``,
-    `Stiv nochmal hier. Da wir uns noch nicht gesprochen haben, schenke ich dir etwas:`, ``,
-    `📄 ${v.pdfTitle} — ein 5-Seiten-Guide für dein Niveau ${v.level}.`, ``,
-    `Der Guide ist diesem Mail angehängt.`, ``,
-    `Wenn du danach Lust auf ein Gespräch hast: ${v.bookUrl}`, ``,
-    `Bis bald! 🇩🇪`,
-    `— Stiv · Aprender-Aleman.de`,
+    `Ich weiß, du interessierst dich für Deutsch — deshalb habe ich dir etwas vorbereitet: ein kostenloses PDF mit Übungen für dein Niveau ${v.level}, damit du heute mit dem Üben anfangen kannst.`, ``,
+    `Du findest es als Anhang in dieser Nachricht.`, ``,
+    `Ich hoffe, es hilft dir! 💪`, ``,
+    `Lust auf 15 Min Gespräch? ${v.bookUrl}`, ``,
+    `Gelfis | Aprender-Aleman.de`,
   ].join("\n");
   return { subject, html: renderEnvelope(body, footerNote), text };
 }

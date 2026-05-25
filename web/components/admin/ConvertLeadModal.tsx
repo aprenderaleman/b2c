@@ -16,15 +16,21 @@ type Lead = {
 const CEFR_LEVELS = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
 /**
- * Map the funnel's coarse german_level (A0, A1-A2, B1, B2+) to a single
- * CEFR level for the student record. Admin can override in the form.
+ * Map the funnel's german_level (now sub-divided: A0, A1.1, A1.2,
+ * A2.1, A2.2, B1, B2 — plus legacy A1-A2 / B2+) to a single CEFR
+ * level for the student record. Admin can override in the form.
  */
 function defaultLevelFrom(lead: Lead): typeof CEFR_LEVELS[number] {
   switch (lead.german_level) {
     case "A0":    return "A0";
-    case "A1-A2": return "A1";
+    case "A1.1":  return "A1";
+    case "A1.2":  return "A1";
+    case "A1-A2": return "A1";   // legacy
+    case "A2.1":  return "A2";
+    case "A2.2":  return "A2";
     case "B1":    return "B1";
-    case "B2+":   return "B2";
+    case "B2":    return "B2";
+    case "B2+":   return "B2";   // legacy
     default:      return "A0";
   }
 }

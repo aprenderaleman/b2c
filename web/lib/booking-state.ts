@@ -16,7 +16,17 @@
  */
 import { useEffect, useState } from "react";
 
-export type GermanLevel = "A0" | "A1-A2" | "B1" | "B2+";
+// Sub-niveles del CEFR usados en el funnel y el drip. Los valores
+// `A1-A2` y `B2+` están deprecados (legacy de la versión anterior
+// del enum) pero se conservan en este tipo solo para que filas
+// antiguas en la BD no rompan el tipado al leerse.
+export type GermanLevel =
+  | "A0"
+  | "A1.1" | "A1.2"
+  | "A2.1" | "A2.2"
+  | "B1"   | "B2"
+  // legacy / fallback
+  | "A1-A2" | "B2+";
 export type Goal =
   | "work" | "visa" | "studies" | "exam" | "travel" | "already_in_dach";
 
