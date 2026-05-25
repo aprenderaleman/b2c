@@ -33,10 +33,10 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300; // 5 min - cabe ~50 leads con 5s delay
+export const maxDuration = 800; // ~13 min - cabe ~70 leads con 10s delay
 
 // ── Config ────────────────────────────────────────────────────
-const DELAY_MS = 5_000;   // 5s entre envíos WA (anti-bloqueo)
+const DELAY_MS = 10_000;  // 10s entre envíos WA (anti-bloqueo más conservador)
 const TEST_PHONE = "+4915253409544";
 const TEST_EMAIL = "gelfis07@gmail.com";
 const IDEMP_KEY = "bulk_pdf_reactivation_sent_at";
