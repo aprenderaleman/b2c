@@ -189,17 +189,26 @@ async function runCron(req: Request) {
   // ── TEST MODE — 1 envío por nivel a Gelfis ──────────────────────
   if (mode === "test") {
     const results: SendResult[] = [];
-    const testLevels: Array<keyof typeof PDF_BY_LEVEL> =
+    const ALL_LEVELS: Array<keyof typeof PDF_BY_LEVEL> =
       ["A0", "A1.1", "A1.2", "A2.1", "A2.2", "B1", "B2"];
 
     // Override del teléfono via ?phone=+49xxx (acepta espacios).
-    // Default = TEST_PHONE. Útil para probar números nuevos sin redeploy.
     const phoneParam = url.searchParams.get("phone");
     const phoneToUse = phoneParam
       ? phoneParam.replace(/\s+/g, "")
       : TEST_PHONE;
     const emailParam = url.searchParams.get("email");
     const emailToUse = emailParam || TEST_EMAIL;
+
+    // Por defecto manda 1 solo PDF (A0) — basta para validar pipeline.
+    // ?all=1 manda los 7 niveles. ?level=A2.1 manda solo ese.
+    const levelParam = url.searchParams.get("level") as keyof typeof PDF_BY_LEVEL | null;
+    const sendAll = url.searchParams.get("all") === "1";
+    const testLevels: Array<keyof typeof PDF_BY_LEVEL> = sendAll
+      ? ALL_LEVELS
+      : levelParam && PDF_BY_LEVEL[levelParam]
+        ? [levelParam]
+        : ["A0"];
 
     for (const level of testLevels) {
       const pdf = PDF_BY_LEVEL[level];
