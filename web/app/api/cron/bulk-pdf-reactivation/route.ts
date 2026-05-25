@@ -192,6 +192,15 @@ async function runCron(req: Request) {
     const testLevels: Array<keyof typeof PDF_BY_LEVEL> =
       ["A0", "A1.1", "A1.2", "A2.1", "A2.2", "B1", "B2"];
 
+    // Override del teléfono via ?phone=+49xxx (acepta espacios).
+    // Default = TEST_PHONE. Útil para probar números nuevos sin redeploy.
+    const phoneParam = url.searchParams.get("phone");
+    const phoneToUse = phoneParam
+      ? phoneParam.replace(/\s+/g, "")
+      : TEST_PHONE;
+    const emailParam = url.searchParams.get("email");
+    const emailToUse = emailParam || TEST_EMAIL;
+
     for (const level of testLevels) {
       const pdf = PDF_BY_LEVEL[level];
       const text = waText("Gelfis", pdf.level, "es");
@@ -199,22 +208,24 @@ async function runCron(req: Request) {
 
       try {
         // 1) WhatsApp text
-        const waRes = await sendWhatsappText(TEST_PHONE, text);
+        const waRes = await sendWhatsappText(phoneToUse, text);
         out.waOk = waRes.ok;
+        if (!waRes.ok) out.error = `wa_text:${waRes.reason}`;
 
         // 2) WhatsApp document
         const fileUrl = `https://${process.env.R2_ACCOUNT_ID ?? ""}.r2.cloudflarestorage.com/${process.env.R2_BUCKET ?? "aprender-aleman-recordings"}/${pdf.r2Key}`;
         const signedUrl = await signRecordingUrl(fileUrl, 24 * 3600);
         const docRes = await sendWhatsappDocument(
-          TEST_PHONE, signedUrl, pdf.fileName,
+          phoneToUse, signedUrl, pdf.fileName,
           { caption: "", kind: "bulk_pdf_test", leadId: "test-" + level },
         );
         out.docOk = docRes.ok;
+        if (!docRes.ok && !out.error) out.error = `wa_doc:${docRes.reason}`;
 
         // 3) Email
         const pdfBuffer = await downloadPdfBuffer(pdf.r2Key);
         if (pdfBuffer) {
-          const emailRes = await sendDiagnosticoFollowupPdfEmail(TEST_EMAIL, {
+          const emailRes = await sendDiagnosticoFollowupPdfEmail(emailToUse, {
             leadName: "Gelfis",
             level:    pdf.level,
             pdfTitle: pdf.title,
