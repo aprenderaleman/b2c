@@ -19,6 +19,10 @@ export type NotificationType =
   // Destinada a superadmins para que entren a /admin/usuarios/[id] y
   // aprueben/rechacen el perfil pendiente.
   | "teacher_pending_approval"
+  // Disparada por /api/public/diagnostico/register en cuanto un lead
+  // completa el paso 5 del funnel. Destinada a superadmins — render
+  // en rojo con badge "IMPORTANTE" porque hay <5 min para contactar.
+  | "lead_new_urgent"
   | "generic";
 
 export type NotificationRow = {

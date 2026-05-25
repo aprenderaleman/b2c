@@ -40,10 +40,12 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { after }                     from "next/server";
 import { z }                          from "zod";
 import { supabaseAdmin }              from "@/lib/supabase";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { sanitizeE164 }                  from "@/lib/phone";
+import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -311,6 +313,33 @@ export async function POST(req: NextRequest) {
   // del diagnóstico nunca sale — se envía la confirmación de la
   // clase de prueba en su lugar.
   void whatsappE164;
+
+  // ── Alerta interna a Gelfis (3 canales: WA + email + in-app) ──────
+  // Fire-and-forget: cualquier fallo se logea pero no bloquea al lead.
+  // Anti-spam y kill-switch viven dentro de notifyNewLeadUrgent.
+  if (leadAlertsEnabled()) {
+    after(async () => {
+      try {
+        const r = await notifyNewLeadUrgent({
+          id:                  leadId,
+          name:                b.name,
+          email:               b.email,
+          whatsapp_normalized: whatsappE164,
+          language:            b.language,
+          country:             b.country,
+          motivo_inicial:      b.motivo_inicial ?? null,
+          german_level:        enumLevel,
+          goal:                enumGoal,
+          urgency:             enumUrgency,
+          budget:              b.answers.budget,
+          diagnostico_answers: b.answers,
+        });
+        console.log("[diagnostico/register] lead alert:", JSON.stringify(r));
+      } catch (e) {
+        console.error("[diagnostico/register] lead alert failed:", e instanceof Error ? e.message : e);
+      }
+    });
+  }
 
   return NextResponse.json(
     { ok: true, lead_id: leadId },

@@ -405,3 +405,17 @@ export async function sendDiagnosticoTestFollowupEmail(
   const { subject, html, text } = renderDiagnosticoTestFollowup(vars);
   return sendRaw(to, subject, html, text);
 }
+
+/**
+ * Alerta interna a Gelfis cuando entra un nuevo lead (paso 5 funnel).
+ * NO va al lead — destinatario único es la cuenta superadmin (env
+ * NEW_LEAD_ALERT_EMAIL). El template tiene un botón directo a WhatsApp.
+ */
+import { renderLeadNewUrgent, type LeadNewUrgentVars } from "./templates/lead-new-urgent";
+export async function sendLeadNewUrgentEmail(
+  to: string,
+  vars: LeadNewUrgentVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderLeadNewUrgent(vars);
+  return sendRaw(to, subject, html, text);
+}
