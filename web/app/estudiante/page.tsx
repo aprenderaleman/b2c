@@ -14,6 +14,8 @@ import { getLiveClassForStudent } from "@/lib/imminent-class";
 import { getStudentProgress } from "@/lib/teacher-notes";
 import { ProgressBars } from "@/components/teacher/ProgressBars";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getPendingReviewForStudent } from "@/lib/class-reviews";
+import { ClassReviewPrompt } from "@/components/student/ClassReviewPrompt";
 
 export const dynamic = "force-dynamic";
 
@@ -40,12 +42,15 @@ export default async function StudentHome() {
     );
   }
 
-  const [upcoming, progress, icalToken, streak, live] = await Promise.all([
+  const [upcoming, progress, icalToken, streak, live, pendingReview] = await Promise.all([
     getStudentUpcomingClasses(student.id, new Date(), 60),
     getStudentProgress(student.id),
     getUserIcalToken(session.user.id),
     getAttendanceStreakForStudent(student.id),
     getLiveClassForStudent(student.id),
+    // No mostramos reseña si el alumno está dado de baja — pero como
+    // ese caso ya no llega aquí (login bloqueado), confiamos en el flag.
+    student.active ? getPendingReviewForStudent(student.id) : Promise.resolve(null),
   ]);
   const [next, ...rest] = upcoming;
 
@@ -60,6 +65,18 @@ export default async function StudentHome() {
 
       {/* Live-now CTA — auto-polls every 15s, auto-hides when class ends */}
       <LiveClassCta initial={live} />
+
+      {/* Post-class review prompt — esquina inferior derecha, no intrusivo.
+          Solo aparece si hay una clase atendida en los últimos 7 días sin
+          reseñar ni descartar. */}
+      {pendingReview && (
+        <ClassReviewPrompt
+          classId={pendingReview.classId}
+          teacherName={pendingReview.teacherName}
+          groupName={pendingReview.groupName}
+          scheduledAt={pendingReview.scheduledAt}
+        />
+      )}
 
       {next ? (
         <NextClassCard
