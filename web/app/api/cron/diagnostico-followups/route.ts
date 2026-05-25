@@ -345,7 +345,7 @@ async function runCron(req: Request) {
           ? [
               `Hallo ${firstName}!`,
               ``,
-              `Ich weiß, du interessierst dich für Deutsch — deshalb habe ich dir etwas vorbereitet: ein kostenloses PDF mit Übungen für dein Niveau ${pdf.level}, damit du heute mit dem Üben anfangen kannst. Du findest es als Anhang in dieser Nachricht.`,
+              `Ich weiß, du interessierst dich für Deutsch — deshalb habe ich dir etwas vorbereitet: ein kostenloses PDF mit Lektionen für dein Niveau ${pdf.level}, damit du heute mit dem Üben anfangen kannst. Du findest es als Anhang in dieser Nachricht.`,
               ``,
               `Ich hoffe, es hilft dir! 💪`,
               ``,
@@ -354,7 +354,7 @@ async function runCron(req: Request) {
           : [
               `¡Hola ${firstName}!`,
               ``,
-              `Sé que estás interesado/a en aprender alemán, así que te he preparado algo: un PDF gratuito con ejercicios adaptados a tu nivel ${pdf.level} para que empieces a practicar desde hoy. Lo encuentras adjunto a este mensaje.`,
+              `Sé que estás interesado/a en aprender alemán, así que te he preparado algo: un PDF gratuito con lecciones adaptadas a tu nivel ${pdf.level} para que empieces a practicar desde hoy. Lo encuentras adjunto a este mensaje.`,
               ``,
               `¡Espero que te sea útil! 💪`,
               ``,
@@ -370,13 +370,13 @@ async function runCron(req: Request) {
         const pdfBuffer = lead.email ? await downloadPdfBuffer(pdf.r2Key) : null;
 
         const sendWaTextThenDoc = async () => {
-          // Primero el texto de contexto (sin link), luego el documento.
-          // Si el texto falla pero el documento sale, el contexto se pierde
-          // pero el lead recibe el PDF — aceptable.
-          await sendWhatsappText(lead.whatsapp_normalized, captionWa);
+          // 1 sola WhatsApp: documento PDF con el texto como CAPTION.
+          // Evolution lo muestra como una sola tarjeta de archivo +
+          // texto debajo. Antes mandábamos 2 (texto + doc) pero Gelfis
+          // pidió consolidar en 1 para no parecer spam.
           return sendWhatsappDocument(
             lead.whatsapp_normalized, signedUrl, pdf.fileName,
-            { caption: "", kind: "diagnostico_pdf_t24h", leadId: lead.id },
+            { caption: captionWa, kind: "diagnostico_pdf_t24h", leadId: lead.id },
           );
         };
 

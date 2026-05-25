@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import {
   sendDiagnosticoFollowupPdfEmail,
 } from "@/lib/email/send";
-import { sendWhatsappText, sendWhatsappDocument } from "@/lib/whatsapp";
+import { sendWhatsappDocument } from "@/lib/whatsapp";
 import { signRecordingUrl } from "@/lib/r2";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
@@ -67,9 +67,11 @@ const PDF_BY_LEVEL: Record<string, PdfMeta> = {
   "A1.2": { slug: "a1-2", level: "A1.2", title: "Formar frases y hacer preguntas",      r2Key: "marketing/v1/a1-2-frases-preguntas.pdf",  fileName: "Aprender-Aleman-Guia-A1.2.pdf" },
   "A2.1": { slug: "a2-1", level: "A2.1", title: "Hablar del pasado: el Perfekt",        r2Key: "marketing/v1/a2-1-perfekt.pdf",           fileName: "Aprender-Aleman-Guia-A2.1.pdf" },
   "A2.2": { slug: "a2-2", level: "A2.2", title: "Planes y obligaciones: modales + futuro", r2Key: "marketing/v1/a2-2-modales-futuro.pdf", fileName: "Aprender-Aleman-Guia-A2.2.pdf" },
-  // TODO: subir b1/b2 PDFs a R2 y restaurar las dos entradas siguientes.
-  "B1":   { slug: "a2-2", level: "A2.2 (fallback B1)", title: "Planes y obligaciones: modales + futuro", r2Key: "marketing/v1/a2-2-modales-futuro.pdf", fileName: "Aprender-Aleman-Guia-A2.2.pdf" },
-  "B2":   { slug: "a2-2", level: "A2.2 (fallback B2)", title: "Planes y obligaciones: modales + futuro", r2Key: "marketing/v1/a2-2-modales-futuro.pdf", fileName: "Aprender-Aleman-Guia-A2.2.pdf" },
+  // TODO: subir b1/b2 PDFs a R2 y restaurar a sus archivos reales.
+  // Hasta entonces caen al A2.2 pero MOSTRAMOS al lead su nivel real
+  // (B1 / B2) para que el mensaje suene coherente.
+  "B1":   { slug: "a2-2", level: "B1", title: "Planes y obligaciones: modales + futuro", r2Key: "marketing/v1/a2-2-modales-futuro.pdf", fileName: "Aprender-Aleman-Guia-B1.pdf" },
+  "B2":   { slug: "a2-2", level: "B2", title: "Planes y obligaciones: modales + futuro", r2Key: "marketing/v1/a2-2-modales-futuro.pdf", fileName: "Aprender-Aleman-Guia-B2.pdf" },
   // legacy keys
   "A1-A2": { slug: "a1-1", level: "A1.1", title: "Hablar de ti y tu día a día",         r2Key: "marketing/v1/a1-1-dia-a-dia.pdf",         fileName: "Aprender-Aleman-Guia-A1.1.pdf" },
   "B2+":   { slug: "a2-2", level: "A2.2", title: "Planes y obligaciones: modales + futuro", r2Key: "marketing/v1/a2-2-modales-futuro.pdf", fileName: "Aprender-Aleman-Guia-A2.2.pdf" },
@@ -124,14 +126,15 @@ function authorised(req: Request, url: URL): boolean {
   return false;
 }
 
-// Copia unificada Gelfis voice.
+// Copia unificada Gelfis voice. Se manda como CAPTION del documento
+// PDF en WhatsApp — 1 solo mensaje por lead (no texto + doc separados).
 function waText(name: string, level: string, language: "es" | "de"): string {
   const firstName = name.split(/\s+/)[0] || name;
   if (language === "de") {
     return [
       `Hallo ${firstName}!`,
       ``,
-      `Ich weiß, du interessierst dich für Deutsch — deshalb habe ich dir etwas vorbereitet: ein kostenloses PDF mit Übungen für dein Niveau ${level}, damit du heute mit dem Üben anfangen kannst. Du findest es als Anhang in dieser Nachricht.`,
+      `Ich weiß, du interessierst dich für Deutsch — deshalb habe ich dir etwas vorbereitet: ein kostenloses PDF mit Lektionen für dein Niveau ${level}, damit du heute mit dem Üben anfangen kannst. Du findest es als Anhang in dieser Nachricht.`,
       ``,
       `Ich hoffe, es hilft dir! 💪`,
       ``,
@@ -141,7 +144,7 @@ function waText(name: string, level: string, language: "es" | "de"): string {
   return [
     `¡Hola ${firstName}!`,
     ``,
-    `Sé que estás interesado/a en aprender alemán, así que te he preparado algo: un PDF gratuito con ejercicios adaptados a tu nivel ${level} para que empieces a practicar desde hoy. Lo encuentras adjunto a este mensaje.`,
+    `Sé que estás interesado/a en aprender alemán, así que te he preparado algo: un PDF gratuito con lecciones adaptadas a tu nivel ${level} para que empieces a practicar desde hoy. Lo encuentras adjunto a este mensaje.`,
     ``,
     `¡Espero que te sea útil! 💪`,
     ``,
@@ -216,20 +219,17 @@ async function runCron(req: Request) {
       const out: SendResult = { leadId: "test-" + level, level, waOk: false, docOk: false, emailOk: false };
 
       try {
-        // 1) WhatsApp text
-        const waRes = await sendWhatsappText(phoneToUse, text);
-        out.waOk = waRes.ok;
-        if (!waRes.ok) out.error = `wa_text:${waRes.reason}`;
-
-        // 2) WhatsApp document
+        // 1 sola WhatsApp: documento PDF con el texto como CAPTION.
+        // Evolution muestra el archivo + texto debajo, mismo bubble.
         const fileUrl = `https://${process.env.R2_ACCOUNT_ID ?? ""}.r2.cloudflarestorage.com/${process.env.R2_BUCKET ?? "aprender-aleman-recordings"}/${pdf.r2Key}`;
         const signedUrl = await signRecordingUrl(fileUrl, 24 * 3600);
         const docRes = await sendWhatsappDocument(
           phoneToUse, signedUrl, pdf.fileName,
-          { caption: "", kind: "bulk_pdf_test", leadId: "test-" + level },
+          { caption: text, kind: "bulk_pdf_test", leadId: "test-" + level },
         );
         out.docOk = docRes.ok;
-        if (!docRes.ok && !out.error) out.error = `wa_doc:${docRes.reason}`;
+        out.waOk = docRes.ok;   // mismo mensaje: si llega doc, llega todo
+        if (!docRes.ok) out.error = `wa_doc:${docRes.reason}`;
 
         // 3) Email
         const pdfBuffer = await downloadPdfBuffer(pdf.r2Key);
@@ -310,16 +310,15 @@ async function runCron(req: Request) {
     };
 
     try {
-      const waRes = await sendWhatsappText(lead.whatsapp_normalized, text);
-      out.waOk = waRes.ok;
-
+      // 1 sola WhatsApp por lead: documento con caption (no texto + doc).
       const fileUrl = `https://${process.env.R2_ACCOUNT_ID ?? ""}.r2.cloudflarestorage.com/${process.env.R2_BUCKET ?? "aprender-aleman-recordings"}/${pdf.r2Key}`;
       const signedUrl = await signRecordingUrl(fileUrl, 24 * 3600);
       const docRes = await sendWhatsappDocument(
         lead.whatsapp_normalized, signedUrl, pdf.fileName,
-        { caption: "", kind: "bulk_pdf_reactivation", leadId: lead.id },
+        { caption: text, kind: "bulk_pdf_reactivation", leadId: lead.id },
       );
       out.docOk = docRes.ok;
+      out.waOk = docRes.ok;
 
       if (lead.email) {
         const pdfBuffer = await downloadPdfBuffer(pdf.r2Key);
