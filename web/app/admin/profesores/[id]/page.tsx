@@ -23,7 +23,7 @@ export default async function TeacherDetailPage({
   const teacher = await getTeacherById(id);
   if (!teacher) notFound();
 
-  const [notes, optOutRow, futureClassesRes] = await Promise.all([
+  const [notes, optOutRow, futureClassesRes, reviewsRes] = await Promise.all([
     listAdminNotes("teacher", id),
     supabaseAdmin()
       .from("users")
@@ -37,7 +37,29 @@ export default async function TeacherDetailPage({
       .eq("teacher_id", id)
       .eq("status", "scheduled")
       .gt("scheduled_at", new Date().toISOString()),
+    // Reseñas que apuntan a clases de ESTE profe.
+    supabaseAdmin()
+      .from("class_reviews")
+      .select(`
+        id, rating, comment, created_at,
+        classes!inner(id, scheduled_at, teacher_id),
+        students!inner(users!inner(full_name, email))
+      `)
+      .eq("classes.teacher_id", id)
+      .not("rating", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(10),
   ]);
+  type RevRow = {
+    id: string; rating: number; comment: string | null; created_at: string;
+    classes: { scheduled_at: string };
+    students: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }
+           | Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
+  };
+  const reviews = ((reviewsRes.data ?? []) as unknown as RevRow[]);
+  const avgRating = reviews.length > 0
+    ? reviews.reduce((a, r) => a + r.rating, 0) / reviews.length
+    : 0;
   const scheduledFutureClasses = futureClassesRes.count ?? 0;
   const optOut = Boolean(
     (optOutRow.data as { notifications_opt_out?: boolean } | null)?.notifications_opt_out,
@@ -145,6 +167,51 @@ export default async function TeacherDetailPage({
           <Kv k="Notas"           v={teacher.notes ?? "—"} />
         </Panel>
       </div>
+
+      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+            Reseñas de alumnos
+          </h2>
+          {reviews.length > 0 ? (
+            <div className="text-sm text-slate-600 dark:text-slate-300">
+              <span className="text-amber-400">★</span>{" "}
+              <strong className="text-slate-900 dark:text-slate-50">{avgRating.toFixed(2)}</strong>{" "}
+              <span className="text-slate-500 dark:text-slate-400">
+                · {reviews.length} reseña{reviews.length === 1 ? "" : "s"} reciente{reviews.length === 1 ? "" : "s"}
+              </span>
+            </div>
+          ) : (
+            <span className="text-xs text-slate-500 dark:text-slate-400">Aún sin reseñas</span>
+          )}
+        </div>
+        {reviews.length > 0 && (
+          <ul className="mt-3 space-y-2.5">
+            {reviews.map(r => {
+              const s = Array.isArray(r.students) ? r.students[0] : r.students;
+              const su = Array.isArray(s.users) ? s.users[0] : s.users;
+              const when = new Date(r.classes.scheduled_at).toLocaleString("es-ES", {
+                timeZone: "Europe/Berlin", day: "2-digit", month: "short", year: "2-digit",
+              });
+              return (
+                <li key={r.id} className="text-sm border-l-2 border-amber-400 pl-3">
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                    <span className="text-amber-400 leading-none">
+                      {"★".repeat(r.rating)}<span className="text-slate-300 dark:text-slate-600">{"★".repeat(5 - r.rating)}</span>
+                    </span>
+                    <span className="text-xs">
+                      {su?.full_name ?? su?.email} · clase del {when}
+                    </span>
+                  </div>
+                  {r.comment && (
+                    <p className="mt-1 text-slate-700 dark:text-slate-200 italic">“{r.comment}”</p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
       <AcceptsTrialsToggle
         teacherId={teacher.id}

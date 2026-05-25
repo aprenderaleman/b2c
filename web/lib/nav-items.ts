@@ -32,7 +32,8 @@ export type NavIconKey =
   | "folder"
   | "award"
   | "userCircle"
-  | "video";
+  | "video"
+  | "star";
 
 export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" | "teacher" | "student", NavItem[]> = {
   superadmin: adminItems(),
@@ -76,6 +77,7 @@ function adminItems(): NavItem[] {
     { label: "Leads",       href: "/admin/leads",       icon: "users",         priority: 6 },
     { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 7 },
     { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
+    { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
     { label: "Chat",        href: "/chat",               icon: "messageCircle", priority: 10 },
   ];
