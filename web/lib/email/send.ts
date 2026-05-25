@@ -51,6 +51,10 @@ import {
   renderDiagnosticoFollowupPdf,
   type DiagnosticoFollowupPdfVars,
 } from "./templates/diagnostico-followup-pdf";
+import {
+  renderDiagnosticoTestFollowup,
+  type DiagnosticoTestFollowupVars,
+} from "./templates/diagnostico-test-followup";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -388,4 +392,16 @@ export async function sendDiagnosticoFollowupPdfEmail(
   return sendRaw(to, subject, html, text, [
     { filename: pdf.fileName, content: pdf.buffer },
   ]);
+}
+
+/**
+ * Msg 4 del drip (T+3d) — 24h después de invitar al test de nivel.
+ * Pregunta si descubrió su nivel + pide hora para llamada hoy/mañana.
+ */
+export async function sendDiagnosticoTestFollowupEmail(
+  to: string,
+  vars: DiagnosticoTestFollowupVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderDiagnosticoTestFollowup(vars);
+  return sendRaw(to, subject, html, text);
 }

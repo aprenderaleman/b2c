@@ -4,6 +4,7 @@ import {
   sendDiagnosticoWelcomeEmail,
   sendDiagnosticoFollowupEmail,
   sendDiagnosticoFollowupPdfEmail,
+  sendDiagnosticoTestFollowupEmail,
 } from "@/lib/email/send";
 import { sendWhatsappText, sendWhatsappDocument } from "@/lib/whatsapp";
 import { signRecordingUrl } from "@/lib/r2";
@@ -31,8 +32,16 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
  *                          frío en touchpoint cálido. PDF servido desde R2,
  *                          descargado y adjuntado al email; WA recibe URL
  *                          firmada (Evolution descarga).
- *   msg 3   →  T+3d    →  WhatsApp última llamada
- *   msg 4   →  T+7d    →  Email final_7d  + status='cold'
+ *   msg 3   →  T+2d    →  WhatsApp — invita al test de nivel gratis
+ *                          (https://schule.aprender-aleman.de/test-de-nivel).
+ *                          Ofrece un descubrimiento personalizado para que
+ *                          el lead vea exactamente en qué punto está.
+ *   msg 4   →  T+3d    →  WhatsApp + Email — 24h después del test:
+ *                          "¿descubriste tu nivel? ¿a qué hora hoy o
+ *                          mañana para una breve llamada?" Doble canal
+ *                          para maximizar respuesta — al menos uno cuenta.
+ *   msg 5   →  T+5d    →  WhatsApp última llamada
+ *   msg 6   →  T+8d    →  Email final_7d  + status='cold'
  *
  * Stop conditions (managed implicitly):
  *   - Si el lead agenda → book-trial cambia status a 'trial_scheduled'
@@ -40,7 +49,7 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
  *   - Si el lead responde por WA con palabras de baja → mark needs_human
  *     (esto NO es responsabilidad de este cron; lo hacen los agentes
  *     Python o el handler del webhook de WhatsApp).
- *   - Tras msg 4, el lead pasa a 'cold' y queda fuera del cron.
+ *   - Tras msg 6, el lead pasa a 'cold' y queda fuera del cron.
  *
  * Auth: `Authorization: Bearer <CRON_SECRET>` o `X-Cron-Secret`.
  *
@@ -58,11 +67,13 @@ const DAY_MS  = 24 * HOUR_MS;
 
 // Gates por mensaje — tiempo MÍNIMO desde diagnostico_completed_at
 // para que el mensaje N pueda salir.
-const GATES_MS: Record<1 | 2 | 3 | 4, number> = {
+const GATES_MS: Record<1 | 2 | 3 | 4 | 5 | 6, number> = {
   1: 15 * MIN_MS,
   2:      DAY_MS,
-  3:  3 * DAY_MS,
-  4:  7 * DAY_MS,
+  3:  2 * DAY_MS,
+  4:  3 * DAY_MS,
+  5:  5 * DAY_MS,
+  6:  8 * DAY_MS,
 };
 
 function authorised(req: Request): boolean {
@@ -183,16 +194,17 @@ async function runCron(req: Request) {
   const sb       = supabaseAdmin();
   const baseUrl  = (process.env.NEXT_PUBLIC_BASE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
   const bookUrl  = `${baseUrl}/agendar/cuando`;
+  const testUrl  = "https://schule.aprender-aleman.de/test-de-nivel";
   const now      = Date.now();
 
-  // Pulla leads en status 'registered' con menos de 4 mensajes enviados.
-  // Filtramos en SQL por last_drip_msg_n < 4 — los de 4 ya están 'cold'
+  // Pulla leads en status 'registered' con menos de 6 mensajes enviados.
+  // Filtramos en SQL por last_drip_msg_n < 6 — los de 6 ya están 'cold'
   // pero defendemos en cliente igual.
   const { data, error } = await sb
     .from("leads")
     .select("id, name, email, whatsapp_normalized, language, german_level, diagnostico_completed_at, last_drip_msg_n")
     .eq("status", "registered")
-    .lt("last_drip_msg_n", 4)
+    .lt("last_drip_msg_n", 6)
     .not("diagnostico_completed_at", "is", null);
 
   if (error) {
@@ -208,7 +220,7 @@ async function runCron(req: Request) {
   for (const lead of leads) {
     const completedAt = new Date(lead.diagnostico_completed_at).getTime();
     const elapsed     = now - completedAt;
-    const nextN       = (lead.last_drip_msg_n + 1) as 1 | 2 | 3 | 4;
+    const nextN       = (lead.last_drip_msg_n + 1) as 1 | 2 | 3 | 4 | 5 | 6;
     const gate        = GATES_MS[nextN];
 
     if (elapsed < gate) { skipped++; continue; }
@@ -362,15 +374,94 @@ async function runCron(req: Request) {
           console.error(`[diagnostico-followups] msg2 email failed lead=${lead.id} pdf=${pdf.slug}:`, err);
         }
       } else if (nextN === 3) {
-        // WhatsApp última llamada
+        // T+2d — WhatsApp invita al test de nivel gratis.
+        // Mensaje corto, una sola línea de copy + URL clickable.
+        kind = "wa";
+        const text = lead.language === "de"
+          ? [
+              `Hallo ${firstName} 👋`,
+              ``,
+              `Eine Idee: möchtest du dein aktuelles Deutsch-Niveau in 5 Min herausfinden? Wir haben einen kostenlosen Test, der dir genau sagt, wo du stehst:`,
+              ``,
+              `${testUrl}`,
+              ``,
+              `Danach erzähl mir das Ergebnis und ich sage dir, was der nächste Schritt für dich wäre. 🇩🇪`,
+            ].join("\n")
+          : [
+              `Hola ${firstName} 👋`,
+              ``,
+              `Una idea: ¿quieres descubrir tu nivel real de alemán en 5 minutos? Tenemos un test gratuito que te dice exactamente en qué punto estás:`,
+              ``,
+              `${testUrl}`,
+              ``,
+              `Cuando termines, cuéntame tu resultado y te digo cuál sería tu siguiente paso. 🇩🇪`,
+            ].join("\n");
+        const r = await sendWhatsappText(lead.whatsapp_normalized, text);
+        ok = r.ok;
+      } else if (nextN === 4) {
+        // T+3d — 24h después del test: ¿descubriste tu nivel? + hora.
+        // WhatsApp + Email en paralelo. Al menos uno cuenta.
+        kind = "wa+email";
+        const waText = lead.language === "de"
+          ? [
+              `Hallo ${firstName}!`,
+              ``,
+              `Konntest du gestern den Niveau-Test machen? Falls ja, würde ich gern 15 Min mit dir sprechen, um dir zu erklären, welcher Weg dir am meisten hilft.`,
+              ``,
+              `Wann passt es dir heute oder morgen, dass ich dich anrufe?`,
+              ``,
+              `Falls du den Test noch nicht gemacht hast: ${testUrl}`,
+            ].join("\n")
+          : [
+              `¡Hola ${firstName}!`,
+              ``,
+              `¿Pudiste hacer el test de nivel ayer? Si ya tienes tu resultado, me encantaría hablar 15 minutos contigo para explicarte qué camino te conviene más desde ahí.`,
+              ``,
+              `¿A qué hora te vendría bien hoy o mañana que te llame?`,
+              ``,
+              `Si aún no hiciste el test: ${testUrl}`,
+            ].join("\n");
+
+        const sendEmail = lead.email
+          ? sendDiagnosticoTestFollowupEmail(lead.email, {
+              leadName: firstName,
+              language: lead.language,
+              testUrl,
+              bookUrl,
+            })
+          : Promise.resolve({ ok: false as const, error: "no_email" });
+
+        const [waRes, emailRes] = await Promise.allSettled([
+          sendWhatsappText(lead.whatsapp_normalized, waText),
+          sendEmail,
+        ]);
+        const waOk = waRes.status === "fulfilled" && waRes.value.ok;
+        const emailOk = emailRes.status === "fulfilled" &&
+          (emailRes.value as { ok: boolean }).ok;
+        ok = waOk || emailOk;
+
+        if (!waOk) {
+          const err = waRes.status === "rejected"
+            ? (waRes.reason instanceof Error ? waRes.reason.message : String(waRes.reason))
+            : "send_failed";
+          console.error(`[diagnostico-followups] msg4 WA failed lead=${lead.id}:`, err);
+        }
+        if (!emailOk) {
+          const err = emailRes.status === "rejected"
+            ? (emailRes.reason instanceof Error ? emailRes.reason.message : String(emailRes.reason))
+            : (emailRes.value as { ok: false; error: string }).error;
+          console.error(`[diagnostico-followups] msg4 email failed lead=${lead.id}:`, err);
+        }
+      } else if (nextN === 5) {
+        // T+5d — WhatsApp última llamada.
         kind = "wa";
         const text = lead.language === "de"
           ? `Hallo ${firstName}, letzte Nachfrage. Buchen wir deine Probestunde oder lieber später?  ${bookUrl}`
           : `Hola ${firstName}, última llamada por si te interesa. ¿Agendamos tu clase o lo dejamos para más adelante?  ${bookUrl}`;
         const r = await sendWhatsappText(lead.whatsapp_normalized, text);
         ok = r.ok;
-      } else if (nextN === 4) {
-        // Email final + cold
+      } else if (nextN === 6) {
+        // T+8d — Email final + cold.
         kind = "email";
         if (!lead.email) { skipped++; continue; }
         const r = await sendDiagnosticoFollowupEmail(lead.email, {
@@ -389,12 +480,12 @@ async function runCron(req: Request) {
 
     if (!ok) { errors++; continue; }
 
-    // Marcar progreso. El msg 4 además mueve a 'cold'.
+    // Marcar progreso. El msg 6 (último) además mueve a 'cold'.
     const update: Record<string, unknown> = {
       last_drip_msg_n:   nextN,
       last_drip_sent_at: new Date().toISOString(),
     };
-    if (nextN === 4) update.status = "cold";
+    if (nextN === 6) update.status = "cold";
 
     const { error: updErr } = await sb.from("leads").update(update).eq("id", lead.id);
     if (updErr) {
