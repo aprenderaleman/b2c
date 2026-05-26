@@ -18,7 +18,8 @@ type StepKey =
   | "datos"
   | "calendario"
   | "low_budget"
-  | "already_registered";
+  | "already_registered"
+  | "success";
 
 export function IllustrationPanel({
   step,
@@ -59,6 +60,7 @@ function IllustrationFor({ step }: { step: StepKey }) {
   if (step === "calendario")    return <IllustrationCalendario />;
   if (step === "low_budget")    return <IllustrationLowBudget />;
   if (step === "already_registered") return <IllustrationAlreadyReg />;
+  if (step === "success")       return <IllustrationSuccess />;
   return null;
 }
 
@@ -165,6 +167,37 @@ function IllustrationLowBudget() {
       {/* Hucha / moneda */}
       <circle cx="140" cy="140" r="70" fill="#fde68a" stroke="#f59e0b" strokeWidth="4" />
       <text x="140" y="155" fontSize="56" textAnchor="middle" fill="#92400e" fontWeight="700">€</text>
+    </svg>
+  );
+}
+
+function IllustrationSuccess() {
+  // Celebración: calendario con check + confetti naranja/ámbar.
+  // Renderizada en /confirmacion tras agendar clase de prueba.
+  return (
+    <svg viewBox="0 0 280 280" className="w-full h-auto max-h-[180px] md:max-h-[360px]" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <ellipse cx="140" cy="240" rx="90" ry="9" fill="#0f172a" opacity="0.08" />
+      {/* Confetti — pétalos de colores alrededor */}
+      <g opacity="0.85">
+        <rect x="40"  y="40"  width="10" height="4" rx="2" fill="#f97316" transform="rotate(20 45 42)" />
+        <rect x="230" y="50"  width="8"  height="4" rx="2" fill="#fbbf24" transform="rotate(-30 234 52)" />
+        <rect x="50"  y="100" width="6"  height="4" rx="2" fill="#34d399" transform="rotate(45 53 102)" />
+        <rect x="225" y="105" width="8"  height="4" rx="2" fill="#f97316" transform="rotate(60 229 107)" />
+        <rect x="35"  y="170" width="8"  height="4" rx="2" fill="#fbbf24" transform="rotate(-15 39 172)" />
+        <rect x="230" y="180" width="10" height="4" rx="2" fill="#34d399" transform="rotate(35 235 182)" />
+        <circle cx="55"  cy="65"  r="3" fill="#fbbf24" />
+        <circle cx="220" cy="80"  r="3" fill="#f97316" />
+        <circle cx="60"  cy="200" r="3" fill="#f97316" />
+        <circle cx="215" cy="210" r="3" fill="#fbbf24" />
+      </g>
+      {/* Círculo verde grande con check — la reserva está confirmada */}
+      <circle cx="140" cy="140" r="70" fill="#34d399" />
+      <circle cx="140" cy="140" r="70" fill="none" stroke="#10b981" strokeWidth="4" />
+      <path d="M108 142 L130 162 L172 118" stroke="white" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      {/* Estrella arriba a la derecha */}
+      <g transform="translate(195 50)">
+        <polygon points="0,-12 3,-4 12,-3 5,3 7,12 0,7 -7,12 -5,3 -12,-3 -3,-4" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
+      </g>
     </svg>
   );
 }

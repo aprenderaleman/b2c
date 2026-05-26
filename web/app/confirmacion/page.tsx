@@ -1,25 +1,21 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Header } from "@/components/Header";
 import { supabaseAdmin } from "@/lib/supabase";
 import { verifyTrialToken } from "@/lib/trial-token";
+import { IllustrationPanel } from "@/components/diagnostico/IllustrationPanel";
+import { RobotMark } from "@/components/RobotMark";
 
 /**
  * GET /confirmacion?c={classId}&t={token}
  *
- * Standalone confirmation page the funnel redirects to after a
- * successful self-service booking. We don't render the success state
- * inline anymore — the lead lands on its own URL so the page is
- * bookmarkable and shareable, and so the homepage can stay focused
- * on the booking flow.
+ * Standalone confirmation page tras una reserva exitosa de clase de
+ * prueba. Tras el redesign 2026-05-26 usa el mismo layout split-screen
+ * (estilo Preply) que el funnel: ilustración a la izquierda + contenido
+ * a la derecha. Light mode con paleta brand (warm + amber + emerald).
  *
- * The token is the same HMAC-signed magic-link token used to enter
- * the aula on the day of the class. We verify it server-side and
- * refuse to render anything sensitive if it's missing or invalid.
- *
- * El PRIMARY CTA apunta al catálogo de cursos en la web pública
- * (decisión Gelfis 2026-05-22). Antes apuntaba a SCHULE — los imports
- * SCHULE_MAINTENANCE y el const SCHULE_URL ya no se usan aquí.
+ * El token es el mismo HMAC-signed magic-link token usado para entrar
+ * al aula. Lo verificamos server-side y rechazamos render si está
+ * ausente o inválido (redirect a "/").
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,7 +33,6 @@ export default async function ConfirmacionPage({
   const payload = verifyTrialToken(token);
   if (!payload || payload.class_id !== classId) redirect("/");
 
-  // Pull the booking — name, date, teacher, short_code.
   const sb = supabaseAdmin();
   const { data: cls } = await sb
     .from("classes")
@@ -81,120 +76,147 @@ export default async function ConfirmacionPage({
     minute:   "2-digit",
   });
 
-  // Prefer the short URL (matches what we sent over email/WhatsApp).
-  // Falls back to the long signed-token URL if the class somehow lacks
-  // a short_code (older bookings made before migration 036).
+  // Magic-link corto (matches what salió por email/WhatsApp). Fallback
+  // al URL largo si el class no tiene short_code (pre-migration 036).
   const magicLinkUrl = r.short_code
     ? `/c/${r.short_code}`
     : `/trial/${classId}?t=${encodeURIComponent(token)}`;
 
   return (
-    <div className="theme-light bg-white text-foreground min-h-screen">
-      <Header />
+    <div className="min-h-[100dvh] bg-white text-slate-900"
+         style={{ overscrollBehavior: "contain" }}>
+      <IllustrationPanel step="success">
+        <div className="flex flex-col min-h-[100dvh]">
+          {/* Header sticky — sólo brand + back a inicio, sin progress bar. */}
+          <header
+            className="sticky top-0 z-40 backdrop-blur bg-white/95 border-b border-slate-100"
+            style={{ paddingTop: "env(safe-area-inset-top)" }}
+          >
+            <div className="mx-auto max-w-xl flex items-center justify-between gap-2 h-14 md:h-16 px-4">
+              <Link
+                href="/"
+                aria-label="Volver al inicio"
+                className="h-10 w-10 inline-flex items-center justify-center rounded-full
+                           text-slate-700 hover:bg-slate-100 active:scale-95 transition"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </Link>
 
-      {/* ── HERO (light): confirmation header + booking summary ── */}
-      <section className="bg-white">
-        <div className="container-x pt-12 sm:pt-16 pb-8 text-center max-w-2xl">
-          <div className="inline-flex items-center justify-center h-14 w-14 rounded-full bg-warm/15 text-[#B4651F] mb-5">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none"
-                 stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-          </div>
-          <span className="eyebrow">Reserva confirmada</span>
-          <h1 className="mt-3 text-[36px] sm:text-5xl font-bold tracking-tight text-foreground leading-[1.05]">
-            ¡Listo{firstName ? `, ${firstName}` : ""}!
-            <br className="hidden sm:block"/>
-            Tu clase está agendada.
-          </h1>
-          <p className="mt-4 text-lg text-muted-foreground leading-relaxed">
-            Te enviamos los detalles a tu correo y a tu WhatsApp. El día de la
-            clase entrarás directamente con el enlace que te llegó — sin contraseña.
-          </p>
+              <Link
+                href="/"
+                aria-label="Aprender-Aleman.de"
+                className="flex items-center gap-1.5 md:gap-2 text-slate-900 active:scale-[0.97] transition"
+              >
+                <span className="md:hidden"><RobotMark size={26} /></span>
+                <span className="hidden md:inline-block"><RobotMark size={32} /></span>
+                <span className="text-[13px] sm:text-sm md:text-base font-semibold tracking-tight">
+                  Aprender-Aleman<span className="text-warm">.de</span>
+                </span>
+              </Link>
 
-          {/* Bloque "valor 30 €" destacado — refuerzo de asistencia.
-              Va ARRIBA del summary para que sea lo primero que vea el
-              lead al aterrizar tras confirmar. Decisión Gelfis
-              2026-05-22. */}
-          <div className="mt-8 rounded-2xl border-2 border-amber-300 bg-amber-50 text-left p-5">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl leading-none mt-0.5" aria-hidden>💎</span>
-              <div className="min-w-0">
-                <p className="text-[12px] font-bold uppercase tracking-wider text-amber-900">
-                  Tu clase tiene valor de 30 €
-                </p>
-                <p className="mt-1.5 text-[15px] text-amber-900 leading-snug">
-                  Te la regalamos por asistir. Te esperamos
-                  el <strong className="capitalize">{startDate}</strong>.
-                </p>
+              <div className="h-10 w-10" />
+            </div>
+          </header>
+
+          <main className="flex-1 mx-auto w-full max-w-xl px-5 md:px-8 pt-6 md:pt-12 lg:pt-16 pb-12 md:pb-16">
+            {/* Eyebrow + título principal */}
+            <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+              ✓ Reserva confirmada
+            </p>
+            <h1 className="mt-2 text-[28px] sm:text-3xl md:text-4xl lg:text-[40px] font-extrabold tracking-tight text-slate-900 leading-tight">
+              ¡Listo{firstName ? `, ${firstName}` : ""}!<br />
+              Tu clase está agendada.
+            </h1>
+            <p className="mt-3 text-[15px] md:text-base text-slate-600 leading-relaxed">
+              Te enviamos los detalles a tu WhatsApp (y también a tu email si nos lo diste).
+              El día de la clase entrarás directamente con el enlace que te llegó —
+              sin contraseña.
+            </p>
+
+            {/* 💎 Bloque "valor 30 €" — refuerzo de asistencia. Va antes
+                del summary para que sea lo primero que vea el lead. */}
+            <div className="mt-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 md:p-5">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl leading-none mt-0.5" aria-hidden>💎</span>
+                <div className="min-w-0">
+                  <p className="text-[12px] font-bold uppercase tracking-wider text-amber-900">
+                    Tu clase tiene valor de 30 €
+                  </p>
+                  <p className="mt-1.5 text-[14.5px] md:text-[15px] text-amber-900 leading-snug">
+                    Te la regalamos por asistir. Te esperamos
+                    el <strong className="capitalize">{startDate}</strong>.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Booking summary card */}
-          <div className="mt-5 rounded-2xl bg-white border border-border shadow-sm p-6 text-left space-y-3">
-            <SummaryRow k="Fecha"     v={startDate} cap />
-            <SummaryRow k="Profesor"  v={teacherName} />
-            <SummaryRow k="Duración"  v={`${r.duration_minutes ?? 45} minutos`} />
-          </div>
+            {/* Booking summary card — datos clave de la reserva */}
+            <div className="mt-4 rounded-2xl bg-white border border-slate-200 shadow-sm p-5 md:p-6 space-y-3">
+              <SummaryRow k="Fecha"     v={startDate} cap />
+              <SummaryRow k="Profesor"  v={teacherName} />
+              <SummaryRow k="Duración"  v={`${r.duration_minutes ?? 45} minutos`} />
+            </div>
+
+            {/* CTA principal — al catálogo de cursos */}
+            <div className="mt-8">
+              <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-slate-500">
+                Mientras esperas tu clase
+              </p>
+              <h2 className="mt-2 text-[20px] md:text-[24px] font-bold text-slate-900 leading-snug">
+                Conoce nuestros cursos y tarifas
+              </h2>
+              <p className="mt-2 text-[14px] md:text-[15px] text-slate-600 leading-relaxed">
+                Visita nuestra web para ver todos los detalles, niveles y precios
+                de los packs disponibles.
+              </p>
+              <a
+                href="https://www.aprender-aleman.de/es/cursos"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-4 inline-flex items-center gap-2 h-12 md:h-14 px-6 rounded-2xl
+                           bg-warm text-warm-foreground font-semibold text-[15px] md:text-base
+                           shadow-lg shadow-warm/20 hover:shadow-warm/30 active:scale-[0.98] transition"
+              >
+                Ver cursos y precios
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                  <polyline points="12 5 19 12 12 19"/>
+                </svg>
+              </a>
+            </div>
+
+            {/* Acciones secundarias — guardar link + ir al inicio */}
+            <div className="mt-10 pt-6 border-t border-slate-100">
+              <a
+                href={magicLinkUrl}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-warm transition-colors underline-offset-4 hover:underline"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" />
+                  <polyline points="7 3 7 8 15 8" />
+                </svg>
+                Guardar enlace de la clase
+              </a>
+              <p className="mt-2 text-xs text-slate-500 leading-snug">
+                El aula abre 15 minutos antes. Recibirás recordatorios por
+                WhatsApp y email antes de la clase.
+              </p>
+
+              <Link
+                href="/"
+                className="mt-6 inline-block text-sm text-slate-500 hover:text-slate-900 transition-colors"
+              >
+                ← Volver al inicio
+              </Link>
+            </div>
+          </main>
         </div>
-      </section>
-
-      {/* ── NAVY: PRIMARY CTA — ver detalles y precios de los cursos.
-              Antes apuntaba a SCHULE; decisión Gelfis 2026-05-22:
-              direccionar al catálogo público de cursos en la web
-              principal porque el lead aún no ha probado la clase y
-              SCHULE le pide cuenta. ── */}
-      <section className="section-navy section-pad">
-        <div className="container-x text-center max-w-3xl">
-          <span className="eyebrow-on-navy">Mientras esperas tu clase</span>
-          <h2 className="mt-3 text-[30px] md:text-[42px] font-bold tracking-tight text-white leading-[1.1]">
-            Conoce nuestros cursos y tarifas
-          </h2>
-          <p className="mt-4 text-base md:text-lg text-white/75 leading-relaxed">
-            Visita nuestra web para ver todos los detalles, niveles y
-            precios de los packs disponibles.
-          </p>
-          <div className="mt-8">
-            <a
-              href="https://www.aprender-aleman.de/es/cursos"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-primary-lg"
-            >
-              Ver cursos y precios
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-                <polyline points="12 5 19 12 12 19"/>
-              </svg>
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* ── MUTED: secondary actions ── */}
-      <section className="section-muted-bg section-pad">
-        <div className="container-x text-center max-w-2xl">
-          <a
-            href={magicLinkUrl}
-            className="inline-flex items-center gap-2 text-sm font-semibold text-foreground hover:text-warm transition-colors underline-offset-4 hover:underline"
-          >
-            Guardar enlace de la clase
-          </a>
-          <p className="mt-2 text-xs text-muted-foreground">
-            El aula abre 15 minutos antes. Recibirás recordatorios por email y
-            WhatsApp antes de la clase.
-          </p>
-
-          <Link
-            href="/"
-            className="mt-10 inline-block text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            ← Volver al inicio
-          </Link>
-        </div>
-      </section>
+      </IllustrationPanel>
     </div>
   );
 }
@@ -202,10 +224,10 @@ export default async function ConfirmacionPage({
 function SummaryRow({ k, v, cap = false }: { k: string; v: string; cap?: boolean }) {
   return (
     <div className="flex items-baseline gap-3">
-      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground w-20 shrink-0">
+      <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500 w-20 shrink-0">
         {k}
       </span>
-      <span className={`text-sm font-medium text-foreground ${cap ? "capitalize" : ""}`}>
+      <span className={`text-[14px] md:text-sm font-medium text-slate-900 ${cap ? "capitalize" : ""}`}>
         {v}
       </span>
     </div>
