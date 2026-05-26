@@ -29,6 +29,7 @@ import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
 import { MobileDayStrip }               from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem }      from "@/components/agendar/TimeList";
 import { RobotMark }                    from "@/components/RobotMark";
+import { IllustrationPanel }            from "./IllustrationPanel";
 
 // ── Opciones del quiz (sincronizadas 1-a-1 con el endpoint
 //    /api/public/diagnostico/register — si cambias texto aquí cámbialo
@@ -203,11 +204,12 @@ export function DiagnosticoFunnel() {
   const [leadId,     setLeadId]     = useState<string | null>(null);
   const [sessionId,  setSessionId]  = useState<string | null>(null);
 
-  // Theme color para la barra de estado en móvil
+  // Theme color para la barra de estado en móvil — cream/rose pastel
+  // tras el redesign light-mode 2026-05-26 (estilo Preply).
   useEffect(() => {
     const meta = document.createElement("meta");
     meta.setAttribute("name", "theme-color");
-    meta.setAttribute("content", "#0F2847");
+    meta.setAttribute("content", "#FFF1ED");
     meta.setAttribute("data-diagnostico", "1");
     document.head.appendChild(meta);
     return () => { meta.remove(); };
@@ -439,81 +441,87 @@ export function DiagnosticoFunnel() {
 
   // ── Render ──────────────────────────────────────────────────
 
+  // Mapeo paso → key de ilustración. Pasos 3/4/5 ya no se muestran al
+  // usuario (quiz simplificado a motivo+nivel) pero los mantenemos por
+  // compat de tipos.
+  const illustrationKey =
+    step === 1 ? "motivo" :
+    step === 2 ? "nivel" :
+    step === 6 ? "datos" :
+    step === 7 ? "calendario" :
+    step === "low_budget_exit" ? "low_budget" :
+    "motivo";
+
   return (
-    <div className="theme-dark min-h-[100dvh] bg-navy-900 text-white flex flex-col"
+    <div className="min-h-[100dvh] bg-white text-slate-900"
          style={{ overscrollBehavior: "contain" }}>
-      {/* Header sticky */}
-      <header
-        className="sticky top-0 z-40 backdrop-blur bg-navy-900/95 border-b border-white/5"
-        style={{ paddingTop: "env(safe-area-inset-top)" }}
-      >
-        <div className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl flex items-center justify-between gap-2 h-14 md:h-16 px-3">
-          <button
-            type="button"
-            onClick={goBack}
-            disabled={step === 1 || step === 7}
-            className="h-10 w-10 inline-flex items-center justify-center rounded-full
-                       text-white/85 hover:bg-white/10 active:scale-95 transition
-                       disabled:opacity-30 disabled:active:scale-100"
-            aria-label="Paso anterior"
+      <IllustrationPanel step={illustrationKey}>
+        <div className="flex flex-col min-h-[100dvh] md:min-h-[100dvh]">
+          {/* Header sticky con back + brand + step counter */}
+          <header
+            className="sticky top-0 z-40 backdrop-blur bg-white/95 border-b border-slate-100"
+            style={{ paddingTop: "env(safe-area-inset-top)" }}
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
+            <div className="mx-auto max-w-xl flex items-center justify-between gap-2 h-14 md:h-16 px-4">
+              <button
+                type="button"
+                onClick={goBack}
+                disabled={step === 1 || step === 7}
+                className="h-10 w-10 inline-flex items-center justify-center rounded-full
+                           text-slate-700 hover:bg-slate-100 active:scale-95 transition
+                           disabled:opacity-30 disabled:active:scale-100"
+                aria-label="Paso anterior"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
 
-          {/* Brand: logo + wordmark. Click vuelve a la home (reinicia
-              el quiz). Tamaño compacto para no robar foco al contenido. */}
-          <Link
-            href="/"
-            aria-label="Aprender-Aleman.de"
-            className="flex items-center gap-1.5 md:gap-2 text-white/90 active:scale-[0.97] transition"
-          >
-            <span className="md:hidden"><RobotMark size={26} /></span>
-            <span className="hidden md:inline-block"><RobotMark size={32} /></span>
-            <span className="text-[13px] sm:text-sm md:text-base lg:text-lg font-semibold tracking-tight">
-              Aprender-Aleman<span className="text-warm">.de</span>
-            </span>
-          </Link>
+              <Link
+                href="/"
+                aria-label="Aprender-Aleman.de"
+                className="flex items-center gap-1.5 md:gap-2 text-slate-900 active:scale-[0.97] transition"
+              >
+                <span className="md:hidden"><RobotMark size={26} /></span>
+                <span className="hidden md:inline-block"><RobotMark size={32} /></span>
+                <span className="text-[13px] sm:text-sm md:text-base font-semibold tracking-tight">
+                  Aprender-Aleman<span className="text-warm">.de</span>
+                </span>
+              </Link>
 
-          {/* Indicador discreto de paso en el slot derecho. Para los
-              pasos sin número (low_budget_exit, 7) lo escondemos. */}
-          <div className="h-10 w-10 inline-flex items-center justify-end pr-1">
-            {step !== "low_budget_exit" && step !== 7 && (
-              <span className="text-[11px] font-semibold tracking-wide text-white/55 tabular-nums">
-                {visualStepNum}/{totalSteps}
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="h-0.5 bg-white/5">
-          <div
-            className="h-full bg-warm transition-[width] duration-300 ease-out"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
-      </header>
+              <div className="h-10 w-10 inline-flex items-center justify-end pr-1">
+                {step !== "low_budget_exit" && step !== 7 && (
+                  <span className="text-[11px] font-semibold tracking-wide text-slate-500 tabular-nums">
+                    {visualStepNum}/{totalSteps}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="h-1 bg-slate-100">
+              <div
+                className="h-full bg-warm transition-[width] duration-300 ease-out"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </header>
 
-      {/* Prueba social — barra discreta sólo en pasos del quiz (1, 2)
-          y del form (6). Da al visitante razones para invertir 30s
-          en responder. No se muestra en calendario/resumen para no
-          competir visualmente con el slot picker / confirmación. */}
-      {(step === 1 || step === 2 || step === 6) && (
-        <div className="mx-auto w-full max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pt-3">
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] sm:text-xs text-white/55 leading-snug">
-            <span className="flex items-center gap-1">
-              <span className="text-amber-300">⭐⭐⭐⭐⭐</span>
-              <span>+800 estudiantes activos</span>
-            </span>
-            <span className="hidden sm:inline text-white/20">·</span>
-            <span>💬 Respuesta en &lt;5 min</span>
-            <span className="hidden sm:inline text-white/20">·</span>
-            <span>🇩🇪 Profesores nativos certificados</span>
-          </div>
-        </div>
-      )}
+          {/* Prueba social — sólo en pasos del quiz (1, 2) y del form (6). */}
+          {(step === 1 || step === 2 || step === 6) && (
+            <div className="mx-auto w-full max-w-xl px-5 pt-3">
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] sm:text-xs text-slate-500 leading-snug">
+                <span className="flex items-center gap-1">
+                  <span className="text-amber-500">⭐⭐⭐⭐⭐</span>
+                  <span>+800 estudiantes activos</span>
+                </span>
+                <span className="hidden sm:inline text-slate-300">·</span>
+                <span>💬 Respuesta en &lt;5 min</span>
+                <span className="hidden sm:inline text-slate-300">·</span>
+                <span>🇩🇪 Profesores nativos certificados</span>
+              </div>
+            </div>
+          )}
 
-      <main className="flex-1 mx-auto w-full max-w-xl md:max-w-2xl lg:max-w-3xl">
+          <main className="flex-1 mx-auto w-full max-w-xl">
         {step === 1 && (
           <MotivoInicialStep
             selected={answers.motivo}
@@ -581,7 +589,9 @@ export function DiagnosticoFunnel() {
             leadId={leadId}
           />
         )}
-      </main>
+          </main>
+        </div>
+      </IllustrationPanel>
     </div>
   );
 }
@@ -611,21 +621,19 @@ function MotivoInicialStep({
 }) {
   return (
     <div className="px-5 md:px-8 pt-5 md:pt-10 lg:pt-14 pb-10 md:pb-16">
-      {/* Título centrado, +10% en móvil (text-[27px] vs antes 24).
-          Tracking más cerrado para que el centrado se vea balanced. */}
-      <h1 className="text-center text-[27px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white leading-tight">
-        Aprende alemán con profesores nativos
-      </h1>
-      {/* +10% en móvil (text-[20px] vs antes 18). Centrado para
-          coherencia con el h1. Aumento margen superior — antes era
-          mt-3, ahora mt-7/mt-8 (móvil) y mt-12 (desktop) para dejar
-          respirar el título. */}
+      {/* Layout estilo Preply (2026-05-26): título alineado a la
+          izquierda, no centrado. La ilustración va en el panel
+          adyacente (IllustrationPanel), no necesitamos hero grande
+          aquí — basta con la pregunta principal directa. */}
       <h2
         id="motivo-inicial-question"
-        className="mt-7 md:mt-12 lg:mt-16 text-center text-[20px] sm:text-xl md:text-2xl lg:text-[26px] font-semibold text-white/90 leading-snug"
+        className="text-[22px] sm:text-2xl md:text-3xl lg:text-[32px] font-extrabold tracking-tight text-slate-900 leading-tight"
       >
         ¿Qué tipo de clases de alemán buscas?
       </h2>
+      <p className="mt-2 text-[14px] md:text-base text-slate-600 leading-snug">
+        Te ayudamos a aprender alemán con profesores nativos certificados.
+      </p>
       {/* Margen extra entre la pregunta y las opciones (mt-7 mobile,
           mt-10 desktop) — antes mt-4. */}
       <ul
@@ -644,11 +652,11 @@ function MotivoInicialStep({
                 data-choice={opt.id}
                 onClick={() => onPick(opt.id)}
                 className={`w-full flex items-center gap-3 md:gap-4 px-4 md:px-5 min-h-[52px] md:min-h-[64px] lg:min-h-[72px] py-2 md:py-3 rounded-2xl
-                            text-left text-white
+                            text-left text-slate-900
                             border transition active:scale-[0.99]
                             ${isSelected
-                              ? "border-warm bg-warm/15"
-                              : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+                              ? "border-warm bg-warm/10"
+                              : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}
               >
                 <span className="text-[22px] sm:text-xl md:text-2xl leading-none shrink-0" aria-hidden>
                   {opt.emoji}
@@ -682,7 +690,7 @@ function QuizStep({
           {personalizedH2}
         </h2>
       )}
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
         {title}
       </h1>
       <ul className="mt-6 space-y-3">
@@ -694,11 +702,11 @@ function QuizStep({
                 type="button"
                 onClick={() => onPick(opt.id)}
                 className={`w-full flex items-center gap-3 md:gap-4 px-4 md:px-5 h-16 md:h-[72px] lg:h-20 rounded-2xl
-                            text-left text-white font-medium
+                            text-left text-slate-900 font-medium
                             border transition active:scale-[0.99]
                             ${isSelected
-                              ? "border-warm bg-warm/15"
-                              : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+                              ? "border-warm bg-warm/10"
+                              : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}
               >
                 <span className="text-2xl md:text-3xl" aria-hidden>{opt.emoji}</span>
                 <span className="text-[15px] md:text-base lg:text-lg leading-snug">{opt.label}</span>
@@ -714,20 +722,20 @@ function QuizStep({
 function LowBudgetExit({ onBack }: { onBack: () => void }) {
   return (
     <div className="px-5 md:px-8 pt-8 md:pt-12 lg:pt-16 pb-12 md:pb-16">
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
         Gracias por contarnos tu situación
       </h1>
-      <p className="mt-4 text-[15px] md:text-base lg:text-lg text-white/80 leading-relaxed">
+      <p className="mt-4 text-[15px] md:text-base lg:text-lg text-slate-700 leading-relaxed">
         Nuestras clases con profesores empiezan desde 285€/mes, así que probablemente
         no encajemos con tu momento actual. Pero no te quedes sin avanzar — empieza
         con Schule, nuestra plataforma de auto-estudio impulsada por IA.
       </p>
 
-      <div className="mt-7 rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="mt-7 rounded-2xl border border-slate-200 bg-slate-50 p-5">
         <div className="text-[13px] font-semibold uppercase tracking-[0.16em] text-warm">
           ✨ Empieza con Schule
         </div>
-        <p className="mt-2 text-[14px] text-white/75 leading-relaxed">
+        <p className="mt-2 text-[14px] text-slate-600 leading-relaxed">
           Plataforma de auto-estudio con ejercicios de gramática, lectura, escritura
           y conversación + Hans, tu profesor digital con IA 24/7.
         </p>
@@ -746,7 +754,7 @@ function LowBudgetExit({ onBack }: { onBack: () => void }) {
         type="button"
         onClick={onBack}
         className="mt-3 block w-full text-center h-12 rounded-2xl
-                   border border-white/15 text-white/85 font-medium
+                   border border-slate-300 text-slate-700 font-medium
                    active:scale-[0.98] transition"
       >
         ← Cambiar mi presupuesto
@@ -780,10 +788,10 @@ function DataCaptureStep({
 
   return (
     <div className="px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)]">
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
         ¡Estamos creando tu plan!
       </h1>
-      <p className="mt-2 text-[15px] md:text-base lg:text-lg text-white/70 leading-relaxed">
+      <p className="mt-2 text-[15px] md:text-base lg:text-lg text-slate-600 leading-relaxed">
         Para enviártelo y agendar tu clase de prueba, necesitamos tus datos:
       </p>
 
@@ -794,9 +802,9 @@ function DataCaptureStep({
             autoComplete="name"
             value={form.name}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
-                       text-white placeholder:text-white/40
-                       focus:outline-none focus:border-warm focus:bg-white/10"
+            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border border-slate-200
+                       text-slate-900 placeholder:text-slate-400
+                       focus:outline-none focus:border-warm focus:bg-slate-100"
             placeholder="Tu nombre y apellido"
           />
         </Field>
@@ -808,9 +816,9 @@ function DataCaptureStep({
               inputMode="tel"
               value={form.countryCode}
               onChange={e => setForm(f => ({ ...f, countryCode: e.target.value.replace(/[^0-9+]/g, "") }))}
-              className="w-20 md:w-24 h-12 md:h-14 px-3 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
-                         text-white text-center
-                         focus:outline-none focus:border-warm focus:bg-white/10"
+              className="w-20 md:w-24 h-12 md:h-14 px-3 md:text-base lg:text-lg rounded-xl bg-slate-50 border border-slate-200
+                         text-slate-900 text-center
+                         focus:outline-none focus:border-warm focus:bg-slate-100"
               placeholder="+49"
             />
             <input
@@ -819,42 +827,42 @@ function DataCaptureStep({
               autoComplete="tel"
               value={form.whatsapp}
               onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
-              className="flex-1 h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
-                         text-white placeholder:text-white/40
-                         focus:outline-none focus:border-warm focus:bg-white/10"
+              className="flex-1 h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border border-slate-200
+                         text-slate-900 placeholder:text-slate-400
+                         focus:outline-none focus:border-warm focus:bg-slate-100"
               placeholder="152 123 4567"
             />
           </div>
           {/* Disclaimer reassuring — la fricción nº 1 del funnel es
               dar el WhatsApp. Explicamos qué hacemos con él y dejamos
               claro que NO mandamos spam ni promociones. */}
-          <div className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-            <p className="text-[12px] sm:text-xs text-white/75 leading-snug">
+          <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+            <p className="text-[12px] sm:text-xs text-emerald-900 leading-snug">
               💬 <strong>Solo te escribiremos con fines educativos:</strong>
             </p>
-            <ul className="mt-1 text-[11.5px] sm:text-[12px] text-white/60 space-y-0.5 leading-snug">
+            <ul className="mt-1 text-[11.5px] sm:text-[12px] text-emerald-800 space-y-0.5 leading-snug">
               <li>· Link de tu clase de prueba</li>
               <li>· Recordatorios antes de la clase</li>
               <li>· Materiales y respuestas a tus dudas</li>
             </ul>
-            <p className="mt-1.5 text-[11px] text-white/45">
+            <p className="mt-1.5 text-[11px] text-emerald-700/80">
               Cero spam · Cero promociones invasivas
             </p>
           </div>
         </Field>
 
-        <Field label={<span>Email <span className="text-white/45 font-normal">— opcional</span></span>}>
+        <Field label={<span>Email <span className="text-slate-400 font-normal">— opcional</span></span>}>
           <input
             type="email"
             autoComplete="email"
             value={form.email}
             onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
-                       text-white placeholder:text-white/40
-                       focus:outline-none focus:border-warm focus:bg-white/10"
+            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border border-slate-200
+                       text-slate-900 placeholder:text-slate-400
+                       focus:outline-none focus:border-warm focus:bg-slate-100"
             placeholder="tu@email.com (opcional)"
           />
-          <p className="mt-1.5 text-[11.5px] text-white/45 leading-snug">
+          <p className="mt-1.5 text-[11.5px] text-slate-400 leading-snug">
             Si lo dejas, te enviamos materiales gratis y la confirmación de tu clase también por email.
           </p>
         </Field>
@@ -867,7 +875,7 @@ function DataCaptureStep({
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-30
-                      bg-gradient-to-t from-navy-900 via-navy-900/95 to-navy-900/0 pt-6">
+                      bg-gradient-to-t from-white via-white/95 to-white/0 pt-6">
         <div className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pb-4"
              style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}>
           <button
@@ -880,9 +888,9 @@ function DataCaptureStep({
           >
             {submitting ? "Creando tu plan…" : "Crear mi plan"}
           </button>
-          <p className="mt-2 text-center text-[11px] text-white/45 leading-snug">
+          <p className="mt-2 text-center text-[11px] text-slate-400 leading-snug">
             Al continuar aceptas nuestra{" "}
-            <Link href="/privacy" target="_blank" className="underline text-white/65">
+            <Link href="/privacy" target="_blank" className="underline text-slate-500">
               política de privacidad
             </Link>
             . Solo usaremos tus datos para contactarte con fines educativos.
@@ -1101,17 +1109,17 @@ function CalendarStep({
 
   return (
     <div className={`px-5 pt-6 ${selectedSlot ? "pb-[calc(env(safe-area-inset-bottom)+9rem)] md:pb-[calc(env(safe-area-inset-bottom)+8rem)]" : "pb-12"}`}>
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
         ¡Tu plan está listo, {name}!
       </h1>
 
-      <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 space-y-2.5">
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2.5">
         <SummaryRow label="Nivel"    value={answers.level} />
         <SummaryRow label="Objetivo" value={answers.goal} />
         <SummaryRow label="Plazo"    value={answers.urgency} />
       </div>
 
-      <p className="mt-6 text-[15px] md:text-base lg:text-lg text-white/85 leading-relaxed">
+      <p className="mt-6 text-[15px] md:text-base lg:text-lg text-slate-700 leading-relaxed">
         Reserva ahora tu clase de <strong>alemán</strong> prueba <strong>GRATIS de 30 min</strong> con tu profesor alemán nativo que también habla español:
       </p>
 
@@ -1133,8 +1141,8 @@ function CalendarStep({
         {loadErr && <p className="text-sm text-red-300">{loadErr}</p>}
 
         {submitting && (
-          <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3
-                          text-sm text-white/85 flex items-center gap-3 mb-4">
+          <div className="rounded-2xl border border-slate-200 bg-white/[0.04] px-4 py-3
+                          text-sm text-slate-700 flex items-center gap-3 mb-4">
             <span className="inline-block h-4 w-4 rounded-full border-2 border-warm border-t-transparent animate-spin" aria-hidden />
             Confirmando tu clase…
           </div>
@@ -1146,7 +1154,7 @@ function CalendarStep({
         )}
 
         {slots && slots.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-center text-sm text-white/65">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white/[0.03] p-6 text-center text-sm text-slate-500">
             Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te avisamos en cuanto se abran horarios.
           </div>
         )}
@@ -1157,10 +1165,11 @@ function CalendarStep({
               daysWithSlots={daysWithSlots}
               selectedDay={selectedDay}
               onSelect={setDay}
+              lightMode
             />
             {selectedDay && (
               <div>
-                <p className="text-[11px] font-semibold uppercase text-white/55 tracking-wider mb-2 capitalize">
+                <p className="text-[11px] font-semibold uppercase text-slate-500 tracking-wider mb-2 capitalize">
                   {fullDateLabel(selectedDay)}
                 </p>
                 <TimeList
@@ -1168,6 +1177,7 @@ function CalendarStep({
                   selectedIso={selectedSlot?.startIso ?? null}
                   selectedTeacherId={selectedSlot?.teacherId ?? null}
                   onSelect={onPickSlot}
+                  lightMode
                 />
               </div>
             )}
@@ -1180,14 +1190,14 @@ function CalendarStep({
           Se desplaza con el scroll y empuja los slots hacia arriba. */}
       {selectedSlot && confirmLabel && (
         <div className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 mt-6 space-y-3">
-          <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3">
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3">
             <div className="flex items-start gap-2.5">
               <span className="text-lg leading-none mt-0.5" aria-hidden>💎</span>
               <div className="min-w-0">
-                <p className="text-[12px] font-semibold uppercase tracking-wider text-amber-200">
+                <p className="text-[12px] font-semibold uppercase tracking-wider text-amber-700">
                   Valor de tu clase
                 </p>
-                <p className="mt-1 text-[14px] md:text-[15px] text-amber-50 leading-snug">
+                <p className="mt-1 text-[14px] md:text-[15px] text-amber-900 leading-snug">
                   Esta clase con un profesor nativo certificado tiene un
                   valor de <strong>30 €</strong>. <strong>Te la regalamos</strong> si
                   asistes a tu primera clase.
@@ -1203,7 +1213,7 @@ function CalendarStep({
               onChange={e => setCommitAttend(e.target.checked)}
               className="mt-0.5 h-5 w-5 accent-warm shrink-0 cursor-pointer"
             />
-            <span className="text-[14px] md:text-base text-white/90 leading-snug">
+            <span className="text-[14px] md:text-base text-slate-800 leading-snug">
               Me comprometo a asistir el <strong className="capitalize">{confirmLabel}</strong>.
             </span>
           </label>
@@ -1215,7 +1225,7 @@ function CalendarStep({
       {selectedSlot && confirmLabel && (
         <div
           className="fixed bottom-0 left-0 right-0 z-30
-                     bg-gradient-to-t from-navy-900 via-navy-900/95 to-navy-900/0
+                     bg-gradient-to-t from-white via-white/95 to-white/0
                      pt-6"
         >
           <div
@@ -1257,10 +1267,10 @@ function CalendarStep({
 function AlreadyRegisteredScreen({ loginUrl, onBack }: { loginUrl: string; onBack: () => void }) {
   return (
     <div className="px-5 md:px-8 pt-8 md:pt-12 lg:pt-16 pb-12 md:pb-16">
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
         Ese email ya tiene cuenta
       </h1>
-      <p className="mt-4 text-[15px] md:text-base lg:text-lg text-white/80 leading-relaxed">
+      <p className="mt-4 text-[15px] md:text-base lg:text-lg text-slate-700 leading-relaxed">
         Detectamos que ya eres parte de Aprender-Aleman.de con ese email.
         Inicia sesión y agenda tu clase desde tu panel.
       </p>
@@ -1278,7 +1288,7 @@ function AlreadyRegisteredScreen({ loginUrl, onBack }: { loginUrl: string; onBac
         type="button"
         onClick={onBack}
         className="mt-3 block w-full text-center h-12 rounded-2xl
-                   border border-white/15 text-white/85 font-medium
+                   border border-slate-300 text-slate-700 font-medium
                    active:scale-[0.98] transition"
       >
         ← Usar otro email
@@ -1290,10 +1300,10 @@ function AlreadyRegisteredScreen({ loginUrl, onBack }: { loginUrl: string; onBac
 function SummaryRow({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="flex items-baseline gap-3">
-      <div className="text-[12px] uppercase tracking-[0.14em] text-white/50 w-20 shrink-0">
+      <div className="text-[12px] uppercase tracking-[0.14em] text-slate-400 w-20 shrink-0">
         {label}
       </div>
-      <div className="text-[15px] text-white font-medium">
+      <div className="text-[15px] text-slate-900 font-medium">
         {value ?? "—"}
       </div>
     </div>
@@ -1303,7 +1313,7 @@ function SummaryRow({ label, value }: { label: string; value: string | null }) {
 function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
     <label className="block">
-      <div className="text-[12px] uppercase tracking-[0.14em] text-white/55 mb-1.5">
+      <div className="text-[12px] uppercase tracking-[0.14em] text-slate-500 mb-1.5">
         {label}
       </div>
       {children}

@@ -16,6 +16,9 @@ type Props = {
   daysWithSlots: Set<string>;            // Berlin "YYYY-MM-DD" keys
   selectedDay:   string | null;
   onSelect:      (key: string) => void;
+  /** Tema claro (post-2026-05-26): usado por /diagnostico/funnel.
+   * Default false → tema oscuro (usado por /agendar/cuando). */
+  lightMode?:    boolean;
 };
 
 const DOW_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
@@ -41,7 +44,7 @@ function berlinDayOfMonth(d: Date): number {
   return Number(key.split("-")[2]);
 }
 
-export function MobileDayStrip({ daysWithSlots, selectedDay, onSelect }: Props) {
+export function MobileDayStrip({ daysWithSlots, selectedDay, onSelect, lightMode = false }: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<HTMLButtonElement>(null);
 
@@ -96,14 +99,20 @@ export function MobileDayStrip({ daysWithSlots, selectedDay, onSelect }: Props) 
                 selected
                   ? "bg-warm text-warm-foreground shadow-lg shadow-warm/20"
                   : has
-                    ? "bg-white/[0.06] text-white hover:bg-white/[0.12]"
-                    : "bg-white/[0.03] text-white/30 cursor-not-allowed",
+                    ? (lightMode
+                        ? "bg-slate-100 text-slate-900 hover:bg-slate-200"
+                        : "bg-white/[0.06] text-white hover:bg-white/[0.12]")
+                    : (lightMode
+                        ? "bg-slate-50 text-slate-300 cursor-not-allowed"
+                        : "bg-white/[0.03] text-white/30 cursor-not-allowed"),
               ].join(" ")}
               aria-pressed={selected}
               aria-label={`${label} ${d.dayOfMonth}${has ? "" : " (sin huecos)"}`}
             >
               <span className={`text-[10px] font-semibold uppercase tracking-wider ${
-                selected ? "text-warm-foreground/80" : "text-white/55"
+                selected
+                  ? "text-warm-foreground/80"
+                  : (lightMode ? "text-slate-500" : "text-white/55")
               }`}>
                 {label}
               </span>

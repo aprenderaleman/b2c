@@ -17,6 +17,9 @@ type Props = {
   selectedIso:  string | null;
   selectedTeacherId: string | null;
   onSelect:     (s: SlotItem) => void;
+  /** Light theme (2026-05-26) — usado en /diagnostico/funnel. Default
+   * false → tema oscuro para /agendar/cuando. */
+  lightMode?:   boolean;
 };
 
 function timeIn(iso: string): string {
@@ -27,10 +30,14 @@ function timeIn(iso: string): string {
   });
 }
 
-export function TimeList({ slots, selectedIso, selectedTeacherId, onSelect }: Props) {
+export function TimeList({ slots, selectedIso, selectedTeacherId, onSelect, lightMode = false }: Props) {
   if (slots.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-center text-sm text-white/55">
+      <div className={`rounded-2xl border border-dashed p-6 text-center text-sm ${
+        lightMode
+          ? "border-slate-200 bg-slate-50 text-slate-500"
+          : "border-white/10 bg-white/[0.03] text-white/55"
+      }`}>
         Sin huecos para este día. Prueba otro día arriba.
       </div>
     );
@@ -50,7 +57,9 @@ export function TimeList({ slots, selectedIso, selectedTeacherId, onSelect }: Pr
               "transition active:scale-[0.99]",
               selected
                 ? "bg-warm text-warm-foreground shadow-lg shadow-warm/20"
-                : "bg-white/[0.06] text-white hover:bg-white/[0.10]",
+                : (lightMode
+                    ? "bg-slate-100 text-slate-900 hover:bg-slate-200"
+                    : "bg-white/[0.06] text-white hover:bg-white/[0.10]"),
             ].join(" ")}
             aria-pressed={selected}
           >
