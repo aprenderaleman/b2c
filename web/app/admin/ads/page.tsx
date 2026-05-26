@@ -1,10 +1,9 @@
 /**
  * /admin/ads — Dashboard de optimización del funnel.
  *
- * Para detectar dónde abandonan los leads y qué opción es la más
- * elegida en cada paso. Pensado para revisar antes de gastar en Ads:
- * si el funnel pierde 90% entre paso 1 y paso 5, no tiene sentido
- * mandar más tráfico hasta arreglarlo.
+ * Tras la simplificación del funnel (2026-05-26) el embudo tiene 4
+ * pasos: motivo → nivel → datos → trial. Las preguntas goal/urgencia/
+ * budget eliminadas del UI las recoge Stiv por WhatsApp.
  *
  * Acceso: solo superadmin / admin.
  */
@@ -33,11 +32,19 @@ export default async function FunnelAdsPage({
 
   const data = await getFunnelAdsData(activeDays);
 
-  // ¿Tenemos telemetría granular (pasos 2-5) suficiente para mostrar?
-  // Si la ventana incluye días previos al lanzamiento, marcamos.
+  // ¿La ventana incluye días previos al lanzamiento de telemetría
+  // granular? Si sí, advertir que paso 2 (nivel) puede tener datos
+  // incompletos (en aquellos días no se persistía a funnel_progress).
   const telemetryDate = new Date(TELEMETRY_STARTS_AT);
   const cutoffDate = new Date(Date.now() - activeDays * 86_400_000);
   const partialTelemetry = cutoffDate < telemetryDate;
+
+  // Conversión global paso 1 → paso 3 (formulario completado)
+  const entry = data.steps[0]?.reached ?? 0;
+  const formCompleted = data.steps[2]?.reached ?? 0;
+  const trialBooked = data.steps[3]?.reached ?? 0;
+  const overallFormConv = entry > 0 ? (100 * formCompleted / entry) : 0;
+  const overallTrialConv = entry > 0 ? (100 * trialBooked / entry) : 0;
 
   return (
     <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
@@ -45,7 +52,8 @@ export default async function FunnelAdsPage({
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white">📊 Funnel Ads</h1>
           <p className="mt-1 text-sm text-white/60">
-            Dónde abandonan los leads y qué optimizar antes de gastar en publicidad.
+            Embudo de 4 pasos — motivo → nivel → datos → trial. Tras la simplificación del
+            quiz (2026-05-26) Stiv recoge goal/urgencia por WhatsApp.
           </p>
         </div>
         <div className="flex gap-1.5 rounded-lg border border-white/10 bg-white/5 p-1">
@@ -65,12 +73,39 @@ export default async function FunnelAdsPage({
         </div>
       </div>
 
+      {/* KPIs grandes — visión rápida del funnel */}
+      <section className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard
+          label="Entradas (motivo)"
+          value={entry.toLocaleString()}
+          accent="text-white"
+        />
+        <KpiCard
+          label="Form completado"
+          value={`${formCompleted.toLocaleString()}`}
+          subtitle={`${overallFormConv.toFixed(1)}% del paso 1`}
+          accent={overallFormConv < 10 ? "text-red-300" : overallFormConv < 15 ? "text-amber-300" : "text-emerald-300"}
+        />
+        <KpiCard
+          label="Trial agendada"
+          value={`${trialBooked.toLocaleString()}`}
+          subtitle={`${overallTrialConv.toFixed(1)}% del paso 1`}
+          accent={trialBooked === 0 && formCompleted >= 5 ? "text-red-300" : overallTrialConv < 5 ? "text-amber-300" : "text-emerald-300"}
+        />
+        <KpiCard
+          label="Convirtieron (pago)"
+          value={`${data.motivoBreakdown.reduce((a, m) => a + m.converted, 0)}`}
+          subtitle="status='converted'"
+          accent="text-white"
+        />
+      </section>
+
       {partialTelemetry && (
         <div className="mt-4 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-100">
-          ℹ️ Los pasos 2-5 sólo tienen telemetría desde el {TELEMETRY_STARTS_AT}. En
-          rangos más largos los conteos de esos pasos pueden estar incompletos
-          (los visitantes antiguos no quedaron registrados). Las cifras de paso 1, 6 y 7
-          son completas históricamente.
+          ℹ️ El paso 2 (nivel) sólo tiene telemetría desde el {TELEMETRY_STARTS_AT}. En
+          rangos más largos los conteos del paso 2 pueden estar bajos
+          artificialmente (los visitantes anteriores no quedaron registrados).
+          Pasos 1, 3 y 4 son completos históricamente.
         </div>
       )}
 
@@ -100,9 +135,9 @@ export default async function FunnelAdsPage({
 
       {/* ── Embudo de pasos ───────────────────────────────────── */}
       <section className="mt-8">
-        <h2 className="text-lg font-semibold text-white">Embudo</h2>
+        <h2 className="text-lg font-semibold text-white">Embudo de 4 pasos</h2>
         <p className="mt-1 text-xs text-white/55">
-          Cada barra muestra cuántos visitantes llegaron a ese paso (vs. el paso anterior y vs. la entrada).
+          Cuántos visitantes llegan a cada paso vs. el paso anterior y vs. la entrada.
         </p>
         <div className="mt-3 space-y-2">
           {data.steps.map((s) => {
@@ -110,21 +145,21 @@ export default async function FunnelAdsPage({
             const drop = s.drop_from_prev ?? 0;
             const dropColor = drop >= 50 ? "text-red-300" : drop >= 25 ? "text-amber-300" : "text-emerald-300";
             return (
-              <div key={s.step} className="rounded-xl border border-white/10 bg-white/5 p-3">
-                <div className="flex items-center justify-between text-sm">
+              <div key={s.position} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div className="flex items-center justify-between text-sm flex-wrap gap-2">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-warm text-warm-foreground text-xs font-bold">
-                      {s.step}
+                      {s.position}
                     </span>
                     <span className="font-medium text-white">{s.label}</span>
                   </div>
                   <div className="flex items-center gap-3 text-xs">
                     <span className="text-white/60">
-                      {s.reached.toLocaleString()} sesiones
+                      {s.reached.toLocaleString()} {s.position <= 2 ? "sesiones" : "leads"}
                     </span>
                     {s.drop_from_prev !== null && (
                       <span className={dropColor}>
-                        −{drop.toFixed(1)}% vs. paso anterior
+                        −{drop.toFixed(1)}% vs. anterior
                       </span>
                     )}
                     <span className="text-white/40 tabular-nums w-14 text-right">
@@ -146,25 +181,26 @@ export default async function FunnelAdsPage({
 
       {/* ── Respuestas más populares por paso ─────────────────── */}
       <section className="mt-8">
-        <h2 className="text-lg font-semibold text-white">¿Qué eligen en cada paso?</h2>
+        <h2 className="text-lg font-semibold text-white">¿Qué eligen?</h2>
         <p className="mt-1 text-xs text-white/55">
-          Distribución de respuestas entre los que SÍ llegaron a cada paso. Si una opción tiene
-          &lt;5% considera eliminarla del quiz.
+          Distribución de respuestas en los pasos del quiz, y país de los leads que completan el formulario.
         </p>
-        <div className="mt-3 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3, 4, 5].map(stepNum => {
-            const buckets = data.answers[stepNum] ?? [];
-            const stepInfo = data.steps.find(s => s.step === stepNum);
+        <div className="mt-3 grid gap-4 md:grid-cols-3">
+          {[1, 2, 3].map(pos => {
+            const buckets = data.answers[pos] ?? [];
+            const stepInfo = data.steps.find(s => s.position === pos);
+            const customLabel = pos === 3 ? "País de leads que completan" : stepInfo?.label;
+            const countLabel = pos === 3 ? "leads" : "respuestas";
             return (
-              <div key={stepNum} className="rounded-xl border border-white/10 bg-white/5 p-4">
+              <div key={pos} className="rounded-xl border border-white/10 bg-white/5 p-4">
                 <div className="text-xs uppercase tracking-wider text-white/50">
-                  Paso {stepNum}
+                  {pos === 3 ? "Paso 3" : `Paso ${pos}`}
                 </div>
                 <div className="text-sm font-semibold text-white mt-0.5">
-                  {stepInfo?.label}
+                  {customLabel}
                 </div>
                 <div className="text-xs text-white/45 mt-1">
-                  {(stepInfo?.reached ?? 0).toLocaleString()} respuestas
+                  {(stepInfo?.reached ?? 0).toLocaleString()} {countLabel}
                 </div>
                 <div className="mt-3 space-y-1.5">
                   {buckets.length === 0 ? (
@@ -172,7 +208,7 @@ export default async function FunnelAdsPage({
                       Sin datos en este rango.
                     </div>
                   ) : (
-                    buckets.map(b => (
+                    buckets.slice(0, 10).map(b => (
                       <div key={b.answer} className="text-[12px]">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-white/85 truncate flex-1" title={b.answer}>
@@ -200,10 +236,10 @@ export default async function FunnelAdsPage({
 
       {/* ── Drop-off por motivo ───────────────────────────────── */}
       <section className="mt-8">
-        <h2 className="text-lg font-semibold text-white">Por motivo (paso 1 → conversión)</h2>
+        <h2 className="text-lg font-semibold text-white">Por motivo</h2>
         <p className="mt-1 text-xs text-white/55">
-          Si un motivo tiene 0% paso 5, hay un problema específico de ese segmento — quizá
-          la propuesta no encaja o un H2 personalizado los asusta.
+          Si un motivo tiene 0% en "datos", hay un problema específico de ese segmento —
+          quizá la propuesta no encaja o el copy personalizado del paso 2 los espanta.
         </p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
@@ -211,9 +247,8 @@ export default async function FunnelAdsPage({
               <tr>
                 <th className="text-left py-2 pr-3">Motivo</th>
                 <th className="text-right py-2 px-3">Sesiones</th>
-                <th className="text-right py-2 px-3">→ Paso 5 (budget)</th>
-                <th className="text-right py-2 px-3">→ Paso 6 (datos)</th>
-                <th className="text-right py-2 px-3">→ Paso 7 (trial)</th>
+                <th className="text-right py-2 px-3">→ Datos (form)</th>
+                <th className="text-right py-2 px-3">→ Trial agendada</th>
                 <th className="text-right py-2 pl-3">Convirtieron</th>
               </tr>
             </thead>
@@ -223,22 +258,21 @@ export default async function FunnelAdsPage({
                   <td className="py-2 pr-3 text-white font-medium">{m.motivo}</td>
                   <td className="py-2 px-3 text-right text-white/80 tabular-nums">{m.sessions}</td>
                   <td className="py-2 px-3 text-right tabular-nums">
-                    <span className={m.pct_5 < 5 ? "text-red-300" : m.pct_5 < 10 ? "text-amber-300" : "text-emerald-300"}>
-                      {m.reached_5} ({m.pct_5.toFixed(1)}%)
+                    <span className={m.pct_datos < 5 ? "text-red-300" : m.pct_datos < 10 ? "text-amber-300" : "text-emerald-300"}>
+                      {m.reached_datos} ({m.pct_datos.toFixed(1)}%)
                     </span>
                   </td>
-                  <td className="py-2 px-3 text-right text-white/80 tabular-nums">
-                    {m.reached_6} ({m.pct_6.toFixed(1)}%)
-                  </td>
-                  <td className="py-2 px-3 text-right text-white/80 tabular-nums">
-                    {m.reached_7} ({m.pct_7.toFixed(1)}%)
+                  <td className="py-2 px-3 text-right tabular-nums">
+                    <span className={m.pct_trial < 2 ? "text-red-300" : m.pct_trial < 5 ? "text-amber-300" : "text-emerald-300"}>
+                      {m.reached_trial} ({m.pct_trial.toFixed(1)}%)
+                    </span>
                   </td>
                   <td className="py-2 pl-3 text-right text-white/80 tabular-nums">{m.converted}</td>
                 </tr>
               ))}
               {data.motivoBreakdown.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-4 text-center text-white/40 italic">
+                  <td colSpan={5} className="py-4 text-center text-white/40 italic">
                     Sin datos en este rango.
                   </td>
                 </tr>
@@ -249,8 +283,25 @@ export default async function FunnelAdsPage({
       </section>
 
       <div className="mt-10 text-center text-xs text-white/35">
-        Datos en vivo. Telemetría paso-a-paso activa desde {TELEMETRY_STARTS_AT}.
+        Datos en vivo. Quiz simplificado activado el {TELEMETRY_STARTS_AT}.
       </div>
+    </div>
+  );
+}
+
+function KpiCard({
+  label, value, subtitle, accent,
+}: {
+  label:    string;
+  value:    string;
+  subtitle?: string;
+  accent:   string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+      <div className="text-[11px] uppercase tracking-wider text-white/50">{label}</div>
+      <div className={`mt-1 text-2xl md:text-3xl font-bold tabular-nums ${accent}`}>{value}</div>
+      {subtitle && <div className="text-xs text-white/45 mt-0.5">{subtitle}</div>}
     </div>
   );
 }
