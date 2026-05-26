@@ -283,35 +283,30 @@ async function runCron(req: Request) {
         // handler nuevo (`_handle_call_time_proposal`) que parsea la
         // hora vía Claude y la agenda en Google Calendar si está libre.
         kind = "wa+email";
-        // Welcome v2 (2026-05-26): tras la simplificación del quiz
-        // (de 5 a 2 preguntas), Stiv recoge en este primer mensaje
-        // el contexto que ya no se pregunta en el funnel (objetivo
-        // + urgencia). El budget lo dejamos para una segunda
-        // interacción para no asustar de entrada.
+        // Welcome v3 (Gelfis 2026-05-27): tono más cálido y orientado a
+        // llamada. En lugar de preguntar por motivo/urgencia en
+        // formato lista (sentía a formulario), ofrecemos una llamada
+        // de 15 min para entender los planes y diseñar plan personalizado.
+        // Cierra con CTA de horario "hoy o mañana" — alta tasa de
+        // respuesta porque pone al lead a elegir momento concreto.
         const waText = lead.language === "de"
           ? [
               `Hallo ${firstName}! 👋`,
               ``,
               `Ich bin Stiv von der Akademie Aprender-Aleman.de — schön, dich kennenzulernen.`,
               ``,
-              `Damit ich dir die beste Lehrkraft und den passenden Plan vorschlagen kann, sag mir bitte kurz:`,
+              `Hast du 15 Minuten Zeit für ein kurzes Gespräch per WhatsApp oder Telefon? Ich möchte deine Pläne mit Deutsch besser verstehen und dir einen individuellen Plan vorschlagen, der zu deinem Niveau, Ziel und Zeitplan passt.`,
               ``,
-              `1. Wofür möchtest du Deutsch lernen? (Arbeit / Studium / Alltag / Prüfung / persönliches Wachstum)`,
-              `2. Wie schnell möchtest du loslegen? (so bald wie möglich / in 6 Monaten / in einem Jahr / kein fester Zeitplan)`,
-              ``,
-              `Mit deinen Antworten suche ich dir die passende Probestunde 🇩🇪`,
+              `Wann würde es dir heute oder morgen passen? 🇩🇪`,
             ].join("\n")
           : [
               `¡Hola ${firstName}! 👋`,
               ``,
               `Soy Stiv de la academia Aprender-Aleman.de — un gusto saludarte.`,
               ``,
-              `Para asignarte al mejor profesor y proponerte el plan adecuado, cuéntame brevemente:`,
+              `¿Te apetece que hablemos 15 minutos por WhatsApp o teléfono? Quiero conocer mejor tus planes con el alemán y diseñarte un plan personalizado que encaje con tu nivel, objetivo y agenda.`,
               ``,
-              `1. ¿Para qué quieres aprender alemán? (Trabajo / Estudios / Vida diaria / Examen oficial / Crecimiento personal)`,
-              `2. ¿Qué tan pronto quieres empezar? (lo antes posible / en 6 meses / en 1 año / sin fecha definida)`,
-              ``,
-              `Con tus respuestas te busco la clase de prueba ideal 🇩🇪`,
+              `¿A qué hora te viene bien hoy o mañana? 🇩🇪`,
             ].join("\n");
 
         const sendEmail = lead.email
