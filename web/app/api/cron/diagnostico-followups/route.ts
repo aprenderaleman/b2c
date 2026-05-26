@@ -283,31 +283,22 @@ async function runCron(req: Request) {
         // handler nuevo (`_handle_call_time_proposal`) que parsea la
         // hora vía Claude y la agenda en Google Calendar si está libre.
         kind = "wa+email";
-        // Welcome v3 (Gelfis 2026-05-27): tono más cálido y orientado a
-        // llamada. En lugar de preguntar por motivo/urgencia en
-        // formato lista (sentía a formulario), ofrecemos una llamada
-        // de 15 min para entender los planes y diseñar plan personalizado.
-        // Cierra con CTA de horario "hoy o mañana" — alta tasa de
-        // respuesta porque pone al lead a elegir momento concreto.
-        const waText = lead.language === "de"
-          ? [
-              `Hallo ${firstName}! 👋`,
-              ``,
-              `Ich bin Stiv von der Akademie Aprender-Aleman.de — schön, dich kennenzulernen.`,
-              ``,
-              `Hast du 15 Minuten Zeit für ein kurzes Gespräch per WhatsApp oder Telefon? Ich möchte deine Pläne mit Deutsch besser verstehen und dir einen individuellen Plan vorschlagen, der zu deinem Niveau, Ziel und Zeitplan passt.`,
-              ``,
-              `Wann würde es dir heute oder morgen passen? 🇩🇪`,
-            ].join("\n")
-          : [
-              `¡Hola ${firstName}! 👋`,
-              ``,
-              `Soy Stiv de la academia Aprender-Aleman.de — un gusto saludarte.`,
-              ``,
-              `¿Te apetece que hablemos 15 minutos por WhatsApp o teléfono? Quiero conocer mejor tus planes con el alemán y diseñarte un plan personalizado que encaje con tu nivel, objetivo y agenda.`,
-              ``,
-              `¿A qué hora te viene bien hoy o mañana? 🇩🇪`,
-            ].join("\n");
+        // Welcome v4 (Gelfis 2026-05-27): copy unificado en español
+        // para TODOS los leads (incluso los marcados `language='de'`).
+        // Decisión: en B2C aplicamos un único idioma para mantener
+        // consistencia operativa — Stiv responde en español y el funnel
+        // está en español. El campo lead.language sigue existiendo
+        // pero ya no bifurca el copy.
+        const waText = [
+          `¡Hola, ${firstName}! 👋`,
+          ``,
+          `Soy Stiv de la academia Aprender-Aleman.de, un gusto saludarte.`,
+          `Recibimos tu solicitud para aprender alemán. Para avanzar más rápido, te propongo hablar 15 minutos para conocer tus objetivos y diseñarte un plan personalizado.`,
+          ``,
+          `¿A qué hora te viene bien hoy o mañana? 🇩🇪`,
+          ``,
+          `Stiv | Aprender-Aleman.de`,
+        ].join("\n");
 
         const sendEmail = lead.email
           ? sendDiagnosticoWelcomeEmail(lead.email, {
