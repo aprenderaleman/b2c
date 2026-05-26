@@ -36,7 +36,7 @@
     },
     {
       "path": "/api/cron/diagnostico-followups",
-      "schedule": "*/30 * * * *"
+      "schedule": "*/5 * * * *"
     },
     {
       "path": "/api/cron/reschedule-followup",

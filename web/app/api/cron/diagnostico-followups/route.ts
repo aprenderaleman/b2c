@@ -67,8 +67,13 @@ const DAY_MS  = 24 * HOUR_MS;
 
 // Gates por mensaje — tiempo MÍNIMO desde diagnostico_completed_at
 // para que el mensaje N pueda salir.
+//
+// Nota: el cron corre cada 30 min (Vercel cron), así que el lead puede
+// recibir el msg 1 entre T+5min y T+35min en el peor caso. Si quieres
+// envío más cercano al instante exacto, habría que bajar el schedule
+// del cron a cada 5 min en vercel.json.
 const GATES_MS: Record<1 | 2 | 3 | 4 | 5 | 6, number> = {
-  1: 15 * MIN_MS,
+  1:  5 * MIN_MS,
   2:      DAY_MS,
   3:  2 * DAY_MS,
   4:  3 * DAY_MS,
