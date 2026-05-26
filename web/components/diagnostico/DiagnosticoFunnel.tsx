@@ -165,27 +165,95 @@ type Step = 1 | 2 | 3 | 4 | 5 | "low_budget_exit" | 6 | 7;
  *
  * Reglas de saneo:
  *  1. Strip non-digits.
- *  2. Si el número empieza por "00", interpreta como prefijo internacional
- *     y descarta los dos ceros (ej. "0034611..." → "34611...").
- *  3. Si los dígitos restantes empiezan por el country-code numérico Y
- *     son lo suficientemente largos para considerarse duplicados, lo
- *     elimina.
+ *  2. Si el número empieza por "00", interpreta como prefijo internacional.
+ *  3. Mientras los dígitos empiecen por el country code Y el resto sea
+ *     plausible (≥6 dígitos), los strippamos. Ahora en bucle para
+ *     manejar casos como "+34+34611..." (triple+ CC).
  *  4. Quita 0 inicial nacional ("0611..." en muchos países = trunk).
  *  5. Concatena `+` + ccDigits + localDigits.
  */
 export function combineE164(countryCode: string, localInput: string): string {
   const ccDigits = countryCode.replace(/\D/g, "");
   let digits = (localInput ?? "").replace(/\D/g, "");
-  // (2) prefijo "00" → quitarlo y volver a iterar
   if (digits.startsWith("00")) digits = digits.slice(2);
-  // (3) si ya viene con CC y queda un número plausible (≥6 dígitos) tras
-  //     quitarlo, lo descartamos para no duplicar.
-  if (ccDigits && digits.startsWith(ccDigits) && digits.length - ccDigits.length >= 6) {
-    digits = digits.slice(ccDigits.length);
+  // Loop para limpiar CC duplicados/triplicados. Cada iteración sólo
+  // quita una copia y vuelve a comprobar — frena al primer fallo de
+  // la condición de plausibilidad.
+  if (ccDigits) {
+    let guard = 4; // máx. 4 iteraciones (un humano no escribe más).
+    while (guard-- > 0
+           && digits.startsWith(ccDigits)
+           && digits.length - ccDigits.length >= 6) {
+      digits = digits.slice(ccDigits.length);
+    }
   }
-  // (4) trunk nacional 0
   if (digits.startsWith("0")) digits = digits.slice(1);
   return `+${ccDigits}${digits}`;
+}
+
+/**
+ * Longitud esperada de dígitos LOCALES (sin código país) por prefijo.
+ * `[min, max]` inclusivo. Si el prefijo no está mapeado usamos el
+ * default amplio [7, 13].
+ *
+ * Datos basados en numbering plans ITU-T (E.164) de cada país.
+ */
+const LOCAL_DIGITS_BY_CC: Record<string, [number, number]> = {
+  "+49":  [10, 12],  // Alemania móvil (152xxxxxxxx etc)
+  "+34":  [9, 9],    // España siempre 9
+  "+41":  [9, 9],    // Suiza
+  "+43":  [10, 13],  // Austria móvil
+  "+33":  [9, 9],    // Francia
+  "+44":  [10, 10],  // UK móvil/fijo
+  "+39":  [9, 11],   // Italia
+  "+351": [9, 9],    // Portugal
+  "+31":  [9, 9],    // Países Bajos
+  "+32":  [8, 9],    // Bélgica
+  "+54":  [10, 11],  // Argentina móvil (a veces lleva 9 extra)
+  "+55":  [10, 11],  // Brasil móvil
+  "+52":  [10, 10],  // México
+  "+57":  [10, 10],  // Colombia
+  "+56":  [8, 9],    // Chile
+  "+51":  [9, 9],    // Perú
+  "+58":  [10, 10],  // Venezuela
+  "+598": [8, 8],    // Uruguay
+  "+595": [9, 9],    // Paraguay
+  "+591": [8, 8],    // Bolivia
+  "+593": [9, 9],    // Ecuador
+  "+506": [8, 8],    // Costa Rica
+  "+507": [8, 8],    // Panamá
+  "+1":   [10, 10],  // USA/Canadá/PR/DO
+  "+53":  [8, 8],    // Cuba
+  "+502": [8, 8],    // Guatemala
+  "+503": [8, 8],    // El Salvador
+  "+504": [8, 8],    // Honduras
+  "+505": [8, 8],    // Nicaragua
+};
+
+/**
+ * Valida que el número local (sin prefijo) tenga la longitud correcta
+ * para el país del prefijo seleccionado. Devuelve `null` si OK, o un
+ * mensaje legible si está mal.
+ */
+export function validatePhoneForCountry(
+  countryCode: string,
+  e164: string,
+): string | null {
+  const cc = countryCode.startsWith("+") ? countryCode : `+${countryCode}`;
+  const range = LOCAL_DIGITS_BY_CC[cc] ?? [7, 13];
+  const ccDigits = cc.replace(/\D/g, "");
+  const all = e164.replace(/\D/g, "");
+  if (!all.startsWith(ccDigits)) {
+    return "El número no coincide con el prefijo. Revisa.";
+  }
+  const local = all.slice(ccDigits.length);
+  if (local.length < range[0]) {
+    return `El número parece muy corto. Para ${cc} debe tener ${range[0] === range[1] ? range[0] : `${range[0]}-${range[1]}`} dígitos (sin el prefijo).`;
+  }
+  if (local.length > range[1]) {
+    return `El número parece muy largo. Para ${cc} debe tener ${range[0] === range[1] ? range[0] : `${range[0]}-${range[1]}`} dígitos (sin el prefijo).`;
+  }
+  return null;
 }
 
 export function DiagnosticoFunnel() {
@@ -321,34 +389,42 @@ export function DiagnosticoFunnel() {
 
   async function submitData() {
     if (submitting) return;
+
+    // ── Validación local pre-submit ────────────────────────────
+    // Comprobaciones que ya cubre `canSubmit`, pero dejamos doble
+    // chequeo en submit para defensa (autocompletado/extension del
+    // navegador puede meter texto sin disparar onChange).
+    const nameOk  = form.name.trim().length >= 2;
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+    const e164    = combineE164(form.countryCode, form.whatsapp);
+    const phoneErr = validatePhoneForCountry(form.countryCode, e164);
+    if (!nameOk) {
+      setSubmitErr("Pon tu nombre completo (mínimo 2 caracteres).");
+      return;
+    }
+    if (!emailOk) {
+      setSubmitErr("Email inválido — revisa que tenga @ y dominio.");
+      return;
+    }
+    if (phoneErr) {
+      setSubmitErr(phoneErr);
+      return;
+    }
+
     setSubmitting(true);
     setSubmitErr(null);
     try {
-      // Normalizar whatsapp a E.164. El usuario puede teclear el número
-      // de varias formas — limpiamos para evitar el bug "+34" + "+34..."
-      // = "+3434...":
-      //   1. Quitar todo lo que no sean dígitos
-      //   2. Si los dígitos ya empiezan por el country code numérico,
-      //      quitarlo (caso: usuario seleccionó +34 y tecleó "34611...")
-      //   3. Quitar 0 inicial (prefijo nacional típico)
-      const whatsappE164 = combineE164(form.countryCode, form.whatsapp);
+      const whatsappE164 = e164;
 
       const body = {
         name:           form.name.trim(),
         email:          form.email.trim().toLowerCase(),
         whatsapp_e164:  whatsappE164,
-        // country se deriva server-side del prefijo del WhatsApp (cambio
-        // Gelfis 2026-05-26 — paso 5 simplificado). Lo enviamos a NULL
-        // y el endpoint lo infiere; si el inferido es válido lo usa, si
-        // no, deja country='XX'.
+        // country se deriva server-side del prefijo del WhatsApp.
         country:        null as string | null,
         language:       "es",
-        // Aceptación de privacidad implícita al pulsar el CTA (disclaimer
-        // mostrado debajo del botón). El endpoint ignora este campo y
-        // siempre setea gdpr_accepted=true server-side.
+        // Aceptación de privacidad implícita al pulsar el CTA.
         gdpr_accepted:  true,
-        // Paso 1 nuevo (motivo_inicial) + session_id para que el
-        // backend enlace lead_motivo_inicial.lead_id.
         session_id:     sessionId ?? undefined,
         motivo_inicial: answers.motivo ?? undefined,
         answers: {
@@ -359,19 +435,64 @@ export function DiagnosticoFunnel() {
         },
       };
 
-      const res = await fetch("/api/public/diagnostico/register", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify(body),
-      });
-      const json = await res.json();
+      let res: Response;
+      try {
+        res = await fetch("/api/public/diagnostico/register", {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify(body),
+        });
+      } catch {
+        setSubmitErr("No tenemos conexión. Revisa tu internet e inténtalo de nuevo.");
+        setSubmitting(false);
+        return;
+      }
+
+      let json: { ok?: boolean; error?: string; login_url?: string; lead_id?: string; issues?: Array<{ path?: string[]; message?: string }> } = {};
+      try {
+        json = await res.json();
+      } catch {
+        setSubmitErr("Respuesta inesperada del servidor. Inténtalo en unos segundos.");
+        setSubmitting(false);
+        return;
+      }
       if (res.status === 409 && json.error === "already_registered") {
         setAlreadyRegistered({ loginUrl: json.login_url ?? "/login" });
         setSubmitting(false);
         return;
       }
+      if (res.status === 429) {
+        setSubmitErr("Demasiados intentos desde tu IP. Espera 10 minutos e inténtalo de nuevo.");
+        setSubmitting(false);
+        return;
+      }
       if (!res.ok || !json.ok) {
-        setSubmitErr(json.error ?? "No se pudo guardar. Inténtalo de nuevo.");
+        // Traducción de errores de zod (validation_failed) a mensajes
+        // humanos. El backend devuelve issues[].path indicando qué
+        // campo falló.
+        if (json.error === "validation_failed" && Array.isArray(json.issues)) {
+          const fieldErrors: Record<string, string> = {
+            email:         "Email inválido — revisa que tenga @ y dominio.",
+            name:          "Pon tu nombre completo (mínimo 2 caracteres).",
+            whatsapp_e164: "Número de WhatsApp inválido. Revisa el prefijo y los dígitos.",
+            "answers.level": "Selecciona tu nivel en el paso anterior.",
+            motivo_inicial: "Vuelve al paso 1 y elige una opción.",
+          };
+          const firstIssue = json.issues[0];
+          const path = (firstIssue?.path ?? []).join(".");
+          setSubmitErr(fieldErrors[path] ?? firstIssue?.message ?? "Datos inválidos. Revísalos.");
+        } else {
+          setSubmitErr("No pudimos guardar tu plan. Inténtalo en unos segundos o escríbenos por WhatsApp.");
+        }
+        setSubmitting(false);
+        return;
+      }
+
+      // En este punto json.ok===true por el guard de arriba — pero TS
+      // no lo infiere por el shape inline. Sacamos lead_id con guard.
+      const newLeadId = json.lead_id ?? "";
+      if (!newLeadId) {
+        setSubmitErr("Respuesta inesperada del servidor. Inténtalo en unos segundos.");
         setSubmitting(false);
         return;
       }
@@ -381,7 +502,7 @@ export function DiagnosticoFunnel() {
 
       // Lead guardado. Disparar pixels y avanzar al resumen.
       firePixelLead({
-        leadId: json.lead_id,
+        leadId: newLeadId,
         email:  body.email,
         budget: body.answers.budget,
       });
@@ -419,18 +540,18 @@ export function DiagnosticoFunnel() {
         country_code:     form.countryCode.startsWith("+") ? form.countryCode : `+${form.countryCode}`,
         phone_local:      form.whatsapp,
         from_diagnostico: true,
-        lead_id:          json.lead_id,
+        lead_id:          newLeadId,
         savedAt:          Date.now(),
       };
       try {
         sessionStorage.setItem("b2c.agendar.v1", JSON.stringify(bookingState));
         // Backwards-compat keys (por si algo los leía).
-        sessionStorage.setItem("diagnostico_lead_id", json.lead_id);
+        sessionStorage.setItem("diagnostico_lead_id", newLeadId);
         sessionStorage.setItem("diagnostico_name",    form.name.trim());
         sessionStorage.setItem("diagnostico_email",   body.email);
       } catch { /* ignore */ }
 
-      setLeadId(json.lead_id);
+      setLeadId(newLeadId);
       setStep(7);
     } catch (e) {
       console.error("[diagnostico] submit failed:", e);
@@ -772,18 +893,33 @@ function DataCaptureStep({
   submitErr:   string | null;
   onSubmit:    () => void;
 }) {
-  // Paso 5 v3 (Gelfis 2026-05-26):
+  // Paso 5 v4 (Gelfis 2026-05-26):
   //  - WhatsApp PRIMERO (es el canal principal — los leads no abren email).
-  //  - Email OPCIONAL (sólo para enviar el PDF de bienvenida).
+  //  - Email OBLIGATORIO (revertido — necesitamos backup channel).
   //  - Sin dropdown país (derivado server-side del prefijo).
   //  - Sin checkbox GDPR (aceptación implícita con disclaimer en el CTA).
-  const emailEntered = form.email.trim().length > 0;
-  const emailValid   = useMemo(() => !emailEntered || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()), [form.email, emailEntered]);
+  //  - Validación de longitud de teléfono por país (ES=9 dígitos,
+  //    DE=10-12, etc) para evitar números mal pegados.
+  const emailValid   = useMemo(
+    () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()),
+    [form.email],
+  );
+  // Calculamos en tiempo real la validación del teléfono para mostrar
+  // un mensaje inline antes de que el usuario pulse el CTA.
+  const phoneError = useMemo(() => {
+    const digits = form.whatsapp.replace(/\D/g, "");
+    if (digits.length === 0) return null;        // todavía no escribió nada
+    if (digits.length < 6) return "El número parece muy corto.";
+    const e164 = combineE164(form.countryCode, form.whatsapp);
+    return validatePhoneForCountry(form.countryCode, e164);
+  }, [form.countryCode, form.whatsapp]);
+
   const phoneDigits  = form.whatsapp.replace(/\D/g, "");
   const canSubmit =
     form.name.trim().length >= 2 &&
+    emailValid &&
     phoneDigits.length >= 6 &&
-    emailValid &&  // si el lead lo escribió, que sea válido
+    phoneError === null &&
     !submitting;
 
   return (
@@ -827,12 +963,23 @@ function DataCaptureStep({
               autoComplete="tel"
               value={form.whatsapp}
               onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
-              className="flex-1 h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border border-slate-200
+              className={`flex-1 h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border
                          text-slate-900 placeholder:text-slate-400
-                         focus:outline-none focus:border-warm focus:bg-slate-100"
+                         focus:outline-none focus:bg-slate-100 ${
+                           phoneError
+                             ? "border-red-400 focus:border-red-500"
+                             : "border-slate-200 focus:border-warm"
+                         }`}
               placeholder="152 123 4567"
+              aria-invalid={!!phoneError}
+              aria-describedby={phoneError ? "wa-error" : undefined}
             />
           </div>
+          {phoneError && (
+            <p id="wa-error" className="mt-1.5 text-[12px] text-red-600 leading-snug">
+              ⚠️ {phoneError}
+            </p>
+          )}
           {/* Disclaimer reassuring — la fricción nº 1 del funnel es
               dar el WhatsApp. Explicamos qué hacemos con él y dejamos
               claro que NO mandamos spam ni promociones. */}
@@ -851,19 +998,29 @@ function DataCaptureStep({
           </div>
         </Field>
 
-        <Field label={<span>Email <span className="text-slate-400 font-normal">— opcional</span></span>}>
+        <Field label="Email">
           <input
             type="email"
             autoComplete="email"
             value={form.email}
             onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border border-slate-200
+            className={`w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border
                        text-slate-900 placeholder:text-slate-400
-                       focus:outline-none focus:border-warm focus:bg-slate-100"
-            placeholder="tu@email.com (opcional)"
+                       focus:outline-none focus:bg-slate-100 ${
+                         form.email.length > 0 && !emailValid
+                           ? "border-red-400 focus:border-red-500"
+                           : "border-slate-200 focus:border-warm"
+                       }`}
+            placeholder="tu@email.com"
+            aria-invalid={form.email.length > 0 && !emailValid}
           />
-          <p className="mt-1.5 text-[11.5px] text-slate-400 leading-snug">
-            Si lo dejas, te enviamos materiales gratis y la confirmación de tu clase también por email.
+          {form.email.length > 0 && !emailValid && (
+            <p className="mt-1.5 text-[12px] text-red-600 leading-snug">
+              ⚠️ Revisa el email — falta el @ o el dominio.
+            </p>
+          )}
+          <p className="mt-1.5 text-[11.5px] text-slate-500 leading-snug">
+            Lo usamos como respaldo si el WhatsApp falla y para enviarte materiales.
           </p>
         </Field>
 
