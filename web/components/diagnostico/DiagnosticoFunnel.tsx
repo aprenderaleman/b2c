@@ -1270,10 +1270,20 @@ function CalendarStep({
         ¡Tu plan está listo, {name}!
       </h1>
 
-      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-2.5">
-        <SummaryRow label="Nivel"    value={answers.level} />
-        <SummaryRow label="Objetivo" value={answers.goal} />
-        <SummaryRow label="Plazo"    value={answers.urgency} />
+      {/* Sólo mostramos el Nivel — tras la simplificación del quiz
+          (2026-05-26) goal/urgencia ya no se preguntan en el funnel,
+          así que mostrar "Objetivo: —" y "Plazo: —" daba la impresión
+          de campos rotos. El emoji del nivel se busca en LEVEL_OPTIONS. */}
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <SummaryRow
+          label="Nivel"
+          value={answers.level}
+          emoji={
+            answers.level
+              ? (LEVEL_OPTIONS.find(o => o.id === answers.level)?.emoji ?? null)
+              : null
+          }
+        />
       </div>
 
       <p className="mt-6 text-[15px] md:text-base lg:text-lg text-slate-700 leading-relaxed">
@@ -1454,14 +1464,21 @@ function AlreadyRegisteredScreen({ loginUrl, onBack }: { loginUrl: string; onBac
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string | null }) {
+function SummaryRow({
+  label, value, emoji,
+}: {
+  label: string;
+  value: string | null;
+  emoji?: string | null;
+}) {
   return (
     <div className="flex items-baseline gap-3">
       <div className="text-[12px] uppercase tracking-[0.14em] text-slate-400 w-20 shrink-0">
         {label}
       </div>
-      <div className="text-[15px] text-slate-900 font-medium">
-        {value ?? "—"}
+      <div className="text-[15px] text-slate-900 font-medium flex items-center gap-2">
+        {emoji && <span className="text-xl leading-none" aria-hidden>{emoji}</span>}
+        <span>{value ?? "—"}</span>
       </div>
     </div>
   );
