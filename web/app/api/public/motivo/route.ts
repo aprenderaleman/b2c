@@ -20,7 +20,8 @@ import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const MOTIVOS = ["particulares","intensivo","certificado","profesional","otro"] as const;
+// "otro" eliminado 2026-05-26 — 0/16 conversiones a paso 5.
+const MOTIVOS = ["particulares","intensivo","certificado","profesional"] as const;
 
 const BodySchema = z.object({
   session_id: z.string().trim().min(8).max(64),

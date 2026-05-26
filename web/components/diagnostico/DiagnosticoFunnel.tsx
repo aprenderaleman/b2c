@@ -34,20 +34,16 @@ import { RobotMark }                    from "@/components/RobotMark";
 //    /api/public/diagnostico/register — si cambias texto aquí cámbialo
 //    también allá o el server rechazará el body) ──────────────────
 
-// Opciones del quiz — sub-niveles granulares para que el drip de
-// followups pueda enviar el PDF gratis adaptado al nivel real.
-// Cada opción incluye una descripción corta para que el lead se
-// auto-evalúe con precisión. Mantén estas en sync 1-a-1 con el
-// endpoint /api/public/diagnostico/register o el server rechaza el body.
+// 6 niveles MCER (Gelfis 2026-05-26). Simplificado de 8 sub-niveles a
+// 6 estándar para bajar fricción del paso 2. Mantén estas 1-a-1 con
+// el endpoint /api/public/diagnostico/register o el server rechaza el body.
 const LEVEL_OPTIONS = [
-  { id: "Cero / no sé nada",                                 emoji: "🌱" },
-  { id: "Conozco lo básico (saludos, números) — A1.1",       emoji: "📗" },
-  { id: "Puedo conversaciones simples — A1.2",               emoji: "📘" },
-  { id: "Sé hablar del pasado (Perfekt) — A2.1",             emoji: "📙" },
-  { id: "Puedo hablar de planes y obligaciones — A2.2",      emoji: "📕" },
-  { id: "Conversaciones cotidianas (B1)",                    emoji: "💬" },
-  { id: "Avanzado (B2 o más)",                                emoji: "🎯" },
-  { id: "No estoy seguro",                                    emoji: "🤔" },
+  { id: "A0 — Cero, no sé nada",                          emoji: "🌱" },
+  { id: "A1 — Conozco lo básico (saludos, números)",      emoji: "📗" },
+  { id: "A2 — Conversaciones simples del día a día",      emoji: "📘" },
+  { id: "B1 — Hablo de temas cotidianos con fluidez",     emoji: "💬" },
+  { id: "B2 — Me defiendo en contextos exigentes",        emoji: "🎯" },
+  { id: "C1 — Nivel avanzado",                            emoji: "🏆" },
 ] as const;
 
 const GOAL_OPTIONS = [
@@ -113,12 +109,13 @@ const COUNTRY_OPTIONS: { code: string; name: string }[] = [
 
 // Paso 1 nuevo (Quality Score Google Ads): keywords objetivo en
 // etiquetas semánticas <h1>/<h2>/<h3> del primer paint server-side.
+// "otro" eliminado 2026-05-26 — convertía 0/16 (0%). Si alguien no
+// encaja en estos 4, no es lead cualificado para el funnel.
 const MOTIVO_OPTIONS = [
   { id: "particulares", emoji: "👨‍🏫", h3: "Clases particulares de alemán online" },
   { id: "intensivo",    emoji: "🚀", h3: "Curso intensivo de alemán online" },
   { id: "certificado",  emoji: "🏅", h3: "Cursos de alemán con certificado oficial (TELC, FIDE, Goethe)" },
   { id: "profesional",  emoji: "💼", h3: "Alemán para trabajar (profesionales)" },
-  { id: "otro",         emoji: "💭", h3: "Tengo otro motivo" },
 ] as const;
 
 type MotivoId = typeof MOTIVO_OPTIONS[number]["id"];
@@ -128,7 +125,6 @@ const MOTIVO_PERSONALIZED_H2: Record<MotivoId, string> = {
   intensivo:    "Perfecto, te preparamos un curso intensivo a tu medida",
   certificado:  "Perfecto, te ayudamos a obtener tu certificado oficial",
   profesional:  "Perfecto, te preparamos el alemán que necesitas para tu profesión",
-  otro:         "Cuéntanos un poco más y adaptamos el plan",
 };
 
 type Answers = {
@@ -349,15 +345,13 @@ export function DiagnosticoFunnel() {
       // página `/agendar/cuando` que tras escoger horario haga submit
       // directo a /api/public/book-trial sin pasar por /tu /nivel
       // /objetivo.
-      const levelMap: Record<string, "A0" | "A1.1" | "A1.2" | "A2.1" | "A2.2" | "B1" | "B2"> = {
-        "Cero / no sé nada":                                 "A0",
-        "Conozco lo básico (saludos, números) — A1.1":       "A1.1",
-        "Puedo conversaciones simples — A1.2":               "A1.2",
-        "Sé hablar del pasado (Perfekt) — A2.1":             "A2.1",
-        "Puedo hablar de planes y obligaciones — A2.2":      "A2.2",
-        "Conversaciones cotidianas (B1)":                    "B1",
-        "Avanzado (B2 o más)":                                "B2",
-        "No estoy seguro":                                    "A0",
+      const levelMap: Record<string, "A0" | "A1" | "A2" | "B1" | "B2" | "C1"> = {
+        "A0 — Cero, no sé nada":                          "A0",
+        "A1 — Conozco lo básico (saludos, números)":      "A1",
+        "A2 — Conversaciones simples del día a día":      "A2",
+        "B1 — Hablo de temas cotidianos con fluidez":     "B1",
+        "B2 — Me defiendo en contextos exigentes":        "B2",
+        "C1 — Nivel avanzado":                            "C1",
       };
       const goalMap: Record<string, "work" | "studies" | "already_in_dach" | "exam" | "travel"> = {
         "Trabajo":                       "work",
@@ -943,15 +937,13 @@ function CalendarStep({
     setSubmitting(true);
     setSubmitErr(null);
     try {
-      const levelMap: Record<string, "A0" | "A1.1" | "A1.2" | "A2.1" | "A2.2" | "B1" | "B2"> = {
-        "Cero / no sé nada":                                 "A0",
-        "Conozco lo básico (saludos, números) — A1.1":       "A1.1",
-        "Puedo conversaciones simples — A1.2":               "A1.2",
-        "Sé hablar del pasado (Perfekt) — A2.1":             "A2.1",
-        "Puedo hablar de planes y obligaciones — A2.2":      "A2.2",
-        "Conversaciones cotidianas (B1)":                    "B1",
-        "Avanzado (B2 o más)":                                "B2",
-        "No estoy seguro":                                    "A0",
+      const levelMap: Record<string, "A0" | "A1" | "A2" | "B1" | "B2" | "C1"> = {
+        "A0 — Cero, no sé nada":                          "A0",
+        "A1 — Conozco lo básico (saludos, números)":      "A1",
+        "A2 — Conversaciones simples del día a día":      "A2",
+        "B1 — Hablo de temas cotidianos con fluidez":     "B1",
+        "B2 — Me defiendo en contextos exigentes":        "B2",
+        "C1 — Nivel avanzado":                            "C1",
       };
       const goalMap: Record<string, string> = {
         "Trabajo":                       "work",

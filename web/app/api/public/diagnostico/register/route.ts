@@ -56,15 +56,16 @@ export const dynamic = "force-dynamic";
 // muestra el quiz en `web/components/diagnostico/`. Si añades una
 // opción al UI, AÑÁDELA aquí también o el endpoint la rechazará.
 
+// 6 niveles MCER — etiqueta visible para el lead es exactamente el ID.
+// Tras la simplificación (Gelfis 2026-05-26): pasamos de 8 sub-niveles
+// a 6 estándar para reducir fricción del paso 2 del funnel.
 const LEVEL_OPTIONS = [
-  "Cero / no sé nada",
-  "Conozco lo básico (saludos, números) — A1.1",
-  "Puedo conversaciones simples — A1.2",
-  "Sé hablar del pasado (Perfekt) — A2.1",
-  "Puedo hablar de planes y obligaciones — A2.2",
-  "Conversaciones cotidianas (B1)",
-  "Avanzado (B2 o más)",
-  "No estoy seguro",
+  "A0 — Cero, no sé nada",
+  "A1 — Conozco lo básico (saludos, números)",
+  "A2 — Conversaciones simples del día a día",
+  "B1 — Hablo de temas cotidianos con fluidez",
+  "B2 — Me defiendo en contextos exigentes",
+  "C1 — Nivel avanzado",
 ] as const;
 
 const GOAL_OPTIONS = [
@@ -92,16 +93,14 @@ const BUDGET_OPTIONS = [
   "Estoy evaluando",
 ] as const;
 
-type GermanLevelEnum = "A0" | "A1.1" | "A1.2" | "A2.1" | "A2.2" | "B1" | "B2" | "unsure";
+type GermanLevelEnum = "A0" | "A1" | "A2" | "B1" | "B2" | "C1";
 const LEVEL_TO_ENUM: Record<typeof LEVEL_OPTIONS[number], GermanLevelEnum> = {
-  "Cero / no sé nada":                                 "A0",
-  "Conozco lo básico (saludos, números) — A1.1":       "A1.1",
-  "Puedo conversaciones simples — A1.2":               "A1.2",
-  "Sé hablar del pasado (Perfekt) — A2.1":             "A2.1",
-  "Puedo hablar de planes y obligaciones — A2.2":      "A2.2",
-  "Conversaciones cotidianas (B1)":                    "B1",
-  "Avanzado (B2 o más)":                                "B2",
-  "No estoy seguro":                                    "unsure",
+  "A0 — Cero, no sé nada":                              "A0",
+  "A1 — Conozco lo básico (saludos, números)":          "A1",
+  "A2 — Conversaciones simples del día a día":          "A2",
+  "B1 — Hablo de temas cotidianos con fluidez":         "B1",
+  "B2 — Me defiendo en contextos exigentes":            "B2",
+  "C1 — Nivel avanzado":                                "C1",
 };
 
 const GOAL_TO_ENUM: Record<typeof GOAL_OPTIONS[number], "work" | "studies" | "already_in_dach" | "exam" | "personal_growth"> = {
@@ -122,7 +121,9 @@ const URGENCY_TO_ENUM: Record<typeof URGENCY_OPTIONS[number], "asap" | "under_3_
   "Sin fecha definida":         "just_looking",
 };
 
-const MOTIVOS = ["particulares","intensivo","certificado","profesional","otro"] as const;
+// "otro" eliminado tras data check 2026-05-26: 0/16 conversiones (0%).
+// Si alguien no encaja en los 4 motivos, no lo dirigimos al funnel.
+const MOTIVOS = ["particulares","intensivo","certificado","profesional"] as const;
 
 const BodySchema = z.object({
   name:          z.string().trim().min(2).max(100),

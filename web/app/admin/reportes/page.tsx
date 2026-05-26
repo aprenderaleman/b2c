@@ -8,7 +8,7 @@ const MOTIVO_LABELS: Record<string, string> = {
   intensivo:    "🚀 Intensivo",
   certificado:  "🏅 Con certificado",
   profesional:  "💼 Profesional",
-  otro:         "💭 Otro motivo",
+  otro:         "💭 Otro motivo (histórico)",
 };
 
 export const dynamic = "force-dynamic";

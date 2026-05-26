@@ -54,7 +54,9 @@ const MOTIVO_LABELS: Record<string, string> = {
   intensivo:    "🚀 Intensivo",
   certificado:  "🏅 Con certificado",
   profesional:  "💼 Profesional",
-  otro:         "💭 Otro motivo",
+  // "otro" eliminado del funnel 2026-05-26 — sigue mapeado por leads
+  // históricos que ya lo tenían en BD.
+  otro:         "💭 Otro motivo (histórico)",
 };
 
 export default async function AllLeadsPage({
@@ -145,7 +147,7 @@ export default async function AllLeadsPage({
         </select>
         <select name="motivo" defaultValue={(filter.motivo?.[0] ?? "") as string} className="input-text">
           <option value="">Todos los motivos</option>
-          {["particulares","intensivo","certificado","profesional","otro"]
+          {["particulares","intensivo","certificado","profesional"]
             .map((m) => <option key={m} value={m}>{MOTIVO_LABELS[m] ?? m}</option>)}
         </select>
         <button type="submit" className="btn-primary">Filtrar</button>
