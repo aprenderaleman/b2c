@@ -167,10 +167,14 @@ const BodySchema = z.object({
   session_id:     z.string().trim().min(8).max(64).optional(),
   motivo_inicial: z.enum(MOTIVOS).optional(),
   answers: z.object({
+    // Tras la simplificación del quiz (2026-05-26) sólo `level` es
+    // obligatorio. Goal/urgencia/budget pasaron a la conversación
+    // con Stiv por WhatsApp y pueden venir null si el cliente es
+    // la nueva versión del funnel.
     level:   z.enum(LEVEL_OPTIONS),
-    goal:    z.enum(GOAL_OPTIONS),
-    urgency: z.enum(URGENCY_OPTIONS),
-    budget:  z.enum(BUDGET_OPTIONS),
+    goal:    z.enum(GOAL_OPTIONS).nullable().optional(),
+    urgency: z.enum(URGENCY_OPTIONS).nullable().optional(),
+    budget:  z.enum(BUDGET_OPTIONS).nullable().optional(),
   }),
 });
 
@@ -254,9 +258,11 @@ export async function POST(req: NextRequest) {
     .limit(1)
     .maybeSingle();
 
-  const enumLevel    = LEVEL_TO_ENUM   [b.answers.level];
-  const enumGoal     = GOAL_TO_ENUM    [b.answers.goal];
-  const enumUrgency  = URGENCY_TO_ENUM [b.answers.urgency];
+  const enumLevel    = LEVEL_TO_ENUM[b.answers.level];
+  // Goal/urgencia opcionales — si el cliente nuevo no los manda,
+  // el lead queda con esos campos null y Stiv los pregunta por WA.
+  const enumGoal     = b.answers.goal    ? GOAL_TO_ENUM[b.answers.goal]       : null;
+  const enumUrgency  = b.answers.urgency ? URGENCY_TO_ENUM[b.answers.urgency] : null;
 
   const baseFields: Record<string, unknown> = {
     name:                     b.name,
@@ -267,7 +273,7 @@ export async function POST(req: NextRequest) {
     german_level:             enumLevel,
     goal:                     enumGoal,
     urgency:                  enumUrgency,
-    budget:                   b.answers.budget,
+    budget:                   b.answers.budget ?? null,
     country:                  country,
     diagnostico_answers:      b.answers,
     diagnostico_completed_at: new Date().toISOString(),
@@ -344,7 +350,7 @@ export async function POST(req: NextRequest) {
     lead_id: leadId,
     type:    "agent_note",
     author:  "system",
-    content: `📋 Diagnóstico completado — nivel: ${b.answers.level}, objetivo: ${b.answers.goal}, urgencia: ${b.answers.urgency}, presupuesto: ${b.answers.budget}, país: ${country}${motivoTxt}`,
+    content: `📋 Diagnóstico completado — nivel: ${b.answers.level}, objetivo: ${b.answers.goal ?? "(pendiente)"}, urgencia: ${b.answers.urgency ?? "(pendiente)"}, presupuesto: ${b.answers.budget ?? "(pendiente)"}, país: ${country}${motivoTxt}`,
     metadata: { kind: "diagnostico_register", answers: b.answers, country, motivo_inicial: b.motivo_inicial ?? null },
   });
 
@@ -375,8 +381,10 @@ export async function POST(req: NextRequest) {
           german_level:        enumLevel,
           goal:                enumGoal,
           urgency:             enumUrgency,
-          budget:              b.answers.budget,
-          diagnostico_answers: b.answers,
+          budget:              b.answers.budget ?? null,
+          diagnostico_answers: Object.fromEntries(
+            Object.entries(b.answers).filter(([, v]) => typeof v === "string"),
+          ) as Record<string, string>,
         });
         console.log("[diagnostico/register] lead alert:", JSON.stringify(r));
       } catch (e) {

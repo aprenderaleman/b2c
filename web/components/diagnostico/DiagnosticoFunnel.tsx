@@ -121,10 +121,10 @@ const MOTIVO_OPTIONS = [
 type MotivoId = typeof MOTIVO_OPTIONS[number]["id"];
 
 const MOTIVO_PERSONALIZED_H2: Record<MotivoId, string> = {
-  particulares: "Perfecto, vamos a encontrar tu profesor para clases particulares",
-  intensivo:    "Perfecto, te preparamos un curso intensivo a tu medida",
-  certificado:  "Perfecto, te ayudamos a obtener tu certificado oficial",
-  profesional:  "Perfecto, te preparamos el alemán que necesitas para tu profesión",
+  particulares: "Genial 👋 Tu primera clase con un profesor nativo certificado es gratis",
+  intensivo:    "Perfecto 🚀 Te preparamos un curso intensivo a tu medida",
+  certificado:  "Perfecto 🏅 Te ayudamos a obtener tu certificado oficial",
+  profesional:  "Perfecto 💼 Te preparamos el alemán que necesitas para tu profesión",
 };
 
 type Answers = {
@@ -144,13 +144,14 @@ type FormData = {
   gdpr:         boolean;
 };
 
-// Pasos del funnel. Tras introducir motivo_inicial el orden es:
-//   1: motivo (nuevo, Q.Score)
-//   2: nivel (era el viejo paso 1, ahora con H2 personalizado encima)
-//   3: objetivo
-//   4: urgencia
-//   5: presupuesto
-//   "low_budget_exit": pantalla SCHULE (no cuenta visualmente)
+// Pasos del funnel (post-2026-05-26, quiz simplificado a 2 preguntas).
+//   1: motivo (Q.Score Google Ads)
+//   2: nivel (MCER A0..C1)
+//   3, 4, 5: ELIMINADOS del UI. Stiv hace estas preguntas (goal,
+//     urgencia, budget) por WhatsApp en la conversación post-trial.
+//     Mantenemos las constantes GOAL/URGENCY/BUDGET_OPTIONS y los
+//     mappers porque otros componentes (admin, agendar) los siguen
+//     usando. El visitante salta de paso 2 directo a paso 6 (datos).
 //   6: captura de datos
 //   7: resumen + calendario
 type Step = 1 | 2 | 3 | 4 | 5 | "low_budget_exit" | 6 | 7;
@@ -227,13 +228,20 @@ export function DiagnosticoFunnel() {
     } catch { /* ignore */ }
   }, []);
 
-  // Progreso visual — 6 pasos visibles (la pantalla SCHULE no cuenta)
+  // Progreso visual — 3 pasos visibles tras la simplificación 2026-05-26:
+  //   1: motivo → 1/3
+  //   2: nivel  → 2/3
+  //   6: datos  → 3/3
+  //   7: calendario → 3/3 (mismo bucket que datos para no parecer "más"
+  //                        después de haber dado el WhatsApp)
   const visualStepNum =
-    step === "low_budget_exit" ? 5 :
-    step === 6 ? 6 :
-    step === 7 ? 6 :
-    step;
-  const totalSteps = 6;
+    step === 1 ? 1 :
+    step === 2 ? 2 :
+    step === "low_budget_exit" ? 3 :
+    step === 6 ? 3 :
+    step === 7 ? 3 :
+    3;
+  const totalSteps = 3;
   const progressPct = (visualStepNum / totalSteps) * 100;
 
   // Handlers ────────────────────────────────────────────────────
@@ -273,9 +281,13 @@ export function DiagnosticoFunnel() {
   }
   function pickLevel(id: typeof LEVEL_OPTIONS[number]["id"]) {
     setAnswers(a => ({ ...a, level: id }));
-    setStep(3);
+    // Quiz simplificado 2026-05-26: tras el nivel saltamos directo a
+    // paso 6 (captura). Goal/urgencia/budget se preguntan por WhatsApp.
+    setStep(6);
     trackStep(2, id);
   }
+  // Handlers heredados — ya no enganchados al UI, pero los conservamos
+  // por si en el futuro re-introducimos alguna pregunta del quiz.
   function pickGoal(id: typeof GOAL_OPTIONS[number]["id"]) {
     setAnswers(a => ({ ...a, goal: id }));
     setStep(4);
@@ -293,8 +305,10 @@ export function DiagnosticoFunnel() {
   }
 
   function goBack() {
-    if (step === 7) return; // no hay back desde resumen
-    if (step === 6) setStep(5);
+    if (step === 7) return; // no hay back desde el calendario tras confirmar
+    // Quiz simplificado: paso 6 vuelve directo a paso 2 (saltando los
+    // pasos 3/4/5 que ya no se muestran al usuario).
+    if (step === 6) setStep(2);
     else if (step === "low_budget_exit") setStep(5);
     else if (step === 5) setStep(4);
     else if (step === 4) setStep(3);
@@ -479,6 +493,25 @@ export function DiagnosticoFunnel() {
           />
         </div>
       </header>
+
+      {/* Prueba social — barra discreta sólo en pasos del quiz (1, 2)
+          y del form (6). Da al visitante razones para invertir 30s
+          en responder. No se muestra en calendario/resumen para no
+          competir visualmente con el slot picker / confirmación. */}
+      {(step === 1 || step === 2 || step === 6) && (
+        <div className="mx-auto w-full max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pt-3">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] sm:text-xs text-white/55 leading-snug">
+            <span className="flex items-center gap-1">
+              <span className="text-amber-300">⭐⭐⭐⭐⭐</span>
+              <span>+800 estudiantes activos</span>
+            </span>
+            <span className="hidden sm:inline text-white/20">·</span>
+            <span>💬 Respuesta en &lt;5 min</span>
+            <span className="hidden sm:inline text-white/20">·</span>
+            <span>🇩🇪 Profesores nativos certificados</span>
+          </div>
+        </div>
+      )}
 
       <main className="flex-1 mx-auto w-full max-w-xl md:max-w-2xl lg:max-w-3xl">
         {step === 1 && (
@@ -731,16 +764,18 @@ function DataCaptureStep({
   submitErr:   string | null;
   onSubmit:    () => void;
 }) {
-  // Paso 5 simplificado (Gelfis 2026-05-26): eliminado dropdown de país
-  // y checkbox GDPR. El país lo derivamos server-side del código de
-  // área del WhatsApp (+49→DE, +34→ES, etc). La aceptación de privacidad
-  // se hace implícita al pulsar el CTA con disclaimer debajo del botón.
-  const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()), [form.email]);
-  const phoneDigits = form.whatsapp.replace(/\D/g, "");
+  // Paso 5 v3 (Gelfis 2026-05-26):
+  //  - WhatsApp PRIMERO (es el canal principal — los leads no abren email).
+  //  - Email OPCIONAL (sólo para enviar el PDF de bienvenida).
+  //  - Sin dropdown país (derivado server-side del prefijo).
+  //  - Sin checkbox GDPR (aceptación implícita con disclaimer en el CTA).
+  const emailEntered = form.email.trim().length > 0;
+  const emailValid   = useMemo(() => !emailEntered || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()), [form.email, emailEntered]);
+  const phoneDigits  = form.whatsapp.replace(/\D/g, "");
   const canSubmit =
     form.name.trim().length >= 2 &&
-    emailValid &&
     phoneDigits.length >= 6 &&
+    emailValid &&  // si el lead lo escribió, que sea válido
     !submitting;
 
   return (
@@ -753,7 +788,7 @@ function DataCaptureStep({
       </p>
 
       <div className="mt-6 space-y-4">
-        <Field label="Nombre completo">
+        <Field label="Nombre">
           <input
             type="text"
             autoComplete="name"
@@ -763,19 +798,6 @@ function DataCaptureStep({
                        text-white placeholder:text-white/40
                        focus:outline-none focus:border-warm focus:bg-white/10"
             placeholder="Tu nombre y apellido"
-          />
-        </Field>
-
-        <Field label="Email">
-          <input
-            type="email"
-            autoComplete="email"
-            value={form.email}
-            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
-                       text-white placeholder:text-white/40
-                       focus:outline-none focus:border-warm focus:bg-white/10"
-            placeholder="tu@email.com"
           />
         </Field>
 
@@ -803,9 +825,37 @@ function DataCaptureStep({
               placeholder="152 123 4567"
             />
           </div>
-          <p className="mt-2 text-[12px] sm:text-xs text-white/55 leading-snug">
-            Verifica que tu número sea correcto — ahí enviaremos el
-            enlace para tu clase.
+          {/* Disclaimer reassuring — la fricción nº 1 del funnel es
+              dar el WhatsApp. Explicamos qué hacemos con él y dejamos
+              claro que NO mandamos spam ni promociones. */}
+          <div className="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+            <p className="text-[12px] sm:text-xs text-white/75 leading-snug">
+              💬 <strong>Solo te escribiremos con fines educativos:</strong>
+            </p>
+            <ul className="mt-1 text-[11.5px] sm:text-[12px] text-white/60 space-y-0.5 leading-snug">
+              <li>· Link de tu clase de prueba</li>
+              <li>· Recordatorios antes de la clase</li>
+              <li>· Materiales y respuestas a tus dudas</li>
+            </ul>
+            <p className="mt-1.5 text-[11px] text-white/45">
+              Cero spam · Cero promociones invasivas
+            </p>
+          </div>
+        </Field>
+
+        <Field label={<span>Email <span className="text-white/45 font-normal">— opcional</span></span>}>
+          <input
+            type="email"
+            autoComplete="email"
+            value={form.email}
+            onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
+                       text-white placeholder:text-white/40
+                       focus:outline-none focus:border-warm focus:bg-white/10"
+            placeholder="tu@email.com (opcional)"
+          />
+          <p className="mt-1.5 text-[11.5px] text-white/45 leading-snug">
+            Si lo dejas, te enviamos materiales gratis y la confirmación de tu clase también por email.
           </p>
         </Field>
 
@@ -1250,7 +1300,7 @@ function SummaryRow({ label, value }: { label: string; value: string | null }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: React.ReactNode; children: React.ReactNode }) {
   return (
     <label className="block">
       <div className="text-[12px] uppercase tracking-[0.14em] text-white/55 mb-1.5">
