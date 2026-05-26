@@ -125,13 +125,43 @@ const URGENCY_TO_ENUM: Record<typeof URGENCY_OPTIONS[number], "asap" | "under_3_
 // Si alguien no encaja en los 4 motivos, no lo dirigimos al funnel.
 const MOTIVOS = ["particulares","intensivo","certificado","profesional"] as const;
 
+// Mapa de prefijo E.164 → ISO-3166-1 alpha-2. Cobre los países del
+// COUNTRY_OPTIONS del componente; "+1" colapsa a US (suficiente).
+// Usado para inferir country cuando el cliente nuevo (post-2026-05-26)
+// ya no envía el campo (lo eliminamos del paso 5 del funnel).
+const PHONE_PREFIX_TO_COUNTRY: Record<string, string> = {
+  "+1787": "PR", "+1809": "DO",
+  "+595": "PY", "+598": "UY", "+591": "BO", "+593": "EC",
+  "+506": "CR", "+507": "PA", "+502": "GT", "+504": "HN",
+  "+505": "NI", "+503": "SV", "+351": "PT",
+  "+49": "DE", "+34": "ES", "+43": "AT", "+41": "CH",
+  "+54": "AR", "+52": "MX", "+57": "CO", "+56": "CL",
+  "+51": "PE", "+58": "VE", "+53": "CU", "+55": "BR",
+  "+33": "FR", "+39": "IT", "+44": "GB", "+31": "NL", "+32": "BE",
+  "+1": "US",
+};
+function inferCountryFromWhatsapp(whatsappE164: string): string {
+  const cc = whatsappE164.startsWith("+") ? whatsappE164 : `+${whatsappE164}`;
+  // Probar prefijos del más largo al más corto (e.g., +1787 antes que +1).
+  for (const len of [5, 4, 3, 2]) {
+    const k = cc.slice(0, len);
+    if (PHONE_PREFIX_TO_COUNTRY[k]) return PHONE_PREFIX_TO_COUNTRY[k];
+  }
+  return "XX";
+}
+
 const BodySchema = z.object({
   name:          z.string().trim().min(2).max(100),
   email:         z.string().trim().toLowerCase().email(),
   whatsapp_e164: z.string().trim().regex(/^\+?[0-9]{8,15}$/, "WhatsApp inválido"),
-  country:       z.string().trim().length(2).toUpperCase(),
+  // country: opcional para clientes nuevos (post-2026-05-26). Si no
+  // viene o viene null, lo inferimos del prefijo del WhatsApp.
+  country:       z.string().trim().length(2).toUpperCase().optional().nullable(),
   language:      z.enum(["es", "de"]).optional().default("es"),
-  gdpr_accepted: z.literal(true, { errorMap: () => ({ message: "Aceptación GDPR obligatoria" }) }),
+  // gdpr_accepted: aceptamos cualquier valor — la aceptación es
+  // implícita al pulsar el CTA (disclaimer en el botón). Siempre
+  // se guarda como true server-side.
+  gdpr_accepted: z.boolean().optional(),
   // Paso 1 nuevo (motivo_inicial). Opcional para no romper compat con
   // clientes viejos que aún no envían el campo.
   session_id:     z.string().trim().min(8).max(64).optional(),
@@ -180,6 +210,12 @@ export async function POST(req: NextRequest) {
   // por country-code duplicado), saneamos colapsando un código repetido
   // al inicio.
   const whatsappE164 = sanitizeE164(b.whatsapp_e164);
+
+  // País: si el cliente lo envió lo respetamos (compat con clientes
+  // viejos); si no, lo inferimos del prefijo del WhatsApp E.164.
+  const country = b.country && b.country.length === 2
+    ? b.country
+    : inferCountryFromWhatsapp(whatsappE164);
 
   const sb = supabaseAdmin();
 
@@ -232,7 +268,7 @@ export async function POST(req: NextRequest) {
     goal:                     enumGoal,
     urgency:                  enumUrgency,
     budget:                   b.answers.budget,
-    country:                  b.country,
+    country:                  country,
     diagnostico_answers:      b.answers,
     diagnostico_completed_at: new Date().toISOString(),
     gdpr_accepted:            true,
@@ -308,8 +344,8 @@ export async function POST(req: NextRequest) {
     lead_id: leadId,
     type:    "agent_note",
     author:  "system",
-    content: `📋 Diagnóstico completado — nivel: ${b.answers.level}, objetivo: ${b.answers.goal}, urgencia: ${b.answers.urgency}, presupuesto: ${b.answers.budget}, país: ${b.country}${motivoTxt}`,
-    metadata: { kind: "diagnostico_register", answers: b.answers, country: b.country, motivo_inicial: b.motivo_inicial ?? null },
+    content: `📋 Diagnóstico completado — nivel: ${b.answers.level}, objetivo: ${b.answers.goal}, urgencia: ${b.answers.urgency}, presupuesto: ${b.answers.budget}, país: ${country}${motivoTxt}`,
+    metadata: { kind: "diagnostico_register", answers: b.answers, country, motivo_inicial: b.motivo_inicial ?? null },
   });
 
   // Welcome (email + WA) NO se manda inmediato — decisión Gelfis
@@ -334,7 +370,7 @@ export async function POST(req: NextRequest) {
           email:               b.email,
           whatsapp_normalized: whatsappE164,
           language:            b.language,
-          country:             b.country,
+          country:             country,
           motivo_inicial:      b.motivo_inicial ?? null,
           german_level:        enumLevel,
           goal:                enumGoal,

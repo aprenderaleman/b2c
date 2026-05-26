@@ -238,11 +238,29 @@ export function DiagnosticoFunnel() {
 
   // Handlers ────────────────────────────────────────────────────
 
+  // Telemetría: graba en funnel_progress que la sesión llegó a {step}
+  // y opcionalmente qué respuesta dio. Fire-and-forget, no bloquea UX.
+  // Llamado al ENTRAR al paso, no al salir, para registrar abandono
+  // correctamente: si el lead llega al paso 3 y se va, queda como
+  // "alcanzó paso 3" sin respuesta de paso 3.
+  function trackStep(stepNum: number, answer: string | null) {
+    if (!sessionId) return;
+    try {
+      fetch("/api/public/funnel/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId, step: stepNum, answer }),
+        keepalive: true,
+      }).catch(() => { /* silencioso */ });
+    } catch { /* silencioso */ }
+  }
+
   async function pickMotivo(id: MotivoId) {
     setAnswers(a => ({ ...a, motivo: id }));
     setStep(2);
-    // Persist a la BD via session_id. Fire-and-forget para no
-    // bloquear la transición visual.
+    trackStep(1, id);
+    // Mantenemos /api/public/motivo para enlazar con leads (campo
+    // motivo_inicial). El track genérico va aparte.
     if (sessionId) {
       try {
         await fetch("/api/public/motivo", {
@@ -256,18 +274,22 @@ export function DiagnosticoFunnel() {
   function pickLevel(id: typeof LEVEL_OPTIONS[number]["id"]) {
     setAnswers(a => ({ ...a, level: id }));
     setStep(3);
+    trackStep(2, id);
   }
   function pickGoal(id: typeof GOAL_OPTIONS[number]["id"]) {
     setAnswers(a => ({ ...a, goal: id }));
     setStep(4);
+    trackStep(3, id);
   }
   function pickUrgency(id: typeof URGENCY_OPTIONS[number]["id"]) {
     setAnswers(a => ({ ...a, urgency: id }));
     setStep(5);
+    trackStep(4, id);
   }
   function pickBudget(id: typeof BUDGET_OPTIONS[number]["id"], lowBudget: boolean) {
     setAnswers(a => ({ ...a, budget: id }));
     setStep(lowBudget ? "low_budget_exit" : 6);
+    trackStep(5, id);
   }
 
   function goBack() {
@@ -299,8 +321,15 @@ export function DiagnosticoFunnel() {
         name:           form.name.trim(),
         email:          form.email.trim().toLowerCase(),
         whatsapp_e164:  whatsappE164,
-        country:        form.country,
+        // country se deriva server-side del prefijo del WhatsApp (cambio
+        // Gelfis 2026-05-26 — paso 5 simplificado). Lo enviamos a NULL
+        // y el endpoint lo infiere; si el inferido es válido lo usa, si
+        // no, deja country='XX'.
+        country:        null as string | null,
         language:       "es",
+        // Aceptación de privacidad implícita al pulsar el CTA (disclaimer
+        // mostrado debajo del botón). El endpoint ignora este campo y
+        // siempre setea gdpr_accepted=true server-side.
         gdpr_accepted:  true,
         // Paso 1 nuevo (motivo_inicial) + session_id para que el
         // backend enlace lead_motivo_inicial.lead_id.
@@ -330,6 +359,9 @@ export function DiagnosticoFunnel() {
         setSubmitting(false);
         return;
       }
+
+      // Telemetría: paso 6 completado (form de datos enviado).
+      trackStep(6, null);
 
       // Lead guardado. Disparar pixels y avanzar al resumen.
       firePixelLead({
@@ -502,7 +534,6 @@ export function DiagnosticoFunnel() {
             <DataCaptureStep
               form={form}
               setForm={setForm}
-              countries={COUNTRY_OPTIONS}
               submitting={submitting}
               submitErr={submitErr}
               onSubmit={submitData}
@@ -692,23 +723,24 @@ function LowBudgetExit({ onBack }: { onBack: () => void }) {
 }
 
 function DataCaptureStep({
-  form, setForm, countries, submitting, submitErr, onSubmit,
+  form, setForm, submitting, submitErr, onSubmit,
 }: {
   form:        FormData;
   setForm:     React.Dispatch<React.SetStateAction<FormData>>;
-  countries:   { code: string; name: string }[];
   submitting:  boolean;
   submitErr:   string | null;
   onSubmit:    () => void;
 }) {
+  // Paso 5 simplificado (Gelfis 2026-05-26): eliminado dropdown de país
+  // y checkbox GDPR. El país lo derivamos server-side del código de
+  // área del WhatsApp (+49→DE, +34→ES, etc). La aceptación de privacidad
+  // se hace implícita al pulsar el CTA con disclaimer debajo del botón.
   const emailValid = useMemo(() => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()), [form.email]);
   const phoneDigits = form.whatsapp.replace(/\D/g, "");
   const canSubmit =
     form.name.trim().length >= 2 &&
     emailValid &&
     phoneDigits.length >= 6 &&
-    form.country.length === 2 &&
-    form.gdpr &&
     !submitting;
 
   return (
@@ -777,42 +809,6 @@ function DataCaptureStep({
           </p>
         </Field>
 
-        <Field label="País de residencia">
-          <select
-            value={form.country}
-            onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
-            className="w-full h-12 md:h-14 px-3 md:text-base lg:text-lg rounded-xl bg-white/5 border border-white/10
-                       text-white
-                       focus:outline-none focus:border-warm focus:bg-white/10"
-          >
-            {countries.map(c => (
-              <option key={c.code} value={c.code} className="bg-navy-900 text-white">
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-
-        <p className="text-xs text-white/55 leading-relaxed pt-2">
-          Solo usaremos tus datos para contactarte con fines educativos relacionados con
-          tu plan de aprendizaje. Nunca los compartiremos con terceros.
-        </p>
-
-        <label className="flex items-start gap-3 cursor-pointer pt-1">
-          <input
-            type="checkbox"
-            checked={form.gdpr}
-            onChange={e => setForm(f => ({ ...f, gdpr: e.target.checked }))}
-            className="mt-1 h-5 w-5 rounded accent-warm"
-          />
-          <span className="text-[13px] text-white/85 leading-relaxed">
-            Acepto la{" "}
-            <Link href="/privacy" target="_blank" className="underline text-warm">
-              política de privacidad
-            </Link>
-          </span>
-        </label>
-
         {submitErr && (
           <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
             {submitErr}
@@ -834,6 +830,13 @@ function DataCaptureStep({
           >
             {submitting ? "Creando tu plan…" : "Crear mi plan"}
           </button>
+          <p className="mt-2 text-center text-[11px] text-white/45 leading-snug">
+            Al continuar aceptas nuestra{" "}
+            <Link href="/privacy" target="_blank" className="underline text-white/65">
+              política de privacidad
+            </Link>
+            . Solo usaremos tus datos para contactarte con fines educativos.
+          </p>
         </div>
       </div>
     </div>
@@ -867,7 +870,8 @@ function CalendarStep({
   // "Confirmar" se habilita solo cuando ambos están marcados.
   // Decisión Gelfis 2026-05-22: aumentar la asistencia haciendo que
   // el lead reconozca el valor (€30) y explícitamente se comprometa.
-  const [commitValue,    setCommitValue]    = useState(false);
+  // 2026-05-26: eliminado el checkbox "valor" — sólo queda el de
+  // compromiso de asistencia para reducir fricción en el paso 6.
   const [commitAttend,   setCommitAttend]   = useState(false);
 
   useEffect(() => {
@@ -925,12 +929,12 @@ function CalendarStep({
     }
   };
 
-  const canConfirm = !!selectedSlot && commitValue && commitAttend && !submitting;
+  const canConfirm = !!selectedSlot && commitAttend && !submitting;
 
   const confirmBooking = async () => {
     if (submitting || !selectedSlot) return;
-    if (!commitValue || !commitAttend) {
-      setSubmitErr("Marca ambas casillas de compromiso para confirmar tu reserva.");
+    if (!commitAttend) {
+      setSubmitErr("Marca la casilla de compromiso para confirmar tu reserva.");
       return;
     }
     const s = selectedSlot;
@@ -997,6 +1001,18 @@ function CalendarStep({
         return;
       }
       firePixelSchedule({ leadId });
+      // Telemetría: paso 7 completado (clase de prueba agendada).
+      try {
+        const sid = sessionStorage.getItem("b2c.diagnostico.sid");
+        if (sid) {
+          fetch("/api/public/funnel/track", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ session_id: sid, step: 7, answer: s.startIso }),
+            keepalive: true,
+          }).catch(() => { /* silencioso */ });
+        }
+      } catch { /* ignore */ }
       try {
         sessionStorage.removeItem("b2c.agendar.v1");
         sessionStorage.removeItem("diagnostico_lead_id");
@@ -1034,7 +1050,7 @@ function CalendarStep({
   })();
 
   return (
-    <div className={`px-5 pt-6 ${selectedSlot ? "pb-[calc(env(safe-area-inset-bottom)+19rem)] md:pb-[calc(env(safe-area-inset-bottom)+17rem)]" : "pb-12"}`}>
+    <div className={`px-5 pt-6 ${selectedSlot ? "pb-[calc(env(safe-area-inset-bottom)+9rem)] md:pb-[calc(env(safe-area-inset-bottom)+8rem)]" : "pb-12"}`}>
       <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-white">
         ¡Tu plan está listo, {name}!
       </h1>
@@ -1109,12 +1125,43 @@ function CalendarStep({
         )}
       </div>
 
-      {/* CTA sticky de confirmación. Solo se muestra cuando el lead ha
-          escogido un slot. Incluye:
-            1. Tarjeta de valor (30 € · regalo si asiste) — refuerzo
-               comercial pre-decisión.
-            2. Dos checkboxes de compromiso (valor + asistencia).
-            3. Botón Confirmar, deshabilitado hasta ambos checks. */}
+      {/* Bloque compromiso IN-PAGE — sólo aparece tras seleccionar slot.
+          Va fuera del sticky para que NO se superponga con el botón.
+          Se desplaza con el scroll y empuja los slots hacia arriba. */}
+      {selectedSlot && confirmLabel && (
+        <div className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 mt-6 space-y-3">
+          <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3">
+            <div className="flex items-start gap-2.5">
+              <span className="text-lg leading-none mt-0.5" aria-hidden>💎</span>
+              <div className="min-w-0">
+                <p className="text-[12px] font-semibold uppercase tracking-wider text-amber-200">
+                  Valor de tu clase
+                </p>
+                <p className="mt-1 text-[14px] md:text-[15px] text-amber-50 leading-snug">
+                  Esta clase con un profesor nativo certificado tiene un
+                  valor de <strong>30 €</strong>. <strong>Te la regalamos</strong> si
+                  asistes a tu primera clase.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <label className="flex items-start gap-3 cursor-pointer px-1 py-2">
+            <input
+              type="checkbox"
+              checked={commitAttend}
+              onChange={e => setCommitAttend(e.target.checked)}
+              className="mt-0.5 h-5 w-5 accent-warm shrink-0 cursor-pointer"
+            />
+            <span className="text-[14px] md:text-base text-white/90 leading-snug">
+              Me comprometo a asistir el <strong className="capitalize">{confirmLabel}</strong>.
+            </span>
+          </label>
+        </div>
+      )}
+
+      {/* CTA sticky: SOLO el botón Confirmar. El bloque de valor +
+          compromiso vive in-page arriba (no se superpone). */}
       {selectedSlot && confirmLabel && (
         <div
           className="fixed bottom-0 left-0 right-0 z-30
@@ -1122,53 +1169,9 @@ function CalendarStep({
                      pt-6"
         >
           <div
-            className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pb-4 space-y-3"
+            className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pb-4"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
           >
-            {/* Tarjeta de valor */}
-            <div className="rounded-2xl border border-amber-400/40 bg-amber-500/10 px-4 py-3">
-              <div className="flex items-start gap-2.5">
-                <span className="text-lg leading-none mt-0.5" aria-hidden>💎</span>
-                <div className="min-w-0">
-                  <p className="text-[12px] font-semibold uppercase tracking-wider text-amber-200">
-                    Valor de tu clase
-                  </p>
-                  <p className="mt-1 text-[14px] md:text-[15px] text-amber-50 leading-snug">
-                    Esta clase con un profesor nativo certificado tiene un
-                    valor de <strong>30 €</strong>. <strong>Te la regalamos</strong> si
-                    asistes a tu primera clase.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Compromisos del lead */}
-            <div className="space-y-2.5 px-1">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={commitValue}
-                  onChange={e => setCommitValue(e.target.checked)}
-                  className="mt-0.5 h-5 w-5 accent-warm shrink-0 cursor-pointer"
-                />
-                <span className="text-[13px] md:text-sm text-white/85 leading-snug">
-                  Entiendo que esta clase tiene un valor de <strong>30 €</strong> y
-                  que la recibo como regalo.
-                </span>
-              </label>
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={commitAttend}
-                  onChange={e => setCommitAttend(e.target.checked)}
-                  className="mt-0.5 h-5 w-5 accent-warm shrink-0 cursor-pointer"
-                />
-                <span className="text-[13px] md:text-sm text-white/85 leading-snug">
-                  Me comprometo a asistir el <strong className="capitalize">{confirmLabel}</strong>.
-                </span>
-              </label>
-            </div>
-
             <button
               type="button"
               onClick={confirmBooking}

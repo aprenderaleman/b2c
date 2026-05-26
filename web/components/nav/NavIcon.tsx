@@ -53,6 +53,12 @@ const PATHS: Record<NavIconKey, React.ReactNode> = {
       <path d="M7 16v-5M12 16v-9M17 16v-3" />
     </>
   ),
+  trendingUp: (
+    <>
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </>
+  ),
   messageCircle: (
     <>
       <path d="M21 12a9 9 0 1 1-3.7-7.3l.2.2-1 4.1 4.1-1 .2.2A9 9 0 0 1 21 12Z" />
