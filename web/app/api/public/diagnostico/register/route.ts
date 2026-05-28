@@ -44,7 +44,7 @@ import { after }                     from "next/server";
 import { z }                          from "zod";
 import { supabaseAdmin }              from "@/lib/supabase";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
-import { sanitizeE164 }                  from "@/lib/phone";
+import { sanitizeE164, rescueDoublePrefix } from "@/lib/phone";
 import { parsePhoneNumberFromString }    from "libphonenumber-js";
 import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
 
@@ -216,30 +216,18 @@ export async function POST(req: NextRequest) {
   // al inicio.
   let whatsappE164 = sanitizeE164(b.whatsapp_e164);
 
-  // Defense in depth con libphonenumber (2026-05-27): caso real lead
-  // español con prefijo +49 por defecto → "+4934676482692". El número
-  // es inválido como alemán pero válido como español. Si parsea como
-  // inválido, intentamos re-interpretarlo quitando el primer CC y
-  // viendo si el resto es un número válido por sí mismo.
+  // Defense in depth (2026-05-27): rescate de doble-prefijo. Caso real
+  // lead español con +49 por defecto → "+4934676482692". libphonenumber
+  // lo considera "válido" como alemán (plan laxo), así que sanitizeE164
+  // no lo arregla. rescueDoublePrefix detecta que tras el +49 hay otro
+  // CC extranjero válido (+34 español) y corrige. El cliente ya manda
+  // el número correcto vía resolvePhone — esto cubre llamadas directas
+  // a la API o clientes en caché con el bug.
+  whatsappE164 = rescueDoublePrefix(whatsappE164);
+  // Normaliza al formato canónico si parsea bien.
   {
     const parsed = parsePhoneNumberFromString(whatsappE164);
-    if (!parsed || !parsed.isValid()) {
-      // Intento de rescate: ¿el cuerpo tras el primer CC es un número
-      // internacional válido por sí solo? (ej. +49 [34676482692] donde
-      // 34676482692 = +34 676482692 válido español).
-      const digits = whatsappE164.replace(/\D/g, "");
-      // Probar quitando 2 o 3 dígitos iniciales (longitud típica de CC).
-      for (const ccLen of [2, 3]) {
-        const candidate = parsePhoneNumberFromString(`+${digits.slice(ccLen)}`);
-        if (candidate && candidate.isValid()) {
-          whatsappE164 = candidate.number;
-          break;
-        }
-      }
-    } else {
-      // Normaliza al formato canónico E.164 de libphonenumber.
-      whatsappE164 = parsed.number;
-    }
+    if (parsed && parsed.isValid()) whatsappE164 = parsed.number;
   }
 
   // País: lo derivamos del número ya saneado con libphonenumber (más

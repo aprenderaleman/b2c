@@ -202,6 +202,36 @@ export function resolvePhone(countryCode: string, localInput: string): PhoneReso
 }
 
 /**
+ * Rescate de doble-prefijo para un E.164 ya armado (server-side defense
+ * in depth). Caso: "+4934676482692" donde tras el primer CC (49) viene
+ * otro CC extranjero válido (34 + número español). libphonenumber
+ * considera el número entero "válido" (Alemania es laxo), así que no
+ * podemos confiar sólo en isValid() — aplicamos la misma lista de
+ * detección que resolvePhone.
+ *
+ * Devuelve el E.164 corregido si detecta el patrón, o el original.
+ */
+export function rescueDoublePrefix(e164: string): string {
+  const digits = (e164 ?? "").replace(/\D/g, "");
+  if (!digits) return e164;
+
+  // Probamos quitar un primer CC de 1-3 dígitos y ver si lo que queda
+  // empieza por un CC extranjero conocido formando un número válido.
+  for (const firstCcLen of [2, 3, 1]) {
+    const rest = digits.slice(firstCcLen);
+    for (const cc of FOREIGN_DETECT_CCS) {
+      if (rest.startsWith(cc)) {
+        const cand = parsePhoneNumberFromString(`+${rest}`);
+        if (cand && cand.isValid() && String(cand.countryCallingCode) === cc) {
+          return cand.number;
+        }
+      }
+    }
+  }
+  return e164;
+}
+
+/**
  * Saneo defensivo de un E.164 que ya viene con `+`. Pensado para los
  * endpoints públicos que reciben el número ya armado por el frontend
  * pero pueden recibir formas malformadas:
