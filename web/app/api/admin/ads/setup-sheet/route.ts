@@ -44,6 +44,17 @@ export async function GET(req: Request) {
     }, { status: 500 });
   }
 
+  // Modo "solo info": devuelve el email del service account SIN crear
+  // ninguna hoja. Para el flujo donde Gelfis crea la hoja él mismo
+  // (Opción B) y necesita saber con qué cuenta compartirla.
+  if (new URL(req.url).searchParams.get("info") === "1") {
+    return NextResponse.json({
+      ok: true,
+      serviceAccountEmail: saEmail,
+      instructions: `Comparte tu Google Sheet (Editor) con: ${saEmail}. Luego pon GADS_CONVERSIONS_SHEET_ID en Vercel y selecciónala en Google Ads.`,
+    });
+  }
+
   const result = await createConversionSheet(SHARE_WITH);
   if (!result) {
     return NextResponse.json({
