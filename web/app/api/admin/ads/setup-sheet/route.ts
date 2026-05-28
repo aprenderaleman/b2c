@@ -21,15 +21,20 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Cuenta de Google logueada en Google Ads (dueña del Drive donde debe
-// aparecer la hoja).
-const SHARE_WITH = "aprenderaleman2026@gmail.com";
+// aparecer la hoja). Se puede sobreescribir con ?email=otra@gmail.com.
+const DEFAULT_SHARE_WITH = "helphis0405@gmail.com";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
   const role = (session?.user as { role?: string } | undefined)?.role;
   if (!session?.user || (role !== "admin" && role !== "superadmin")) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+
+  const emailParam = new URL(req.url).searchParams.get("email")?.trim();
+  const SHARE_WITH = emailParam && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailParam)
+    ? emailParam
+    : DEFAULT_SHARE_WITH;
 
   const saEmail = serviceAccountEmail();
   if (!saEmail) {
