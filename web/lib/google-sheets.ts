@@ -98,6 +98,81 @@ export async function ensureConversionHeader(): Promise<boolean> {
   }
 }
 
+/**
+ * Crea una hoja nueva para conversiones de Google Ads, le pone las
+ * cabeceras OCI, y la comparte (Editor) con el email indicado para que
+ * aparezca en su Drive y Google Ads pueda seleccionarla.
+ *
+ * Devuelve { id, url } o null si falla / no hay service account.
+ * La hoja queda propiedad del service account (nuestro cron escribe
+ * sin sharing extra) y compartida con el usuario (Google Ads la lee).
+ */
+export async function createConversionSheet(shareWithEmail: string): Promise<{ id: string; url: string } | null> {
+  const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!json) return null;
+  let parsed: { client_email?: string; private_key?: string };
+  try { parsed = JSON.parse(json); } catch { return null; }
+  if (!parsed.client_email || !parsed.private_key) return null;
+
+  const { JWT } = await import("google-auth-library");
+  const { sheets } = await import("@googleapis/sheets");
+  const { drive }  = await import("@googleapis/drive");
+  const privateKey = parsed.private_key.replace(/\\n/g, "\n");
+  const auth = new JWT({
+    email:  parsed.client_email,
+    key:    privateKey,
+    scopes: [
+      "https://www.googleapis.com/auth/spreadsheets",
+      "https://www.googleapis.com/auth/drive",
+    ],
+  });
+
+  const sheetsApi = sheets({ version: "v4", auth });
+  const driveApi  = drive({ version: "v3", auth });
+
+  try {
+    // 1. Crear la hoja con las 2 filas de cabecera (Parameters + columns).
+    const created = await sheetsApi.spreadsheets.create({
+      requestBody: {
+        properties: { title: `Conversiones Google Ads — Aprender-Aleman.de` },
+        sheets: [{
+          properties: { title: "Conversions" },
+          data: [{
+            startRow: 0, startColumn: 0,
+            rowData: [
+              { values: [{ userEnteredValue: { stringValue: "Parameters:TimeZone=Europe/Berlin" } }] },
+              { values: HEADER_ROW.map(h => ({ userEnteredValue: { stringValue: h } })) },
+            ],
+          }],
+        }],
+      },
+    });
+    const id = created.data.spreadsheetId;
+    if (!id) return null;
+
+    // 2. Compartir con el email del usuario (Editor) para que aparezca
+    //    en su Drive y Google Ads pueda seleccionarla.
+    await driveApi.permissions.create({
+      fileId: id,
+      sendNotificationEmail: true,
+      requestBody: { type: "user", role: "writer", emailAddress: shareWithEmail },
+    });
+
+    return { id, url: `https://docs.google.com/spreadsheets/d/${id}/edit` };
+  } catch (e) {
+    console.error("[gsheets] createConversionSheet failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/** Email del service account (para instrucciones de compartir). */
+export function serviceAccountEmail(): string | null {
+  const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!json) return null;
+  try { return (JSON.parse(json) as { client_email?: string }).client_email ?? null; }
+  catch { return null; }
+}
+
 export type ConversionRow = {
   gclid:        string;
   conversionName: string;
