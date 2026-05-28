@@ -57,6 +57,18 @@ export function leadAlertsEnabled(): boolean {
 }
 
 /**
+ * Canales activos para la alerta de nuevo lead. Gelfis 2026-05-27:
+ * sólo por email (desactivado WhatsApp + in-app). Configurable vía
+ * env NEW_LEAD_ALERT_CHANNELS (CSV: "email,whatsapp,inapp"). Si la
+ * env no está, el default es "email" únicamente.
+ */
+function alertChannels(): Set<string> {
+  const raw = (process.env.NEW_LEAD_ALERT_CHANNELS ?? "email")
+    .split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  return new Set(raw);
+}
+
+/**
  * Dispara los 3 sends en paralelo. Llamar desde `after()`.
  * Devuelve un summary para logging; no lanza.
  */
@@ -70,10 +82,14 @@ export async function notifyNewLeadUrgent(lead: LeadForAlert): Promise<{
     return { skipped: "NEW_LEAD_ALERT_ENABLED=false" };
   }
 
-  const adminWa    = (process.env.NEW_LEAD_ALERT_WHATSAPP ?? "").trim();
-  const adminEmail = (process.env.NEW_LEAD_ALERT_EMAIL    ?? "").trim().toLowerCase();
-  if (!adminWa && !adminEmail) {
-    return { skipped: "no_destinations_configured" };
+  const channels   = alertChannels();
+  // Sólo consideramos cada destino si su canal está activo.
+  const adminWa    = channels.has("whatsapp")
+    ? (process.env.NEW_LEAD_ALERT_WHATSAPP ?? "").trim() : "";
+  const adminEmail = channels.has("email")
+    ? (process.env.NEW_LEAD_ALERT_EMAIL ?? "").trim().toLowerCase() : "";
+  if (!adminWa && !adminEmail && !channels.has("inapp")) {
+    return { skipped: "no_channels_active" };
   }
 
   // Anti-spam: si el lead es el propio admin (testing), saltamos.
@@ -159,6 +175,10 @@ export async function notifyNewLeadUrgent(lead: LeadForAlert): Promise<{
   }
 
   // ── 3. In-app a todos los superadmins ─────────────────────
+  if (!channels.has("inapp")) {
+    result.inApp = { ok: true, count: 0 };
+    return result;
+  }
   try {
     const sb = supabaseAdmin();
     const { data: supers } = await sb
