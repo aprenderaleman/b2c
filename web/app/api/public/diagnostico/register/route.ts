@@ -45,6 +45,7 @@ import { z }                          from "zod";
 import { supabaseAdmin }              from "@/lib/supabase";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { sanitizeE164 }                  from "@/lib/phone";
+import { parsePhoneNumberFromString }    from "libphonenumber-js";
 import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
 
 export const runtime = "nodejs";
@@ -213,13 +214,40 @@ export async function POST(req: NextRequest) {
   // si el cliente nos pasó algo malformado (caso real "+3434615541087"
   // por country-code duplicado), saneamos colapsando un código repetido
   // al inicio.
-  const whatsappE164 = sanitizeE164(b.whatsapp_e164);
+  let whatsappE164 = sanitizeE164(b.whatsapp_e164);
 
-  // País: si el cliente lo envió lo respetamos (compat con clientes
-  // viejos); si no, lo inferimos del prefijo del WhatsApp E.164.
-  const country = b.country && b.country.length === 2
+  // Defense in depth con libphonenumber (2026-05-27): caso real lead
+  // español con prefijo +49 por defecto → "+4934676482692". El número
+  // es inválido como alemán pero válido como español. Si parsea como
+  // inválido, intentamos re-interpretarlo quitando el primer CC y
+  // viendo si el resto es un número válido por sí mismo.
+  {
+    const parsed = parsePhoneNumberFromString(whatsappE164);
+    if (!parsed || !parsed.isValid()) {
+      // Intento de rescate: ¿el cuerpo tras el primer CC es un número
+      // internacional válido por sí solo? (ej. +49 [34676482692] donde
+      // 34676482692 = +34 676482692 válido español).
+      const digits = whatsappE164.replace(/\D/g, "");
+      // Probar quitando 2 o 3 dígitos iniciales (longitud típica de CC).
+      for (const ccLen of [2, 3]) {
+        const candidate = parsePhoneNumberFromString(`+${digits.slice(ccLen)}`);
+        if (candidate && candidate.isValid()) {
+          whatsappE164 = candidate.number;
+          break;
+        }
+      }
+    } else {
+      // Normaliza al formato canónico E.164 de libphonenumber.
+      whatsappE164 = parsed.number;
+    }
+  }
+
+  // País: lo derivamos del número ya saneado con libphonenumber (más
+  // fiable que el prefijo crudo). Fallback al mapa manual si no parsea.
+  const parsedFinal = parsePhoneNumberFromString(whatsappE164);
+  const country = (b.country && b.country.length === 2)
     ? b.country
-    : inferCountryFromWhatsapp(whatsappE164);
+    : (parsedFinal?.country ?? inferCountryFromWhatsapp(whatsappE164));
 
   const sb = supabaseAdmin();
 

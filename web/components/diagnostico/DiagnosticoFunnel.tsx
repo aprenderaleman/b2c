@@ -30,6 +30,7 @@ import { MobileDayStrip }               from "@/components/agendar/MobileDayStri
 import { TimeList, type SlotItem }      from "@/components/agendar/TimeList";
 import { RobotMark }                    from "@/components/RobotMark";
 import { IllustrationPanel }            from "./IllustrationPanel";
+import { resolvePhone }                 from "@/lib/phone";
 
 // ── Opciones del quiz (sincronizadas 1-a-1 con el endpoint
 //    /api/public/diagnostico/register — si cambias texto aquí cámbialo
@@ -256,6 +257,22 @@ export function validatePhoneForCountry(
   return null;
 }
 
+// Nombre legible de país por prefijo telefónico (para el aviso de
+// mismatch). Cubre los prefijos más comunes del tráfico.
+const CC_TO_NAME: Record<string, string> = {
+  "+49": "Alemania", "+34": "España", "+41": "Suiza", "+43": "Austria",
+  "+33": "Francia", "+39": "Italia", "+351": "Portugal", "+44": "Reino Unido",
+  "+31": "Países Bajos", "+32": "Bélgica",
+  "+54": "Argentina", "+52": "México", "+57": "Colombia", "+56": "Chile",
+  "+51": "Perú", "+58": "Venezuela", "+598": "Uruguay", "+595": "Paraguay",
+  "+591": "Bolivia", "+593": "Ecuador", "+506": "Costa Rica", "+507": "Panamá",
+  "+53": "Cuba", "+55": "Brasil", "+1": "EE.UU./Canadá",
+  "+502": "Guatemala", "+503": "El Salvador", "+504": "Honduras", "+505": "Nicaragua",
+};
+function countryNameForCc(cc: string): string {
+  return CC_TO_NAME[cc] ?? "otro país";
+}
+
 export function DiagnosticoFunnel() {
   const [step, setStep]       = useState<Step>(1);
   const [answers, setAnswers] = useState<Answers>({
@@ -396,8 +413,10 @@ export function DiagnosticoFunnel() {
     // navegador puede meter texto sin disparar onChange).
     const nameOk  = form.name.trim().length >= 2;
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
-    const e164    = combineE164(form.countryCode, form.whatsapp);
-    const phoneErr = validatePhoneForCountry(form.countryCode, e164);
+    // Resolución inteligente con libphonenumber — el e164 final puede
+    // tener un CC distinto al del dropdown si el lead tecleó su número
+    // completo con otro prefijo (caso +49 default + número español).
+    const phoneRes = resolvePhone(form.countryCode, form.whatsapp);
     if (!nameOk) {
       setSubmitErr("Pon tu nombre completo (mínimo 2 caracteres).");
       return;
@@ -406,10 +425,11 @@ export function DiagnosticoFunnel() {
       setSubmitErr("Email inválido — revisa que tenga @ y dominio.");
       return;
     }
-    if (phoneErr) {
-      setSubmitErr(phoneErr);
+    if (!phoneRes.valid) {
+      setSubmitErr("Número de WhatsApp no válido. Revisa el prefijo y los dígitos.");
       return;
     }
+    const e164 = phoneRes.e164;
 
     setSubmitting(true);
     setSubmitErr(null);
@@ -904,15 +924,29 @@ function DataCaptureStep({
     () => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim()),
     [form.email],
   );
-  // Calculamos en tiempo real la validación del teléfono para mostrar
-  // un mensaje inline antes de que el usuario pulse el CTA.
-  const phoneError = useMemo(() => {
+  // Resolución inteligente del teléfono con libphonenumber. Detecta
+  // el país real del número (no sólo la longitud) y avisa cuando el
+  // prefijo tecleado no coincide con el del dropdown.
+  const phoneInfo = useMemo(() => {
     const digits = form.whatsapp.replace(/\D/g, "");
-    if (digits.length === 0) return null;        // todavía no escribió nada
-    if (digits.length < 6) return "El número parece muy corto.";
-    const e164 = combineE164(form.countryCode, form.whatsapp);
-    return validatePhoneForCountry(form.countryCode, e164);
+    if (digits.length === 0) return { state: "empty" as const };
+    if (digits.length < 6) return { state: "short" as const };
+    const res = resolvePhone(form.countryCode, form.whatsapp);
+    if (res.ccMismatch && res.detectedCc) {
+      // El número parece de otro país (caso +49 seleccionado pero el
+      // lead tecleó su número español). Lo aceptamos pero avisamos.
+      return { state: "mismatch" as const, detectedCc: res.detectedCc, country: res.country, e164: res.e164 };
+    }
+    if (!res.valid) return { state: "invalid" as const };
+    return { state: "ok" as const, e164: res.e164 };
   }, [form.countryCode, form.whatsapp]);
+
+  // Mensaje de error/aviso a mostrar bajo el campo.
+  const phoneError =
+    phoneInfo.state === "short"    ? "El número parece muy corto."
+    : phoneInfo.state === "invalid" ? "Número no válido para este prefijo. Revisa el código de país y los dígitos."
+    : null;
+  const phoneMismatch = phoneInfo.state === "mismatch" ? phoneInfo : null;
 
   const phoneDigits  = form.whatsapp.replace(/\D/g, "");
   const canSubmit =
@@ -979,6 +1013,29 @@ function DataCaptureStep({
             <p id="wa-error" className="mt-1.5 text-[12px] text-red-600 leading-snug">
               ⚠️ {phoneError}
             </p>
+          )}
+          {phoneMismatch && (
+            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+              <p className="text-[12px] text-amber-900 leading-snug">
+                ⚠️ Tu número parece de <strong>{countryNameForCc(phoneMismatch.detectedCc)}</strong> ({phoneMismatch.detectedCc}),
+                pero seleccionaste {form.countryCode}.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  // Cambiar el prefijo al detectado y limpiar el número
+                  // local quitando ese CC para que quede el nacional.
+                  const det = phoneMismatch.detectedCc!;
+                  const detDigits = det.replace(/\D/g, "");
+                  let local = form.whatsapp.replace(/\D/g, "");
+                  if (local.startsWith(detDigits)) local = local.slice(detDigits.length);
+                  setForm(f => ({ ...f, countryCode: det, whatsapp: local }));
+                }}
+                className="mt-1.5 text-[12px] font-semibold text-amber-900 underline underline-offset-2"
+              >
+                Cambiar prefijo a {phoneMismatch.detectedCc} →
+              </button>
+            </div>
           )}
           {/* Disclaimer reassuring — la fricción nº 1 del funnel es
               dar el WhatsApp. Explicamos qué hacemos con él y dejamos

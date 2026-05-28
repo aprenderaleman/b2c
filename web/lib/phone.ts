@@ -79,6 +79,128 @@ export function isValidE164(phone: string): boolean {
   return /^\+\d{8,15}$/.test(phone || "");
 }
 
+// ── Resolución inteligente de teléfono (libphonenumber) ────────────
+//
+// Caso real Gelfis 2026-05-27: lead español dejó el prefijo por defecto
+// +49 (Alemania) y escribió su número completo con el 34 → quedó
+// "+4934676482692". Las heurísticas de longitud no lo detectan porque
+// 11 dígitos es válido para Alemania. La ÚNICA forma fiable de saber
+// que "34676482692" no es alemán pero sí español es consultar los
+// planes de numeración reales — eso lo hace libphonenumber-js.
+
+import { parsePhoneNumberFromString } from "libphonenumber-js";
+
+export type PhoneResolution = {
+  /** E.164 final recomendado (ej. "+34676482692"). */
+  e164:        string;
+  /** ISO-2 del país detectado (ej. "ES"), o null si no se pudo. */
+  country:     string | null;
+  /** true si el número es válido según el plan de numeración. */
+  valid:       boolean;
+  /** true si el país detectado NO coincide con el prefijo seleccionado
+   *  (el lead probablemente tecleó su número con otro código de país). */
+  ccMismatch:  boolean;
+  /** Prefijo detectado distinto al seleccionado (ej. "+34"), o null. */
+  detectedCc:  string | null;
+};
+
+/**
+ * Resuelve el teléfono combinando el prefijo del dropdown + lo que el
+ * lead escribió, pero priorizando el plan de numeración real.
+ *
+ * Estrategia:
+ *  1. Candidato A = prefijo seleccionado + número tecleado (saneado).
+ *  2. Candidato B = número tecleado interpretado como internacional
+ *     completo (por si el lead pegó su número con su propio CC).
+ *  3. Si A es válido para su país → usar A (caso normal).
+ *  4. Si A NO es válido pero B sí → el lead tecleó un número de otro
+ *     país; usamos B y marcamos ccMismatch.
+ *  5. Si ninguno es válido → devolver A con valid=false.
+ */
+// Prefijos que detectamos como "el lead tecleó su número completo con
+// otro código de país". Ordenados de más largo a más corto para hacer
+// match con el CC más específico primero.
+//
+// IMPORTANTE: excluimos +1 (EE.UU./Canadá) a propósito — colisiona con
+// los móviles alemanes 15x/16x/17x (un alemán que teclea "15123456789"
+// formaría "+15123456789" = US válido, falso positivo). Como este
+// funnel es de mercado hispano/DACH, +1 no es un caso primario y el
+// riesgo de romper números alemanes es mayor que el beneficio.
+const FOREIGN_DETECT_CCS = [
+  "598", "595", "591", "593", "506", "507", "502", "503", "504", "505", "351",
+  "34", "54", "57", "52", "56", "51", "58", "53", "41", "43", "33", "39", "44", "31", "32",
+].sort((a, b) => b.length - a.length);
+
+export function resolvePhone(countryCode: string, localInput: string): PhoneResolution {
+  const selectedCc = countryCode.startsWith("+") ? countryCode : `+${countryCode}`;
+  const selectedCcDigits = selectedCc.replace(/\D/g, "");
+
+  // Candidato A — prefijo seleccionado + número local saneado (fuerza
+  // el CC del dropdown; replica combineE164 del componente).
+  let aDigits = (localInput ?? "").replace(/\D/g, "");
+  if (aDigits.startsWith("00")) aDigits = aDigits.slice(2);
+  if (selectedCcDigits) {
+    let guard = 4;
+    while (guard-- > 0
+           && aDigits.startsWith(selectedCcDigits)
+           && aDigits.length - selectedCcDigits.length >= 6) {
+      aDigits = aDigits.slice(selectedCcDigits.length);
+    }
+  }
+  if (aDigits.startsWith("0")) aDigits = aDigits.slice(1);
+  const aRaw = `+${selectedCcDigits}${aDigits}`;
+  const a = parsePhoneNumberFromString(aRaw);
+
+  // Candidato B — el lead tecleó su número completo con OTRO código de
+  // país (caso real: +49 por defecto + número español "34676482692").
+  // Sólo lo consideramos si el número tecleado EMPIEZA por un CC
+  // conocido de nuestra lista (distinto al seleccionado) y al
+  // interpretarlo como internacional libphonenumber lo valida.
+  let typed = (localInput ?? "").replace(/\D/g, "");
+  if (typed.startsWith("00")) typed = typed.slice(2);
+  let b: ReturnType<typeof parsePhoneNumberFromString> | undefined;
+  let detectedCc: string | null = null;
+  if (!typed.startsWith(selectedCcDigits)) {
+    for (const cc of FOREIGN_DETECT_CCS) {
+      if (cc === selectedCcDigits) continue;
+      if (typed.startsWith(cc)) {
+        const cand = parsePhoneNumberFromString(`+${typed}`);
+        // Validamos que sea un número válido Y que el CC que detecta
+        // libphonenumber coincida con el que matcheamos (evita que
+        // un número largo se interprete con otro CC por casualidad).
+        if (cand && cand.isValid() && String(cand.countryCallingCode) === cc) {
+          b = cand;
+          detectedCc = `+${cc}`;
+          break;
+        }
+      }
+    }
+  }
+
+  // (1) Si detectamos un número extranjero válido → prevalece sobre A,
+  //     incluso si A también "pasa" la validación laxa de su país.
+  if (b && b.isValid() && detectedCc) {
+    return {
+      e164: b.number, country: b.country ?? null, valid: true,
+      ccMismatch: detectedCc !== selectedCc, detectedCc,
+    };
+  }
+
+  // (2) A válido → caso normal.
+  if (a && a.isValid()) {
+    return {
+      e164: a.number, country: a.country ?? null, valid: true,
+      ccMismatch: false, detectedCc: null,
+    };
+  }
+
+  // (3) Ninguno válido.
+  return {
+    e164: aRaw, country: a?.country ?? null, valid: false,
+    ccMismatch: false, detectedCc: null,
+  };
+}
+
 /**
  * Saneo defensivo de un E.164 que ya viene con `+`. Pensado para los
  * endpoints públicos que reciben el número ya armado por el frontend
