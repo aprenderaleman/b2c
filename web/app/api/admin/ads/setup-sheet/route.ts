@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { createConversionSheet, serviceAccountEmail } from "@/lib/google-sheets";
+import { createConversionSheet, serviceAccountEmail, writeHeaderToSheet } from "@/lib/google-sheets";
 
 /**
  * GET /api/admin/ads/setup-sheet
@@ -44,14 +44,40 @@ export async function GET(req: Request) {
     }, { status: 500 });
   }
 
+  const url = new URL(req.url);
+
   // Modo "solo info": devuelve el email del service account SIN crear
   // ninguna hoja. Para el flujo donde Gelfis crea la hoja él mismo
   // (Opción B) y necesita saber con qué cuenta compartirla.
-  if (new URL(req.url).searchParams.get("info") === "1") {
+  if (url.searchParams.get("info") === "1") {
     return NextResponse.json({
       ok: true,
       serviceAccountEmail: saEmail,
       instructions: `Comparte tu Google Sheet (Editor) con: ${saEmail}. Luego pon GADS_CONVERSIONS_SHEET_ID en Vercel y selecciónala en Google Ads.`,
+    });
+  }
+
+  // Modo "escribir cabeceras en MI hoja": escribe las 5 columnas en la
+  // fila 1 de la hoja indicada (formato Data Manager). Requiere que la
+  // hoja esté compartida (Editor) con el service account.
+  const writeId = url.searchParams.get("write_headers");
+  if (writeId) {
+    const ok = await writeHeaderToSheet(writeId.trim());
+    if (!ok) {
+      return NextResponse.json({
+        ok: false,
+        error: "No pude escribir en la hoja. Verifica que la compartiste (Editor) con el service account.",
+        serviceAccountEmail: saEmail,
+      }, { status: 502 });
+    }
+    return NextResponse.json({
+      ok: true,
+      message: "Cabeceras escritas en la fila 1: Google Click ID · Conversion Name · Conversion Time · Conversion Value · Conversion Currency",
+      sheetId: writeId.trim(),
+      nextSteps: [
+        "Refresca el selector de Google Ads — ahora verás las 5 columnas.",
+        "Mapea: Fecha/hora→Conversion Time, ID transacción→Google Click ID, Valor→Conversion Value, Moneda→Conversion Currency, Atribución→Google Click ID.",
+      ],
     });
   }
 

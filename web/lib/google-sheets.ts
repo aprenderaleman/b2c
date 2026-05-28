@@ -63,39 +63,42 @@ const HEADER_ROW = [
   "Conversion Currency",
 ];
 
-export async function ensureConversionHeader(): Promise<boolean> {
+/**
+ * Escribe las cabeceras (fila 1) en la hoja indicada. Formato Data
+ * Manager de Google Ads: las columnas van directamente en A1:E1, SIN
+ * la línea "Parameters:TimeZone=" del método clásico (la zona horaria
+ * se configura en el mapeo de campos del UI de Google Ads).
+ *
+ * Idempotente: sólo escribe si A1 no es ya "Google Click ID".
+ */
+export async function writeHeaderToSheet(sheetId: string): Promise<boolean> {
   const client = await getSheetsClient();
-  const sheetId = process.env.GADS_CONVERSIONS_SHEET_ID;
-  if (!client || !sheetId) return false;
-
+  if (!client) return false;
   try {
     const res = await client.spreadsheets.values.get({
       spreadsheetId: sheetId,
-      range: "A1:E2",
+      range: "A1:E1",
     });
-    const rows = res.data.values ?? [];
-    // Google Ads exige una primera fila "Parameters:TimeZone=..." y luego
-    // la cabecera. Si A1 no empieza por "Parameters:", reescribimos las
-    // dos primeras filas.
-    const a1 = (rows[0]?.[0] ?? "").toString();
-    if (!a1.startsWith("Parameters:")) {
+    const a1 = (res.data.values?.[0]?.[0] ?? "").toString();
+    if (a1 !== HEADER_ROW[0]) {
       await client.spreadsheets.values.update({
         spreadsheetId: sheetId,
-        range: "A1:E2",
+        range: "A1:E1",
         valueInputOption: "RAW",
-        requestBody: {
-          values: [
-            ["Parameters:TimeZone=Europe/Berlin", "", "", "", ""],
-            HEADER_ROW,
-          ],
-        },
+        requestBody: { values: [HEADER_ROW] },
       });
     }
     return true;
   } catch (e) {
-    console.error("[gsheets] ensureConversionHeader failed:", e instanceof Error ? e.message : e);
+    console.error("[gsheets] writeHeaderToSheet failed:", e instanceof Error ? e.message : e);
     return false;
   }
+}
+
+export async function ensureConversionHeader(): Promise<boolean> {
+  const sheetId = process.env.GADS_CONVERSIONS_SHEET_ID;
+  if (!sheetId) return false;
+  return writeHeaderToSheet(sheetId);
 }
 
 /**
@@ -131,7 +134,9 @@ export async function createConversionSheet(shareWithEmail: string): Promise<{ i
   const driveApi  = drive({ version: "v3", auth });
 
   try {
-    // 1. Crear la hoja con las 2 filas de cabecera (Parameters + columns).
+    // 1. Crear la hoja con las cabeceras en la fila 1 (formato Data
+    //    Manager — sin línea "Parameters:", la zona horaria se mapea
+    //    en el UI de Google Ads).
     const created = await sheetsApi.spreadsheets.create({
       requestBody: {
         properties: { title: `Conversiones Google Ads — Aprender-Aleman.de` },
@@ -140,7 +145,6 @@ export async function createConversionSheet(shareWithEmail: string): Promise<{ i
           data: [{
             startRow: 0, startColumn: 0,
             rowData: [
-              { values: [{ userEnteredValue: { stringValue: "Parameters:TimeZone=Europe/Berlin" } }] },
               { values: HEADER_ROW.map(h => ({ userEnteredValue: { stringValue: h } })) },
             ],
           }],
