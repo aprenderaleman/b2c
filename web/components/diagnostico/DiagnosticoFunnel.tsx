@@ -315,6 +315,25 @@ export function DiagnosticoFunnel() {
     } catch { /* ignore */ }
   }, []);
 
+  // Captura de atribución publicitaria (Gelfis 2026-05-27). El GCLID es
+  // el ID de clic que Google añade a la URL del anuncio (?gclid=...);
+  // lo necesitamos para atribuir la conversión offline (lead→cliente)
+  // de vuelta a la campaña. Persistimos en sessionStorage para que
+  // sobreviva la navegación del quiz. gbraid/wbraid son las variantes
+  // de iOS. También guardamos UTMs para análisis interno.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const keys = ["gclid", "gbraid", "wbraid", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"];
+      for (const k of keys) {
+        const v = params.get(k);
+        // Sólo escribimos si viene en la URL — no machacamos un valor
+        // capturado en una visita anterior de la misma sesión.
+        if (v) sessionStorage.setItem(`b2c.attr.${k}`, v);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   // Progreso visual — 3 pasos visibles tras la simplificación 2026-05-26:
   //   1: motivo → 1/3
   //   2: nivel  → 2/3
@@ -436,6 +455,12 @@ export function DiagnosticoFunnel() {
     try {
       const whatsappE164 = e164;
 
+      // Recuperar atribución publicitaria capturada al aterrizar.
+      const attr = (k: string): string | undefined => {
+        try { return sessionStorage.getItem(`b2c.attr.${k}`) ?? undefined; }
+        catch { return undefined; }
+      };
+
       const body = {
         name:           form.name.trim(),
         email:          form.email.trim().toLowerCase(),
@@ -447,6 +472,15 @@ export function DiagnosticoFunnel() {
         gdpr_accepted:  true,
         session_id:     sessionId ?? undefined,
         motivo_inicial: answers.motivo ?? undefined,
+        // Atribución Google Ads / UTM (para conversión offline).
+        gclid:          attr("gclid"),
+        gbraid:         attr("gbraid"),
+        wbraid:         attr("wbraid"),
+        utm_source:     attr("utm_source"),
+        utm_medium:     attr("utm_medium"),
+        utm_campaign:   attr("utm_campaign"),
+        utm_term:       attr("utm_term"),
+        utm_content:    attr("utm_content"),
         answers: {
           level:   answers.level,
           goal:    answers.goal,

@@ -133,9 +133,11 @@ export async function POST(
     return NextResponse.json({ error: "create_student_failed", message: msg }, { status: 500 });
   }
 
-  // Mark the lead as converted and log the event.
+  // Mark the lead as converted and log the event. `converted_at` se usa
+  // para la exportación de conversiones offline a Google Ads (cron
+  // ads-conversions-export) — marca el momento exacto de la conversión.
   await sb.from("leads")
-    .update({ status: "converted", next_contact_date: null })
+    .update({ status: "converted", next_contact_date: null, converted_at: new Date().toISOString() })
     .eq("id", lead.id);
 
   await sb.from("lead_timeline").insert({

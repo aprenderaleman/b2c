@@ -167,6 +167,15 @@ const BodySchema = z.object({
   // clientes viejos que aún no envían el campo.
   session_id:     z.string().trim().min(8).max(64).optional(),
   motivo_inicial: z.enum(MOTIVOS).optional(),
+  // Atribución publicitaria (Google Ads / UTM) — todo opcional.
+  gclid:        z.string().trim().max(200).optional().nullable(),
+  gbraid:       z.string().trim().max(200).optional().nullable(),
+  wbraid:       z.string().trim().max(200).optional().nullable(),
+  utm_source:   z.string().trim().max(120).optional().nullable(),
+  utm_medium:   z.string().trim().max(120).optional().nullable(),
+  utm_campaign: z.string().trim().max(200).optional().nullable(),
+  utm_term:     z.string().trim().max(200).optional().nullable(),
+  utm_content:  z.string().trim().max(200).optional().nullable(),
   answers: z.object({
     // Tras la simplificación del quiz (2026-05-26) sólo `level` es
     // obligatorio. Goal/urgencia/budget pasaron a la conversación
@@ -301,6 +310,17 @@ export async function POST(req: NextRequest) {
   // Solo escribimos motivo_inicial si vino — preservamos el valor previo
   // de leads existentes que no lo tengan.
   if (b.motivo_inicial) baseFields.motivo_inicial = b.motivo_inicial;
+
+  // Atribución publicitaria — sólo escribimos si vino un valor, para no
+  // borrar un gclid capturado en una visita anterior del mismo lead.
+  if (b.gclid)        baseFields.gclid        = b.gclid;
+  if (b.gbraid)       baseFields.gbraid       = b.gbraid;
+  if (b.wbraid)       baseFields.wbraid       = b.wbraid;
+  if (b.utm_source)   baseFields.utm_source   = b.utm_source;
+  if (b.utm_medium)   baseFields.utm_medium   = b.utm_medium;
+  if (b.utm_campaign) baseFields.utm_campaign = b.utm_campaign;
+  if (b.utm_term)     baseFields.utm_term     = b.utm_term;
+  if (b.utm_content)  baseFields.utm_content  = b.utm_content;
 
   let leadId: string;
 
