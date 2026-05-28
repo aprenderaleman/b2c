@@ -18,6 +18,33 @@ export type WhatsappResult =
   | { ok: false; reason: string };
 
 /**
+ * Lista de bloqueo de números que NUNCA deben recibir mensajes
+ * automáticos (alertas admin, drip de followups, recordatorios, etc).
+ *
+ * Caso Gelfis 2026-05-27: su número personal +491607530948 se usó como
+ * destino de alertas y para testing; pidió que dejara de recibir
+ * mensajes automáticos. Cualquier número en esta lista se silencia al
+ * nivel más bajo del sender, así que ningún flujo lo alcanza.
+ *
+ * Se puede ampliar vía env WHATSAPP_BLOCKLIST (lista separada por comas).
+ * Los números se comparan por sus dígitos (ignorando +, espacios, etc).
+ */
+const HARDCODED_BLOCKLIST = [
+  "+491607530948",
+];
+function blocklistDigits(): Set<string> {
+  const fromEnv = (process.env.WHATSAPP_BLOCKLIST ?? "")
+    .split(",").map(s => s.trim()).filter(Boolean);
+  const all = [...HARDCODED_BLOCKLIST, ...fromEnv];
+  return new Set(all.map(n => n.replace(/\D/g, "")));
+}
+export function isWhatsappBlocked(phoneE164: string): boolean {
+  const digits = (phoneE164 ?? "").replace(/\D/g, "");
+  if (!digits) return false;
+  return blocklistDigits().has(digits);
+}
+
+/**
  * Send a plain-text WhatsApp message to a phone number in E.164 format.
  * Caller is responsible for ensuring the number is valid & opted-in.
  */
@@ -25,6 +52,12 @@ export async function sendWhatsappText(
   phoneE164: string,
   text: string,
 ): Promise<WhatsappResult> {
+  // Bloqueo duro — números que pidieron no recibir mensajes automáticos.
+  if (isWhatsappBlocked(phoneE164)) {
+    console.warn("[whatsapp] número en blocklist, mensaje suprimido:", phoneE164);
+    return { ok: false, reason: "blocklisted" };
+  }
+
   const baseUrl = process.env.AGENTS_BASE_URL?.replace(/\/$/, "");
   const secret  = process.env.AGENTS_INTERNAL_SECRET;
   if (!baseUrl || !secret) {
@@ -79,6 +112,12 @@ export async function sendWhatsappDocument(
   fileName: string,
   opts: { caption?: string; kind?: string; leadId?: string } = {},
 ): Promise<WhatsappResult> {
+  // Bloqueo duro — mismos números que sendWhatsappText.
+  if (isWhatsappBlocked(phoneE164)) {
+    console.warn("[whatsapp] número en blocklist, documento suprimido:", phoneE164);
+    return { ok: false, reason: "blocklisted" };
+  }
+
   const baseUrl = process.env.AGENTS_BASE_URL?.replace(/\/$/, "");
   const secret  = process.env.AGENTS_INTERNAL_SECRET;
   if (!baseUrl || !secret) {
