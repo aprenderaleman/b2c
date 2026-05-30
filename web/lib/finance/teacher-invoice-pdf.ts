@@ -144,13 +144,19 @@ export async function buildTeacherInvoicePdf(args: {
       if (name) studentNames.push(name);
     }
     // Pick best label per row:
-    //  · group class → group name (fallback class title, fallback "Grupo")
-    //  · individual  → student name (fallback class title, fallback "Clase individual")
+    //  · group class → class.title (refleja el contexto cuando se dio
+    //    la clase: si el grupo se renombró luego, el título histórico
+    //    de la clase sigue siendo la verdad para esa sesión. Caso
+    //    Florian 04-05: title="Deutsch A1 Abends" pero el grupo ahora
+    //    se llama "Deutsch A2 - B1" porque se mudó Victoria). Fallback
+    //    al nombre actual del grupo si no hay título.
+    //  · individual → student name (fallback class title, fallback "Clase individual")
+    const titleTrim = c?.title?.trim() ?? "";
     let label: string;
     if (c?.type === "group") {
-      label = groupName ?? c?.title ?? "Grupo";
+      label = titleTrim || groupName || "Grupo";
     } else {
-      label = studentNames.join(", ") || (c?.title ?? "Clase individual");
+      label = studentNames.join(", ") || titleTrim || "Clase individual";
     }
     const date_iso = c?.started_at ?? c?.scheduled_at ?? "";
     // Carryover = clase agendada antes del mes que se factura.
