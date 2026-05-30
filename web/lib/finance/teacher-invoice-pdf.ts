@@ -75,10 +75,16 @@ export async function buildTeacherInvoicePdf(args: {
   // mayo) y peor — escondía facturas de clases que se loguearon antes
   // del mes (la factura quedaba casi vacía, 2.8KB). Ahora filtramos por
   // class.scheduled_at, que es la verdad de cuándo se dio la clase.
+  // Filtramos por chl.created_at — IGUAL que `recompute_teacher_month`
+  // — para que el TOTAL del PDF cuadre siempre con teacher_earnings.
+  // El carryover de meses previos (caso Vero 04-29 backfilleada en mayo)
+  // cae aquí porque su log se creó en mayo. En el render lo separamos
+  // en una sección "Pendientes de meses anteriores" para que el profe
+  // entienda por qué aparece una clase de un mes que ya cobró.
   const { data: hoursLog } = await sb
     .from("class_hours_log")
     .select(`
-      id, duration_minutes, amount_cents, rate_at_time,
+      id, created_at, duration_minutes, amount_cents, rate_at_time,
       class:classes!inner(
         id, started_at, scheduled_at, type, title,
         group:student_groups(name),
@@ -88,8 +94,8 @@ export async function buildTeacherInvoicePdf(args: {
       )
     `)
     .eq("teacher_id", args.teacherId)
-    .gte("classes.scheduled_at", monthStart)
-    .lt("classes.scheduled_at", monthEnd);
+    .gte("created_at", monthStart)
+    .lt("created_at", monthEnd);
 
   type ParticipantRow = {
     student: { user: { full_name: string | null } | Array<{ full_name: string | null }> }
@@ -114,14 +120,17 @@ export async function buildTeacherInvoicePdf(args: {
   const logRowsRaw = (hoursLog ?? []) as LogRow[];
 
   type FlatRow = {
-    started_at:      string;
+    started_at:      string;          // class.started_at or scheduled_at
     type:            "group" | "individual";
     duration_min:    number;
     amount_cents:    number;
     rate_cents_per_h: number;
-    label:           string;   // group name OR student name OR class title
+    label:           string;          // group name OR student name OR class title
+    isCarryover:     boolean;         // true if class.scheduled_at < monthStart
   };
-  const rows: FlatRow[] = logRowsRaw.map(r => {
+  const monthStartMs = new Date(monthStart).getTime();
+  const monthEndMs   = new Date(monthEnd).getTime();
+  const allRows: FlatRow[] = logRowsRaw.map(r => {
     const c: ClassShape = Array.isArray(r.class) ? r.class[0] : r.class;
     const groupRaw = c?.group;
     const groupName = Array.isArray(groupRaw) ? (groupRaw[0]?.name ?? null) : (groupRaw?.name ?? null);
@@ -144,6 +153,16 @@ export async function buildTeacherInvoicePdf(args: {
       label = studentNames.join(", ") || (c?.title ?? "Clase individual");
     }
     const date_iso = c?.started_at ?? c?.scheduled_at ?? "";
+    // Carryover = clase agendada antes del mes que se factura.
+    let isCarryover = false;
+    if (c?.scheduled_at) {
+      const t = new Date(c.scheduled_at).getTime();
+      if (!Number.isNaN(t) && t < monthStartMs) isCarryover = true;
+      // Si la clase está agendada en un mes FUTURO al de la factura
+      // (raro pero defensivo), también la tratamos como carryover para
+      // que aparezca en la sección aparte, no enmascarada.
+      if (!Number.isNaN(t) && t >= monthEndMs) isCarryover = true;
+    }
     return {
       started_at:       date_iso,
       type:             c?.type ?? "individual",
@@ -151,12 +170,17 @@ export async function buildTeacherInvoicePdf(args: {
       amount_cents:     Number(r.amount_cents),
       rate_cents_per_h: Math.round(Number(r.rate_at_time) * 100),
       label,
+      isCarryover,
     };
   }).sort((a, b) => a.started_at.localeCompare(b.started_at));
 
+  const rows         = allRows.filter(r => !r.isCarryover);
+  const carryoverRows = allRows.filter(r =>  r.isCarryover);
+
+  // El total del PDF incluye carryover — debe cuadrar con teacher_earnings.
   let totalCents = 0;
   let totalHours = 0;
-  for (const r of rows) {
+  for (const r of allRows) {
     totalCents += r.amount_cents;
     totalHours += r.duration_min / 60;
   }
@@ -252,12 +276,57 @@ export async function buildTeacherInvoicePdf(args: {
     y0 += 20;
   }
 
+  // ───── Carryover: clases de meses anteriores facturadas este mes ─────
+  if (carryoverRows.length > 0) {
+    if (y0 > 660) { doc.addPage(); y0 = 60; }
+    y0 += 14;
+    doc.font("Helvetica-Bold").fontSize(11).fillColor("#0f172a")
+       .text("Pendientes de meses anteriores", 50, y0);
+    y0 += 4;
+    doc.font("Helvetica-Oblique").fontSize(9).fillColor("#64748b")
+       .text("Clases de meses previos que se facturan en esta nómina (ajustes y horas que quedaron sin facturar a tiempo).",
+             50, y0 + 12, { width: 500 });
+    y0 += 34;
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#475569");
+    doc.text("FECHA",              50,  y0);
+    doc.text("GRUPO / ALUMNO",     115, y0);
+    doc.text("TIPO",               340, y0, { width: 60 });
+    doc.text("MIN",                400, y0, { width: 40, align: "right" });
+    doc.text("TARIFA",             450, y0, { width: 50, align: "right" });
+    doc.text("IMPORTE",            500, y0, { width: 50, align: "right" });
+    doc.moveTo(50, y0 + 13).lineTo(550, y0 + 13).strokeColor("#cbd5e1").stroke();
+    y0 += 20;
+    let cIdx = 0;
+    for (const r of carryoverRows) {
+      if (y0 > 760) { doc.addPage(); y0 = 60; }
+      if (cIdx % 2 === 1) {
+        doc.rect(TABLE_LEFT, y0 - 4, TABLE_RIGHT - TABLE_LEFT, ROW_H).fillColor("#fef3c7").fill();
+      } else {
+        doc.rect(TABLE_LEFT, y0 - 4, TABLE_RIGHT - TABLE_LEFT, ROW_H).fillColor("#fffbeb").fill();
+      }
+      let dateStr = "—";
+      if (r.started_at) {
+        const d = new Date(r.started_at);
+        if (!Number.isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 10);
+      }
+      doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
+      doc.text(dateStr,                       50,  y0, { width: 60,  lineBreak: false });
+      doc.text(truncate(r.label, 36),         115, y0, { width: 220, lineBreak: false });
+      doc.text(typeLabel(r.type),             340, y0, { width: 60,  lineBreak: false });
+      doc.text(String(r.duration_min),        400, y0, { width: 40,  lineBreak: false, align: "right" });
+      doc.text(rateEur(r.rate_cents_per_h),   450, y0, { width: 50,  lineBreak: false, align: "right" });
+      doc.text(euros(r.amount_cents),         500, y0, { width: 50,  lineBreak: false, align: "right" });
+      y0 += ROW_H;
+      cIdx++;
+    }
+  }
+
   // ───── Resumen por grupo/alumno ─────
-  // Agrupa por (label, type) para que el profe vea cuánto le pagamos por
-  // cada grupo y por cada alumno individual.
+  // Incluye clases del mes + carryover, para que el resumen cuadre con
+  // el total a pagar.
   type Bucket = { label: string; type: "group" | "individual"; classes: number; minutes: number; cents: number };
   const buckets = new Map<string, Bucket>();
-  for (const r of rows) {
+  for (const r of allRows) {
     const key = r.type + ":" + r.label;
     const b = buckets.get(key) ?? { label: r.label, type: r.type, classes: 0, minutes: 0, cents: 0 };
     b.classes += 1;
