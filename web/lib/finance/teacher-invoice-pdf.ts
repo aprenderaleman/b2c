@@ -66,36 +66,99 @@ export async function buildTeacherInvoicePdf(args: {
   const nextM = m === 12 ? 1     : m + 1;
   const monthEnd = `${nextY}-${String(nextM).padStart(2, "0")}-01T00:00:00Z`;
 
-  // Classes taught that month
-  const { data: classes } = await sb
-    .from("classes")
+  // Lectura desde class_hours_log — SOURCE OF TRUTH del importe a pagar.
+  // El rollup mensual a teacher_earnings viene de class_hours_log, así
+  // que el PDF debe leer del mismo lugar para que cuadre con el email.
+  //
+  // BUG fixed 2026-05-30: ANTES filtrábamos por chl.created_at, lo cual
+  // dejaba clases de otro mes mezcladas (caso Vero 04-13 logueado en
+  // mayo) y peor — escondía facturas de clases que se loguearon antes
+  // del mes (la factura quedaba casi vacía, 2.8KB). Ahora filtramos por
+  // class.scheduled_at, que es la verdad de cuándo se dio la clase.
+  const { data: hoursLog } = await sb
+    .from("class_hours_log")
     .select(`
-      id, started_at, billed_hours, type,
-      group:student_groups(name)
+      id, duration_minutes, amount_cents, rate_at_time,
+      class:classes!inner(
+        id, started_at, scheduled_at, type, title,
+        group:student_groups(name),
+        class_participants(
+          student:students!inner(user:users!inner(full_name))
+        )
+      )
     `)
     .eq("teacher_id", args.teacherId)
-    .eq("status", "completed")
-    .gt("billed_hours", 0)
-    .gte("started_at", monthStart)
-    .lt("started_at", monthEnd)
-    .order("started_at", { ascending: true });
+    .gte("classes.scheduled_at", monthStart)
+    .lt("classes.scheduled_at", monthEnd);
 
-  type ClsRow = {
-    id: string; started_at: string; billed_hours: number; type: "group" | "individual";
-    group: { name: string } | { name: string }[] | null;
+  type ParticipantRow = {
+    student: { user: { full_name: string | null } | Array<{ full_name: string | null }> }
+           | Array<{ user: { full_name: string | null } | Array<{ full_name: string | null }> }>;
   };
-  const rows = (classes ?? []) as ClsRow[];
+  type ClassShape = {
+    id: string;
+    started_at:   string | null;
+    scheduled_at: string;
+    type: "group" | "individual";
+    title:        string | null;
+    group: { name: string } | { name: string }[] | null;
+    class_participants: ParticipantRow[] | null;
+  };
+  type LogRow = {
+    id:               string;
+    duration_minutes: number;
+    amount_cents:     number;
+    rate_at_time:     string | number;
+    class: ClassShape | ClassShape[];
+  };
+  const logRowsRaw = (hoursLog ?? []) as LogRow[];
 
-  const rateOf = (t: "group" | "individual") =>
-    t === "individual"
-      ? (teacher as { rate_individual_cents: number }).rate_individual_cents
-      : (teacher as { rate_group_cents:      number }).rate_group_cents;
+  type FlatRow = {
+    started_at:      string;
+    type:            "group" | "individual";
+    duration_min:    number;
+    amount_cents:    number;
+    rate_cents_per_h: number;
+    label:           string;   // group name OR student name OR class title
+  };
+  const rows: FlatRow[] = logRowsRaw.map(r => {
+    const c: ClassShape = Array.isArray(r.class) ? r.class[0] : r.class;
+    const groupRaw = c?.group;
+    const groupName = Array.isArray(groupRaw) ? (groupRaw[0]?.name ?? null) : (groupRaw?.name ?? null);
+    // For individual classes, gather the student names from participants
+    // so the invoice doesn't say "—" or blank.
+    const studentNames: string[] = [];
+    for (const p of (c?.class_participants ?? [])) {
+      const s = Array.isArray(p.student) ? p.student[0] : p.student;
+      const u2 = Array.isArray(s?.user) ? s.user[0] : s?.user;
+      const name = u2?.full_name?.trim();
+      if (name) studentNames.push(name);
+    }
+    // Pick best label per row:
+    //  · group class → group name (fallback class title, fallback "Grupo")
+    //  · individual  → student name (fallback class title, fallback "Clase individual")
+    let label: string;
+    if (c?.type === "group") {
+      label = groupName ?? c?.title ?? "Grupo";
+    } else {
+      label = studentNames.join(", ") || (c?.title ?? "Clase individual");
+    }
+    const date_iso = c?.started_at ?? c?.scheduled_at ?? "";
+    return {
+      started_at:       date_iso,
+      type:             c?.type ?? "individual",
+      duration_min:     Number(r.duration_minutes),
+      amount_cents:     Number(r.amount_cents),
+      rate_cents_per_h: Math.round(Number(r.rate_at_time) * 100),
+      label,
+    };
+  }).sort((a, b) => a.started_at.localeCompare(b.started_at));
 
   let totalCents = 0;
   let totalHours = 0;
   for (const r of rows) {
-    totalCents += r.billed_hours * rateOf(r.type);
-    totalHours += r.billed_hours;
+    totalCents += r.amount_cents;
+    totalHours += r.duration_min / 60;
   }
 
   // ── Render PDF
@@ -133,36 +196,107 @@ export async function buildTeacherInvoicePdf(args: {
   // Table header
   let y0 = 260;
   doc.font("Helvetica-Bold").fontSize(9).fillColor("#475569");
-  doc.text("FECHA",   50,  y0);
-  doc.text("GRUPO",   115, y0);
-  doc.text("TIPO",    340, y0, { width: 60 });
-  doc.text("HORAS",   400, y0, { width: 40, align: "right" });
-  doc.text("TARIFA",  450, y0, { width: 50, align: "right" });
-  doc.text("IMPORTE", 500, y0, { width: 50, align: "right" });
+  doc.text("FECHA",              50,  y0);
+  doc.text("GRUPO / ALUMNO",     115, y0);
+  doc.text("TIPO",               340, y0, { width: 60 });
+  doc.text("MIN",                400, y0, { width: 40, align: "right" });
+  doc.text("TARIFA",             450, y0, { width: 50, align: "right" });
+  doc.text("IMPORTE",            500, y0, { width: 50, align: "right" });
   doc.moveTo(50, y0 + 15).lineTo(550, y0 + 15).strokeColor("#cbd5e1").stroke();
 
   // Rows
   y0 += 22;
   doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
+  // Trunca con ellipsis manual para evitar wrap a 2 líneas que solapa.
+  const truncate = (s: string, max: number): string =>
+    s.length <= max ? s : s.slice(0, max - 1).trimEnd() + "…";
+  // Etiquetas más legibles para el tipo (en español).
+  const typeLabel = (t: "group" | "individual") => t === "group" ? "Grupal" : "Individual";
+  // Filas alternadas con fondo zebra para legibilidad.
+  let rowIdx = 0;
+  const ROW_H  = 20;
+  const TABLE_LEFT = 48;
+  const TABLE_RIGHT = 552;
   for (const r of rows) {
-    if (y0 > 750) { doc.addPage(); y0 = 60; }
-    const groupRaw  = r.group as { name: string } | { name: string }[] | null;
-    const groupName = Array.isArray(groupRaw) ? groupRaw[0]?.name : groupRaw?.name;
-    const dateStr   = new Date(r.started_at).toISOString().slice(0, 10);
-    const rc        = rateOf(r.type);
-    const amt       = r.billed_hours * rc;
-    doc.text(dateStr,                      50,  y0);
-    doc.text(groupName ?? "—",             115, y0, { width: 220, ellipsis: true });
-    doc.text(r.type,                       340, y0, { width: 60 });
-    doc.text(String(r.billed_hours) + "h", 400, y0, { width: 40, align: "right" });
-    doc.text(rateEur(rc),                  450, y0, { width: 50, align: "right" });
-    doc.text(euros(amt),                   500, y0, { width: 50, align: "right" });
-    y0 += 16;
+    if (y0 > 720) { doc.addPage(); y0 = 60; }
+
+    if (rowIdx % 2 === 1) {
+      doc.rect(TABLE_LEFT, y0 - 4, TABLE_RIGHT - TABLE_LEFT, ROW_H)
+         .fillColor("#f8fafc").fill();
+    }
+    doc.fillColor("#0f172a");
+
+    let dateStr = "—";
+    if (r.started_at) {
+      const d = new Date(r.started_at);
+      if (!Number.isNaN(d.getTime())) {
+        dateStr = d.toISOString().slice(0, 10);
+      }
+    }
+    const label = truncate(r.label, 36);
+
+    doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
+    doc.text(dateStr,                       50,  y0, { width: 60,  lineBreak: false });
+    doc.text(label,                         115, y0, { width: 220, lineBreak: false });
+    doc.text(typeLabel(r.type),             340, y0, { width: 60,  lineBreak: false });
+    doc.text(String(r.duration_min),        400, y0, { width: 40,  lineBreak: false, align: "right" });
+    doc.text(rateEur(r.rate_cents_per_h),   450, y0, { width: 50,  lineBreak: false, align: "right" });
+    doc.text(euros(r.amount_cents),         500, y0, { width: 50,  lineBreak: false, align: "right" });
+
+    y0 += ROW_H;
+    rowIdx++;
   }
 
   if (rows.length === 0) {
     doc.font("Helvetica-Oblique").fillColor("#94a3b8").text("Sin clases facturables este mes.", 50, y0);
     y0 += 20;
+  }
+
+  // ───── Resumen por grupo/alumno ─────
+  // Agrupa por (label, type) para que el profe vea cuánto le pagamos por
+  // cada grupo y por cada alumno individual.
+  type Bucket = { label: string; type: "group" | "individual"; classes: number; minutes: number; cents: number };
+  const buckets = new Map<string, Bucket>();
+  for (const r of rows) {
+    const key = r.type + ":" + r.label;
+    const b = buckets.get(key) ?? { label: r.label, type: r.type, classes: 0, minutes: 0, cents: 0 };
+    b.classes += 1;
+    b.minutes += r.duration_min;
+    b.cents   += r.amount_cents;
+    buckets.set(key, b);
+  }
+  const summary = [...buckets.values()].sort((a, b) => b.cents - a.cents);
+
+  if (summary.length > 0) {
+    if (y0 > 650) { doc.addPage(); y0 = 60; }
+    y0 += 16;
+    doc.font("Helvetica-Bold").fontSize(11).fillColor("#0f172a")
+       .text("Resumen por grupo / alumno", 50, y0);
+    y0 += 18;
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#475569");
+    doc.text("GRUPO / ALUMNO",     50,  y0);
+    doc.text("TIPO",               300, y0, { width: 60 });
+    doc.text("CLASES",             360, y0, { width: 50, align: "right" });
+    doc.text("MIN",                415, y0, { width: 50, align: "right" });
+    doc.text("IMPORTE",            475, y0, { width: 75, align: "right" });
+    doc.moveTo(50, y0 + 13).lineTo(550, y0 + 13).strokeColor("#cbd5e1").stroke();
+    y0 += 20;
+    let idx = 0;
+    for (const b of summary) {
+      if (y0 > 760) { doc.addPage(); y0 = 60; }
+      if (idx % 2 === 1) {
+        doc.rect(TABLE_LEFT, y0 - 4, TABLE_RIGHT - TABLE_LEFT, ROW_H)
+           .fillColor("#f8fafc").fill();
+      }
+      doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
+      doc.text(truncate(b.label, 40),       50,  y0, { width: 250, lineBreak: false });
+      doc.text(typeLabel(b.type),           300, y0, { width: 60,  lineBreak: false });
+      doc.text(String(b.classes),           360, y0, { width: 50,  lineBreak: false, align: "right" });
+      doc.text(String(b.minutes),           415, y0, { width: 50,  lineBreak: false, align: "right" });
+      doc.text(euros(b.cents),              475, y0, { width: 75,  lineBreak: false, align: "right" });
+      y0 += ROW_H;
+      idx++;
+    }
   }
 
   // Total box
