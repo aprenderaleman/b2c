@@ -175,6 +175,21 @@ class WhatsAppService:
         """Evolution expects a bare number (no +) or a full jid 'xxx@s.whatsapp.net'."""
         return re.sub(r"\D", "", phone_e164)
 
+    # Blocklist global: números que NUNCA reciben WhatsApps automáticos.
+    # Caso 2026-05-30: Gelfis pidió cortar todo a +491607530948
+    # (recibía daily-digest, send-fail alerts, silent-inbound, etc).
+    # Comparamos por dígitos (ignora +, espacios) para ser robustos.
+    _BLOCKLIST_DIGITS = {
+        "491607530948",
+    }
+
+    @classmethod
+    def _is_blocklisted(cls, to_e164: str | None) -> bool:
+        if not to_e164:
+            return False
+        digits = re.sub(r"\D", "", to_e164)
+        return digits in cls._BLOCKLIST_DIGITS
+
     def send_text(
         self,
         name: str,
@@ -196,6 +211,17 @@ class WhatsAppService:
 
         Uses the Evolution v1.8 shape: {number, options, textMessage:{text}}.
         """
+        # Blocklist check — antes de cualquier I/O. Devolvemos un id
+        # sintético para no romper callers que asumen un string non-empty,
+        # pero NINGÚN mensaje sale por el cable.
+        if self._is_blocklisted(to_e164):
+            import logging
+            logging.getLogger("whatsapp_service").warning(
+                "[blocklist] mensaje suprimido para %s (kind=%s, lead=%s)",
+                to_e164, kind, lead_id,
+            )
+            return "blocklisted"
+
         payload = {
             "number": self._to_jid(to_e164),
             "options": {
@@ -263,6 +289,14 @@ class WhatsAppService:
 
         Returns Evolution message id on success. Raises WhatsAppError otherwise.
         """
+        # Blocklist check — antes de cualquier I/O. Mismo patrón que send_text.
+        if self._is_blocklisted(to_e164):
+            import logging
+            logging.getLogger("whatsapp_service").warning(
+                "[blocklist] documento suprimido para %s (kind=%s, lead=%s, file=%s)",
+                to_e164, kind, lead_id, file_name,
+            )
+            return "blocklisted"
         payload = {
             "number": self._to_jid(to_e164),
             "options": {"delay": 1200, "presence": "composing"},

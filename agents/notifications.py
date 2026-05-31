@@ -72,14 +72,39 @@ def _ensure_table() -> None:
         """)
 
 
+# Números que NUNCA deben recibir notificaciones automáticas.
+# Caso 2026-05-30: Gelfis pidió cortar TODO el flujo a +491607530948
+# (estaba recibiendo daily-digest, send-fail, silent-inbound, etc).
+# Comparado por dígitos solamente (ignora +, espacios, etc).
+_BLOCKLIST_DIGITS = {
+    "491607530948",
+}
+
+
+def _is_blocklisted(number_e164: str | None) -> bool:
+    if not number_e164:
+        return False
+    digits = "".join(c for c in number_e164 if c.isdigit())
+    return digits in _BLOCKLIST_DIGITS
+
+
 def _gelfis_number() -> str | None:
     raw = os.environ.get("GELFIS_PERSONAL_WHATSAPP", "").strip()
     if not raw or raw.startswith("+49XXX"):
         return None
     try:
-        return normalize_phone(raw)
+        normalized = normalize_phone(raw)
     except ValueError:
         return None
+    # Si el env apunta a un número bloqueado, NO devolvemos nada — así
+    # ninguna notificación de este módulo intenta siquiera enviarse.
+    if _is_blocklisted(normalized):
+        log.warning(
+            "GELFIS_PERSONAL_WHATSAPP=%s está en blocklist — todas las "
+            "notificaciones a ese número quedan suprimidas.", normalized,
+        )
+        return None
+    return normalized
 
 
 def _recently_sent(kind: NotificationKind, lead_id: str | None) -> bool:
