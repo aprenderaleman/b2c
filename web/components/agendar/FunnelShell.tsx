@@ -3,17 +3,18 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
+import { IllustrationPanel } from "@/components/diagnostico/IllustrationPanel";
 
 /**
  * Mobile-first app-shell for the booking funnel.
  *
- * Wraps every /agendar/* page with a sticky top bar (back · step n/4 ·
- * close) and a thin progress strip. The page itself is responsible
- * for its own scrollable content + sticky bottom CTA via <StepFrame>.
- *
- * Desktop visitors hitting /agendar will see the same shell — that's
- * fine, it scales gracefully (centered, max-width). The legacy
- * embedded funnel on `/` remains untouched.
+ * Wraps every /agendar/* page con:
+ *  - Light mode (estilo Preply, post-2026-05-26) — alineado con el
+ *    redesign del funnel diagnóstico.
+ *  - Layout split-screen vía IllustrationPanel: imagen izquierda
+ *    (desktop) / banda superior (mobile), contenido derecha/abajo.
+ *  - Header sticky con back, paso N/4 y cerrar.
+ *  - Progress strip naranja.
  */
 
 const STEP_PATHS = ["/agendar/cuando", "/agendar/tu", "/agendar/nivel", "/agendar/objetivo"] as const;
@@ -24,6 +25,14 @@ function stepIndexFor(pathname: string): number {
   return idx >= 0 ? idx : 0;
 }
 
+// Mapeo path → key de ilustración (las del IllustrationPanel).
+function illustrationKeyFor(pathname: string): "calendario" | "datos" | "nivel" | "motivo" {
+  if (pathname.startsWith("/agendar/tu"))       return "datos";
+  if (pathname.startsWith("/agendar/nivel"))    return "nivel";
+  if (pathname.startsWith("/agendar/objetivo")) return "motivo";
+  return "calendario";
+}
+
 export function FunnelShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() ?? "/agendar/cuando";
   const router   = useRouter();
@@ -31,15 +40,12 @@ export function FunnelShell({ children }: { children: React.ReactNode }) {
   const stepNum  = idx + 1;
   const total    = STEP_PATHS.length;
 
-  // Theme-color flips to navy for the funnel so the OS status bar
-  // (Android Chrome) blends with our header. We inject our OWN meta
-  // (no `media` attr) so it overrides the prefers-color-scheme metas
-  // set by the root layout. Cleaned up on unmount so the rest of the
-  // site keeps its default theme.
+  // Theme-color cream/rose pastel — alineado con el redesign light
+  // mode del funnel principal (commit eeaf9c5).
   useEffect(() => {
     const meta = document.createElement("meta");
     meta.setAttribute("name",    "theme-color");
-    meta.setAttribute("content", "#0F2847");
+    meta.setAttribute("content", "#FFF1ED");
     meta.setAttribute("data-funnel-shell", "1");
     document.head.appendChild(meta);
     return () => { meta.remove(); };
@@ -60,58 +66,63 @@ export function FunnelShell({ children }: { children: React.ReactNode }) {
   };
 
   const progressPct = (stepNum / total) * 100;
+  const illoKey = illustrationKeyFor(pathname);
 
   return (
     <div
-      className="theme-dark min-h-[100dvh] bg-navy-900 text-white flex flex-col"
+      className="min-h-[100dvh] bg-white text-slate-900"
       style={{ overscrollBehavior: "contain" }}
     >
-      {/* ── Sticky header ───────────────────────────────── */}
-      <header
-        className="sticky top-0 z-40 backdrop-blur bg-navy-900/95 border-b border-white/5"
-        style={{ paddingTop: "env(safe-area-inset-top)" }}
-      >
-        <div className="mx-auto max-w-xl flex items-center justify-between gap-2 h-14 px-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="h-10 w-10 inline-flex items-center justify-center rounded-full
-                       text-white/85 hover:bg-white/10 active:scale-95 transition"
-            aria-label={idx > 0 ? "Paso anterior" : "Volver al inicio"}
+      <IllustrationPanel step={illoKey}>
+        <div className="flex flex-col min-h-[100dvh]">
+          {/* ── Sticky header ───────────────────────────── */}
+          <header
+            className="sticky top-0 z-40 backdrop-blur bg-white/95 border-b border-slate-100"
+            style={{ paddingTop: "env(safe-area-inset-top)" }}
           >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
+            <div className="mx-auto max-w-xl flex items-center justify-between gap-2 h-14 px-3">
+              <button
+                type="button"
+                onClick={onBack}
+                className="h-10 w-10 inline-flex items-center justify-center rounded-full
+                           text-slate-700 hover:bg-slate-100 active:scale-95 transition"
+                aria-label={idx > 0 ? "Paso anterior" : "Volver al inicio"}
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
 
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/70">
-            Paso {stepNum} de {total}
-          </div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Paso {stepNum} de {total}
+              </div>
 
-          <Link
-            href="/"
-            className="h-10 w-10 inline-flex items-center justify-center rounded-full
-                       text-white/85 hover:bg-white/10 active:scale-95 transition"
-            aria-label="Cerrar y volver al inicio"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6"  y1="6" x2="18" y2="18" />
-            </svg>
-          </Link>
+              <Link
+                href="/"
+                className="h-10 w-10 inline-flex items-center justify-center rounded-full
+                           text-slate-700 hover:bg-slate-100 active:scale-95 transition"
+                aria-label="Cerrar y volver al inicio"
+              >
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6"  y1="6" x2="18" y2="18" />
+                </svg>
+              </Link>
+            </div>
+            {/* Progress strip */}
+            <div className="h-1 bg-slate-100">
+              <div
+                className="h-full bg-warm transition-[width] duration-300 ease-out"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </header>
+
+          <main className="flex-1 mx-auto w-full max-w-xl">
+            {children}
+          </main>
         </div>
-        {/* Progress strip */}
-        <div className="h-0.5 bg-white/5">
-          <div
-            className="h-full bg-warm transition-[width] duration-300 ease-out"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
-      </header>
-
-      <main className="flex-1 mx-auto w-full max-w-xl">
-        {children}
-      </main>
+      </IllustrationPanel>
     </div>
   );
 }
@@ -150,11 +161,11 @@ export function StepFrame({
   return (
     <>
       <div className={`px-5 pt-5 ${bottomPad}`}>
-        <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-white">
+        <h1 className="text-[26px] sm:text-3xl font-extrabold tracking-tight text-slate-900">
           {title}
         </h1>
         {subtitle && (
-          <p className="mt-1.5 text-[15px] text-white/70 leading-relaxed">
+          <p className="mt-1.5 text-[15px] text-slate-600 leading-relaxed">
             {subtitle}
           </p>
         )}
@@ -166,7 +177,7 @@ export function StepFrame({
       {onContinue && (
         <div
           className="fixed bottom-0 left-0 right-0 z-30
-                     bg-gradient-to-t from-navy-900 via-navy-900/95 to-navy-900/0
+                     bg-gradient-to-t from-white via-white/95 to-white/0
                      pt-6"
         >
           <div
@@ -177,7 +188,6 @@ export function StepFrame({
               type="button"
               onClick={() => {
                 if (!canContinue || loading) return;
-                // Subtle haptic where supported — feels app-native.
                 if (typeof navigator !== "undefined" && "vibrate" in navigator) {
                   try { navigator.vibrate?.(8); } catch { /* iOS quietly no-ops */ }
                 }

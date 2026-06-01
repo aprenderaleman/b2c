@@ -64,7 +64,7 @@ export default function StepNivel() {
                 "transition active:scale-[0.99]",
                 selected
                   ? "bg-warm text-warm-foreground shadow-lg shadow-warm/20"
-                  : "bg-white/[0.06] text-white hover:bg-white/[0.10]",
+                  : "bg-slate-100 text-slate-900 hover:bg-slate-100",
               ].join(" ")}
               aria-pressed={selected}
             >
@@ -74,7 +74,7 @@ export default function StepNivel() {
                   {l.title}
                 </span>
                 <span className={`block text-[13px] mt-0.5 ${
-                  selected ? "text-warm-foreground/80" : "text-white/55"
+                  selected ? "text-warm-foreground/80" : "text-slate-500"
                 }`}>
                   {l.sub}
                 </span>

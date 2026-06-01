@@ -149,7 +149,7 @@ export default function StepObjetivo() {
     >
       <div className="space-y-6">
         <div>
-          <span className="text-[11px] font-semibold text-white/55 uppercase tracking-wider mb-2 block">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">
             ¿Para qué quieres aprender?
           </span>
           <div className="grid gap-2">
@@ -165,7 +165,7 @@ export default function StepObjetivo() {
                     "transition active:scale-[0.99]",
                     selected
                       ? "bg-warm text-warm-foreground shadow-lg shadow-warm/20"
-                      : "bg-white/[0.06] text-white hover:bg-white/[0.10]",
+                      : "bg-slate-100 text-slate-900 hover:bg-slate-100",
                   ].join(" ")}
                   aria-pressed={selected}
                 >
@@ -179,15 +179,15 @@ export default function StepObjetivo() {
         </div>
 
         <div className="pt-1">
-          <span className="text-[11px] font-semibold text-white/55 uppercase tracking-wider mb-2 block">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2 block">
             Tu WhatsApp
           </span>
           <div className="flex gap-2">
             <select
               value={state.country_code}
               onChange={(e) => update({ country_code: e.target.value })}
-              className="h-14 w-[110px] rounded-2xl bg-white/[0.08] border border-white/10
-                         text-white text-base px-2 outline-none focus:border-warm"
+              className="h-14 w-[110px] rounded-2xl bg-slate-50 border border-slate-200
+                         text-slate-900 text-base px-2 outline-none focus:border-warm"
               aria-label="Código de país"
             >
               {COUNTRY_CODES.map(c => (
@@ -203,9 +203,9 @@ export default function StepObjetivo() {
               value={state.phone_local}
               onChange={(e) => update({ phone_local: e.target.value })}
               placeholder="123 456 7890"
-              className="flex-1 h-14 px-4 rounded-2xl bg-white/[0.08] text-white text-base
-                         placeholder:text-white/30 outline-none
-                         border border-white/10 focus:border-warm focus:bg-white/[0.10]
+              className="flex-1 h-14 px-4 rounded-2xl bg-slate-50 text-slate-900 text-base
+                         placeholder:text-slate-400 outline-none
+                         border border-slate-200 focus:border-warm focus:bg-slate-100
                          transition-colors"
               required
             />
@@ -220,14 +220,14 @@ export default function StepObjetivo() {
               <path d="M12 22a10 10 0 1 0-10-10 10 10 0 0 0 10 10z"/>
               <path d="M9 12l2 2 4-4"/>
             </svg>
-            <p className="text-xs text-white/85 leading-relaxed">
-              <strong className="font-semibold text-white">Solo te escribiremos con fines educativos:</strong>{" "}
+            <p className="text-xs text-slate-700 leading-relaxed">
+              <strong className="font-semibold text-slate-900">Solo te escribiremos con fines educativos:</strong>{" "}
               confirmar tu clase, enviarte material y recordatorios. Sin spam.
             </p>
           </div>
 
           {state.phone_local.length > 0 && phoneDigits.length < 6 && (
-            <p className="text-xs text-red-300 mt-2">Escribe un número de WhatsApp válido.</p>
+            <p className="text-xs text-red-600 mt-2">Escribe un número de WhatsApp válido.</p>
           )}
           {looksDuplicatedCC && (
             <p className="text-xs text-amber-300 mt-2">
@@ -238,7 +238,7 @@ export default function StepObjetivo() {
         </div>
 
         {submitErr && (
-          <p className="text-sm text-red-300 -mt-2" role="alert">
+          <p className="text-sm text-red-600 -mt-2" role="alert">
             {submitErr}
           </p>
         )}

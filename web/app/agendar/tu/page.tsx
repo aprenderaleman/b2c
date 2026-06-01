@@ -39,7 +39,7 @@ export default function StepTu() {
     >
       <div className="space-y-3">
         <label className="block">
-          <span className="text-[11px] font-semibold text-white/55 uppercase tracking-wider">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
             Nombre
           </span>
           <input
@@ -49,15 +49,15 @@ export default function StepTu() {
             placeholder="Tu nombre"
             autoFocus
             autoComplete="given-name"
-            className="mt-1 w-full h-14 px-4 rounded-2xl bg-white/[0.08] text-white text-base
-                       placeholder:text-white/30 outline-none
-                       border border-white/10 focus:border-warm focus:bg-white/[0.10]
+            className="mt-1 w-full h-14 px-4 rounded-2xl bg-slate-50 text-slate-900 text-base
+                       placeholder:text-slate-400 outline-none
+                       border border-slate-200 focus:border-warm focus:bg-slate-100
                        transition-colors"
           />
         </label>
 
         <label className="block">
-          <span className="text-[11px] font-semibold text-white/55 uppercase tracking-wider">
+          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
             Email
           </span>
           <input
@@ -67,13 +67,13 @@ export default function StepTu() {
             value={state.email}
             onChange={(e) => update({ email: e.target.value })}
             placeholder="tu@email.com"
-            className="mt-1 w-full h-14 px-4 rounded-2xl bg-white/[0.08] text-white text-base
-                       placeholder:text-white/30 outline-none
-                       border border-white/10 focus:border-warm focus:bg-white/[0.10]
+            className="mt-1 w-full h-14 px-4 rounded-2xl bg-slate-50 text-slate-900 text-base
+                       placeholder:text-slate-400 outline-none
+                       border border-slate-200 focus:border-warm focus:bg-slate-100
                        transition-colors"
           />
           {state.email.length > 0 && !emailOk && (
-            <span className="block mt-1.5 text-xs text-red-300">
+            <span className="block mt-1.5 text-xs text-red-600">
               Revisa el formato del correo.
             </span>
           )}

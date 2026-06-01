@@ -172,34 +172,34 @@ export default function StepCuando() {
         <div className="space-y-4">
           <div className="flex gap-2 overflow-hidden">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="shrink-0 w-14 h-[68px] rounded-2xl bg-white/[0.06] animate-pulse" />
+              <div key={i} className="shrink-0 w-14 h-[68px] rounded-2xl bg-slate-100 animate-pulse" />
             ))}
           </div>
           <div className="space-y-2 mt-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-14 rounded-2xl bg-white/[0.06] animate-pulse" />
+              <div key={i} className="h-14 rounded-2xl bg-slate-100 animate-pulse" />
             ))}
           </div>
         </div>
       )}
 
-      {loadErr && <p className="text-sm text-red-300">{loadErr}</p>}
+      {loadErr && <p className="text-sm text-red-600">{loadErr}</p>}
 
       {submitting && (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3
-                        text-sm text-white/80 flex items-center gap-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3
+                        text-sm text-slate-700 flex items-center gap-3">
           <span className="inline-block h-4 w-4 rounded-full border-2 border-warm border-t-transparent animate-spin" aria-hidden />
           Confirmando tu clase…
         </div>
       )}
       {submitErr && (
-        <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
           {submitErr}
         </div>
       )}
 
       {slots && slots.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-6 text-center text-sm text-white/65">
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">
           Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te
           avisamos en cuanto se abran horarios.
         </div>
@@ -211,11 +211,12 @@ export default function StepCuando() {
             daysWithSlots={daysWithSlots}
             selectedDay={selectedDay}
             onSelect={setDay}
+            lightMode
           />
 
           {selectedDay && (
             <div>
-              <p className="text-[11px] font-semibold uppercase text-white/55 tracking-wider mb-2 capitalize">
+              <p className="text-[11px] font-semibold uppercase text-slate-500 tracking-wider mb-2 capitalize">
                 {fullDateLabel(selectedDay)}
               </p>
               <TimeList
@@ -223,6 +224,7 @@ export default function StepCuando() {
                 selectedIso={state.slot_iso}
                 selectedTeacherId={state.teacher_id}
                 onSelect={onPickSlot}
+                lightMode
               />
             </div>
           )}
