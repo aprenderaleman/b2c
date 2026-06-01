@@ -9,28 +9,71 @@
  */
 import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
-import { getFunnelAdsData, TELEMETRY_STARTS_AT } from "@/lib/funnel-ads";
+import { getFunnelAdsData, getAvailableCountries, TELEMETRY_STARTS_AT } from "@/lib/funnel-ads";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Funnel Ads · Admin" };
 
+// Filtros de rango de días — granularidad amplia desde "hoy" hasta
+// 90 días. El usuario también puede pasar ?days=N arbitrario en URL.
 const RANGES: Array<{ label: string; days: number }> = [
+  { label: "Hoy",      days: 1   },
+  { label: "3 días",   days: 3   },
   { label: "7 días",   days: 7   },
+  { label: "14 días",  days: 14  },
   { label: "30 días",  days: 30  },
   { label: "90 días",  days: 90  },
 ];
 
+// Nombre legible por código ISO-2 para el dropdown de país.
+const COUNTRY_NAMES: Record<string, string> = {
+  ES: "🇪🇸 España",     DE: "🇩🇪 Alemania",   AT: "🇦🇹 Austria",
+  CH: "🇨🇭 Suiza",      AR: "🇦🇷 Argentina",  MX: "🇲🇽 México",
+  CO: "🇨🇴 Colombia",   CL: "🇨🇱 Chile",       PE: "🇵🇪 Perú",
+  UY: "🇺🇾 Uruguay",    PY: "🇵🇾 Paraguay",    BO: "🇧🇴 Bolivia",
+  EC: "🇪🇨 Ecuador",    VE: "🇻🇪 Venezuela",   CR: "🇨🇷 Costa Rica",
+  PA: "🇵🇦 Panamá",     DO: "🇩🇴 Rep. Dom.",   GT: "🇬🇹 Guatemala",
+  HN: "🇭🇳 Honduras",   NI: "🇳🇮 Nicaragua",   SV: "🇸🇻 El Salvador",
+  CU: "🇨🇺 Cuba",       BR: "🇧🇷 Brasil",      US: "🇺🇸 EE.UU.",
+  FR: "🇫🇷 Francia",    IT: "🇮🇹 Italia",      PT: "🇵🇹 Portugal",
+  GB: "🇬🇧 Reino Unido", NL: "🇳🇱 P. Bajos",   BE: "🇧🇪 Bélgica",
+  XX: "🌐 Otro / sin país",
+};
+
+function countryName(code: string): string {
+  return COUNTRY_NAMES[code] ?? `🌐 ${code}`;
+}
+
+function qs(params: Record<string, string | number | undefined>): string {
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "" && v !== null) sp.set(k, String(v));
+  }
+  const s = sp.toString();
+  return s ? `?${s}` : "";
+}
+
 export default async function FunnelAdsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<{ days?: string; country?: string }>;
 }) {
   await requireRole(["superadmin", "admin"]);
   const sp = await searchParams;
-  const days = Number(sp.days ?? 30);
-  const activeDays = RANGES.some(r => r.days === days) ? days : 30;
 
-  const data = await getFunnelAdsData(activeDays);
+  // Días: aceptamos cualquier número 1-365 desde URL; si no, default 30.
+  const daysRaw = Number(sp.days ?? 30);
+  const activeDays = Number.isFinite(daysRaw) && daysRaw >= 1 && daysRaw <= 365
+    ? Math.round(daysRaw) : 30;
+
+  // País: ISO-2 mayúsculas; vacío = todos.
+  const countryRaw = (sp.country ?? "").trim().toUpperCase();
+  const activeCountry = countryRaw.length === 2 ? countryRaw : "";
+
+  const [data, availableCountries] = await Promise.all([
+    getFunnelAdsData(activeDays, activeCountry || undefined),
+    getAvailableCountries(activeDays),
+  ]);
 
   // ¿La ventana incluye días previos al lanzamiento de telemetría
   // granular? Si sí, advertir que paso 2 (nivel) puede tener datos
@@ -48,30 +91,79 @@ export default async function FunnelAdsPage({
 
   return (
     <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-white">📊 Funnel Ads</h1>
           <p className="mt-1 text-sm text-white/60">
-            Embudo de 4 pasos — motivo → nivel → datos → trial. Tras la simplificación del
-            quiz (2026-05-26) Stiv recoge goal/urgencia por WhatsApp.
+            Quiz de <strong>2 preguntas</strong> (motivo + nivel) → datos → trial. Goal/urgencia/budget
+            los recoge Stiv por WhatsApp (eliminados del funnel el {TELEMETRY_STARTS_AT}).
           </p>
         </div>
-        <div className="flex gap-1.5 rounded-lg border border-white/10 bg-white/5 p-1">
-          {RANGES.map(r => (
-            <Link
-              key={r.days}
-              href={`/admin/ads?days=${r.days}`}
-              className={`px-3 py-1.5 rounded-md text-sm transition ${
-                r.days === activeDays
-                  ? "bg-warm text-warm-foreground font-semibold"
-                  : "text-white/70 hover:text-white"
-              }`}
-            >
-              {r.label}
-            </Link>
-          ))}
-        </div>
       </div>
+
+      {/* ── Filtros ────────────────────────────────────────────── */}
+      <section className="rounded-xl border border-white/10 bg-white/5 p-3 flex flex-col md:flex-row gap-3 md:items-center">
+        {/* Días */}
+        <div className="flex-1">
+          <div className="text-[11px] uppercase tracking-wider text-white/45 mb-1.5">Rango</div>
+          <div className="flex gap-1 flex-wrap">
+            {RANGES.map(r => (
+              <Link
+                key={r.days}
+                href={`/admin/ads${qs({ days: r.days, country: activeCountry || undefined })}`}
+                className={`px-3 py-1.5 rounded-md text-sm transition ${
+                  r.days === activeDays
+                    ? "bg-warm text-warm-foreground font-semibold"
+                    : "border border-white/10 bg-white/5 text-white/70 hover:text-white hover:bg-white/10"
+                }`}
+              >
+                {r.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* País */}
+        <div className="md:w-72">
+          <div className="text-[11px] uppercase tracking-wider text-white/45 mb-1.5">País</div>
+          <form action="/admin/ads" method="get" className="flex gap-1.5">
+            <input type="hidden" name="days" value={activeDays} />
+            <select
+              name="country"
+              defaultValue={activeCountry}
+              className="flex-1 h-9 px-2 rounded-md border border-white/10 bg-white/5 text-sm text-white"
+            >
+              <option value="">Todos ({availableCountries.reduce((a, c) => a + c.count, 0)} leads)</option>
+              {availableCountries.map(c => (
+                <option key={c.code} value={c.code}>
+                  {countryName(c.code)} · {c.count}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              className="px-3 py-1.5 rounded-md text-sm bg-warm text-warm-foreground font-semibold hover:opacity-90"
+            >
+              Aplicar
+            </button>
+          </form>
+        </div>
+      </section>
+
+      {activeCountry && (
+        <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-100 flex items-center justify-between gap-3">
+          <span>
+            Filtrando por país: <strong>{countryName(activeCountry)}</strong>. Los pasos 1 y 2 (sesiones)
+            no se filtran por país — sólo conocemos el país tras el paso 3 (form completado).
+          </span>
+          <Link
+            href={`/admin/ads${qs({ days: activeDays })}`}
+            className="text-amber-200 hover:text-white underline text-xs whitespace-nowrap"
+          >
+            Limpiar filtro
+          </Link>
+        </div>
+      )}
 
       {/* KPIs grandes — visión rápida del funnel */}
       <section className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -135,7 +227,7 @@ export default async function FunnelAdsPage({
 
       {/* ── Embudo de pasos ───────────────────────────────────── */}
       <section className="mt-8">
-        <h2 className="text-lg font-semibold text-white">Embudo de 4 pasos</h2>
+        <h2 className="text-lg font-semibold text-white">Embudo {activeCountry ? `· ${countryName(activeCountry)}` : ""}</h2>
         <p className="mt-1 text-xs text-white/55">
           Cuántos visitantes llegan a cada paso vs. el paso anterior y vs. la entrada.
         </p>
