@@ -48,6 +48,10 @@ import {
   type DiagnosticoFollowupVars,
 } from "./templates/diagnostico-followup";
 import {
+  renderEmailOnlyNudge,
+  type EmailOnlyNudgeVars,
+} from "./templates/email-only-nudge";
+import {
   renderDiagnosticoFollowupPdf,
   type DiagnosticoFollowupPdfVars,
 } from "./templates/diagnostico-followup-pdf";
@@ -363,6 +367,19 @@ export async function sendDiagnosticoWelcomeEmail(
   vars: DiagnosticoWelcomeVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderDiagnosticoWelcome(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Nudge agresivo para leads que completaron el form pero NO dejaron
+ * WhatsApp. Schedule: T+30min, T+6h, T+24h, T+3d, T+7d. Cada uno con
+ * subject y copy escalando la urgencia.
+ */
+export async function sendEmailOnlyNudge(
+  to: string,
+  vars: EmailOnlyNudgeVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderEmailOnlyNudge(vars);
   return sendRaw(to, subject, html, text);
 }
 

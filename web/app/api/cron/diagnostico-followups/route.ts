@@ -243,6 +243,13 @@ async function runCron(req: Request) {
   const testUrl  = "https://schule.aprender-aleman.de/test-de-nivel";
   const now      = Date.now();
 
+  // ── PRE-PASE: Email-only nudge ───────────────────────────────────
+  // Drip AGRESIVO para leads que llenaron el form pero NO dejaron
+  // WhatsApp (form 2-pasos, pulsaron "Continuar sin WhatsApp"). Sin
+  // WA no podemos agendarles la clase, así que escalamos en email
+  // hasta convencerlos: T+30min, T+6h, T+24h, T+3d, T+7d.
+  const nudgeResult = await runEmailOnlyNudges(sb, baseUrl, now);
+
   // Pulla leads en status 'registered' con menos de 6 mensajes enviados.
   // Filtramos en SQL por last_drip_msg_n < 6 — los de 6 ya están 'cold'
   // pero defendemos en cliente igual.
@@ -551,7 +558,88 @@ async function runCron(req: Request) {
   }
 
   return NextResponse.json(
-    { ok: true, scanned: leads.length, sent, skipped, errors },
+    { ok: true, scanned: leads.length, sent, skipped, errors, nudge: nudgeResult },
     { headers: { "Cache-Control": "no-store" } },
   );
+}
+
+// ── Email-only nudge — drip agresivo para leads sin WhatsApp ──────
+
+const NUDGE_GATES_MS: Record<1 | 2 | 3 | 4 | 5, number> = {
+  1: 30 * MIN_MS,    // T+30min
+  2:  6 * HOUR_MS,   // T+6h
+  3:      DAY_MS,    // T+24h
+  4:  3 * DAY_MS,    // T+3d
+  5:  7 * DAY_MS,    // T+7d
+};
+
+type SB = ReturnType<typeof supabaseAdmin>;
+
+async function runEmailOnlyNudges(sb: SB, baseUrl: string, nowMs: number) {
+  const { sendEmailOnlyNudge } = await import("@/lib/email/send");
+
+  const { data, error } = await sb
+    .from("leads")
+    .select("id, name, email, diagnostico_completed_at, created_at, email_only_nudge_count, last_email_only_nudge_at")
+    .is("whatsapp_normalized", null)
+    .eq("status", "registered")
+    .not("email", "is", null)
+    .not("diagnostico_completed_at", "is", null)
+    .lt("email_only_nudge_count", 5);
+
+  if (error) {
+    console.error("[email-only-nudge] query failed:", error.message);
+    return { sent: 0, errors: 1, skipped: 0 };
+  }
+
+  let sent = 0, errors = 0, skipped = 0;
+  for (const row of (data ?? []) as Array<{
+    id: string; name: string | null; email: string;
+    diagnostico_completed_at: string;
+    email_only_nudge_count: number;
+    last_email_only_nudge_at: string | null;
+  }>) {
+    const nextN = (row.email_only_nudge_count + 1) as 1 | 2 | 3 | 4 | 5;
+    if (nextN > 5) { skipped++; continue; }
+    const gate = NUDGE_GATES_MS[nextN];
+    const elapsed = nowMs - new Date(row.diagnostico_completed_at).getTime();
+    if (elapsed < gate) { skipped++; continue; }
+    // Anti-doble disparo: no enviar si el último nudge salió hace <gate
+    if (row.last_email_only_nudge_at) {
+      const sinceLast = nowMs - new Date(row.last_email_only_nudge_at).getTime();
+      const minGap = nextN === 1 ? 25 * MIN_MS : 5 * HOUR_MS; // mínimo razonable
+      if (sinceLast < minGap) { skipped++; continue; }
+    }
+
+    const firstName = (row.name ?? "").trim().split(/\s+/)[0] || "Lead";
+    // Link al funnel con el lead_id en hash para auto-restaurar la
+    // sesión. El componente cliente lee `?resume=` y rellena los
+    // campos guardados.
+    const funnelUrl = `${baseUrl}/?resume=${encodeURIComponent(row.id)}#wa`;
+
+    try {
+      const r = await sendEmailOnlyNudge(row.email, {
+        leadName: firstName, funnelUrl, step: nextN,
+      });
+      if (!r.ok) { errors++; continue; }
+
+      await sb.from("leads").update({
+        email_only_nudge_count: nextN,
+        last_email_only_nudge_at: new Date(nowMs).toISOString(),
+      }).eq("id", row.id);
+
+      await sb.from("lead_timeline").insert({
+        lead_id: row.id,
+        type:    "system_message_sent",
+        author:  "system",
+        content: `📧 Nudge #${nextN} (email-only) enviado a ${row.email}`,
+        metadata: { channel: "email", kind: "email_only_nudge", step: nextN },
+      });
+      sent++;
+    } catch (e) {
+      console.error("[email-only-nudge] send failed:", e instanceof Error ? e.message : e);
+      errors++;
+    }
+  }
+  return { sent, errors, skipped };
 }
