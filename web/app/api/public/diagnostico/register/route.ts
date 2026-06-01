@@ -154,7 +154,11 @@ function inferCountryFromWhatsapp(whatsappE164: string): string {
 const BodySchema = z.object({
   name:          z.string().trim().min(2).max(100),
   email:         z.string().trim().toLowerCase().email(),
-  whatsapp_e164: z.string().trim().regex(/^\+?[0-9]{8,15}$/, "WhatsApp inválido"),
+  // WhatsApp opcional desde 2026-06-01 (form en 2 pasos). Si el lead
+  // sólo deja email en el paso 5a, lo creamos sin WA y el drip de
+  // followups por email se encarga de la conversión. Cuando el lead
+  // añade WA después (paso 5b o más tarde), se hace upsert por email.
+  whatsapp_e164: z.string().trim().regex(/^\+?[0-9]{8,15}$/, "WhatsApp inválido").nullable().optional(),
   // country: opcional para clientes nuevos (post-2026-05-26). Si no
   // viene o viene null, lo inferimos del prefijo del WhatsApp.
   country:       z.string().trim().length(2).toUpperCase().optional().nullable(),
@@ -219,32 +223,21 @@ export async function POST(req: NextRequest) {
   }
   const b = parsed.data;
 
-  // Normalizar el WhatsApp a E.164 con `+` al inicio. Defense in depth:
-  // si el cliente nos pasó algo malformado (caso real "+3434615541087"
-  // por country-code duplicado), saneamos colapsando un código repetido
-  // al inicio.
-  let whatsappE164 = sanitizeE164(b.whatsapp_e164);
-
-  // Defense in depth (2026-05-27): rescate de doble-prefijo. Caso real
-  // lead español con +49 por defecto → "+4934676482692". libphonenumber
-  // lo considera "válido" como alemán (plan laxo), así que sanitizeE164
-  // no lo arregla. rescueDoublePrefix detecta que tras el +49 hay otro
-  // CC extranjero válido (+34 español) y corrige. El cliente ya manda
-  // el número correcto vía resolvePhone — esto cubre llamadas directas
-  // a la API o clientes en caché con el bug.
-  whatsappE164 = rescueDoublePrefix(whatsappE164);
-  // Normaliza al formato canónico si parsea bien.
-  {
+  // WhatsApp puede venir null (form en 2 pasos, paso 5a sin WA).
+  // Si viene, lo saneamos; si no, queda como null para el upsert.
+  let whatsappE164: string | null = null;
+  if (b.whatsapp_e164) {
+    whatsappE164 = sanitizeE164(b.whatsapp_e164);
+    whatsappE164 = rescueDoublePrefix(whatsappE164);
     const parsed = parsePhoneNumberFromString(whatsappE164);
     if (parsed && parsed.isValid()) whatsappE164 = parsed.number;
   }
 
-  // País: lo derivamos del número ya saneado con libphonenumber (más
-  // fiable que el prefijo crudo). Fallback al mapa manual si no parsea.
-  const parsedFinal = parsePhoneNumberFromString(whatsappE164);
+  // País: del WhatsApp si lo tenemos, sino se queda null por ahora.
+  const parsedFinal = whatsappE164 ? parsePhoneNumberFromString(whatsappE164) : null;
   const country = (b.country && b.country.length === 2)
     ? b.country
-    : (parsedFinal?.country ?? inferCountryFromWhatsapp(whatsappE164));
+    : (parsedFinal?.country ?? (whatsappE164 ? inferCountryFromWhatsapp(whatsappE164) : null));
 
   const sb = supabaseAdmin();
 
@@ -274,7 +267,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Upsert por email O whatsapp — mismo patrón que /api/public/book-trial.
-  const orFilters: string[] = [`email.eq.${b.email}`, `whatsapp_normalized.eq.${whatsappE164}`];
+  // Búsqueda por email siempre + whatsapp si lo tenemos. Sin WA, el
+  // email es el único discriminador (form en 2 pasos, paso 5a).
+  const orFilters: string[] = [`email.eq.${b.email}`];
+  if (whatsappE164) orFilters.push(`whatsapp_normalized.eq.${whatsappE164}`);
   const { data: existingLead } = await sb
     .from("leads")
     .select("id, status")

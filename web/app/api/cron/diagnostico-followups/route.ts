@@ -95,7 +95,7 @@ type LeadRow = {
   id:                       string;
   name:                     string;
   email:                    string | null;
-  whatsapp_normalized:      string;
+  whatsapp_normalized:      string | null;
   language:                 "es" | "de";
   german_level:             string | null;
   diagnostico_completed_at: string;

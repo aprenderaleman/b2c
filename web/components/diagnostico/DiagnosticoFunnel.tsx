@@ -288,6 +288,16 @@ export function DiagnosticoFunnel() {
   const [alreadyRegistered, setAlreadyRegistered] = useState<{ loginUrl: string } | null>(null);
   const [leadId,     setLeadId]     = useState<string | null>(null);
   const [sessionId,  setSessionId]  = useState<string | null>(null);
+  // Form en 2 fases (Gelfis 2026-06-01): "email" pide nombre+email
+  // (baja fricción), "whatsapp" pide número (alta fricción). Si el
+  // lead se va en la fase whatsapp, ya tenemos email para el drip
+  // agresivo de followups. Reduce drop-off un 30-50% vs form único.
+  const [formPhase, setFormPhase] = useState<"email" | "whatsapp">("email");
+  const [emailOnlyLeadId, setEmailOnlyLeadId] = useState<string | null>(null);
+  // emailOnly=true cuando el lead pulsó "Continuar sin WhatsApp" en
+  // la fase 2. En ese caso el step=7 muestra pantalla de gracias
+  // email-only en vez del calendario (book-trial requiere WhatsApp).
+  const [emailOnly, setEmailOnly] = useState(false);
 
   // Theme color para la barra de estado en móvil — cream/rose pastel
   // tras el redesign light-mode 2026-05-26 (estilo Preply).
@@ -423,24 +433,53 @@ export function DiagnosticoFunnel() {
     // step 1 → no hace nada (es el inicio)
   }
 
+  // Builder común del body de register. Se usa en ambas fases.
+  function buildRegisterBody(whatsappE164: string | null) {
+    const attr = (k: string): string | undefined => {
+      try { return sessionStorage.getItem(`b2c.attr.${k}`) ?? undefined; }
+      catch { return undefined; }
+    };
+    return {
+      name:           form.name.trim(),
+      email:          form.email.trim().toLowerCase(),
+      whatsapp_e164:  whatsappE164,
+      country:        null as string | null,
+      language:       "es",
+      gdpr_accepted:  true,
+      session_id:     sessionId ?? undefined,
+      motivo_inicial: answers.motivo ?? undefined,
+      gclid:          attr("gclid"),
+      gbraid:         attr("gbraid"),
+      wbraid:         attr("wbraid"),
+      utm_source:     attr("utm_source"),
+      utm_medium:     attr("utm_medium"),
+      utm_campaign:   attr("utm_campaign"),
+      utm_term:       attr("utm_term"),
+      utm_content:    attr("utm_content"),
+      answers: {
+        level:   answers.level,
+        goal:    answers.goal,
+        urgency: answers.urgency,
+        budget:  answers.budget,
+      },
+    };
+  }
+
   async function submitData() {
     if (submitting) return;
 
-    // Telemetría: el lead pulsó "Crear mi plan". Lo trackeamos AQUÍ,
-    // antes de cualquier validación, para que el step=5 cuente
-    // INTENTOS de envío (no éxitos).
-    trackStep(5, "submit_attempt");
+    if (formPhase === "email") {
+      return submitEmailPhase();
+    }
+    return submitWhatsappPhase();
+  }
 
-    // ── Validación local pre-submit ────────────────────────────
-    // Comprobaciones que ya cubre `canSubmit`, pero dejamos doble
-    // chequeo en submit para defensa (autocompletado/extension del
-    // navegador puede meter texto sin disparar onChange).
+  // ── FASE 1: nombre + email → register (sin WA) ──────────────────
+  async function submitEmailPhase() {
+    trackStep(5, "submit_attempt_email_phase");
+
     const nameOk  = form.name.trim().length >= 2;
     const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
-    // Resolución inteligente con libphonenumber — el e164 final puede
-    // tener un CC distinto al del dropdown si el lead tecleó su número
-    // completo con otro prefijo (caso +49 default + número español).
-    const phoneRes = resolvePhone(form.countryCode, form.whatsapp);
     if (!nameOk) {
       trackStep(5, "client_invalid_name");
       setSubmitErr("Pon tu nombre completo (mínimo 2 caracteres).");
@@ -451,6 +490,85 @@ export function DiagnosticoFunnel() {
       setSubmitErr("Email inválido — revisa que tenga @ y dominio.");
       return;
     }
+
+    setSubmitting(true);
+    setSubmitErr(null);
+    try {
+      const body = buildRegisterBody(null);
+      let res: Response;
+      try {
+        res = await fetch("/api/public/diagnostico/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } catch {
+        trackStep(5, "network_error");
+        setSubmitErr("No tenemos conexión. Revisa tu internet e inténtalo de nuevo.");
+        setSubmitting(false);
+        return;
+      }
+      const json: { ok?: boolean; lead_id?: string; error?: string; login_url?: string; issues?: Array<{ path?: string[]; message?: string }> } = await res.json().catch(() => ({}));
+      if (res.status === 409 && json.error === "already_registered") {
+        trackStep(5, "already_registered");
+        setAlreadyRegistered({ loginUrl: json.login_url ?? "/login" });
+        setSubmitting(false);
+        return;
+      }
+      if (res.status === 429) {
+        trackStep(5, "rate_limited");
+        setSubmitErr("Demasiados intentos desde tu IP. Espera 10 minutos e inténtalo de nuevo.");
+        setSubmitting(false);
+        return;
+      }
+      if (!res.ok || !json.ok) {
+        trackStep(5, "server_5xx_" + res.status);
+        setSubmitErr("No pudimos guardar tu plan. Inténtalo en unos segundos.");
+        setSubmitting(false);
+        return;
+      }
+      // Lead creado SIN WhatsApp. Guardamos su id y pasamos a fase WA.
+      const newLeadId = json.lead_id ?? "";
+      if (!newLeadId) {
+        setSubmitErr("Respuesta inesperada del servidor.");
+        setSubmitting(false);
+        return;
+      }
+      setEmailOnlyLeadId(newLeadId);
+      setLeadId(newLeadId);
+      trackStep(5, "submit_email_ok");
+      setSubmitting(false);
+      setFormPhase("whatsapp");
+    } catch (e) {
+      console.error("[diagnostico] email phase failed:", e);
+      setSubmitErr("Error de conexión. Inténtalo de nuevo.");
+      setSubmitting(false);
+    }
+  }
+
+  // Skip de la fase 2 — el lead ya está creado con email; lo dejamos
+  // sin WA y entramos al drip email-only agresivo. NO va al calendario
+  // (book-trial requiere WhatsApp); muestra pantalla de email-only.
+  function skipWhatsapp() {
+    if (!emailOnlyLeadId) return;
+    trackStep(5, "skip_whatsapp");
+    trackStep(6, null); // contabilizamos como lead creado (sin WA)
+    setLeadId(emailOnlyLeadId);
+    setEmailOnly(true);
+    setStep(7);
+  }
+
+  // ── FASE 2: añadir WhatsApp al lead ya creado ─────────────────
+  async function submitWhatsappPhase() {
+    if (!emailOnlyLeadId) {
+      // Defensa: si por algún motivo no tenemos el leadId, volver a fase email.
+      setFormPhase("email");
+      return;
+    }
+
+    trackStep(5, "submit_attempt_whatsapp_phase");
+
+    const phoneRes = resolvePhone(form.countryCode, form.whatsapp);
     if (!phoneRes.valid) {
       trackStep(5, "client_invalid_phone");
       setSubmitErr("Número de WhatsApp no válido. Revisa el prefijo y los dígitos.");
@@ -462,40 +580,7 @@ export function DiagnosticoFunnel() {
     setSubmitErr(null);
     try {
       const whatsappE164 = e164;
-
-      // Recuperar atribución publicitaria capturada al aterrizar.
-      const attr = (k: string): string | undefined => {
-        try { return sessionStorage.getItem(`b2c.attr.${k}`) ?? undefined; }
-        catch { return undefined; }
-      };
-
-      const body = {
-        name:           form.name.trim(),
-        email:          form.email.trim().toLowerCase(),
-        whatsapp_e164:  whatsappE164,
-        // country se deriva server-side del prefijo del WhatsApp.
-        country:        null as string | null,
-        language:       "es",
-        // Aceptación de privacidad implícita al pulsar el CTA.
-        gdpr_accepted:  true,
-        session_id:     sessionId ?? undefined,
-        motivo_inicial: answers.motivo ?? undefined,
-        // Atribución Google Ads / UTM (para conversión offline).
-        gclid:          attr("gclid"),
-        gbraid:         attr("gbraid"),
-        wbraid:         attr("wbraid"),
-        utm_source:     attr("utm_source"),
-        utm_medium:     attr("utm_medium"),
-        utm_campaign:   attr("utm_campaign"),
-        utm_term:       attr("utm_term"),
-        utm_content:    attr("utm_content"),
-        answers: {
-          level:   answers.level,
-          goal:    answers.goal,
-          urgency: answers.urgency,
-          budget:  answers.budget,
-        },
-      };
+      const body = buildRegisterBody(whatsappE164);
 
       let res: Response;
       try {
@@ -767,19 +852,22 @@ export function DiagnosticoFunnel() {
               submitting={submitting}
               submitErr={submitErr}
               onSubmit={submitData}
+              phase={formPhase}
+              onSkipWhatsapp={skipWhatsapp}
               onMicroEvent={(e) => {
-                // Mapeo de eventos del form a step en funnel_progress:
-                //   form_opened  → step=3 (lead llegó al form)
-                //   field_typed  → step=4 (escribió al menos 1 carácter)
-                // step=5 lo dispara submitData (intento de envío con
-                // o sin éxito). step=6 = lead creado OK.
                 if (e === "form_opened") trackStep(3, "form_opened");
                 else if (e === "field_typed") trackStep(4, "field_typed");
               }}
             />
           )
         )}
-        {step === 7 && leadId && (
+        {step === 7 && leadId && emailOnly && (
+          <EmailOnlyThanksScreen
+            name={form.name.trim().split(/\s+/)[0] || "tú"}
+            email={form.email.trim()}
+          />
+        )}
+        {step === 7 && leadId && !emailOnly && (
           <CalendarStep
             name={form.name.trim().split(/\s+/)[0] || "tú"}
             answers={answers}
@@ -962,16 +1050,19 @@ function LowBudgetExit({ onBack }: { onBack: () => void }) {
 }
 
 function DataCaptureStep({
-  form, setForm, submitting, submitErr, onSubmit, onMicroEvent,
+  form, setForm, submitting, submitErr, onSubmit, onMicroEvent, phase, onSkipWhatsapp,
 }: {
   form:        FormData;
   setForm:     React.Dispatch<React.SetStateAction<FormData>>;
   submitting:  boolean;
   submitErr:   string | null;
   onSubmit:    () => void;
-  // Telemetría granular del paso 3 (form). Eventos:
-  //   "form_opened"   → la pantalla del form se renderizó.
-  //   "field_typed"   → primer carácter escrito en cualquier campo.
+  /** Fase actual del form (2-step):
+   *    "email"    → muestra nombre + email + CTA "Continuar →"
+   *    "whatsapp" → muestra WhatsApp + CTA "Crear mi plan" + skip link */
+  phase:       "email" | "whatsapp";
+  /** Si el lead pulsa "Continuar sin WhatsApp" en la fase 2. */
+  onSkipWhatsapp?: () => void;
   onMicroEvent?: (event: "form_opened" | "field_typed") => void;
 }) {
   // Disparar "form_opened" una vez al montar.
@@ -1022,23 +1113,42 @@ function DataCaptureStep({
   const phoneMismatch = phoneInfo.state === "mismatch" ? phoneInfo : null;
 
   const phoneDigits  = form.whatsapp.replace(/\D/g, "");
-  const canSubmit =
-    form.name.trim().length >= 2 &&
-    emailValid &&
-    phoneDigits.length >= 6 &&
-    phoneError === null &&
-    !submitting;
+  // canSubmit depende de la fase:
+  //   email    → nombre + email válidos
+  //   whatsapp → teléfono válido (con la longitud correcta por país)
+  const canSubmit = !submitting && (
+    phase === "email"
+      ? (form.name.trim().length >= 2 && emailValid)
+      : (phoneDigits.length >= 6 && phoneError === null)
+  );
 
+  const firstName = (form.name ?? "").trim().split(/\s+/)[0] || "tú";
   return (
     <div className="px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)]">
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
-        ¡Estamos creando tu plan!
-      </h1>
-      <p className="mt-2 text-[15px] md:text-base lg:text-lg text-slate-600 leading-relaxed">
-        Para enviártelo y agendar tu clase de prueba, necesitamos tus datos:
-      </p>
+      {phase === "email" ? (
+        <>
+          <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+            ¡Estamos creando tu plan!
+          </h1>
+          <p className="mt-2 text-[15px] md:text-base lg:text-lg text-slate-600 leading-relaxed">
+            Empecemos por los datos básicos para enviarte tu plan personalizado.
+          </p>
+        </>
+      ) : (
+        <>
+          <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+            ¡Perfecto, {firstName}!
+          </h1>
+          <p className="mt-2 text-[15px] md:text-base lg:text-lg text-slate-600 leading-relaxed">
+            Para enviarte el <strong>link al aula</strong> y los <strong>recordatorios de tu clase</strong>,
+            déjanos tu WhatsApp:
+          </p>
+        </>
+      )}
 
       <div className="mt-6 space-y-4">
+        {/* FASE EMAIL: Nombre */}
+        {phase === "email" && (
         <Field label="Nombre">
           <input
             type="text"
@@ -1051,7 +1161,10 @@ function DataCaptureStep({
             placeholder="Tu nombre y apellido"
           />
         </Field>
+        )}
 
+        {/* FASE WHATSAPP: campo de teléfono */}
+        {phase === "whatsapp" && (
         <Field label="WhatsApp">
           <div className="flex gap-2">
             <input
@@ -1127,7 +1240,10 @@ function DataCaptureStep({
             </p>
           </div>
         </Field>
+        )}
 
+        {/* FASE EMAIL: campo Email */}
+        {phase === "email" && (
         <Field label="Email">
           <input
             type="email"
@@ -1150,9 +1266,10 @@ function DataCaptureStep({
             </p>
           )}
           <p className="mt-1.5 text-[11.5px] text-slate-500 leading-snug">
-            Lo usamos como respaldo si el WhatsApp falla y para enviarte materiales.
+            Aquí te enviamos el plan personalizado, materiales y la confirmación de la clase.
           </p>
         </Field>
+        )}
 
         {submitErr && (
           <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -1173,8 +1290,24 @@ function DataCaptureStep({
                        shadow-lg shadow-warm/20 active:scale-[0.98] transition
                        disabled:opacity-50 disabled:active:scale-100"
           >
-            {submitting ? "Creando tu plan…" : "Crear mi plan"}
+            {submitting
+              ? (phase === "email" ? "Guardando…" : "Creando tu plan…")
+              : (phase === "email" ? "Continuar →" : "Crear mi plan")}
           </button>
+
+          {/* Skip link sólo en fase WA — el lead puede seguir sin dar
+              su número y entrará en el drip agresivo por email. */}
+          {phase === "whatsapp" && onSkipWhatsapp && (
+            <button
+              type="button"
+              onClick={onSkipWhatsapp}
+              disabled={submitting}
+              className="mt-3 w-full text-center text-[13px] text-slate-500 hover:text-slate-700 underline underline-offset-2"
+            >
+              Prefiero seguir solo por email
+            </button>
+          )}
+
           <p className="mt-2 text-center text-[11px] text-slate-400 leading-snug">
             Al continuar aceptas nuestra{" "}
             <Link href="/privacy" target="_blank" className="underline text-slate-500">
@@ -1557,6 +1690,61 @@ function CalendarStep({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Pantalla "gracias email-only" — se muestra cuando el lead llenó
+ * nombre+email en la fase 1 y pulsó "Continuar sin WhatsApp" en la
+ * fase 2. El lead ya está registrado, el drip por email se hará cargo.
+ *
+ * Importante: no permitimos agendar trial sin WA (book-trial lo exige),
+ * pero damos un wa.me link explícito por si quieren ofrecer su número
+ * voluntariamente para acelerar el seguimiento.
+ */
+function EmailOnlyThanksScreen({ name, email }: { name: string; email: string }) {
+  // Pre-rellenamos un mensaje con su nombre + email para que Stiv
+  // pueda enlazar la conversación con el lead automáticamente.
+  const waText = `Hola Stiv, soy ${name} (${email}). Acabo de registrarme en el funnel y quiero agendar mi clase de prueba por WhatsApp.`;
+  const waUrl  = `https://wa.me/491607530948?text=${encodeURIComponent(waText)}`;
+  return (
+    <div className="px-5 md:px-8 pt-8 md:pt-12 lg:pt-16 pb-12 md:pb-16">
+      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+        ¡Listo, {name}!
+      </h1>
+      <p className="mt-3 text-[15px] md:text-base lg:text-lg text-slate-600 leading-relaxed">
+        Recibimos tu solicitud. Te hemos enviado un correo a <strong>{email}</strong> con
+        los pasos siguientes y materiales para empezar.
+      </p>
+      <p className="mt-2 text-[14px] md:text-base text-slate-600 leading-relaxed">
+        Revisa tu bandeja de entrada (y la de spam, por si acaso) en los próximos minutos.
+      </p>
+
+      <div className="mt-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 md:p-5">
+        <p className="text-[12px] font-bold uppercase tracking-wider text-amber-900">
+          💡 ¿Quieres agendar tu clase ya?
+        </p>
+        <p className="mt-1.5 text-[14.5px] md:text-[15px] text-amber-900 leading-snug">
+          Para reservar tu horario online y recibir los recordatorios, necesitamos
+          tu WhatsApp. Escríbenos ahora desde tu móvil:
+        </p>
+        <a
+          href={waUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-4 inline-flex items-center gap-2 h-12 px-5 rounded-2xl
+                     bg-emerald-500 text-white font-semibold text-[15px]
+                     shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition"
+        >
+          💬 Hablar con Stiv por WhatsApp
+        </a>
+      </div>
+
+      <p className="mt-8 text-[13px] text-slate-500 leading-relaxed">
+        Si prefieres, también puedes responder al email que te acabamos de enviar y
+        Stiv te coordinará todo desde ahí.
+      </p>
     </div>
   );
 }

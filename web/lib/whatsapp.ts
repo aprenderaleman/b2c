@@ -49,9 +49,13 @@ export function isWhatsappBlocked(phoneE164: string): boolean {
  * Caller is responsible for ensuring the number is valid & opted-in.
  */
 export async function sendWhatsappText(
-  phoneE164: string,
+  phoneE164: string | null | undefined,
   text: string,
 ): Promise<WhatsappResult> {
+  // Guarda: lead sin WhatsApp (form en 2 pasos, fase 2 saltada).
+  if (!phoneE164 || phoneE164.trim().length === 0) {
+    return { ok: false, reason: "no_whatsapp_on_lead" };
+  }
   // Bloqueo duro — números que pidieron no recibir mensajes automáticos.
   if (isWhatsappBlocked(phoneE164)) {
     console.warn("[whatsapp] número en blocklist, mensaje suprimido:", phoneE164);
@@ -107,11 +111,15 @@ export async function sendWhatsappText(
  * @param leadId       Para tracking en timeline.
  */
 export async function sendWhatsappDocument(
-  phoneE164: string,
+  phoneE164: string | null | undefined,
   mediaUrl: string,
   fileName: string,
   opts: { caption?: string; kind?: string; leadId?: string } = {},
 ): Promise<WhatsappResult> {
+  // Guarda: lead sin WhatsApp.
+  if (!phoneE164 || phoneE164.trim().length === 0) {
+    return { ok: false, reason: "no_whatsapp_on_lead" };
+  }
   // Bloqueo duro — mismos números que sendWhatsappText.
   if (isWhatsappBlocked(phoneE164)) {
     console.warn("[whatsapp] número en blocklist, documento suprimido:", phoneE164);
