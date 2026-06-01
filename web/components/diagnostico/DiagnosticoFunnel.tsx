@@ -426,6 +426,11 @@ export function DiagnosticoFunnel() {
   async function submitData() {
     if (submitting) return;
 
+    // Telemetría: el lead pulsó "Crear mi plan". Lo trackeamos AQUÍ,
+    // antes de cualquier validación, para que el step=5 cuente
+    // INTENTOS de envío (no éxitos).
+    trackStep(5, "submit_attempt");
+
     // ── Validación local pre-submit ────────────────────────────
     // Comprobaciones que ya cubre `canSubmit`, pero dejamos doble
     // chequeo en submit para defensa (autocompletado/extension del
@@ -437,14 +442,17 @@ export function DiagnosticoFunnel() {
     // completo con otro prefijo (caso +49 default + número español).
     const phoneRes = resolvePhone(form.countryCode, form.whatsapp);
     if (!nameOk) {
+      trackStep(5, "client_invalid_name");
       setSubmitErr("Pon tu nombre completo (mínimo 2 caracteres).");
       return;
     }
     if (!emailOk) {
+      trackStep(5, "client_invalid_email");
       setSubmitErr("Email inválido — revisa que tenga @ y dominio.");
       return;
     }
     if (!phoneRes.valid) {
+      trackStep(5, "client_invalid_phone");
       setSubmitErr("Número de WhatsApp no válido. Revisa el prefijo y los dígitos.");
       return;
     }
@@ -497,6 +505,7 @@ export function DiagnosticoFunnel() {
           body:    JSON.stringify(body),
         });
       } catch {
+        trackStep(5, "network_error");
         setSubmitErr("No tenemos conexión. Revisa tu internet e inténtalo de nuevo.");
         setSubmitting(false);
         return;
@@ -506,16 +515,19 @@ export function DiagnosticoFunnel() {
       try {
         json = await res.json();
       } catch {
+        trackStep(5, "server_bad_response");
         setSubmitErr("Respuesta inesperada del servidor. Inténtalo en unos segundos.");
         setSubmitting(false);
         return;
       }
       if (res.status === 409 && json.error === "already_registered") {
+        trackStep(5, "already_registered");
         setAlreadyRegistered({ loginUrl: json.login_url ?? "/login" });
         setSubmitting(false);
         return;
       }
       if (res.status === 429) {
+        trackStep(5, "rate_limited");
         setSubmitErr("Demasiados intentos desde tu IP. Espera 10 minutos e inténtalo de nuevo.");
         setSubmitting(false);
         return;
@@ -525,6 +537,9 @@ export function DiagnosticoFunnel() {
         // humanos. El backend devuelve issues[].path indicando qué
         // campo falló.
         if (json.error === "validation_failed" && Array.isArray(json.issues)) {
+          const firstIssue = json.issues[0];
+          const path = (firstIssue?.path ?? []).join(".");
+          trackStep(5, `server_validation_${path || "unknown"}`);
           const fieldErrors: Record<string, string> = {
             email:         "Email inválido — revisa que tenga @ y dominio.",
             name:          "Pon tu nombre completo (mínimo 2 caracteres).",
@@ -532,10 +547,9 @@ export function DiagnosticoFunnel() {
             "answers.level": "Selecciona tu nivel en el paso anterior.",
             motivo_inicial: "Vuelve al paso 1 y elige una opción.",
           };
-          const firstIssue = json.issues[0];
-          const path = (firstIssue?.path ?? []).join(".");
           setSubmitErr(fieldErrors[path] ?? firstIssue?.message ?? "Datos inválidos. Revísalos.");
         } else {
+          trackStep(5, `server_5xx_${res.status}`);
           setSubmitErr("No pudimos guardar tu plan. Inténtalo en unos segundos o escríbenos por WhatsApp.");
         }
         setSubmitting(false);
@@ -753,6 +767,15 @@ export function DiagnosticoFunnel() {
               submitting={submitting}
               submitErr={submitErr}
               onSubmit={submitData}
+              onMicroEvent={(e) => {
+                // Mapeo de eventos del form a step en funnel_progress:
+                //   form_opened  → step=3 (lead llegó al form)
+                //   field_typed  → step=4 (escribió al menos 1 carácter)
+                // step=5 lo dispara submitData (intento de envío con
+                // o sin éxito). step=6 = lead creado OK.
+                if (e === "form_opened") trackStep(3, "form_opened");
+                else if (e === "field_typed") trackStep(4, "field_typed");
+              }}
             />
           )
         )}
@@ -939,14 +962,30 @@ function LowBudgetExit({ onBack }: { onBack: () => void }) {
 }
 
 function DataCaptureStep({
-  form, setForm, submitting, submitErr, onSubmit,
+  form, setForm, submitting, submitErr, onSubmit, onMicroEvent,
 }: {
   form:        FormData;
   setForm:     React.Dispatch<React.SetStateAction<FormData>>;
   submitting:  boolean;
   submitErr:   string | null;
   onSubmit:    () => void;
+  // Telemetría granular del paso 3 (form). Eventos:
+  //   "form_opened"   → la pantalla del form se renderizó.
+  //   "field_typed"   → primer carácter escrito en cualquier campo.
+  onMicroEvent?: (event: "form_opened" | "field_typed") => void;
 }) {
+  // Disparar "form_opened" una vez al montar.
+  useEffect(() => { onMicroEvent?.("form_opened"); }, [onMicroEvent]);
+  // Disparar "field_typed" la PRIMERA vez que cualquier campo cambia.
+  const [typedOnce, setTypedOnce] = useState(false);
+  useEffect(() => {
+    if (typedOnce) return;
+    const any = form.name.length > 0 || form.email.length > 0 || form.whatsapp.length > 0;
+    if (any) {
+      setTypedOnce(true);
+      onMicroEvent?.("field_typed");
+    }
+  }, [form.name, form.email, form.whatsapp, typedOnce, onMicroEvent]);
   // Paso 5 v4 (Gelfis 2026-05-26):
   //  - WhatsApp PRIMERO (es el canal principal — los leads no abren email).
   //  - Email OBLIGATORIO (revertido — necesitamos backup channel).
