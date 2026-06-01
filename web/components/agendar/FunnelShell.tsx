@@ -176,7 +176,7 @@ export function StepFrame({
 
       {onContinue && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-30
+          className="fixed bottom-0 left-0 right-0 md:left-1/2 z-30
                      bg-gradient-to-t from-white via-white/95 to-white/0
                      pt-6"
         >

@@ -906,14 +906,14 @@ function MotivoInicialStep({
   onPick: (id: MotivoId) => void;
 }) {
   return (
-    <div className="px-5 md:px-8 pt-5 md:pt-10 lg:pt-14 pb-10 md:pb-16">
+    <div className="px-5 md:px-8 lg:px-10 pt-5 md:pt-9 lg:pt-12 pb-10 md:pb-16">
       {/* Layout estilo Preply (2026-05-26): título alineado a la
           izquierda, no centrado. La ilustración va en el panel
           adyacente (IllustrationPanel), no necesitamos hero grande
           aquí — basta con la pregunta principal directa. */}
       <h2
         id="motivo-inicial-question"
-        className="text-[22px] sm:text-2xl md:text-3xl lg:text-[32px] font-extrabold tracking-tight text-slate-900 leading-tight"
+        className="text-[22px] sm:text-2xl md:text-[24px] lg:text-[28px] font-extrabold tracking-tight text-slate-900 leading-tight"
       >
         ¿Qué tipo de clases de alemán buscas?
       </h2>
@@ -925,7 +925,7 @@ function MotivoInicialStep({
       <ul
         role="radiogroup"
         aria-labelledby="motivo-inicial-question"
-        className="mt-7 md:mt-10 space-y-2"
+        className="mt-7 md:mt-9 space-y-2 md:space-y-3"
       >
         {MOTIVO_OPTIONS.map(opt => {
           const isSelected = selected === opt.id;
@@ -948,7 +948,7 @@ function MotivoInicialStep({
                   {opt.emoji}
                 </span>
                 {/* +10% en móvil (text-[15.5px] vs antes 14) */}
-                <h3 className="text-[15.5px] sm:text-[15px] md:text-base lg:text-lg leading-snug font-medium m-0">
+                <h3 className="text-[15.5px] sm:text-[15px] md:text-[15px] lg:text-[16px] leading-snug font-medium m-0">
                   {opt.h3}
                 </h3>
               </button>
@@ -970,16 +970,16 @@ function QuizStep({
   personalizedH2?: string | null;
 }) {
   return (
-    <div className="px-5 md:px-8 pt-6 md:pt-10 lg:pt-14 pb-12 md:pb-16">
+    <div className="px-5 md:px-8 lg:px-10 pt-6 md:pt-9 lg:pt-12 pb-12 md:pb-16">
       {personalizedH2 && (
-        <h2 className="mb-4 md:mb-5 text-[18px] sm:text-xl md:text-2xl lg:text-[26px] font-semibold text-warm leading-snug">
+        <h2 className="mb-4 md:mb-5 text-[18px] sm:text-xl md:text-[21px] lg:text-[24px] font-semibold text-warm leading-snug">
           {personalizedH2}
         </h2>
       )}
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+      <h1 className="text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900">
         {title}
       </h1>
-      <ul className="mt-6 space-y-3">
+      <ul className="mt-6 md:mt-8 space-y-3 md:space-y-4">
         {options.map(opt => {
           const isSelected = selected === opt.id;
           return (
@@ -995,7 +995,7 @@ function QuizStep({
                               : "border-slate-200 bg-slate-50 hover:bg-slate-100"}`}
               >
                 <span className="text-2xl md:text-3xl" aria-hidden>{opt.emoji}</span>
-                <span className="text-[15px] md:text-base lg:text-lg leading-snug">{opt.label}</span>
+                <span className="text-[15px] md:text-[15px] lg:text-[16px] leading-snug">{opt.label}</span>
               </button>
             </li>
           );
@@ -1008,10 +1008,10 @@ function QuizStep({
 function LowBudgetExit({ onBack }: { onBack: () => void }) {
   return (
     <div className="px-5 md:px-8 pt-8 md:pt-12 lg:pt-16 pb-12 md:pb-16">
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+      <h1 className="text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900">
         Gracias por contarnos tu situación
       </h1>
-      <p className="mt-4 text-[15px] md:text-base lg:text-lg text-slate-700 leading-relaxed">
+      <p className="mt-4 text-[15px] md:text-[15px] lg:text-[16px] text-slate-700 leading-relaxed">
         Nuestras clases con profesores empiezan desde 285€/mes, así que probablemente
         no encajemos con tu momento actual. Pero no te quedes sin avanzar — empieza
         con Schule, nuestra plataforma de auto-estudio impulsada por IA.
@@ -1124,29 +1124,29 @@ function DataCaptureStep({
 
   const firstName = (form.name ?? "").trim().split(/\s+/)[0] || "tú";
   return (
-    <div className="px-5 pt-6 pb-[calc(env(safe-area-inset-bottom)+5.5rem)]">
+    <div className="px-5 md:px-8 pt-6 md:pt-10 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-[calc(env(safe-area-inset-bottom)+7rem)]">
       {phase === "email" ? (
         <>
-          <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900 leading-tight">
             ¡Estamos creando tu plan!
           </h1>
-          <p className="mt-2 text-[15px] md:text-base lg:text-lg text-slate-600 leading-relaxed">
+          <p className="mt-3 md:mt-4 text-[15px] md:text-[15px] lg:text-[16px] text-slate-600 leading-relaxed">
             Empecemos por los datos básicos para enviarte tu plan personalizado.
           </p>
         </>
       ) : (
         <>
-          <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+          <h1 className="text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900 leading-tight">
             ¡Perfecto, {firstName}!
           </h1>
-          <p className="mt-2 text-[15px] md:text-base lg:text-lg text-slate-600 leading-relaxed">
+          <p className="mt-3 md:mt-4 text-[15px] md:text-[15px] lg:text-[16px] text-slate-600 leading-relaxed">
             Para enviarte el <strong>link al aula</strong> y los <strong>recordatorios de tu clase</strong>,
             déjanos tu WhatsApp:
           </p>
         </>
       )}
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-7 md:mt-9 space-y-5 md:space-y-6">
         {/* FASE EMAIL: Nombre */}
         {phase === "email" && (
         <Field label="Nombre">
@@ -1155,7 +1155,7 @@ function DataCaptureStep({
             autoComplete="name"
             value={form.name}
             onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            className="w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border border-slate-200
+            className="w-full h-12 md:h-13 px-4 md:text-base lg:text-[16px] rounded-xl bg-slate-50 border border-slate-200
                        text-slate-900 placeholder:text-slate-400
                        focus:outline-none focus:border-warm focus:bg-slate-100"
             placeholder="Tu nombre y apellido"
@@ -1172,7 +1172,7 @@ function DataCaptureStep({
               inputMode="tel"
               value={form.countryCode}
               onChange={e => setForm(f => ({ ...f, countryCode: e.target.value.replace(/[^0-9+]/g, "") }))}
-              className="w-20 md:w-24 h-12 md:h-14 px-3 md:text-base lg:text-lg rounded-xl bg-slate-50 border border-slate-200
+              className="w-20 md:w-24 h-12 md:h-13 px-3 md:text-base lg:text-[16px] rounded-xl bg-slate-50 border border-slate-200
                          text-slate-900 text-center
                          focus:outline-none focus:border-warm focus:bg-slate-100"
               placeholder="+49"
@@ -1183,7 +1183,7 @@ function DataCaptureStep({
               autoComplete="tel"
               value={form.whatsapp}
               onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
-              className={`flex-1 h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border
+              className={`flex-1 h-12 md:h-13 px-4 md:text-base lg:text-[16px] rounded-xl bg-slate-50 border
                          text-slate-900 placeholder:text-slate-400
                          focus:outline-none focus:bg-slate-100 ${
                            phoneError
@@ -1250,7 +1250,7 @@ function DataCaptureStep({
             autoComplete="email"
             value={form.email}
             onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-            className={`w-full h-12 md:h-14 px-4 md:text-base lg:text-lg rounded-xl bg-slate-50 border
+            className={`w-full h-12 md:h-13 px-4 md:text-base lg:text-[16px] rounded-xl bg-slate-50 border
                        text-slate-900 placeholder:text-slate-400
                        focus:outline-none focus:bg-slate-100 ${
                          form.email.length > 0 && !emailValid
@@ -1278,15 +1278,15 @@ function DataCaptureStep({
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30
+      <div className="fixed bottom-0 left-0 right-0 md:left-1/2 z-30
                       bg-gradient-to-t from-white via-white/95 to-white/0 pt-6">
-        <div className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pb-4"
+        <div className="mx-auto max-w-xl px-5 md:px-8 pb-4"
              style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}>
           <button
             type="button"
             onClick={onSubmit}
             disabled={!canSubmit}
-            className="w-full h-12 md:h-14 lg:h-16 rounded-2xl bg-warm text-warm-foreground font-semibold text-base md:text-lg lg:text-xl
+            className="w-full h-12 md:h-13 lg:h-14 rounded-2xl bg-warm text-warm-foreground font-semibold text-base md:text-[16px] lg:text-[17px]
                        shadow-lg shadow-warm/20 active:scale-[0.98] transition
                        disabled:opacity-50 disabled:active:scale-100"
           >
@@ -1529,7 +1529,7 @@ function CalendarStep({
 
   return (
     <div className={`px-5 pt-6 ${selectedSlot ? "pb-[calc(env(safe-area-inset-bottom)+9rem)] md:pb-[calc(env(safe-area-inset-bottom)+8rem)]" : "pb-12"}`}>
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+      <h1 className="text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900">
         ¡Tu plan está listo, {name}!
       </h1>
 
@@ -1549,7 +1549,7 @@ function CalendarStep({
         />
       </div>
 
-      <p className="mt-6 text-[15px] md:text-base lg:text-lg text-slate-700 leading-relaxed">
+      <p className="mt-6 text-[15px] md:text-[15px] lg:text-[16px] text-slate-700 leading-relaxed">
         Reserva ahora tu clase de <strong>alemán</strong> prueba <strong>GRATIS de 30 min</strong> con tu profesor alemán nativo que también habla español:
       </p>
 
@@ -1619,7 +1619,7 @@ function CalendarStep({
           Va fuera del sticky para que NO se superponga con el botón.
           Se desplaza con el scroll y empuja los slots hacia arriba. */}
       {selectedSlot && confirmLabel && (
-        <div className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 mt-6 space-y-3">
+        <div className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 mt-6 md:mt-8 space-y-3 md:space-y-4">
           <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3">
             <div className="flex items-start gap-2.5">
               <span className="text-lg leading-none mt-0.5" aria-hidden>💎</span>
@@ -1654,25 +1654,25 @@ function CalendarStep({
           compromiso vive in-page arriba (no se superpone). */}
       {selectedSlot && confirmLabel && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-30
+          className="fixed bottom-0 left-0 right-0 md:left-1/2 z-30
                      bg-gradient-to-t from-white via-white/95 to-white/0
                      pt-6"
         >
           <div
-            className="mx-auto max-w-xl md:max-w-2xl lg:max-w-3xl px-5 pb-4"
+            className="mx-auto max-w-xl md:max-w-xl lg:max-w-xl px-5 md:px-8 pb-4"
             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}
           >
             <button
               type="button"
               onClick={confirmBooking}
               disabled={!canConfirm}
-              className="w-full h-14 md:h-16 lg:h-[68px] rounded-2xl bg-warm text-warm-foreground font-semibold
+              className="w-full h-14 md:h-13 lg:h-14 rounded-2xl bg-warm text-warm-foreground font-semibold
                          shadow-lg shadow-warm/20 active:scale-[0.98] transition
                          disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100
                          flex flex-col items-center justify-center gap-0.5"
             >
               {submitting ? (
-                <span className="flex items-center gap-2 text-base md:text-lg">
+                <span className="flex items-center gap-2 text-base">
                   <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
                   Confirmando…
                 </span>
@@ -1681,7 +1681,7 @@ function CalendarStep({
                   <span className="text-[11px] md:text-xs font-semibold uppercase tracking-[0.14em] opacity-75">
                     Confirmar
                   </span>
-                  <span className="text-[15px] md:text-lg lg:text-xl font-bold capitalize">
+                  <span className="text-[15px] md:text-[16px] lg:text-[17px] font-bold capitalize">
                     {confirmLabel}
                   </span>
                 </>
@@ -1710,10 +1710,10 @@ function EmailOnlyThanksScreen({ name, email }: { name: string; email: string })
   const waUrl  = `https://wa.me/491607530948?text=${encodeURIComponent(waText)}`;
   return (
     <div className="px-5 md:px-8 pt-8 md:pt-12 lg:pt-16 pb-12 md:pb-16">
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+      <h1 className="text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900">
         ¡Listo, {name}!
       </h1>
-      <p className="mt-3 text-[15px] md:text-base lg:text-lg text-slate-600 leading-relaxed">
+      <p className="mt-3 text-[15px] md:text-[15px] lg:text-[16px] text-slate-600 leading-relaxed">
         Recibimos tu solicitud. Te hemos enviado un correo a <strong>{email}</strong> con
         los pasos siguientes y materiales para empezar.
       </p>
@@ -1752,10 +1752,10 @@ function EmailOnlyThanksScreen({ name, email }: { name: string; email: string })
 function AlreadyRegisteredScreen({ loginUrl, onBack }: { loginUrl: string; onBack: () => void }) {
   return (
     <div className="px-5 md:px-8 pt-8 md:pt-12 lg:pt-16 pb-12 md:pb-16">
-      <h1 className="text-[26px] sm:text-3xl md:text-4xl lg:text-[44px] font-extrabold tracking-tight text-slate-900">
+      <h1 className="text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900">
         Ese email ya tiene cuenta
       </h1>
-      <p className="mt-4 text-[15px] md:text-base lg:text-lg text-slate-700 leading-relaxed">
+      <p className="mt-4 text-[15px] md:text-[15px] lg:text-[16px] text-slate-700 leading-relaxed">
         Detectamos que ya eres parte de Aprender-Aleman.de con ese email.
         Inicia sesión y agenda tu clase desde tu panel.
       </p>
