@@ -114,13 +114,17 @@ export async function getFunnelAdsData(days: number): Promise<FunnelAdsData> {
   ).size;
 
   // Pasos 3 (datos) y 4 (trial) — usamos `leads` como ground truth.
-  // Más robusto que funnel_progress porque captura leads creados antes
-  // de la activación de la telemetría granular.
+  //
+  // Nota crítica: book-trial cambia el source del lead de 'diagnostico'
+  // a 'funnel_trial_self_book' al agendar la clase. Por eso NO filtramos
+  // por source aquí; en su lugar usamos `motivo_inicial IS NOT NULL`
+  // (lo setea sólo el funnel) o el flag de funnel_progress como
+  // discriminador. Sin esto la métrica de trials daba 0 falsamente.
   const { data: leadsRows } = await sb
     .from("leads")
-    .select("id, motivo_inicial, trial_scheduled_at, status")
+    .select("id, motivo_inicial, trial_scheduled_at, status, source")
     .gte("created_at", since)
-    .eq("source", "diagnostico");
+    .or("motivo_inicial.not.is.null,source.eq.diagnostico,source.eq.funnel_trial_self_book");
 
   const sessionsStep3 = (leadsRows ?? []).length;
   const sessionsStep4 = (leadsRows ?? []).filter(
@@ -206,11 +210,14 @@ export async function getFunnelAdsData(days: number): Promise<FunnelAdsData> {
   // Nota: en el funnel simplificado goal/urgency/budget vienen del
   // followup de Stiv, no del quiz. Aquí mostramos los datos de los
   // leads que completaron el form (nivel + país).
+  // Países de los leads que completaron el form. Misma lógica del
+  // paso 3: NO filtramos por source (cambia tras book-trial), filtramos
+  // por leads del funnel (motivo_inicial NOT NULL o source funnel).
   const { data: countryData } = await sb
     .from("leads")
     .select("country")
     .gte("created_at", since)
-    .eq("source", "diagnostico");
+    .or("motivo_inicial.not.is.null,source.eq.diagnostico,source.eq.funnel_trial_self_book");
   const countryCounts: Record<string, number> = {};
   for (const r of (countryData ?? []) as Array<{ country: string | null }>) {
     const k = r.country ?? "(sin país)";
@@ -312,11 +319,14 @@ async function getMotivoBreakdown(sb: SB, since: string): Promise<MotivoBreakdow
   }
 
   // Leads por motivo (paso 3 = datos) + trial scheduled (paso 4) + converted
+  // No filtramos por source — el lead empieza como source='diagnostico'
+  // pero book-trial lo cambia a 'funnel_trial_self_book' al agendar.
+  // El discriminador real es motivo_inicial NOT NULL (lo setea el funnel).
   const { data: leads } = await sb
     .from("leads")
     .select("motivo_inicial, trial_scheduled_at, status")
     .gte("created_at", since)
-    .eq("source", "diagnostico");
+    .not("motivo_inicial", "is", null);
 
   const reachedDatos: Record<string, number> = {};
   const reachedTrial: Record<string, number> = {};
