@@ -81,6 +81,7 @@ export default async function AllLeadsPage({
     german_level:  toArray(sp.level),
     language:      sp.lang === "es" || sp.lang === "de" ? sp.lang : undefined,
     has_trial:     sp.trial === "yes" || sp.trial === "no" ? sp.trial : undefined,
+    cold_call:     sp.cold_call === "pending" || sp.cold_call === "done" ? sp.cold_call : undefined,
     motivo:        toArray(sp.motivo),
     q:             typeof sp.q === "string" ? sp.q : undefined,
     limit:         PAGE_SIZE,
@@ -145,6 +146,11 @@ export default async function AllLeadsPage({
           <option value="yes">Con clase</option>
           <option value="no">Sin clase</option>
         </select>
+        <select name="cold_call" defaultValue={filter.cold_call ?? ""} className="input-text">
+          <option value="">¿Llamada fría?</option>
+          <option value="pending">⏰ Pendiente</option>
+          <option value="done">✅ Hecha</option>
+        </select>
         <select name="motivo" defaultValue={(filter.motivo?.[0] ?? "") as string} className="input-text">
           <option value="">Todos los motivos</option>
           {["particulares","intensivo","certificado","profesional"]
@@ -160,6 +166,7 @@ export default async function AllLeadsPage({
               <Th>Nombre</Th>
               <Th>WhatsApp</Th>
               <Th>Estado</Th>
+              <Th><span title="Llamada fría">📞</span></Th>
               <Th>Motivo</Th>
               <Th>Nivel</Th>
               <Th>Objetivo</Th>
@@ -172,7 +179,7 @@ export default async function AllLeadsPage({
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
             {rows.length === 0 && (
-              <tr><td colSpan={11} className="p-6 text-center text-slate-500 dark:text-slate-400">No hay leads que coincidan.</td></tr>
+              <tr><td colSpan={12} className="p-6 text-center text-slate-500 dark:text-slate-400">No hay leads que coincidan.</td></tr>
             )}
             {rows.map((l) => (
               <tr key={l.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
@@ -183,6 +190,17 @@ export default async function AllLeadsPage({
                 </Td>
                 <Td><code className="text-xs">{l.whatsapp_normalized ?? l.email ?? "—"}</code></Td>
                 <Td><StatusBadge status={l.status} /></Td>
+                <Td>
+                  {l.cold_call_done_at
+                    ? (
+                      <span title={`Llamada fría hecha el ${new Date(l.cold_call_done_at).toLocaleString("es-ES")}`}
+                            className="text-emerald-600 dark:text-emerald-400">✅</span>
+                    )
+                    : (
+                      <span title="Llamada fría pendiente"
+                            className="text-amber-600 dark:text-amber-400">⏰</span>
+                    )}
+                </Td>
                 <Td>{l.motivo_inicial ? (MOTIVO_LABELS[l.motivo_inicial] ?? l.motivo_inicial) : "—"}</Td>
                 <Td>{l.german_level ?? "—"}</Td>
                 <Td>{l.goal ? (GOAL_LABELS[l.goal] ?? l.goal) : "—"}</Td>

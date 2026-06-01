@@ -129,6 +129,10 @@ export type LeadsFilter = {
   german_level?: string[];
   language?: "es" | "de";
   has_trial?: "yes" | "no";
+  // Filtro de llamada fría:
+  //   "pending" = aún no se ha hecho (cold_call_done_at IS NULL)
+  //   "done"    = ya se hizo (cold_call_done_at IS NOT NULL)
+  cold_call?: "pending" | "done";
   // Motivo inicial (paso 0 del funnel diagnóstico). Si se filtra,
   // solo devuelve leads cuyo motivo_inicial está en el set.
   motivo?: string[];
@@ -148,6 +152,8 @@ export async function getLeads(filter: LeadsFilter = {}): Promise<{ rows: LeadRo
   if (filter.language)             query = query.eq("language", filter.language);
   if (filter.has_trial === "yes")  query = query.not("trial_scheduled_at", "is", null);
   if (filter.has_trial === "no")   query = query.is("trial_scheduled_at", null);
+  if (filter.cold_call === "pending") query = query.is("cold_call_done_at", null);
+  if (filter.cold_call === "done")    query = query.not("cold_call_done_at", "is", null);
   if (filter.motivo?.length)       query = query.in("motivo_inicial", filter.motivo);
   if (filter.q) {
     const like = `%${filter.q.replace(/[%_]/g, "")}%`;
