@@ -179,16 +179,38 @@ class WhatsAppService:
     # Caso 2026-05-30: Gelfis pidió cortar todo a +491607530948
     # (recibía daily-digest, send-fail alerts, silent-inbound, etc).
     # Comparamos por dígitos (ignora +, espacios) para ser robustos.
-    _BLOCKLIST_DIGITS = {
+    #
+    # La lista se fusiona con `system_config.whatsapp_blocklist_phones`
+    # (CSV) para permitir añadir números nuevos sin redeploy. Lo
+    # leemos cada llamada (no cacheado) para que el bloqueo aplique
+    # en cuestión de segundos al cambiar el config.
+    _BLOCKLIST_DIGITS_HARDCODED = frozenset({
         "491607530948",
-    }
+    })
+
+    @classmethod
+    def _blocklist_digits(cls) -> frozenset[str]:
+        extra: set[str] = set()
+        try:
+            # Import lazy para evitar dependencia dura del módulo
+            # whatsapp_service en agents.shared cuando se usa en
+            # scripts sueltos / tests.
+            from agents.shared.db import get_config
+            raw = get_config("whatsapp_blocklist_phones") or ""
+            for piece in raw.split(","):
+                digits = re.sub(r"\D", "", piece)
+                if digits:
+                    extra.add(digits)
+        except Exception:
+            pass
+        return cls._BLOCKLIST_DIGITS_HARDCODED | frozenset(extra)
 
     @classmethod
     def _is_blocklisted(cls, to_e164: str | None) -> bool:
         if not to_e164:
             return False
         digits = re.sub(r"\D", "", to_e164)
-        return digits in cls._BLOCKLIST_DIGITS
+        return digits in cls._blocklist_digits()
 
     def send_text(
         self,

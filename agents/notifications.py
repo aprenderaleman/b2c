@@ -76,16 +76,49 @@ def _ensure_table() -> None:
 # Caso 2026-05-30: Gelfis pidió cortar TODO el flujo a +491607530948
 # (estaba recibiendo daily-digest, send-fail, silent-inbound, etc).
 # Comparado por dígitos solamente (ignora +, espacios, etc).
-_BLOCKLIST_DIGITS = {
+_BLOCKLIST_DIGITS_HARDCODED = frozenset({
     "491607530948",
-}
+})
+
+
+def _blocklist_digits() -> frozenset[str]:
+    """
+    Devuelve el set de dígitos bloqueados, fusionando la lista
+    hardcoded con la columna `system_config.whatsapp_blocklist_phones`
+    (CSV). Esto permite añadir números nuevos desde la BD SIN redeploy
+    — útil cuando hay una emergencia y no se puede esperar al cron.
+    """
+    extra: set[str] = set()
+    try:
+        raw = get_config("whatsapp_blocklist_phones") or ""
+        for piece in raw.split(","):
+            digits = "".join(c for c in piece if c.isdigit())
+            if digits:
+                extra.add(digits)
+    except Exception:
+        # get_config puede fallar si la tabla no existe en el momento
+        # del import. Caemos a la lista hardcoded sin romper.
+        pass
+    return _BLOCKLIST_DIGITS_HARDCODED | frozenset(extra)
 
 
 def _is_blocklisted(number_e164: str | None) -> bool:
     if not number_e164:
         return False
     digits = "".join(c for c in number_e164 if c.isdigit())
-    return digits in _BLOCKLIST_DIGITS
+    return digits in _blocklist_digits()
+
+
+def _killswitch_active() -> bool:
+    """
+    Killswitch global de notificaciones a Gelfis. Si
+    `system_config.gelfis_notifications_killswitch = 'on'` entonces
+    NINGUNA función notify_* manda nada. Flippable desde la BD.
+    """
+    try:
+        return (get_config("gelfis_notifications_killswitch") or "").lower() == "on"
+    except Exception:
+        return False
 
 
 def _gelfis_number() -> str | None:
@@ -152,6 +185,11 @@ def _send(
     lead_id: str | None = None,
 ) -> bool:
     _ensure_table()
+
+    # Killswitch global desde system_config — flippable sin redeploy.
+    if _killswitch_active():
+        log.warning("gelfis_notifications_killswitch=on — skipping %s", kind)
+        return False
 
     number = _gelfis_number()
     if not number:
