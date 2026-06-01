@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
 import { getFunnelAdsData, getAvailableCountries, TELEMETRY_STARTS_AT } from "@/lib/funnel-ads";
+import { RefreshButton } from "./RefreshButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Funnel Ads · Admin" };
@@ -99,6 +100,7 @@ export default async function FunnelAdsPage({
             los recoge Stiv por WhatsApp (eliminados del funnel el {TELEMETRY_STARTS_AT}).
           </p>
         </div>
+        <RefreshButton at={new Date().toLocaleTimeString("es-ES", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", second: "2-digit" })} />
       </div>
 
       {/* ── Filtros ────────────────────────────────────────────── */}
@@ -271,6 +273,9 @@ export default async function FunnelAdsPage({
         </div>
       </section>
 
+      {/* ── Micro-embudo del paso 3 (form) ───────────────────── */}
+      <MicroFunnelSection data={data.microFunnel} />
+
       {/* ── Respuestas más populares por paso ─────────────────── */}
       <section className="mt-8">
         <h2 className="text-lg font-semibold text-white">¿Qué eligen?</h2>
@@ -378,6 +383,138 @@ export default async function FunnelAdsPage({
         Datos en vivo. Quiz simplificado activado el {TELEMETRY_STARTS_AT}.
       </div>
     </div>
+  );
+}
+
+// ── Micro-embudo del paso 3 (form) ────────────────────────────────
+// Desglosa qué pasa entre "lead eligió nivel" y "lead creado": ¿llegó
+// al form? ¿escribió algo? ¿intentó enviar? ¿qué validación falló?
+function MicroFunnelSection({ data }: { data: import("@/lib/funnel-ads").MicroFunnelData }) {
+  // Cada sub-paso muestra el % vs el anterior. El "drop" entre dos
+  // sub-pasos es donde se va el lead.
+  const subSteps = [
+    { label: "Eligen nivel (paso 2)",        n: data.reached_step2,          colorBase: "from-warm to-amber-300" },
+    { label: "Abre el form",                  n: data.reached_form_opened,    colorBase: "from-warm to-amber-300" },
+    { label: "Escribe al menos 1 carácter",   n: data.reached_field_typed,    colorBase: "from-warm to-amber-300" },
+    { label: "Pulsa Crear mi plan",           n: data.reached_submit_attempt, colorBase: "from-warm to-amber-300" },
+    { label: "Lead creado OK (paso 6)",       n: data.reached_submit_ok,      colorBase: "from-emerald-500 to-emerald-300" },
+  ];
+  const entry = subSteps[0].n || 1;
+
+  const hasMicroData = subSteps.slice(1).some(s => s.n > 0);
+
+  // Mapeo de outcome → etiqueta humana + color (semáforo).
+  const OUTCOME_LABELS: Record<string, { label: string; color: string }> = {
+    submit_attempt:                { label: "🟢 OK (pasó a paso 6)",           color: "text-emerald-300" },
+    client_invalid_name:           { label: "🔴 Validación cliente: nombre",   color: "text-red-300" },
+    client_invalid_email:          { label: "🔴 Validación cliente: email",    color: "text-red-300" },
+    client_invalid_phone:          { label: "🔴 Validación cliente: WhatsApp", color: "text-red-300" },
+    network_error:                 { label: "🟡 Error de red (lead sin internet)", color: "text-amber-300" },
+    server_bad_response:           { label: "🔴 Respuesta servidor inesperada", color: "text-red-300" },
+    rate_limited:                  { label: "🟡 Rate limit (10/IP/10min)",     color: "text-amber-300" },
+    already_registered:            { label: "🔵 Email ya registrado",          color: "text-blue-300" },
+    server_validation_email:       { label: "🔴 Server: email inválido",       color: "text-red-300" },
+    server_validation_whatsapp_e164: { label: "🔴 Server: WhatsApp inválido",  color: "text-red-300" },
+    server_validation_name:        { label: "🔴 Server: nombre inválido",      color: "text-red-300" },
+  };
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold text-white">Micro-embudo del paso 3 (form)</h2>
+      <p className="mt-1 text-xs text-white/55">
+        Dentro del paso 3 (formulario de datos): ¿dónde se pierden los leads exactamente?
+        Telemetría activa desde {data.microStartsAt}.
+      </p>
+
+      {!hasMicroData && (
+        <div className="mt-3 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-100">
+          ℹ️ Sin datos en este rango. La telemetría granular empezó el {data.microStartsAt} —
+          los nuevos leads desde esa fecha generan estos micro-eventos. Refresca esta
+          página dentro de unas horas para ver los primeros datos.
+        </div>
+      )}
+
+      {hasMicroData && (
+        <>
+          <div className="mt-3 space-y-2">
+            {subSteps.map((s, i) => {
+              const widthPct = entry > 0 ? 100 * s.n / entry : 0;
+              const prev = i > 0 ? subSteps[i - 1].n : null;
+              const drop = prev !== null && prev > 0 ? 100 * (prev - s.n) / prev : null;
+              const dropColor = drop === null ? "text-white/40"
+                : drop >= 50 ? "text-red-300"
+                : drop >= 25 ? "text-amber-300"
+                : "text-emerald-300";
+              return (
+                <div key={i} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                  <div className="flex items-center justify-between text-sm flex-wrap gap-2">
+                    <span className="font-medium text-white">{s.label}</span>
+                    <div className="flex items-center gap-3 text-xs">
+                      <span className="text-white/60">{s.n.toLocaleString()} sesiones</span>
+                      {drop !== null && (
+                        <span className={dropColor}>−{drop.toFixed(1)}% vs. anterior</span>
+                      )}
+                      <span className="text-white/40 tabular-nums w-14 text-right">
+                        {widthPct.toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="mt-2 h-2 w-full rounded-full bg-white/5 overflow-hidden">
+                    <div
+                      className={`h-full bg-gradient-to-r ${s.colorBase} rounded-full transition-all`}
+                      style={{ width: `${Math.max(2, widthPct)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Outcomes del submit (por qué se rechazó / aprobó) */}
+          {data.outcomes.length > 0 && (
+            <div className="mt-5 rounded-xl border border-white/10 bg-white/5 p-4">
+              <div className="text-xs uppercase tracking-wider text-white/50">
+                Resultados del envío
+              </div>
+              <div className="text-sm font-semibold text-white mt-0.5">
+                ¿Por qué se rechaza o aprueba "Crear mi plan"?
+              </div>
+              <p className="text-xs text-white/45 mt-1">
+                Último outcome por sesión que intentó enviar. Si vieras
+                muchos <strong>client_invalid_phone</strong>, la validación de WhatsApp es
+                el culpable.
+              </p>
+              <div className="mt-3 space-y-1.5">
+                {data.outcomes.map(o => {
+                  const info = OUTCOME_LABELS[o.outcome] ?? {
+                    label: o.outcome,
+                    color: "text-white/70",
+                  };
+                  return (
+                    <div key={o.outcome} className="text-[12px]">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`${info.color} truncate flex-1`} title={o.outcome}>
+                          {info.label}
+                        </span>
+                        <span className="text-white/55 tabular-nums shrink-0">
+                          {o.count} ({o.pct.toFixed(0)}%)
+                        </span>
+                      </div>
+                      <div className="mt-0.5 h-1 w-full rounded-full bg-white/5 overflow-hidden">
+                        <div
+                          className="h-full bg-warm/70"
+                          style={{ width: `${o.pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

@@ -64,7 +64,38 @@ export type FunnelAdsData = {
   motivoBreakdown: MotivoBreakdownRow[];
   alerts:      FunnelAlert[];
   telemetryStartsAt: string;
+  microFunnel: MicroFunnelData;
 };
+
+/**
+ * Micro-embudo dentro del paso 3 (form). Datos desde 2026-06-01
+ * (cuando se desplegó la telemetría granular).
+ *
+ * Pipeline interno:
+ *   step=2 (nivel elegido) → step=3 (form abierto) → step=4 (escribió
+ *   algo) → step=5 (intento de envío con outcome) → step=6 (lead OK).
+ *
+ * outcomes es el desglose de `funnel_progress.answer` cuando step=5.
+ * Permite ver POR QUÉ se rechaza un submit (validación cliente,
+ * server, rate limit, etc).
+ */
+export type MicroFunnelData = {
+  /** Sesiones únicas que llegaron a cada sub-paso. */
+  reached_step2:           number; // eligen nivel
+  reached_form_opened:     number; // step=3 / "form_opened"
+  reached_field_typed:     number; // step=4 / "field_typed"
+  reached_submit_attempt:  number; // step=5 (cualquier outcome)
+  reached_submit_ok:       number; // step=6 / lead creado
+  /** Desglose de outcomes del intento de envío. Sólo cuenta el
+   *  ÚLTIMO outcome por sesión (un lead puede intentar varias veces). */
+  outcomes:                Array<{ outcome: string; count: number; pct: number }>;
+  /** Fecha desde la que tenemos micro-datos (los rangos previos a esto
+   *  mostrarán 0 en los sub-pasos 3, 4, 5). */
+  microStartsAt:           string;
+};
+
+// Día en que se desplegó la telemetría granular del paso 3 (commit eede774).
+export const MICRO_TELEMETRY_STARTS_AT = "2026-06-01";
 
 // Día en que se activó funnel_progress + quiz simplificado.
 export const TELEMETRY_STARTS_AT = "2026-05-26";
@@ -273,6 +304,9 @@ export async function getFunnelAdsData(
 
   const motivoBreakdown = await getMotivoBreakdown(sb, since, country);
 
+  // ── 4. Micro-embudo del paso 3 (form) ──────────────────────────
+  const microFunnel = await getMicroFunnel(sb, since, sessionsStep2);
+
   // ── 4. Alertas automáticas ──────────────────────────────────────
 
   const alerts: FunnelAlert[] = [];
@@ -335,6 +369,72 @@ export async function getFunnelAdsData(
     motivoBreakdown,
     alerts,
     telemetryStartsAt: TELEMETRY_STARTS_AT,
+    microFunnel,
+  };
+}
+
+// ── Micro-embudo paso 3 (form) ────────────────────────────────────
+
+async function getMicroFunnel(
+  sb: SB,
+  since: string,
+  step2Count: number,
+): Promise<MicroFunnelData> {
+  // Sesiones únicas que llegaron a cada sub-paso (3, 4, 5, 6).
+  // funnel_progress es idempotente por (session_id, step), así que
+  // count(*) = count(DISTINCT session_id) en estas queries.
+  const fetchCount = async (step: number): Promise<number> => {
+    const { data } = await sb
+      .from("funnel_progress")
+      .select("session_id")
+      .eq("step", step)
+      .gte("created_at", since);
+    return new Set((data ?? []).map((r: { session_id: string }) => r.session_id)).size;
+  };
+
+  const [reachedForm, reachedTyped, reachedSubmit, reachedOk] = await Promise.all([
+    fetchCount(3),
+    fetchCount(4),
+    fetchCount(5),
+    fetchCount(6),
+  ]);
+
+  // Outcomes del step=5: cada sesión puede haber intentado varias veces
+  // (e.g. corrigió el email tras un client_invalid_email). Tomamos el
+  // ÚLTIMO outcome por sesión — refleja por qué dejó de intentar.
+  const { data: step5Rows } = await sb
+    .from("funnel_progress")
+    .select("session_id, answer, created_at")
+    .eq("step", 5)
+    .gte("created_at", since)
+    .order("created_at", { ascending: false });
+  const lastBySession: Record<string, string> = {};
+  for (const r of (step5Rows ?? []) as Array<{ session_id: string; answer: string | null }>) {
+    if (!lastBySession[r.session_id]) {
+      lastBySession[r.session_id] = r.answer ?? "(sin etiqueta)";
+    }
+  }
+  const counts: Record<string, number> = {};
+  for (const a of Object.values(lastBySession)) {
+    counts[a] = (counts[a] ?? 0) + 1;
+  }
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  const outcomes = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([outcome, count]) => ({
+      outcome,
+      count,
+      pct: total > 0 ? 100 * count / total : 0,
+    }));
+
+  return {
+    reached_step2:          step2Count,
+    reached_form_opened:    reachedForm,
+    reached_field_typed:    reachedTyped,
+    reached_submit_attempt: reachedSubmit,
+    reached_submit_ok:      reachedOk,
+    outcomes,
+    microStartsAt: MICRO_TELEMETRY_STARTS_AT,
   };
 }
 
