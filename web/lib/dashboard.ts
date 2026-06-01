@@ -27,6 +27,9 @@ export type LeadRow = {
   // Respuesta del nuevo paso 1 del funnel (Q.Score). NULL para leads
   // previos al cambio.
   motivo_inicial: "particulares" | "intensivo" | "certificado" | "profesional" | "otro" | null;
+  // Timestamp de la última llamada fría hecha al lead. NULL = pendiente.
+  // Lo togglea el botón de /admin/leads/[id].
+  cold_call_done_at: string | null;
 };
 
 export type TimelineRow = {

@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { formatBerlinFull } from "@/lib/time";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { LeadActions } from "@/components/admin/LeadActions";
+import { ColdCallToggle } from "@/components/admin/ColdCallToggle";
 import { WaQuickActions } from "@/components/admin/WaQuickActions";
 import { RescheduleTrialButton } from "./RescheduleTrialButton";
 
@@ -238,6 +239,12 @@ export default async function LeadDetail({
               </div>
             )}
             <Kv k="RGPD aceptado"      v={lead.gdpr_accepted ? `Sí · ${lead.gdpr_accepted_at ? new Date(lead.gdpr_accepted_at).toLocaleDateString("es-ES") : ""}` : "No"} />
+            <div className="mt-4">
+              <ColdCallToggle
+                leadId={lead.id}
+                coldCallDoneAt={(lead as { cold_call_done_at?: string | null }).cold_call_done_at ?? null}
+              />
+            </div>
           </Panel>
 
           {lead.whatsapp_normalized && (
