@@ -1167,9 +1167,12 @@ function DataCaptureStep({
       <p className="mt-3 md:mt-4 text-[15px] md:text-[15px] lg:text-[16px] text-slate-600 leading-relaxed">
         Sólo necesitamos unos datos para enviarte tu plan personalizado.
       </p>
+      <p className="mt-1 text-[11.5px] text-slate-400 leading-snug">
+        Los campos marcados con <span className="text-warm font-semibold">*</span> son obligatorios.
+      </p>
 
       <div className="mt-7 md:mt-9 space-y-5 md:space-y-6">
-        <Field label="Nombre">
+        <Field label={<span>Nombre <span className="text-warm">*</span></span>}>
           <input
             type="text"
             autoComplete="name"
@@ -1183,7 +1186,7 @@ function DataCaptureStep({
         </Field>
 
         {/* Email — siempre visible, obligatorio */}
-        <Field label="Email">
+        <Field label={<span>Email <span className="text-warm">*</span></span>}>
           <input
             type="email"
             autoComplete="email"
@@ -1212,7 +1215,7 @@ function DataCaptureStep({
         {/* WhatsApp — OPCIONAL. Aparece bajo email cuando nombre +
             email están válidos. Si lo deja vacío, va al drip email-only. */}
         {showWhatsappField && (
-        <Field label={<span>WhatsApp <span className="text-slate-400 font-normal">— opcional</span></span>}>
+        <Field label="WhatsApp">
           <div className="flex gap-2">
             <input
               type="tel"
@@ -1237,7 +1240,7 @@ function DataCaptureStep({
                              ? "border-red-400 focus:border-red-500"
                              : "border-slate-200 focus:border-warm"
                          }`}
-              placeholder="152 123 4567 (opcional)"
+              placeholder="152 123 4567"
               aria-invalid={!!phoneError}
               aria-describedby={phoneError ? "wa-error" : undefined}
             />
@@ -1268,11 +1271,12 @@ function DataCaptureStep({
               </button>
             </div>
           )}
-          {/* Disclaimer educativo — sin presión, queda claro que es
-              opcional y que solo usaremos el WA con fines educativos. */}
+          {/* Disclaimer educativo — NO mencionamos que es opcional;
+              el asterisco rojo en Nombre/Email + ausencia de él en
+              WhatsApp lo comunica visualmente. */}
           <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
             <p className="text-[12px] sm:text-xs text-emerald-900 leading-snug">
-              💬 <strong>Si lo dejas, solo te escribiremos con fines educativos:</strong>
+              💬 <strong>Solo te escribiremos con fines educativos:</strong>
             </p>
             <ul className="mt-1 text-[11.5px] sm:text-[12px] text-emerald-800 space-y-0.5 leading-snug">
               <li>· Link de tu clase de prueba</li>
@@ -1280,7 +1284,7 @@ function DataCaptureStep({
               <li>· Materiales y respuestas a tus dudas</li>
             </ul>
             <p className="mt-1.5 text-[11px] text-emerald-700/80">
-              Cero spam · Cero promociones · Sin tu WhatsApp también te llega el plan por email.
+              Cero spam · Cero promociones invasivas
             </p>
           </div>
         </Field>
