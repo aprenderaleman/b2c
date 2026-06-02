@@ -19,7 +19,8 @@ type StepKey =
   | "calendario"
   | "low_budget"
   | "already_registered"
-  | "success";
+  | "success"
+  | "particulares";
 
 export function IllustrationPanel({
   step,
@@ -61,6 +62,7 @@ function IllustrationFor({ step }: { step: StepKey }) {
   if (step === "low_budget")    return <IllustrationLowBudget />;
   if (step === "already_registered") return <IllustrationAlreadyReg />;
   if (step === "success")       return <IllustrationSuccess />;
+  if (step === "particulares")  return <IllustrationParticulares />;
   return null;
 }
 
@@ -167,6 +169,73 @@ function IllustrationLowBudget() {
       {/* Hucha / moneda */}
       <circle cx="140" cy="140" r="70" fill="#fde68a" stroke="#f59e0b" strokeWidth="4" />
       <text x="140" y="155" fontSize="56" textAnchor="middle" fill="#92400e" fontWeight="700">€</text>
+    </svg>
+  );
+}
+
+function IllustrationParticulares() {
+  // Dos figuras 1-a-1: estudiante a la izquierda, profesor a la
+  // derecha (gorro académico), burbuja de chat entre ellos. Paleta
+  // brand (warm + amber + cream).
+  return (
+    <svg viewBox="0 0 280 280" className="w-full h-auto max-h-[180px] md:max-h-[360px]" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <ellipse cx="140" cy="240" rx="100" ry="9" fill="#0f172a" opacity="0.08" />
+
+      {/* ── Estudiante (izquierda) ── */}
+      <g transform="translate(35 95)">
+        {/* hombros / cuerpo */}
+        <path d="M0 90 Q0 55 35 55 L55 55 Q90 55 90 90 L90 110 L0 110 Z" fill="#fdba74" />
+        {/* cabeza */}
+        <circle cx="45" cy="32" r="26" fill="#fde68a" />
+        {/* pelo */}
+        <path d="M22 25 Q28 5 45 5 Q62 5 68 25 Q60 18 45 18 Q30 18 22 25 Z" fill="#92400e" />
+        {/* ojos */}
+        <circle cx="36" cy="33" r="2.3" fill="#1e293b" />
+        <circle cx="54" cy="33" r="2.3" fill="#1e293b" />
+        {/* sonrisa */}
+        <path d="M37 42 Q45 48 53 42" stroke="#1e293b" strokeWidth="2" fill="none" strokeLinecap="round" />
+      </g>
+
+      {/* ── Burbuja de chat ── */}
+      <g transform="translate(108 75)">
+        <rect x="0" y="0" width="62" height="44" rx="14" fill="#ffffff" stroke="#f97316" strokeWidth="2.5" />
+        {/* "cola" de la burbuja apuntando hacia el profe */}
+        <path d="M50 38 L62 50 L54 40 Z" fill="#ffffff" stroke="#f97316" strokeWidth="2.5" strokeLinejoin="round" />
+        {/* 3 puntos chat */}
+        <circle cx="18" cy="22" r="3" fill="#f97316" />
+        <circle cx="31" cy="22" r="3" fill="#f97316" />
+        <circle cx="44" cy="22" r="3" fill="#f97316" />
+      </g>
+
+      {/* ── Profesor (derecha) — con gorro académico y "DE" pin ── */}
+      <g transform="translate(155 95)">
+        {/* hombros / cuerpo */}
+        <path d="M0 90 Q0 55 35 55 L55 55 Q90 55 90 90 L90 110 L0 110 Z" fill="#f97316" />
+        {/* pin "DE" pecho */}
+        <circle cx="45" cy="80" r="9" fill="#fff7ed" stroke="#fbbf24" strokeWidth="2" />
+        <text x="45" y="83.5" fontSize="9" fontWeight="700" fill="#92400e" textAnchor="middle">DE</text>
+        {/* cabeza */}
+        <circle cx="45" cy="32" r="26" fill="#fde68a" />
+        {/* ojos */}
+        <circle cx="36" cy="33" r="2.3" fill="#1e293b" />
+        <circle cx="54" cy="33" r="2.3" fill="#1e293b" />
+        {/* sonrisa */}
+        <path d="M37 42 Q45 48 53 42" stroke="#1e293b" strokeWidth="2" fill="none" strokeLinecap="round" />
+        {/* Gorro académico */}
+        <g>
+          <rect x="20" y="7" width="50" height="6" fill="#1e293b" />
+          <path d="M14 13 L45 0 L76 13 L45 22 Z" fill="#1e293b" />
+          {/* borla */}
+          <line x1="68" y1="13" x2="74" y2="22" stroke="#fbbf24" strokeWidth="2" />
+          <circle cx="74" cy="24" r="3" fill="#fbbf24" />
+        </g>
+      </g>
+
+      {/* Pequeña corona "1:1" arriba */}
+      <g transform="translate(115 30)">
+        <rect x="0" y="0" width="50" height="22" rx="11" fill="#fbbf24" />
+        <text x="25" y="15.5" fontSize="11" fontWeight="800" fill="#92400e" textAnchor="middle">1 : 1</text>
+      </g>
     </svg>
   );
 }

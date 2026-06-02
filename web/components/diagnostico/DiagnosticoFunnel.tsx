@@ -669,7 +669,7 @@ export function DiagnosticoFunnel() {
     step === 6 ? "datos" :
     step === 7 ? "calendario" :
     step === "low_budget_exit" ? "low_budget" :
-    step === "particulares_offer" ? "motivo" :
+    step === "particulares_offer" ? "particulares" :
     "motivo";
 
   return (
