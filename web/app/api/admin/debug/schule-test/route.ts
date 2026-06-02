@@ -82,10 +82,30 @@ export async function GET(req: Request) {
     return NextResponse.json({ mode: "batch", schule_url: SCHULE_BASE, health, count: arr.length, results });
   }
 
+  // ARBITRARY MODE: probar Schule con un email ad-hoc (no necesita
+  // user en BD). Útil para test con aliases tipo gmail "+aprender".
+  if (mode === "arbitrary") {
+    const email = url.searchParams.get("email");
+    const name  = url.searchParams.get("name") ?? "Test User";
+    if (!email) return NextResponse.json({ error: "missing_email" }, { status: 400 });
+    try {
+      const res = await fetch(`${SCHULE_BASE}/api/b2c/sso-link`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ email, full_name: name, secret }),
+        cache:   "no-store",
+      });
+      const body = await res.text();
+      return NextResponse.json({ mode: "arbitrary", sent: { email, full_name: name }, status: res.status, bodyText: body.slice(0, 2000) });
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
   // SINGLE MODE: detailed test for one user.
   const userId = url.searchParams.get("userId");
   if (!userId) {
-    return NextResponse.json({ error: "missing_userId (or use ?mode=batch)" }, { status: 400 });
+    return NextResponse.json({ error: "missing_userId (or use ?mode=batch / ?mode=arbitrary&email=...)" }, { status: 400 });
   }
 
   const { data: u } = await sb
