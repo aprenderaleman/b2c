@@ -156,7 +156,11 @@ type FormData = {
 //     usando. El visitante salta de paso 2 directo a paso 6 (datos).
 //   6: captura de datos
 //   7: resumen + calendario
-type Step = 1 | 2 | 3 | 4 | 5 | "low_budget_exit" | 6 | 7;
+// "particulares_offer" — pantalla intermedia entre paso 1 (motivo) y
+// paso 2 (nivel) que aparece SÓLO cuando motivo=particulares. Muestra
+// pricing transparente porque los leads de particulares abandonaban
+// 75% en paso 2 esperando ver precio (vs intensivo/certificado 60%).
+type Step = 1 | 2 | 3 | 4 | 5 | "low_budget_exit" | "particulares_offer" | 6 | 7;
 
 /**
  * Combina country code + número local en E.164 protegiéndose de los
@@ -347,6 +351,7 @@ export function DiagnosticoFunnel() {
   //                        después de haber dado el WhatsApp)
   const visualStepNum =
     step === 1 ? 1 :
+    step === "particulares_offer" ? 1 : // todavía en paso 1 visual
     step === 2 ? 2 :
     step === "low_budget_exit" ? 3 :
     step === 6 ? 3 :
@@ -376,10 +381,14 @@ export function DiagnosticoFunnel() {
 
   async function pickMotivo(id: MotivoId) {
     setAnswers(a => ({ ...a, motivo: id }));
-    setStep(2);
+    // Particulares → pantalla de pricing transparente antes del quiz.
+    // El resto continúa al paso 2 (nivel) directo.
+    if (id === "particulares") {
+      setStep("particulares_offer");
+    } else {
+      setStep(2);
+    }
     trackStep(1, id);
-    // Mantenemos /api/public/motivo para enlazar con leads (campo
-    // motivo_inicial). El track genérico va aparte.
     if (sessionId) {
       try {
         await fetch("/api/public/motivo", {
@@ -416,16 +425,22 @@ export function DiagnosticoFunnel() {
   }
 
   function goBack() {
-    if (step === 7) return; // no hay back desde el calendario tras confirmar
-    // Quiz simplificado: paso 6 vuelve directo a paso 2 (saltando los
-    // pasos 3/4/5 que ya no se muestran al usuario).
-    if (step === 6) setStep(2);
+    if (step === 7) return;
+    if (step === 6) {
+      // Si llegaron al form desde particulares_offer (skip quiz),
+      // vuelven a la oferta; si no, al paso 2 (nivel).
+      setStep(answers.motivo === "particulares" && !answers.level
+        ? "particulares_offer" : 2);
+    }
+    else if (step === "particulares_offer") setStep(1);
     else if (step === "low_budget_exit") setStep(5);
     else if (step === 5) setStep(4);
     else if (step === 4) setStep(3);
     else if (step === 3) setStep(2);
-    else if (step === 2) setStep(1);
-    // step 1 → no hace nada (es el inicio)
+    else if (step === 2) {
+      // Si motivo=particulares, paso 2 vuelve a la oferta de pricing.
+      setStep(answers.motivo === "particulares" ? "particulares_offer" : 1);
+    }
   }
 
   // Builder común del body de register. Se usa en ambas fases.
@@ -654,6 +669,7 @@ export function DiagnosticoFunnel() {
     step === 6 ? "datos" :
     step === 7 ? "calendario" :
     step === "low_budget_exit" ? "low_budget" :
+    step === "particulares_offer" ? "motivo" :
     "motivo";
 
   return (
@@ -730,6 +746,12 @@ export function DiagnosticoFunnel() {
           <MotivoInicialStep
             selected={answers.motivo}
             onPick={pickMotivo}
+          />
+        )}
+        {step === "particulares_offer" && (
+          <ParticularesOfferStep
+            onContinueQuiz={() => { setStep(2); trackStep(2, "from_particulares_offer_quiz"); }}
+            onSkipToForm={() => { setStep(6); trackStep(2, "from_particulares_offer_skip"); }}
           />
         )}
         {step === 2 && (
@@ -884,6 +906,96 @@ function MotivoInicialStep({
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Pantalla intermedia para motivo='particulares' (Gelfis 2026-06-01).
+ * Aparece entre paso 1 y paso 2 SÓLO cuando el lead eligió "Clases
+ * particulares". Muestra pricing transparente porque los leads de
+ * particulares abandonaban un 75% en paso 2 esperando ver precio.
+ */
+function ParticularesOfferStep({
+  onContinueQuiz,
+  onSkipToForm,
+}: {
+  onContinueQuiz: () => void;
+  onSkipToForm:   () => void;
+}) {
+  return (
+    <div className="px-5 md:px-8 lg:px-10 pt-5 md:pt-9 lg:pt-12 pb-12 md:pb-16">
+      <h1 className="text-[24px] sm:text-3xl md:text-[28px] lg:text-[32px] font-extrabold tracking-tight text-slate-900 leading-tight">
+        👨‍🏫 Clases particulares de alemán
+      </h1>
+      <p className="mt-3 md:mt-4 text-[15px] md:text-[15px] lg:text-[16px] text-slate-600 leading-relaxed">
+        Profesor nativo certificado, online, a tu ritmo, sin compromiso.
+      </p>
+
+      {/* Tarjeta de pricing — transparencia que es lo que el lead busca */}
+      <div className="mt-6 md:mt-8 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 md:p-6 space-y-3">
+        <div className="flex items-start gap-3">
+          <span className="text-2xl leading-none mt-0.5" aria-hidden>💎</span>
+          <div>
+            <p className="text-[12px] font-bold uppercase tracking-wider text-amber-900">
+              Primera clase
+            </p>
+            <p className="mt-0.5 text-[16px] md:text-[17px] font-bold text-amber-900 leading-snug">
+              GRATIS · 30 min con tu profesor nativo
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3 pt-2 border-t border-amber-200">
+          <span className="text-2xl leading-none mt-0.5" aria-hidden>💶</span>
+          <div>
+            <p className="text-[12px] font-bold uppercase tracking-wider text-amber-900">
+              Después
+            </p>
+            <p className="mt-0.5 text-[16px] md:text-[17px] font-bold text-amber-900 leading-snug">
+              Desde 18 €/clase
+            </p>
+            <p className="text-[12.5px] text-amber-800 mt-0.5 leading-snug">
+              Paquetes flexibles · sin mensualidades · sin permanencia
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3 pt-2 border-t border-amber-200">
+          <span className="text-2xl leading-none mt-0.5" aria-hidden>🇩🇪</span>
+          <div>
+            <p className="text-[13.5px] md:text-[14px] text-amber-900 leading-snug">
+              Profesores <strong>nativos certificados</strong>, todos con titulación
+              oficial. Tú eliges el horario cada semana.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* CTA principal: continuar al quiz (30s) */}
+      <button
+        type="button"
+        onClick={onContinueQuiz}
+        className="mt-7 md:mt-8 w-full h-12 md:h-13 lg:h-14 rounded-2xl bg-warm text-warm-foreground
+                   font-semibold text-base md:text-[16px] lg:text-[17px]
+                   shadow-lg shadow-warm/20 active:scale-[0.98] transition
+                   flex items-center justify-center gap-2"
+      >
+        Personalizar mi clase
+        <span className="text-[12px] font-normal opacity-75">(30 s)</span>
+      </button>
+
+      {/* CTA secundario: ir directo al form */}
+      <button
+        type="button"
+        onClick={onSkipToForm}
+        className="mt-3 w-full text-center text-[13px] md:text-[14px] text-slate-500 hover:text-slate-700 underline underline-offset-2"
+      >
+        O ir directo al formulario y agendar →
+      </button>
+
+      {/* Mini prueba social */}
+      <p className="mt-6 md:mt-8 text-center text-[12px] text-slate-500">
+        ⭐⭐⭐⭐⭐ +800 estudiantes este mes
+      </p>
     </div>
   );
 }
