@@ -89,6 +89,10 @@ export default async function FunnelAdsPage({
   const trialBooked = data.steps[3]?.reached ?? 0;
   const overallFormConv = entry > 0 ? (100 * formCompleted / entry) : 0;
   const overallTrialConv = entry > 0 ? (100 * trialBooked / entry) : 0;
+  // Tasa de conversión "trial → pago": de los que agendaron clase de
+  // prueba, ¿qué porcentaje terminó comprando? Es el KPI más cercano
+  // a ventas — mide la calidad del cierre, no del ad.
+  const trialToPaidConv = trialBooked > 0 ? (100 * data.totalConverted / trialBooked) : 0;
 
   return (
     <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
@@ -189,8 +193,18 @@ export default async function FunnelAdsPage({
         <KpiCard
           label="Convirtieron (pago)"
           value={`${data.totalConverted}`}
-          subtitle="status='converted'"
-          accent="text-white"
+          subtitle={trialBooked > 0
+            ? `${trialToPaidConv.toFixed(1)}% de los ${trialBooked} trials`
+            : "Sin trials en el rango"}
+          accent={
+            trialBooked === 0
+              ? "text-white"
+              : trialToPaidConv >= 30
+                ? "text-emerald-300"
+                : trialToPaidConv >= 15
+                  ? "text-amber-300"
+                  : "text-red-300"
+          }
         />
       </section>
 
