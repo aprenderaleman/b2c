@@ -27,12 +27,67 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const userId = url.searchParams.get("userId");
-  if (!userId) {
-    return NextResponse.json({ error: "missing_userId" }, { status: 400 });
+  const mode = url.searchParams.get("mode") ?? "single";
+  const SCHULE_BASE = process.env.SCHULE_API_URL ?? "https://api-schule.aprender-aleman.de";
+  const secret      = process.env.B2C_SYNC_SECRET;
+  if (!secret) {
+    return NextResponse.json({ error: "no_secret_configured" }, { status: 500 });
   }
 
   const sb = supabaseAdmin();
+
+  // BATCH MODE: test SSO for a roster of users and report status per user.
+  // Para diagnosticar si Schule está roto globalmente o solo para algunos.
+  if (mode === "batch") {
+    const { data: users } = await sb
+      .from("users")
+      .select("id, email, full_name, phone")
+      .eq("role", "student")
+      .order("created_at", { ascending: false })
+      .limit(15);
+    const arr = (users ?? []) as Array<{ id: string; email: string; full_name: string | null; phone: string | null }>;
+
+    const results: Array<Record<string, unknown>> = [];
+    for (const u of arr) {
+      try {
+        const res = await fetch(`${SCHULE_BASE}/api/b2c/sso-link`, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ email: u.email, full_name: u.full_name ?? undefined, phone: u.phone ?? undefined, secret }),
+          cache:   "no-store",
+        });
+        const body = await res.text();
+        results.push({
+          email:    u.email,
+          name:     u.full_name,
+          phone:    u.phone,
+          status:   res.status,
+          bodySnip: body.slice(0, 200),
+        });
+      } catch (e) {
+        results.push({ email: u.email, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    // Schule health-ish: ping with bad secret to confirm endpoint alive
+    let health: Record<string, unknown> = {};
+    try {
+      const h = await fetch(`${SCHULE_BASE}/api/b2c/sso-link`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "ping@x.x", secret: "ping" }), cache: "no-store",
+      });
+      health = { status: h.status, body: (await h.text()).slice(0, 200) };
+    } catch (e) {
+      health = { error: e instanceof Error ? e.message : String(e) };
+    }
+    return NextResponse.json({ mode: "batch", schule_url: SCHULE_BASE, health, count: arr.length, results });
+  }
+
+  // SINGLE MODE: detailed test for one user.
+  const userId = url.searchParams.get("userId");
+  if (!userId) {
+    return NextResponse.json({ error: "missing_userId (or use ?mode=batch)" }, { status: 400 });
+  }
+
   const { data: u } = await sb
     .from("users")
     .select("email, full_name, phone, role")
@@ -40,32 +95,10 @@ export async function GET(req: Request) {
     .maybeSingle();
   if (!u) return NextResponse.json({ error: "user_not_found" }, { status: 404 });
 
-  const SCHULE_BASE = process.env.SCHULE_API_URL ?? "https://api-schule.aprender-aleman.de";
-  const secret      = process.env.B2C_SYNC_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: "no_secret_configured" }, { status: 500 });
-  }
-
   const variants = [
-    {
-      label: "con teléfono",
-      payload: {
-        email:     (u as { email: string }).email,
-        full_name: (u as { full_name: string | null }).full_name ?? undefined,
-        phone:     (u as { phone: string | null }).phone ?? undefined,
-      },
-    },
-    {
-      label: "sin teléfono",
-      payload: {
-        email:     (u as { email: string }).email,
-        full_name: (u as { full_name: string | null }).full_name ?? undefined,
-      },
-    },
-    {
-      label: "solo email",
-      payload: { email: (u as { email: string }).email },
-    },
+    { label: "con teléfono", payload: { email: u.email, full_name: u.full_name ?? undefined, phone: u.phone ?? undefined } },
+    { label: "sin teléfono", payload: { email: u.email, full_name: u.full_name ?? undefined } },
+    { label: "solo email",   payload: { email: u.email } },
   ];
 
   const results: Array<Record<string, unknown>> = [];
@@ -78,22 +111,11 @@ export async function GET(req: Request) {
         cache:   "no-store",
       });
       const body = await res.text();
-      results.push({
-        variant:  v.label,
-        sent:     v.payload,
-        status:   res.status,
-        ok:       res.ok,
-        bodyText: body.slice(0, 2000),
-      });
+      results.push({ variant: v.label, sent: v.payload, status: res.status, ok: res.ok, bodyText: body.slice(0, 2000) });
     } catch (e) {
-      results.push({
-        variant: v.label,
-        sent:    v.payload,
-        error:   e instanceof Error ? e.message : String(e),
-      });
+      results.push({ variant: v.label, sent: v.payload, error: e instanceof Error ? e.message : String(e) });
     }
   }
-
   return NextResponse.json({
     schule_url: SCHULE_BASE,
     user:       { id: userId, email: u.email, full_name: u.full_name, phone: u.phone },
