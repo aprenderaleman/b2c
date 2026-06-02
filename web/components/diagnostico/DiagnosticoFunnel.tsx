@@ -573,10 +573,13 @@ export function DiagnosticoFunnel() {
       trackStep(6, null);
 
       // Lead guardado. Disparar pixels y avanzar al resumen.
+      // hasWhatsapp señaliza calidad del lead a Google Ads / Meta /
+      // TikTok: con WhatsApp = 2 EUR (puede agendar); sin = 1 EUR.
       firePixelLead({
-        leadId: newLeadId,
-        email:  body.email,
-        budget: body.answers.budget,
+        leadId:      newLeadId,
+        email:       body.email,
+        budget:      body.answers.budget,
+        hasWhatsapp: !!e164,
       });
 
       // Pre-cargar el booking-state que usa `/agendar/*` para que el
