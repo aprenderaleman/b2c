@@ -23,7 +23,11 @@ export type SchuleLinkResult = {
 };
 
 const SCHULE_BASE = process.env.SCHULE_API_URL ?? "https://api-schule.aprender-aleman.de";
-const HANS_BASE   = process.env.HANS_API_URL   ?? "https://hans-api.aprender-aleman.de/api";
+// Hans backend lives at hans.aprender-aleman.de/api (no separate API
+// subdomain) — el subdominio `hans-api.aprender-aleman.de` que el
+// default antiguo apuntaba NO resuelve (DNS muerto). Caso Alejandra
+// 02/06: clicó el botón, Hans devolvió "Could not resolve host".
+const HANS_BASE   = process.env.HANS_API_URL   ?? "https://hans.aprender-aleman.de/api";
 
 /**
  * Server-side call to Schule to generate a one-shot SSO link. Returns
