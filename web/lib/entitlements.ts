@@ -47,18 +47,33 @@ export async function createSchuleSsoLink(args: {
     return { ok: false, error: "B2C_SYNC_SECRET not configured in b2c env", status: 503 };
   }
 
-  const res = await fetch(`${SCHULE_BASE}/api/b2c/sso-link`, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify({
-      email:     args.email,
-      full_name: args.fullName ?? undefined,
-      phone:     args.phone ?? undefined,
-      secret,
-    }),
-    // Never cache — these tokens are short-lived.
-    cache: "no-store",
-  });
+  // Caso Alejandra 02/06: alumna con teléfono +52 (México). Schule
+  // devolvía 500 "Error interno del servidor" al hacer el upsert,
+  // probablemente por su validador de teléfono regional (los demás
+  // alumnos tienen +34/+41/+49). Patrón: intentamos con teléfono
+  // primero (sigue siendo útil para sync) y, si Schule rechaza con
+  // ≥500, reintentamos sin teléfono — la SSO no depende del número
+  // y la alumna debe poder entrar.
+  const tryRequest = async (includePhone: boolean) => {
+    const body: Record<string, unknown> = { email: args.email, secret };
+    if (args.fullName) body.full_name = args.fullName;
+    if (includePhone && args.phone) body.phone = args.phone;
+    return fetch(`${SCHULE_BASE}/api/b2c/sso-link`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(body),
+      cache:   "no-store",
+    });
+  };
+
+  let res = await tryRequest(true);
+
+  if (!res.ok && res.status >= 500 && args.phone) {
+    console.warn(
+      `[schule-sso] retry sin teléfono — primera respuesta ${res.status} para ${args.email}`,
+    );
+    res = await tryRequest(false);
+  }
 
   if (!res.ok) {
     let msg = `schule returned ${res.status}`;
