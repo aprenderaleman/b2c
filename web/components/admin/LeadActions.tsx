@@ -32,6 +32,7 @@ export function LeadActions({ lead }: { lead: Lead }) {
   const alreadyConverted = Boolean(lead.converted_to_user_id);
   const canConvert       = !alreadyConverted && lead.status !== "lost";
   const canReactivate    = lead.status === "needs_human";
+  const canRestoreFromLost = lead.status === "lost" && !alreadyConverted;
   const canMarkLost      = lead.status !== "lost" && !alreadyConverted;
   const canMarkAttendance = lead.status === "trial_scheduled" || lead.status === "trial_reminded";
 
@@ -240,6 +241,31 @@ export function LeadActions({ lead }: { lead: Lead }) {
         <form action={`/api/admin/leads/${lead.id}/lost`} method="post">
           <button type="submit" className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-1 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
             Marcar perdido
+          </button>
+        </form>
+      )}
+
+      {/* Restaurar lead marcado como perdido: vuelve a estado
+          'in_conversation' y desbloquea el botón "Convertir en
+          estudiante". Caso típico: el sistema cerró el lead por
+          inactividad pero al final pagó y hay que activarlo a mano. */}
+      {canRestoreFromLost && (
+        <form
+          action={`/api/admin/leads/${lead.id}/reactivate`}
+          method="post"
+          onSubmit={(e) => {
+            if (!confirm(
+              "Quitar el estado 'Perdido' y volver a 'En conversación'.\n\n" +
+              "Después podrás convertirlo en estudiante con el botón verde."
+            )) e.preventDefault();
+          }}
+        >
+          <button
+            type="submit"
+            className="text-xs font-semibold rounded-full border border-blue-300 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/15 hover:bg-blue-100 dark:hover:bg-blue-500/25 px-3 py-1 text-blue-700 dark:text-blue-300"
+            title="Quitar el estado 'Perdido' y devolver el lead al pipeline."
+          >
+            ↻ Quitar &apos;Perdido&apos;
           </button>
         </form>
       )}
