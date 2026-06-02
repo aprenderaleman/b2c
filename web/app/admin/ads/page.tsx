@@ -188,7 +188,7 @@ export default async function FunnelAdsPage({
         />
         <KpiCard
           label="Convirtieron (pago)"
-          value={`${data.motivoBreakdown.reduce((a, m) => a + m.converted, 0)}`}
+          value={`${data.totalConverted}`}
           subtitle="status='converted'"
           accent="text-white"
         />

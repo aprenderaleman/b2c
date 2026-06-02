@@ -62,6 +62,12 @@ export type FunnelAdsData = {
   // Los pasos 3 (datos) y 4 (trial) no tienen "respuesta de selección".
   answers:     Record<number, AnswerBucket[]>;
   motivoBreakdown: MotivoBreakdownRow[];
+  // Conteo bruto de leads con status='converted' cuya conversión cae
+  // en la ventana de días. Cuenta TODOS — incluso los que no tienen
+  // motivo_inicial (creados manualmente o por canales no-funnel).
+  // El sumar motivoBreakdown.converted se queda corto porque excluye
+  // leads con motivo NULL. (Caso Alejandra 2026-06-02.)
+  totalConverted: number;
   alerts:      FunnelAlert[];
   telemetryStartsAt: string;
   microFunnel: MicroFunnelData;
@@ -304,6 +310,17 @@ export async function getFunnelAdsData(
 
   const motivoBreakdown = await getMotivoBreakdown(sb, since, country);
 
+  // Total de conversiones REAL — no excluye leads sin motivo_inicial.
+  // Usa converted_at si está presente; si no, cae a created_at (filas
+  // viejas previas a la columna converted_at quedan con NULL).
+  let convQ = sb
+    .from("leads")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "converted")
+    .or(`converted_at.gte.${since},and(converted_at.is.null,created_at.gte.${since})`);
+  if (country) convQ = convQ.eq("country", country);
+  const { count: totalConverted } = await convQ;
+
   // ── 4. Micro-embudo del paso 3 (form) ──────────────────────────
   const microFunnel = await getMicroFunnel(sb, since, sessionsStep2);
 
@@ -367,6 +384,7 @@ export async function getFunnelAdsData(
     steps,
     answers,
     motivoBreakdown,
+    totalConverted: totalConverted ?? 0,
     alerts,
     telemetryStartsAt: TELEMETRY_STARTS_AT,
     microFunnel,
