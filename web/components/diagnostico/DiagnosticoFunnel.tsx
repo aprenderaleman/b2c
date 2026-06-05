@@ -642,11 +642,13 @@ export function DiagnosticoFunnel() {
       } catch { /* ignore */ }
 
       setLeadId(newLeadId);
-      // Si el lead dejó WhatsApp → calendario (book-trial requiere WA).
-      // Si NO → pantalla email-only thanks + drip agresivo por email.
+      // Decisión Gelfis 2026-06-XX: TODO lead va directo al calendario
+      // tras enviar el form, dieran o no WhatsApp. Antes pasábamos por
+      // EmailOnlyThanksScreen los sin-WA (un click extra) — la dejamos
+      // como componente alcanzable pero ya no es la ruta por defecto.
+      // Conservamos los eventos de telemetría para medir el ratio.
       if (!whatsappE164) {
         trackStep(5, "submitted_email_only");
-        setEmailOnly(true);
       } else {
         trackStep(5, "submitted_with_whatsapp");
       }
