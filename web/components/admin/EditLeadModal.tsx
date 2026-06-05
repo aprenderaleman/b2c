@@ -25,10 +25,17 @@ type Lead = {
   goal:         string | null;
 };
 
-// Sub-niveles del enum `german_level`. Conservamos "A1-A2" y "B2+"
-// como legacy para no perder filas históricas al editarlas.
-const LEVELS = ["A0", "A1.1", "A1.2", "A2.1", "A2.2", "B1", "B2", "A1-A2", "B2+"] as const;
-const GOALS  = ["work", "visa", "studies", "exam", "travel", "already_in_dach"] as const;
+// Sincronizado con el enum `german_level` de Postgres. Incluye los
+// niveles "limpios" (A1, A2, C1) además de los sub-niveles y los
+// legacy "A1-A2", "B2+", "unsure" — si no aparecen aquí, el form
+// muestra mal el valor actual y el guardado falla con validation_failed.
+const LEVELS = [
+  "A0", "A1", "A1.1", "A1.2", "A1-A2",
+  "A2", "A2.1", "A2.2",
+  "B1", "B2", "B2+", "C1",
+  "unsure",
+] as const;
+const GOALS  = ["work", "visa", "studies", "exam", "travel", "already_in_dach", "personal_growth"] as const;
 
 type Props = {
   lead:    Lead;

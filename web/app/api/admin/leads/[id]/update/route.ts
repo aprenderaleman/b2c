@@ -27,8 +27,25 @@ const Body = z.object({
   whatsapp_normalized: z.string().trim().min(4).max(40).nullable().optional(),
   whatsapp_country:    z.string().trim().regex(/^\+?\d{1,4}$/).optional(),
   language:            z.enum(["es", "de"]).optional(),
-  german_level:        z.enum(["A0", "A1.1", "A1.2", "A2.1", "A2.2", "B1", "B2", "A1-A2", "B2+"]).nullable().optional(),
-  goal:                z.string().trim().max(40).nullable().optional(),
+  // Sincronizado con el enum `german_level` de Postgres (ver
+  // db/migrations/000_init.sql + sucesivos ALTER TYPE). Incluye los
+  // niveles "limpios" (A1, A2, C1) además de los sub-niveles y los
+  // legacy "A1-A2", "B2+", "unsure" — si añades un nuevo nivel al
+  // enum de la DB, añádelo también aquí o el modal de edición caerá
+  // en validation_failed silenciosamente.
+  german_level:        z.enum([
+    "A0", "A1", "A1.1", "A1.2", "A1-A2",
+    "A2", "A2.1", "A2.2",
+    "B1", "B2", "B2+", "C1",
+    "unsure",
+  ]).nullable().optional(),
+  // Mismo enum que `lead_goal` en Postgres. Antes era z.string() lo
+  // que dejaba colar valores que la DB rechazaba con 500. Ahora
+  // validamos contra los mismos enum values.
+  goal:                z.enum([
+    "work", "visa", "studies", "exam",
+    "travel", "already_in_dach", "personal_growth",
+  ]).nullable().optional(),
 });
 
 export async function POST(
