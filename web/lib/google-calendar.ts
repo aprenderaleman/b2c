@@ -211,6 +211,45 @@ export async function createInfoCallEvent(a: {
 }
 
 /**
+ * Crea un evento genérico de clase recurrente en el calendar de Gelfis.
+ * Pensado para clases de estudiantes ya convertidos (no leads/trials).
+ * Devuelve `eventId` para guardar en `classes.google_calendar_event_id`,
+ * o `null` si la integración no está configurada o el insert falló.
+ */
+export async function createClassEvent(a: {
+  summary:         string;            // "Alejandra · Deutsch B1"
+  startIso:        string;
+  durationMinutes: number;
+  description:     string;            // multi-línea, se manda tal cual
+}): Promise<CreatedEvent | null> {
+  const cal = await getCalendarClient();
+  if (!cal) return null;
+
+  const calendarId = process.env.GOOGLE_CALENDAR_ID!;
+  const start = new Date(a.startIso);
+  const end   = new Date(start.getTime() + a.durationMinutes * 60_000);
+
+  try {
+    const res = await cal.events.insert({
+      calendarId,
+      requestBody: {
+        summary:     a.summary,
+        description: a.description,
+        start: { dateTime: start.toISOString(), timeZone: "Europe/Berlin" },
+        end:   { dateTime: end.toISOString(),   timeZone: "Europe/Berlin" },
+        reminders: { useDefault: false, overrides: [] },
+      },
+    });
+    const data = res.data;
+    if (!data.id) return null;
+    return { eventId: data.id, htmlLink: data.htmlLink ?? null };
+  } catch (e) {
+    console.error("[gcal] createClassEvent failed:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/**
  * Mueve un evento existente a un nuevo horario. Usado por el flujo de
  * "cambio de hora" del trial (agents/reschedule_flow.py). Idempotente:
  * si el evento no existe (404) lo logueamos y devolvemos false para que
