@@ -49,13 +49,14 @@ export const dynamic  = "force-dynamic";
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 const TRIAL_DURATION_MIN = 45;
 
-// WhatsApp is required: the teacher confirms the class + shares the
-// material via WhatsApp, and the lead is told this in the funnel
-// disclaimer ("only educational purposes").
+// WhatsApp es OPCIONAL desde 2026-06-XX (Gelfis: todo lead debe poder
+// agendar incluso sin WA). Si el lead no lo da, la confirmación va
+// solo por email y NO se envían recordatorios por WhatsApp. El lead
+// puede añadirlo después respondiendo al email de confirmación.
 const Body = z.object({
   name:           z.string().trim().min(2).max(100),
   email:          z.string().trim().toLowerCase().email(),
-  whatsapp_e164:  z.string().trim().min(8, "WhatsApp requerido"),
+  whatsapp_e164:  z.string().trim().min(8).nullable().optional(),
   whatsapp_raw:   z.string().trim().min(4).nullable().optional(),
   // Sincronizado con los 6 niveles del funnel post-2026-05-26
   // (A0/A1/A2/B1/B2/C1). Conservamos los antiguos por compat con
@@ -127,7 +128,10 @@ export async function POST(req: Request) {
   // country code (caso Juan José 2026-05-07: "+3434615541087"). El
   // frontend ya lo hace pero este endpoint también lo llaman otras
   // entradas (mobile dev, WP plugin, etc.).
-  b.whatsapp_e164 = sanitizeE164(b.whatsapp_e164);
+  // sanitizeE164 espera string; con null/undefined lo dejamos tal cual.
+  if (b.whatsapp_e164) {
+    b.whatsapp_e164 = sanitizeE164(b.whatsapp_e164);
+  }
   const sb = supabaseAdmin();
 
   // ── 1. Already a registered student? Reject.

@@ -815,6 +815,7 @@ export function DiagnosticoFunnel() {
           <EmailOnlyThanksScreen
             name={form.name.trim().split(/\s+/)[0] || "tú"}
             email={form.email.trim()}
+            onScheduleClick={() => setEmailOnly(false)}
           />
         )}
         {step === 7 && leadId && !emailOnly && (
@@ -1439,8 +1440,12 @@ function CalendarStep({
         "Crecimiento personal":          "travel",
       };
 
+      // WhatsApp es opcional (decisión Gelfis 2026-06-XX): si el lead
+      // no lo dio, mandamos null y la confirmación va solo por email.
+      const hasWa        = form.whatsapp.replace(/\D/g, "").length > 0;
       const cc           = form.countryCode.startsWith("+") ? form.countryCode : `+${form.countryCode}`;
-      const whatsappE164 = combineE164(form.countryCode, form.whatsapp);
+      const whatsappE164 = hasWa ? combineE164(form.countryCode, form.whatsapp) : null;
+      const whatsappRaw  = hasWa ? `${cc} ${form.whatsapp}` : null;
 
       const res = await fetch("/api/public/book-trial", {
         method:  "POST",
@@ -1449,7 +1454,7 @@ function CalendarStep({
           name:          form.name.trim(),
           email:         form.email.trim().toLowerCase(),
           whatsapp_e164: whatsappE164,
-          whatsapp_raw:  `${cc} ${form.whatsapp}`,
+          whatsapp_raw:  whatsappRaw,
           german_level:  answers.level ? levelMap[answers.level] : "A0",
           goal:          answers.goal  ? goalMap [answers.goal]  : "work",
           language:      "es",
@@ -1699,18 +1704,24 @@ function CalendarStep({
 }
 
 /**
- * Pantalla "gracias email-only" — se muestra cuando el lead llenó
- * nombre+email en la fase 1 y pulsó "Continuar sin WhatsApp" en la
- * fase 2. El lead ya está registrado, el drip por email se hará cargo.
+ * Pantalla "gracias email-only" — se muestra cuando el lead completó
+ * nombre+email pero no dio WhatsApp. El lead ya está registrado, el
+ * drip por email se hará cargo.
  *
- * Importante: no permitimos agendar trial sin WA (book-trial lo exige),
- * pero damos un wa.me link explícito por si quieren ofrecer su número
- * voluntariamente para acelerar el seguimiento.
+ * Cambio 2026-06-XX (Gelfis): TODO lead debe poder agendar — el CTA
+ * principal ahora abre el calendario inline (sin WA). El wa.me link
+ * queda como alternativa secundaria por si prefieren chatear.
  */
-function EmailOnlyThanksScreen({ name, email }: { name: string; email: string }) {
+function EmailOnlyThanksScreen({
+  name, email, onScheduleClick,
+}: {
+  name: string;
+  email: string;
+  onScheduleClick: () => void;
+}) {
   // Pre-rellenamos un mensaje con su nombre + email para que Stiv
   // pueda enlazar la conversación con el lead automáticamente.
-  const waText = `Hola Stiv, soy ${name} (${email}). Acabo de registrarme en el funnel y quiero agendar mi clase de prueba por WhatsApp.`;
+  const waText = `Hola Stiv, soy ${name} (${email}). Acabo de registrarme en el funnel y quiero coordinar mi clase de prueba por WhatsApp.`;
   const waUrl  = `https://wa.me/491607530948?text=${encodeURIComponent(waText)}`;
   return (
     <div className="px-5 md:px-8 pt-8 md:pt-12 lg:pt-16 pb-12 md:pb-16">
@@ -1725,28 +1736,51 @@ function EmailOnlyThanksScreen({ name, email }: { name: string; email: string })
         Revisa tu bandeja de entrada (y la de spam, por si acaso) en los próximos minutos.
       </p>
 
-      <div className="mt-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 md:p-5">
-        <p className="text-[12px] font-bold uppercase tracking-wider text-amber-900">
-          💡 ¿Quieres agendar tu clase ya?
+      {/* CTA principal — agendar AHORA sin WhatsApp */}
+      <div className="mt-7 rounded-2xl border-2 border-warm bg-warm/10 p-5">
+        <p className="text-[12px] font-bold uppercase tracking-wider text-warm-foreground">
+          🎯 Da el siguiente paso ahora
         </p>
-        <p className="mt-1.5 text-[14.5px] md:text-[15px] text-amber-900 leading-snug">
-          Para reservar tu horario online y recibir los recordatorios, necesitamos
-          tu WhatsApp. Escríbenos ahora desde tu móvil:
+        <h2 className="mt-1.5 text-[18px] md:text-[20px] font-extrabold text-slate-900 leading-tight">
+          Agenda tu clase de prueba gratuita
+        </h2>
+        <p className="mt-1.5 text-[14px] text-slate-700 leading-snug">
+          Escoge el horario que mejor te venga. La confirmación con el enlace
+          de Zoom te llega al email.
+        </p>
+        <button
+          type="button"
+          onClick={onScheduleClick}
+          className="mt-4 inline-flex items-center justify-center gap-2 w-full md:w-auto
+                     h-12 px-6 rounded-2xl bg-warm text-warm-foreground font-semibold text-[15px]
+                     shadow-lg shadow-warm/20 active:scale-[0.98] transition"
+        >
+          📅 Agendar mi clase ahora →
+        </button>
+      </div>
+
+      {/* Alternativa secundaria — coordinar por WhatsApp */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <p className="text-[13px] font-semibold text-slate-700">
+          ¿Prefieres coordinarlo por WhatsApp?
+        </p>
+        <p className="mt-1 text-[13px] text-slate-600 leading-snug">
+          Stiv te ayuda a escoger el mejor horario y te envía los recordatorios.
         </p>
         <a
           href={waUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-4 inline-flex items-center gap-2 h-12 px-5 rounded-2xl
-                     bg-emerald-500 text-white font-semibold text-[15px]
-                     shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition"
+          className="mt-3 inline-flex items-center gap-2 h-10 px-4 rounded-xl
+                     bg-emerald-500 text-white font-semibold text-[13.5px]
+                     active:scale-[0.98] transition"
         >
           💬 Hablar con Stiv por WhatsApp
         </a>
       </div>
 
-      <p className="mt-8 text-[13px] text-slate-500 leading-relaxed">
-        Si prefieres, también puedes responder al email que te acabamos de enviar y
+      <p className="mt-6 text-[12.5px] text-slate-500 leading-relaxed">
+        También puedes responder al email que te acabamos de enviar y
         Stiv te coordinará todo desde ahí.
       </p>
     </div>
