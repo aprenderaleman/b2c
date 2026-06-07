@@ -1563,9 +1563,11 @@ function CalendarStep({
       <p className="mt-6 text-[15px] md:text-[15px] lg:text-[16px] text-slate-700 leading-relaxed">
         El siguiente paso para avanzar rápido es vivir una clase de verdad.
         {" "}
-        <strong>Reserva ahora tu clase de prueba GRATIS de 30 min con un profesor nativo alemán que también habla español</strong>.
-        {" "}
-        En ella diseñamos juntos tu plan personalizado para que aprendas con confianza, a tu ritmo.
+        Reserva ahora tu{" "}
+        <strong className="bg-warm/15 text-warm-foreground rounded px-1 box-decoration-clone">
+          clase de prueba GRATIS de 30 min con un profesor nativo alemán que también habla español
+        </strong>
+        . En ella diseñamos juntos tu plan personalizado para que aprendas con confianza, a tu ritmo.
       </p>
       <p className="mt-3 text-[14.5px] md:text-[15px] text-slate-600 leading-relaxed">
         Sin compromisos, elige tu día y hora:
