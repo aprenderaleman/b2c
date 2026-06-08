@@ -642,17 +642,25 @@ export function DiagnosticoFunnel() {
       } catch { /* ignore */ }
 
       setLeadId(newLeadId);
-      // Decisión Gelfis 2026-06-XX: TODO lead va directo al calendario
-      // tras enviar el form, dieran o no WhatsApp. Antes pasábamos por
-      // EmailOnlyThanksScreen los sin-WA (un click extra) — la dejamos
-      // como componente alcanzable pero ya no es la ruta por defecto.
+      // Decisión Gelfis 2026-06-XX: el calendario se despliega INLINE
+      // dentro de DataCaptureStep (step=5) en cuanto leadId está set.
+      // Cero navegación a step=7 — el lead siente que el calendario
+      // "apareció" debajo del form colapsado. Hace ratio submit→book
+      // mejor porque elimina la fricción del click intermedio.
       // Conservamos los eventos de telemetría para medir el ratio.
       if (!whatsappE164) {
         trackStep(5, "submitted_email_only");
       } else {
         trackStep(5, "submitted_with_whatsapp");
       }
-      setStep(7);
+      // setStep(7) eliminado — DataCaptureStep ya renderiza CalendarStep
+      // inline al detectar leadId !== null. Auto-scroll suave hacia el
+      // calendario para que se vea de inmediato.
+      setTimeout(() => {
+        if (typeof window !== "undefined") {
+          window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+        }
+      }, 100);
     } catch (e) {
       console.error("[diagnostico] submit failed:", e);
       setSubmitErr("Error de conexión. Inténtalo de nuevo.");
@@ -810,6 +818,9 @@ export function DiagnosticoFunnel() {
                 if (e === "form_opened") trackStep(3, "form_opened");
                 else if (e === "field_typed") trackStep(4, "field_typed");
               }}
+              leadId={leadId}
+              answers={answers}
+              name={form.name.trim().split(/\s+/)[0] || "tú"}
             />
           )
         )}
@@ -860,6 +871,13 @@ function MotivoInicialStep({
 }) {
   return (
     <div className="px-5 md:px-8 lg:px-10 pt-5 md:pt-9 lg:pt-12 pb-10 md:pb-16">
+      {/* Badge persistente — recompensa al final del funnel.
+          Repetido en cada paso para anclar la promesa. */}
+      <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/15 text-warm-foreground
+                      px-3 py-1 text-[12px] font-semibold mb-3">
+        <span aria-hidden>🎁</span>
+        <span>Al terminar te llevas tu <strong>clase de prueba GRATIS</strong></span>
+      </div>
       {/* Layout estilo Preply (2026-05-26): título alineado a la
           izquierda, no centrado. La ilustración va en el panel
           adyacente (IllustrationPanel), no necesitamos hero grande
@@ -1014,6 +1032,12 @@ function QuizStep({
 }) {
   return (
     <div className="px-5 md:px-8 lg:px-10 pt-6 md:pt-9 lg:pt-12 pb-12 md:pb-16">
+      {/* Badge persistente de recompensa */}
+      <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/15 text-warm-foreground
+                      px-3 py-1 text-[12px] font-semibold mb-3">
+        <span aria-hidden>🎁</span>
+        <span>Al terminar te llevas tu <strong>clase de prueba GRATIS</strong></span>
+      </div>
       {personalizedH2 && (
         <h2 className="mb-4 md:mb-5 text-[18px] sm:text-xl md:text-[21px] lg:text-[24px] font-semibold text-warm leading-snug">
           {personalizedH2}
@@ -1094,6 +1118,7 @@ function LowBudgetExit({ onBack }: { onBack: () => void }) {
 
 function DataCaptureStep({
   form, setForm, submitting, submitErr, onSubmit, onMicroEvent,
+  leadId, answers, name,
 }: {
   form:        FormData;
   setForm:     React.Dispatch<React.SetStateAction<FormData>>;
@@ -1101,6 +1126,12 @@ function DataCaptureStep({
   submitErr:   string | null;
   onSubmit:    () => void;
   onMicroEvent?: (event: "form_opened" | "field_typed") => void;
+  // Cuando leadId está set (post-register), el formulario se contrae y
+  // CalendarStep se renderiza inline debajo — sin navegación a otra
+  // pantalla. Política Gelfis 2026-06-XX: cero clicks intermedios.
+  leadId:    string | null;
+  answers:   Answers;
+  name:      string;
 }) {
   // Disparar "form_opened" una vez al montar.
   useEffect(() => { onMicroEvent?.("form_opened"); }, [onMicroEvent]);
@@ -1150,26 +1181,44 @@ function DataCaptureStep({
   const phoneMismatch = phoneInfo.state === "mismatch" ? phoneInfo : null;
 
   const phoneDigits  = form.whatsapp.replace(/\D/g, "");
-  // canSubmit depende de la fase:
-  //   email    → nombre + email válidos
-  // Form unificado: nombre + email son obligatorios; WhatsApp opcional.
-  // El WhatsApp aparece bajo el email cuando ambos están válidos.
+  // Form: nombre + email + WhatsApp son TODOS obligatorios desde
+  // 2026-06-XX (Gelfis: WA obligatorio para clase de prueba, demasiados
+  // leads sin canal de contacto). El WhatsApp aparece bajo el email
+  // cuando ambos están válidos (revelación progresiva).
   const nameOk  = form.name.trim().length >= 2;
   const showWhatsappField = nameOk && emailValid;
-  const phoneIsEmpty = phoneDigits.length === 0;
-  // canSubmit: si el lead escribió un WA, debe ser válido. Si lo dejó
-  // vacío, está bien (es opcional).
-  const canSubmit = !submitting && nameOk && emailValid &&
-    (phoneIsEmpty || phoneError === null);
+  const phoneOk = phoneInfo.state === "ok" || phoneInfo.state === "mismatch";
+  const canSubmit = !submitting && nameOk && emailValid && phoneOk;
+
+  // Una vez registered (leadId set), pintamos el calendario inline
+  // debajo del form colapsado. El usuario no ve un step nuevo —
+  // siente que "el calendario apareció".
+  const registered = !!leadId;
 
   return (
-    <div className="px-5 md:px-8 pt-6 md:pt-10 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-[calc(env(safe-area-inset-bottom)+7rem)]">
-      <h1 className="text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900 leading-tight">
-        ¡Estamos creando tu plan!
+    <div className={`px-5 md:px-8 pt-6 md:pt-10 ${registered
+      ? "pb-12"
+      : "pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-[calc(env(safe-area-inset-bottom)+7rem)]"}`}>
+      {/* Badge persistente — recompensa al final del funnel */}
+      <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/15 text-warm-foreground
+                      px-3 py-1 text-[12px] font-semibold">
+        <span aria-hidden>🎁</span>
+        <span>Al terminar te llevas tu <strong>clase de prueba GRATIS</strong></span>
+      </div>
+
+      <h1 className="mt-3 text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900 leading-tight">
+        {registered ? `¡Casi listo, ${name}!` : "¡Estamos creando tu plan!"}
       </h1>
       <p className="mt-3 md:mt-4 text-[15px] md:text-[15px] lg:text-[16px] text-slate-600 leading-relaxed">
-        Sólo necesitamos unos datos para enviarte tu plan personalizado.
+        {registered
+          ? "Elige el horario que mejor te venga para tu clase de prueba GRATIS."
+          : "Necesitamos unos datos para enviarte tu plan y desbloquear el calendario."}
       </p>
+
+      {/* === ZONA FORMULARIO — visible siempre, pero los inputs
+          se vuelven readOnly cuando ya está registrado === */}
+      {!registered && (
+      <>
       <p className="mt-1 text-[11.5px] text-slate-400 leading-snug">
         Los campos marcados con <span className="text-warm font-semibold">*</span> son obligatorios.
       </p>
@@ -1215,10 +1264,23 @@ function DataCaptureStep({
           </p>
         </Field>
 
-        {/* WhatsApp — OPCIONAL. Aparece bajo email cuando nombre +
-            email están válidos. Si lo deja vacío, va al drip email-only. */}
+        {/* WhatsApp — OBLIGATORIO. Aparece bajo email cuando nombre +
+            email están válidos. Instrucciones explícitas porque
+            estábamos recibiendo muchos números inservibles. */}
         {showWhatsappField && (
-        <Field label="WhatsApp">
+        <Field label={<span>WhatsApp <span className="text-warm">*</span></span>}>
+          {/* Instrucciones antes del input — para que el lead sepa cómo
+              escribir el número antes de equivocarse. */}
+          <div className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="text-[12px] font-semibold text-slate-700 leading-snug">
+              📌 Cómo escribir tu número correctamente:
+            </p>
+            <ul className="mt-1 text-[12px] text-slate-600 space-y-0.5 leading-snug">
+              <li>· Selecciona el <strong>código de tu país</strong> en el desplegable de la izquierda</li>
+              <li>· En el campo grande escribe SOLO los dígitos del número, <strong>sin el código del país</strong></li>
+              <li>· Ejemplo (España): <code className="bg-white px-1 rounded">+34</code> + <code className="bg-white px-1 rounded">612 345 678</code></li>
+            </ul>
+          </div>
           <div className="flex gap-2">
             <input
               type="tel"
@@ -1243,7 +1305,7 @@ function DataCaptureStep({
                              ? "border-red-400 focus:border-red-500"
                              : "border-slate-200 focus:border-warm"
                          }`}
-              placeholder="152 123 4567"
+              placeholder="612 345 678"
               aria-invalid={!!phoneError}
               aria-describedby={phoneError ? "wa-error" : undefined}
             />
@@ -1251,6 +1313,11 @@ function DataCaptureStep({
           {phoneError && (
             <p id="wa-error" className="mt-1.5 text-[12px] text-red-600 leading-snug">
               ⚠️ {phoneError}
+            </p>
+          )}
+          {phoneInfo.state === "ok" && (
+            <p className="mt-1.5 text-[12px] text-emerald-700 font-semibold leading-snug">
+              ✓ Número válido — listo para confirmar
             </p>
           )}
           {phoneMismatch && (
@@ -1274,17 +1341,15 @@ function DataCaptureStep({
               </button>
             </div>
           )}
-          {/* Disclaimer educativo — NO mencionamos que es opcional;
-              el asterisco rojo en Nombre/Email + ausencia de él en
-              WhatsApp lo comunica visualmente. */}
+          {/* Por qué pedimos el WhatsApp */}
           <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
             <p className="text-[12px] sm:text-xs text-emerald-900 leading-snug">
-              💬 <strong>Solo te escribiremos con fines educativos:</strong>
+              💬 <strong>Lo necesitamos para tu clase de prueba:</strong>
             </p>
             <ul className="mt-1 text-[11.5px] sm:text-[12px] text-emerald-800 space-y-0.5 leading-snug">
-              <li>· Link de tu clase de prueba</li>
-              <li>· Recordatorios antes de la clase</li>
-              <li>· Materiales y respuestas a tus dudas</li>
+              <li>· Link de la clase 24 h y 30 min antes</li>
+              <li>· Resolver cualquier duda al instante</li>
+              <li>· Materiales adaptados a tu nivel</li>
             </ul>
             <p className="mt-1.5 text-[11px] text-emerald-700/80">
               Cero spam · Cero promociones invasivas
@@ -1312,7 +1377,9 @@ function DataCaptureStep({
                        shadow-lg shadow-warm/20 active:scale-[0.98] transition
                        disabled:opacity-50 disabled:active:scale-100"
           >
-            {submitting ? "Creando tu plan…" : "Crear mi plan"}
+            {submitting
+              ? "Verificando…"
+              : "✓ Confirmar mi número y ver horarios →"}
           </button>
 
           <p className="mt-2 text-center text-[11px] text-slate-400 leading-snug">
@@ -1324,6 +1391,28 @@ function DataCaptureStep({
           </p>
         </div>
       </div>
+      </>
+      )}
+
+      {/* === ZONA RESUMEN + CALENDARIO INLINE — visible una vez registrado === */}
+      {registered && leadId && (
+        <>
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[13px] text-slate-700">
+            <div className="font-semibold text-slate-900">Tus datos están guardados ✓</div>
+            <div className="mt-1 text-slate-600 truncate">
+              {form.name.trim()} · {form.email.trim().toLowerCase()} · {form.countryCode} {form.whatsapp}
+            </div>
+          </div>
+          <div className="mt-3">
+            <CalendarStep
+              name={name}
+              answers={answers}
+              form={form}
+              leadId={leadId}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
