@@ -871,13 +871,6 @@ function MotivoInicialStep({
 }) {
   return (
     <div className="px-5 md:px-8 lg:px-10 pt-5 md:pt-9 lg:pt-12 pb-10 md:pb-16">
-      {/* Badge persistente — recompensa al final del funnel.
-          Repetido en cada paso para anclar la promesa. */}
-      <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/15 text-warm-foreground
-                      px-3 py-1 text-[12px] font-semibold mb-3">
-        <span aria-hidden>🎁</span>
-        <span>Al terminar te llevas tu <strong>clase de prueba GRATIS</strong></span>
-      </div>
       {/* Layout estilo Preply (2026-05-26): título alineado a la
           izquierda, no centrado. La ilustración va en el panel
           adyacente (IllustrationPanel), no necesitamos hero grande
@@ -927,6 +920,16 @@ function MotivoInicialStep({
           );
         })}
       </ul>
+      {/* Badge de recompensa — DEBAJO de las opciones para no competir
+          visualmente con el título y para que el lead lo vea como
+          un beneficio que rodea su decisión, no que la apura. */}
+      <div className="mt-6 flex">
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/15 text-warm-foreground
+                        px-3 py-1 text-[12px] font-semibold">
+          <span aria-hidden>🎁</span>
+          <span>Al terminar te llevas tu <strong>clase de prueba GRATIS</strong></span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1032,12 +1035,6 @@ function QuizStep({
 }) {
   return (
     <div className="px-5 md:px-8 lg:px-10 pt-6 md:pt-9 lg:pt-12 pb-12 md:pb-16">
-      {/* Badge persistente de recompensa */}
-      <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/15 text-warm-foreground
-                      px-3 py-1 text-[12px] font-semibold mb-3">
-        <span aria-hidden>🎁</span>
-        <span>Al terminar te llevas tu <strong>clase de prueba GRATIS</strong></span>
-      </div>
       {personalizedH2 && (
         <h2 className="mb-4 md:mb-5 text-[18px] sm:text-xl md:text-[21px] lg:text-[24px] font-semibold text-warm leading-snug">
           {personalizedH2}
@@ -1068,6 +1065,14 @@ function QuizStep({
           );
         })}
       </ul>
+      {/* Badge de recompensa — DEBAJO de las opciones (Gelfis 2026-06-XX). */}
+      <div className="mt-6 flex">
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/15 text-warm-foreground
+                        px-3 py-1 text-[12px] font-semibold">
+          <span aria-hidden>🎁</span>
+          <span>Al terminar te llevas tu <strong>clase de prueba GRATIS</strong></span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1199,21 +1204,25 @@ function DataCaptureStep({
     <div className={`px-5 md:px-8 pt-6 md:pt-10 ${registered
       ? "pb-12"
       : "pb-[calc(env(safe-area-inset-bottom)+5.5rem)] md:pb-[calc(env(safe-area-inset-bottom)+7rem)]"}`}>
-      {/* Badge persistente — recompensa al final del funnel */}
-      <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/15 text-warm-foreground
-                      px-3 py-1 text-[12px] font-semibold">
-        <span aria-hidden>🎁</span>
-        <span>Al terminar te llevas tu <strong>clase de prueba GRATIS</strong></span>
-      </div>
-
-      <h1 className="mt-3 text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900 leading-tight">
-        {registered ? `¡Casi listo, ${name}!` : "¡Estamos creando tu plan!"}
-      </h1>
-      <p className="mt-3 md:mt-4 text-[15px] md:text-[15px] lg:text-[16px] text-slate-600 leading-relaxed">
-        {registered
-          ? "Elige el horario que mejor te venga para tu clase de prueba GRATIS."
-          : "Necesitamos unos datos para enviarte tu plan y desbloquear el calendario."}
-      </p>
+      {/* Cuando ya está registrado, NO mostramos el badge/h1/subtitle
+          aquí — CalendarStep abajo trae su propio título y copy. Antes
+          se repetía '¡Casi listo!' + 'Elige el horario...' + resumen,
+          y ese pellizco duplicado se sentía bug. */}
+      {!registered && (
+        <>
+          <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/15 text-warm-foreground
+                          px-3 py-1 text-[12px] font-semibold">
+            <span aria-hidden>🎁</span>
+            <span>Al terminar te llevas tu <strong>clase de prueba GRATIS</strong></span>
+          </div>
+          <h1 className="mt-3 text-[26px] sm:text-3xl md:text-[30px] lg:text-[36px] font-extrabold tracking-tight text-slate-900 leading-tight">
+            ¡Estamos creando tu plan!
+          </h1>
+          <p className="mt-3 md:mt-4 text-[15px] md:text-[15px] lg:text-[16px] text-slate-600 leading-relaxed">
+            Necesitamos unos datos para enviarte tu plan y desbloquear el calendario.
+          </p>
+        </>
+      )}
 
       {/* === ZONA FORMULARIO — visible siempre, pero los inputs
           se vuelven readOnly cuando ya está registrado === */}
@@ -1394,24 +1403,17 @@ function DataCaptureStep({
       </>
       )}
 
-      {/* === ZONA RESUMEN + CALENDARIO INLINE — visible una vez registrado === */}
+      {/* === CALENDARIO INLINE — visible una vez registrado.
+          Sin resumen propio: CalendarStep ya trae su título "Tu plan
+          está listo, X" + nivel + copy, y el resumen externo se
+          sentía duplicado. === */}
       {registered && leadId && (
-        <>
-          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-[13px] text-slate-700">
-            <div className="font-semibold text-slate-900">Tus datos están guardados ✓</div>
-            <div className="mt-1 text-slate-600 truncate">
-              {form.name.trim()} · {form.email.trim().toLowerCase()} · {form.countryCode} {form.whatsapp}
-            </div>
-          </div>
-          <div className="mt-3">
-            <CalendarStep
-              name={name}
-              answers={answers}
-              form={form}
-              leadId={leadId}
-            />
-          </div>
-        </>
+        <CalendarStep
+          name={name}
+          answers={answers}
+          form={form}
+          leadId={leadId}
+        />
       )}
     </div>
   );
