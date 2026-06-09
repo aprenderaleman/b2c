@@ -1388,7 +1388,7 @@ function DataCaptureStep({
           >
             {submitting
               ? "Verificando…"
-              : "✓ Confirmar mi número y ver horarios →"}
+              : "Continuar y ver horarios →"}
           </button>
 
           <p className="mt-2 text-center text-[11px] text-slate-400 leading-snug">
