@@ -83,23 +83,25 @@ export default async function FunnelAdsPage({
   const cutoffDate = new Date(Date.now() - activeDays * 86_400_000);
   const partialTelemetry = cutoffDate < telemetryDate;
 
-  // Conversión global paso 1 → paso 3 (formulario completado)
+  // Cadena del embudo: cada KPI muestra % del paso INMEDIATAMENTE
+  // anterior, no del paso 1. Da una lectura más útil ("¿cuántos de
+  // los que llegaron al paso anterior pasaron al siguiente?").
   const entry = data.steps[0]?.reached ?? 0;
   const formCompleted = data.steps[2]?.reached ?? 0;
   const trialBooked = data.steps[3]?.reached ?? 0;
-  const overallFormConv = entry > 0 ? (100 * formCompleted / entry) : 0;
-  const overallTrialConv = entry > 0 ? (100 * trialBooked / entry) : 0;
-  // Tasa de conversión "trial → pago": de los que agendaron clase de
-  // prueba, ¿qué porcentaje terminó comprando? Es el KPI más cercano
-  // a ventas — mide la calidad del cierre, no del ad.
-  const trialToPaidConv = trialBooked > 0 ? (100 * data.totalConverted / trialBooked) : 0;
-
-  // Asistencia a clases de prueba — sub-embudo entre "agendó" y "convirtió".
-  // Mide la calidad de los leads que pasan por trial: ¿se presentan?
   const ta = data.trialAttendance;
-  const taTotalResolved = ta.attended + ta.absent;
-  const attendanceRate  = taTotalResolved > 0 ? (100 * ta.attended / taTotalResolved) : 0;
-  const noShowRate      = taTotalResolved > 0 ? (100 * ta.absent   / taTotalResolved) : 0;
+  const trialAttended = ta.attended;
+
+  const formVsEntry        = entry         > 0 ? (100 * formCompleted  / entry)         : 0;
+  const trialVsForm        = formCompleted > 0 ? (100 * trialBooked    / formCompleted) : 0;
+  const attendedVsTrial    = trialBooked   > 0 ? (100 * trialAttended  / trialBooked)   : 0;
+  const convertedVsAttended = trialAttended > 0 ? (100 * data.totalConverted / trialAttended) : 0;
+
+  // % de no-show solo para la alerta opcional bajo la fila (no se
+  // pinta como card propio — los KPIs principales son la cadena
+  // de conversión).
+  const taResolved  = ta.attended + ta.absent;
+  const noShowRate  = taResolved > 0 ? (100 * ta.absent / taResolved) : 0;
 
   return (
     <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
@@ -178,8 +180,9 @@ export default async function FunnelAdsPage({
         </div>
       )}
 
-      {/* KPIs grandes — visión rápida del funnel */}
-      <section className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* KPIs grandes — cadena del funnel.
+          Cada card muestra el % del paso INMEDIATAMENTE anterior. */}
+      <section className="mt-5 grid grid-cols-2 md:grid-cols-5 gap-3">
         <KpiCard
           label="Entradas (motivo)"
           value={entry.toLocaleString()}
@@ -188,90 +191,58 @@ export default async function FunnelAdsPage({
         <KpiCard
           label="Form completado"
           value={`${formCompleted.toLocaleString()}`}
-          subtitle={`${overallFormConv.toFixed(1)}% del paso 1`}
-          accent={overallFormConv < 10 ? "text-red-300" : overallFormConv < 15 ? "text-amber-300" : "text-emerald-300"}
+          subtitle={entry > 0 ? `${formVsEntry.toFixed(1)}% de Entradas` : "—"}
+          accent={formVsEntry < 10 ? "text-red-300" : formVsEntry < 15 ? "text-amber-300" : "text-emerald-300"}
         />
         <KpiCard
           label="Trial agendada"
           value={`${trialBooked.toLocaleString()}`}
-          subtitle={`${overallTrialConv.toFixed(1)}% del paso 1`}
-          accent={trialBooked === 0 && formCompleted >= 5 ? "text-red-300" : overallTrialConv < 5 ? "text-amber-300" : "text-emerald-300"}
+          subtitle={formCompleted > 0 ? `${trialVsForm.toFixed(1)}% de Form completado` : "—"}
+          accent={trialBooked === 0 && formCompleted >= 5 ? "text-red-300" : trialVsForm < 30 ? "text-amber-300" : "text-emerald-300"}
         />
         <KpiCard
-          label="Convirtieron (pago)"
-          value={`${data.totalConverted}`}
+          label="Trial asistido"
+          value={`${trialAttended.toLocaleString()}`}
           subtitle={trialBooked > 0
-            ? `${trialToPaidConv.toFixed(1)}% de los ${trialBooked} trials`
+            ? `${attendedVsTrial.toFixed(1)}% de Trial agendada${ta.pending > 0 ? ` · ${ta.pending} pend.` : ""}`
             : "Sin trials en el rango"}
           accent={
             trialBooked === 0
               ? "text-white"
-              : trialToPaidConv >= 30
+              : attendedVsTrial >= 70
                 ? "text-emerald-300"
-                : trialToPaidConv >= 15
+                : attendedVsTrial >= 50
+                  ? "text-amber-300"
+                  : "text-red-300"
+          }
+        />
+        <KpiCard
+          label="Convirtieron (pago)"
+          value={`${data.totalConverted}`}
+          subtitle={trialAttended > 0
+            ? `${convertedVsAttended.toFixed(1)}% de Trial asistido`
+            : trialBooked > 0
+              ? "Sin asistidos marcados"
+              : "Sin trials en el rango"}
+          accent={
+            trialAttended === 0
+              ? "text-white"
+              : convertedVsAttended >= 30
+                ? "text-emerald-300"
+                : convertedVsAttended >= 15
                   ? "text-amber-300"
                   : "text-red-300"
           }
         />
       </section>
 
-      {/* ── Asistencia a clases de prueba ──────────────────────── */}
-      {/* Sub-fila de KPIs entre "Trial agendada" y "Convirtieron".
-          Mide cuántos de los leads que reservaron clase se presentaron.
-          Si el % de no-show es alto, hay que mejorar la cadena de
-          recordatorios o la calidad del lead que entra al funnel. */}
-      <section className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="flex items-baseline justify-between flex-wrap gap-2">
-          <h3 className="text-sm font-semibold text-white">
-            🎓 Asistencia a las clases de prueba
-          </h3>
-          <span className="text-xs text-white/55">
-            De {ta.scheduled} trial{ta.scheduled === 1 ? "" : "s"} agendado{ta.scheduled === 1 ? "" : "s"} en el rango
-          </span>
+      {/* Alerta de no-show alto debajo de la fila de KPIs si aplica. */}
+      {ta.absent > 0 && noShowRate >= 30 && (
+        <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+          ⚠️ Tasa de no-show alta ({noShowRate.toFixed(0)}% — {ta.absent} de {taResolved} marcados).
+          Revisar recordatorios pre-trial, calidad del lead por motivo y país.
         </div>
-        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
-          <MiniStat
-            label="✅ Asistieron"
-            value={ta.attended.toLocaleString()}
-            subtitle={taTotalResolved > 0 ? `${attendanceRate.toFixed(1)}% de los marcados` : "—"}
-            accent="text-emerald-300"
-          />
-          <MiniStat
-            label="❌ No asistieron"
-            value={ta.absent.toLocaleString()}
-            subtitle={taTotalResolved > 0 ? `${noShowRate.toFixed(1)}% no-show` : "—"}
-            accent={noShowRate >= 40 ? "text-red-300" : noShowRate >= 20 ? "text-amber-300" : "text-white"}
-          />
-          <MiniStat
-            label="⏳ Pendientes"
-            value={ta.pending.toLocaleString()}
-            subtitle={ta.pending > 0 ? "clase próxima o sin marcar" : "todo marcado"}
-            accent="text-white/80"
-          />
-          <MiniStat
-            label="🎯 Tasa de asistencia"
-            value={taTotalResolved > 0 ? `${attendanceRate.toFixed(0)}%` : "—"}
-            subtitle={taTotalResolved > 0
-              ? `${ta.attended}/${taTotalResolved} marcados`
-              : "Aún sin marcas"}
-            accent={
-              taTotalResolved === 0
-                ? "text-white/60"
-                : attendanceRate >= 70
-                  ? "text-emerald-300"
-                  : attendanceRate >= 50
-                    ? "text-amber-300"
-                    : "text-red-300"
-            }
-          />
-        </div>
-        {ta.absent > 0 && noShowRate >= 30 && (
-          <div className="mt-3 text-xs text-amber-200/90">
-            ⚠️ Tasa de no-show alta ({noShowRate.toFixed(0)}%). Revisar recordatorios
-            (cron pre-trial), calidad del lead por motivo, y país.
-          </div>
-        )}
-      </section>
+      )}
 
       {partialTelemetry && (
         <div className="mt-4 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3 text-sm text-blue-100">
@@ -614,20 +585,3 @@ function KpiCard({
   );
 }
 
-/** Variante compacta de KpiCard para sub-fila de asistencia. */
-function MiniStat({
-  label, value, subtitle, accent,
-}: {
-  label:    string;
-  value:    string;
-  subtitle?: string;
-  accent:   string;
-}) {
-  return (
-    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
-      <div className="text-[10px] uppercase tracking-wider text-white/55">{label}</div>
-      <div className={`mt-1 text-xl md:text-2xl font-bold tabular-nums ${accent}`}>{value}</div>
-      {subtitle && <div className="text-[11px] text-white/45 mt-0.5">{subtitle}</div>}
-    </div>
-  );
-}
