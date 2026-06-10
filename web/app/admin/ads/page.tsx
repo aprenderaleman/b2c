@@ -26,6 +26,57 @@ const RANGES: Array<{ label: string; days: number }> = [
   { label: "90 días",  days: 90  },
 ];
 
+// Periodos calendarios — anclados a la zona Europe/Berlin (donde vive
+// el negocio). Cada uno se resuelve a "días hacia atrás desde ahora"
+// en el momento de renderizar la página. Se diferencian de RANGES
+// porque el botón activo se determina por ?period=... no por ?days=N.
+type PeriodKey = "week" | "month" | "year";
+
+const PERIODS: Array<{ key: PeriodKey; label: string }> = [
+  { key: "week",  label: "Esta semana" },  // lunes 00:00 Berlin → hoy
+  { key: "month", label: "Este mes"    },  // día 1 00:00 → hoy
+  { key: "year",  label: "Este año"    },  // 1 ene 00:00 → hoy
+];
+
+/**
+ * Devuelve cuántos días caben desde el inicio del periodo hasta ahora,
+ * en Europe/Berlin. Mínimo 1 (mismo día = "hoy"). Usado para construir
+ * el filtro temporal a partir de ?period=week/month/year.
+ */
+function daysFromPeriod(period: PeriodKey): number {
+  // Trabajamos en Europe/Berlin para que "Esta semana" cuente desde
+  // el lunes local del usuario, no UTC. Usamos `toLocaleString` con
+  // timezone y reconstruimos el Date para extraer los componentes.
+  const berlinNow = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Europe/Berlin" }),
+  );
+
+  let startMs: number;
+  if (period === "week") {
+    // Lunes 00:00 Berlin. getDay(): 0=domingo, 1=lunes, ..., 6=sábado.
+    const day = berlinNow.getDay();
+    const daysSinceMonday = day === 0 ? 6 : day - 1;
+    const monday = new Date(berlinNow);
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(berlinNow.getDate() - daysSinceMonday);
+    startMs = monday.getTime();
+  } else if (period === "month") {
+    const first = new Date(berlinNow);
+    first.setHours(0, 0, 0, 0);
+    first.setDate(1);
+    startMs = first.getTime();
+  } else {
+    // year
+    const jan1 = new Date(berlinNow);
+    jan1.setHours(0, 0, 0, 0);
+    jan1.setMonth(0, 1);
+    startMs = jan1.getTime();
+  }
+
+  const diffDays = Math.ceil((berlinNow.getTime() - startMs) / 86_400_000) + 1;
+  return Math.max(1, Math.min(365, diffDays));
+}
+
 // Nombre legible por código ISO-2 para el dropdown de país.
 const COUNTRY_NAMES: Record<string, string> = {
   ES: "🇪🇸 España",     DE: "🇩🇪 Alemania",   AT: "🇦🇹 Austria",
@@ -57,15 +108,30 @@ function qs(params: Record<string, string | number | undefined>): string {
 export default async function FunnelAdsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; country?: string }>;
+  searchParams: Promise<{ days?: string; country?: string; period?: string }>;
 }) {
   await requireRole(["superadmin", "admin"]);
   const sp = await searchParams;
 
+  // Periodo calendario (?period=week|month|year) tiene prioridad sobre
+  // ?days=N — si está seteado, calculamos los días dinámicamente desde
+  // el inicio de la semana/mes/año actual en Europe/Berlin.
+  const periodRaw = (sp.period ?? "").trim().toLowerCase();
+  const activePeriod: PeriodKey | "" =
+    periodRaw === "week" || periodRaw === "month" || periodRaw === "year"
+      ? periodRaw
+      : "";
+
   // Días: aceptamos cualquier número 1-365 desde URL; si no, default 30.
-  const daysRaw = Number(sp.days ?? 30);
-  const activeDays = Number.isFinite(daysRaw) && daysRaw >= 1 && daysRaw <= 365
-    ? Math.round(daysRaw) : 30;
+  // Si hay periodo activo, lo derivamos de ese; si no, leemos ?days.
+  let activeDays: number;
+  if (activePeriod) {
+    activeDays = daysFromPeriod(activePeriod);
+  } else {
+    const daysRaw = Number(sp.days ?? 30);
+    activeDays = Number.isFinite(daysRaw) && daysRaw >= 1 && daysRaw <= 365
+      ? Math.round(daysRaw) : 30;
+  }
 
   // País: ISO-2 mayúsculas; vacío = todos.
   const countryRaw = (sp.country ?? "").trim().toUpperCase();
@@ -118,7 +184,7 @@ export default async function FunnelAdsPage({
 
       {/* ── Filtros ────────────────────────────────────────────── */}
       <section className="rounded-xl border border-white/10 bg-white/5 p-3 flex flex-col md:flex-row gap-3 md:items-center">
-        {/* Días */}
+        {/* Días + Periodos calendarios */}
         <div className="flex-1">
           <div className="text-[11px] uppercase tracking-wider text-white/45 mb-1.5">Rango</div>
           <div className="flex gap-1 flex-wrap">
@@ -127,12 +193,28 @@ export default async function FunnelAdsPage({
                 key={r.days}
                 href={`/admin/ads${qs({ days: r.days, country: activeCountry || undefined })}`}
                 className={`px-3 py-1.5 rounded-md text-sm transition ${
-                  r.days === activeDays
+                  !activePeriod && r.days === activeDays
                     ? "bg-warm text-warm-foreground font-semibold"
                     : "border border-white/10 bg-white/5 text-white/70 hover:text-white hover:bg-white/10"
                 }`}
               >
                 {r.label}
+              </Link>
+            ))}
+            {/* Separador visual entre N-días y periodos calendarios. */}
+            <span className="self-center text-white/20 px-1 select-none">·</span>
+            {PERIODS.map(p => (
+              <Link
+                key={p.key}
+                href={`/admin/ads${qs({ period: p.key, country: activeCountry || undefined })}`}
+                className={`px-3 py-1.5 rounded-md text-sm transition ${
+                  activePeriod === p.key
+                    ? "bg-warm text-warm-foreground font-semibold"
+                    : "border border-white/10 bg-white/5 text-white/70 hover:text-white hover:bg-white/10"
+                }`}
+                title={`Cubre ${daysFromPeriod(p.key)} día${daysFromPeriod(p.key) === 1 ? "" : "s"} desde el inicio del periodo`}
+              >
+                {p.label}
               </Link>
             ))}
           </div>
@@ -142,7 +224,13 @@ export default async function FunnelAdsPage({
         <div className="md:w-72">
           <div className="text-[11px] uppercase tracking-wider text-white/45 mb-1.5">País</div>
           <form action="/admin/ads" method="get" className="flex gap-1.5">
-            <input type="hidden" name="days" value={activeDays} />
+            {/* Preservamos el periodo calendario si está activo; si no,
+                mantenemos el rango de días simple. Sin esto el form de
+                país perdía el filtro de "Este mes/semana/año". */}
+            {activePeriod
+              ? <input type="hidden" name="period" value={activePeriod} />
+              : <input type="hidden" name="days"   value={activeDays} />
+            }
             <select
               name="country"
               defaultValue={activeCountry}
@@ -172,7 +260,7 @@ export default async function FunnelAdsPage({
             no se filtran por país — sólo conocemos el país tras el paso 3 (form completado).
           </span>
           <Link
-            href={`/admin/ads${qs({ days: activeDays })}`}
+            href={`/admin/ads${qs(activePeriod ? { period: activePeriod } : { days: activeDays })}`}
             className="text-amber-200 hover:text-white underline text-xs whitespace-nowrap"
           >
             Limpiar filtro
