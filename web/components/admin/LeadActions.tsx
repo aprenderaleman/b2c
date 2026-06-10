@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ConvertLeadModal } from "./ConvertLeadModal";
 import { DeleteLeadButton } from "./DeleteLeadButton";
 import { EditLeadModal }    from "./EditLeadModal";
+import { MarkAttendedModal } from "./MarkAttendedModal";
 
 type Lead = {
   id:    string;
@@ -26,8 +28,10 @@ type Lead = {
  * state.
  */
 export function LeadActions({ lead }: { lead: Lead }) {
-  const [convertOpen, setConvertOpen] = useState(false);
-  const [editOpen,    setEditOpen]    = useState(false);
+  const [convertOpen,  setConvertOpen]  = useState(false);
+  const [editOpen,     setEditOpen]     = useState(false);
+  const [attendedOpen, setAttendedOpen] = useState(false);
+  const router = useRouter();
 
   const alreadyConverted = Boolean(lead.converted_to_user_id);
   const canConvert       = !alreadyConverted && lead.status !== "lost";
@@ -172,26 +176,14 @@ export function LeadActions({ lead }: { lead: Lead }) {
 
       {canMarkAttendance && (
         <>
-          <form
-            action={`/api/admin/leads/${lead.id}/trial/attended`}
-            method="post"
-            onSubmit={(e) => {
-              if (!confirm(
-                "Marcar el lead como ASISTIÓ a la clase de prueba.\n\n" +
-                "• Pasa a estado 'in_conversation'.\n" +
-                "• Le mandamos un WhatsApp pidiendo feedback y ofreciendo un plan personalizado.\n\n" +
-                "¿Continuar?"
-              )) e.preventDefault();
-            }}
+          <button
+            type="button"
+            onClick={() => setAttendedOpen(true)}
+            className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25"
+            title="Lead asistió a la clase de prueba — abre el formulario de pack/objetivo/pago"
           >
-            <button
-              type="submit"
-              className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25"
-              title="Lead asistió a la clase de prueba"
-            >
-              ✓ Asistió
-            </button>
-          </form>
+            ✓ Asistió
+          </button>
           <form
             action={`/api/admin/leads/${lead.id}/trial/absent`}
             method="post"
@@ -279,6 +271,20 @@ export function LeadActions({ lead }: { lead: Lead }) {
       </a>
 
       <DeleteLeadButton leadId={lead.id} />
+
+      {/* Mark attended modal — captura pack + objetivo + tipo de pago
+          antes de mandar el WhatsApp personalizado post-clase. */}
+      {attendedOpen && (
+        <MarkAttendedModal
+          leadId={lead.id}
+          leadName={lead.name}
+          onClose={() => setAttendedOpen(false)}
+          onSuccess={() => {
+            setAttendedOpen(false);
+            router.refresh();
+          }}
+        />
+      )}
 
       {/* Conversion modal */}
       <ConvertLeadModal
