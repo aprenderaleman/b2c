@@ -55,6 +55,7 @@ PAUSED_STATUSES = (
     "trial_absent",
     "absent_followup_1",
     "absent_followup_2",
+    "absent_followup_3",
 )
 
 # Estados post-engagement: Agent 1 sí compone reactivaciones, pero Agent 0

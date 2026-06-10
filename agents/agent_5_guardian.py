@@ -142,7 +142,8 @@ def tick_absent_followups() -> int:
                    german_level, goal, urgency, status,
                    current_followup_number
               FROM leads
-             WHERE status IN ('trial_absent', 'absent_followup_1', 'absent_followup_2')
+             WHERE status IN ('trial_absent', 'absent_followup_1',
+                              'absent_followup_2', 'absent_followup_3')
                AND next_contact_date IS NOT NULL
                AND next_contact_date <= NOW()
             """
@@ -161,45 +162,56 @@ def _process_absent_followup(lead: dict) -> None:
     name = _first_name(lead)
     lang = lead["language"]
 
+    # Secuencia de 4 follow-ups (copy aprobado por Gelfis 2026-06-08).
+    # Cadencia D+1 / D+3 / D+5 / D+7 medida desde el "No asistió"; las
+    # `timedelta` siguientes son OFFSETS desde el envío de cada paso
+    # (ej. después de FU1 esperamos +2d para FU2 → total 3d).
     if status == "trial_absent":
         body = (
-            f"Hallo {name}, alles gut bei dir? 😊\n\n"
-            f"Ich habe gesehen, dass du gestern nicht in der Probestunde warst.\n\n"
-            f"Möchtest du einen neuen Termin vereinbaren?\n\n"
-            f"— Stiv · Aprender-Aleman.de"
+            f"Hallo {name}, ich habe gesehen, dass du gestern nicht in deine "
+            f"Probestunde reinkonntest. Möchtest du immer noch Deutsch lernen?\n"
+            f"— Stiv | Aprender-Aleman.de"
         ) if lang == "de" else (
-            f"Hola {name}, ¿todo bien? 😊\n\n"
-            f"Vi que ayer no pudiste conectarte a la clase de prueba.\n\n"
-            f"¿Quieres que reagendemos?\n\n"
-            f"— Stiv · Aprender-Aleman.de"
+            f"Hola {name}, vi que ayer no pudiste conectarte a tu clase de prueba. "
+            f"¿Sigues interesado/a en aprender alemán?\n"
+            f"— Stiv | Aprender-Aleman.de"
         )
         next_status = "absent_followup_1"
-        next_delta = timedelta(days=3)  # +4d after absent total
+        next_delta = timedelta(days=2)  # FU2 cae +3d después del marcado
     elif status == "absent_followup_1":
         body = (
-            f"Hallo {name}, ich versuche es noch einmal. 🧡\n\n"
-            f"Wenn du Deutsch immer noch lernen möchtest, sag mir Bescheid "
-            f"und wir suchen einen neuen Termin.\n\n"
-            f"— Stiv · Aprender-Aleman.de"
+            f"Hallo {name}, wir schließen die Anmeldungen und die Plätze gehen aus. "
+            f"Soll ich deinen reservieren?\n"
+            f"— Stiv | Aprender-Aleman.de"
         ) if lang == "de" else (
-            f"Hola {name}, vuelvo a escribirte. 🧡\n\n"
-            f"Si aún te interesa aprender alemán, dímelo y coordinamos "
-            f"un nuevo horario.\n\n"
-            f"— Stiv · Aprender-Aleman.de"
+            f"Hola {name}, estamos cerrando inscripciones y los cupos se están agotando. "
+            f"¿Quieres que te reserve el tuyo?\n"
+            f"— Stiv | Aprender-Aleman.de"
         )
         next_status = "absent_followup_2"
-        next_delta = timedelta(days=6)
-    else:  # absent_followup_2
+        next_delta = timedelta(days=2)  # FU3 cae +5d después del marcado
+    elif status == "absent_followup_2":
         body = (
-            f"Hallo {name}, letztes Mal von meiner Seite.\n\n"
-            f"Falls du Deutsch lernen möchtest, schreib mir einfach — "
-            f"ansonsten alles Gute für dich! 🧡\n\n"
-            f"— Stiv · Aprender-Aleman.de"
+            f"Hallo {name}, je früher du anfängst, desto schneller erreichst du dein "
+            f"Ziel mit Deutsch. Probieren wir es diese Woche?\n"
+            f"— Stiv | Aprender-Aleman.de"
         ) if lang == "de" else (
-            f"Hola {name}, último mensaje por mi parte.\n\n"
-            f"Si quieres aprender alemán, escríbeme — si no, te deseamos "
-            f"lo mejor. 🧡\n\n"
-            f"— Stiv · Aprender-Aleman.de"
+            f"Hola {name}, cuanto antes empieces, antes llegarás a tu objetivo con el "
+            f"alemán. ¿Lo intentamos esta semana?\n"
+            f"— Stiv | Aprender-Aleman.de"
+        )
+        next_status = "absent_followup_3"
+        next_delta = timedelta(days=2)  # FU4 cae +7d después del marcado
+    else:  # absent_followup_3 — último mensaje
+        body = (
+            f"Hallo {name}, wir geben deinen Platz an einen anderen Schüler weiter. "
+            f"Falls du es dir später anders überlegst, sind wir hier. "
+            f"Alles Gute! 🍀\n"
+            f"— Stiv | Aprender-Aleman.de"
+        ) if lang == "de" else (
+            f"Hola {name}, vamos a liberar tu espacio para dárselo a otro estudiante. "
+            f"Si en algún momento decides retomar, aquí estaremos. ¡Mucho éxito! 🍀\n"
+            f"— Stiv | Aprender-Aleman.de"
         )
         next_status = "lost"
         next_delta = None
