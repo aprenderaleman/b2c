@@ -335,11 +335,17 @@ def handle_incoming_message(
     # el bot NO debe auto-mensajear. Caso Sara 2026-04-30 donde el bot
     # le ofreció horarios a alguien que iba a otra academia.
     if status == "in_conversation" and _is_awaiting_trial_decision(lead["id"]):
-        log.info("Lead %s post-trial pendiente decisión — escalando a Gelfis.", lead["id"])
+        log.info("Lead %s post-trial pendiente decisión — escalando a Gelfis (needs_human).", lead["id"])
+        # Decisión Gelfis 2026-06-05: cualquier respuesta del lead tras
+        # haber recibido el link de pago debe escalar a needs_human
+        # (no solo notificar). Casos típicos: "sí, ya pagué", "tuve un
+        # problema con el pago", "¿cuánto cuesta?". Todos requieren
+        # acción humana — Stiv no debe responder.
+        update_status(lead["id"], "needs_human", author="agent_4")
         log_timeline(
             lead["id"], type="escalation", author="agent_4",
-            content=f"Post-trial pendiente decisión: \"{text[:200]}\"",
-            metadata={"alert_gelfis": True},
+            content=f"Post-trial decisión: lead respondió — escalado a needs_human. \"{text[:200]}\"",
+            metadata={"alert_gelfis": True, "reason": "post_trial_reply"},
         )
         try:
             from agents.notifications import notify_trial_attended_pending

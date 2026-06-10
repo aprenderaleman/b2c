@@ -78,7 +78,7 @@ def _template_contact_1(lead: dict) -> str:
     agendaron clase de prueba. Decisión Gelfis 2026-05-12: ofrecemos
     una llamada de 15 min (no clase de prueba) — la llamada convierte
     mejor con leads que se quedaron parados en el funnel.
-    Firma: Gelfis Horn (humano), no Stiv (bot).
+    Firma: Stiv · Aprender-Aleman.de.
     """
     name = _first_name(lead)
     if lead["language"] == "de":
