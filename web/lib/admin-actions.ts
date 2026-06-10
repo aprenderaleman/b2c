@@ -103,7 +103,12 @@ export async function markTrialAttendedAwaitingConversion(
   //     la venta a mano (es escalado, no auto-respuesta de Stiv). Esto
   //     se hace en el handler de mensajes entrantes leyendo el flag
   //     `awaiting_payment_confirmation_since` en lead_meta.
-  const followupAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  // +2 días desde el envío del Mensaje 1. La cadena post-clase ahora
+  // tiene 3 mensajes en total (1 inmediato + 2 en +2d y +3d) procesada
+  // por /api/cron/post-trial-followups. Antes era +24h con un único
+  // follow-up vía Python; ahora todo es TS para mantener el copy en un
+  // solo sitio y poder mandar email en los pasos que lo necesitan.
+  const followupAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
 
   // Cargamos la metadata existente para no pisarla.
   const { data: metaRow } = await sb
@@ -150,40 +155,35 @@ export async function markTrialAttendedAwaitingConversion(
 
     // Copy fijo aprobado por Gelfis. NO modificar el wording sin pedirle
     // antes — el equipo lo usa palabra por palabra.
+    // Copy Mensaje 1 — aprobado por Gelfis 08/06.
     text = lead.language === "de"
       ? [
           `Hallo ${firstName}! 😊`,
           ``,
           `Es war mir eine Freude, dich heute in der Probestunde dabei zu haben — schön, dass es dir gefallen hat.`,
           ``,
-          `Basierend auf deinem Ziel (${opts.objective}) passt das Paket **${packName}** am besten zu dir.`,
+          `Basierend auf deinem Ziel (${opts.objective}) passt das Paket ${packName} am besten zu dir.`,
           ``,
-          `Hier dein Anmeldelink — auf der Seite kannst du die Zahlungsart wählen, die dir am besten passt:`,
+          `Hier dein Anmeldelink:`,
+          `👉 ${packLink || "(Ich schicke dir den Link gleich nach.)"}`,
           ``,
-          packLink || `(Ich schicke dir den Link gleich nach.)`,
+          `Sag mir Bescheid, sobald du die Zahlung abgeschlossen hast. Bei Fragen bin ich da.`,
           ``,
-          `Wenn du Fragen hast, schreib mir gerne.`,
-          ``,
-          `Bitte sag mir Bescheid, sobald du die Zahlung abgeschlossen hast.`,
-          ``,
-          `*  Aprender-Aleman.de`,
+          `Gelfis | Aprender-Aleman.de`,
         ].join("\n")
       : [
           `¡Hola ${firstName}! 😊`,
           ``,
           `Ha sido un placer tenerte en la clase de prueba de hoy — qué bueno que la hayas disfrutado.`,
           ``,
-          `Según tu objetivo (${opts.objective}), el Pack que mejor se adapta a ti es el ${packName}.`,
+          `Según tu objetivo (${opts.objective}), el pack que mejor se adapta a ti es el ${packName}.`,
           ``,
-          `Aquí tienes el enlace para formalizar tu inscripción — en la página podrás elegir el método de pago que más te convenga:`,
+          `Aquí tienes el enlace para formalizar tu inscripción:`,
+          `👉 ${packLink || "(Te paso el enlace en breve.)"}`,
           ``,
-          packLink || `(Te paso el enlace en breve.)`,
+          `Avísame cuando hayas realizado el pago. Cualquier duda, aquí estoy.`,
           ``,
-          `Si tienes cualquier duda, dime sin problema.`,
-          ``,
-          `Avisame por favor cuando hayas realizado el pago`,
-          ``,
-          `*  Aprender-Aleman.de`,
+          `Gelfis | Aprender-Aleman.de`,
         ].join("\n");
   } else {
     // Fallback (sin pack/objetivo seleccionado) — mensaje genérico de antes.

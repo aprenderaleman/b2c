@@ -93,6 +93,14 @@ def _leads_due() -> list[dict]:
                    AND status NOT IN ({",".join(["%s"] * len(PAUSED_STATUSES))})
                    -- Respetar pausa manual de admin
                    AND (ai_paused_until IS NULL OR ai_paused_until <= NOW())
+                   -- Excluir leads de la cadena post-clase de prueba
+                   -- (los maneja /api/cron/post-trial-followups en Vercel
+                   --  con su propio copy + email espejo).
+                   AND NOT (
+                         status = 'in_conversation'
+                     AND meta IS NOT NULL
+                     AND meta->>'awaiting_payment_confirmation_since' IS NOT NULL
+                   )
                 )
              ORDER BY
                  CASE WHEN status = 'new' THEN 0 ELSE 1 END,

@@ -64,6 +64,54 @@ export function renderPostTrialFollowupGeneric(v: PostTrialFollowupGenericVars):
   return { subject, html, text };
 }
 
+/**
+ * Email del Mensaje 3 (último) — al liberar el cupo. Mismo wording que
+ * el WhatsApp final, firmado por Stiv. Sin botón ni link.
+ */
+export type PostTrialFinalVars = {
+  name:     string;
+  language: "es" | "de";
+};
+
+export function renderPostTrialFinal(v: PostTrialFinalVars): RenderedEmail {
+  if (v.language === "de") {
+    const subject = `Letzte Nachricht — wir geben deinen Platz frei`;
+    const body = `
+      ${h2(`Hallo ${escapeHtml(v.name)},`)}
+      ${p("Das ist meine letzte Nachricht von meiner Seite.")}
+      ${p("Wir werden deinen Platz in der Akademie an einen anderen Schüler weitergeben. Falls du irgendwann wieder einsteigen möchtest, sind wir hier.")}
+      ${p("Viel Erfolg! 🍀")}
+      ${p(`<em style="color:#64748b;">Stiv | Aprender-Aleman.de</em>`)}
+    `;
+    const html = renderEnvelope(body, "Du erhältst diese E-Mail im Rahmen unseres Follow-up bei Aprender-Aleman.de.");
+    const text = [
+      `Hallo ${v.name},`, ``,
+      `Das ist meine letzte Nachricht von meiner Seite.`, ``,
+      `Wir werden deinen Platz in der Akademie an einen anderen Schüler weitergeben. Falls du irgendwann wieder einsteigen möchtest, sind wir hier.`, ``,
+      `Viel Erfolg! 🍀`, ``,
+      `Stiv | Aprender-Aleman.de`,
+    ].join("\n");
+    return { subject, html, text };
+  }
+  const subject = `Último mensaje — liberamos tu espacio`;
+  const body = `
+    ${h2(`Hola ${escapeHtml(v.name)},`)}
+    ${p("Último mensaje por mi parte.")}
+    ${p("Vamos a liberar tu espacio en la academia para dárselo a otro estudiante. Si en algún momento decides retomar, aquí estaremos.")}
+    ${p("¡Mucho éxito! 🍀")}
+    ${p(`<em style="color:#64748b;">Stiv | Aprender-Aleman.de</em>`)}
+  `;
+  const html = renderEnvelope(body, "Recibes este correo como cierre de tu seguimiento en Aprender-Aleman.de.");
+  const text = [
+    `Hola ${v.name},`, ``,
+    `Último mensaje por mi parte.`, ``,
+    `Vamos a liberar tu espacio en la academia para dárselo a otro estudiante. Si en algún momento decides retomar, aquí estaremos.`, ``,
+    `¡Mucho éxito! 🍀`, ``,
+    `Stiv | Aprender-Aleman.de`,
+  ].join("\n");
+  return { subject, html, text };
+}
+
 // ─── Versión personalizada (con pack y objetivo) ─────────────────────
 
 function renderES(v: PostTrialFollowupVars): RenderedEmail {
@@ -71,23 +119,21 @@ function renderES(v: PostTrialFollowupVars): RenderedEmail {
   const body = `
     ${h2(`¡Hola ${escapeHtml(v.name)}! 😊`)}
     ${p("Ha sido un placer tenerte en la clase de prueba de hoy — qué bueno que la hayas disfrutado.")}
-    ${p(`Según tu objetivo (<strong>${escapeHtml(v.objective)}</strong>), el Pack que mejor se adapta a ti es el <strong>${escapeHtml(v.packName)}</strong>.`)}
-    ${p("Aquí tienes el enlace para formalizar tu inscripción — en la página podrás elegir el método de pago que más te convenga:")}
-    <div style="text-align:center;margin:24px 0 28px 0;">${button(v.packUrl, "Inscribirme →")}</div>
-    ${p("Si tienes cualquier duda, dime sin problema.")}
-    ${p("Avísame por favor cuando hayas realizado el pago.")}
-    ${p(`<em style="color:#64748b;">* Aprender-Aleman.de</em>`)}
+    ${p(`Según tu objetivo (<strong>${escapeHtml(v.objective)}</strong>), el pack que mejor se adapta a ti es el <strong>${escapeHtml(v.packName)}</strong>.`)}
+    ${p("Aquí tienes el enlace para formalizar tu inscripción:")}
+    <div style="text-align:center;margin:24px 0 28px 0;">${button(v.packUrl, "👉 Inscribirme")}</div>
+    ${p("Avísame cuando hayas realizado el pago. Cualquier duda, aquí estoy.")}
+    ${p(`<em style="color:#64748b;">Gelfis | Aprender-Aleman.de</em>`)}
   `;
   const html = renderEnvelope(body, "Recibes este correo tras tu clase de prueba en Aprender-Aleman.de.");
   const text = [
     `¡Hola ${v.name}! 😊`, ``,
     `Ha sido un placer tenerte en la clase de prueba de hoy — qué bueno que la hayas disfrutado.`, ``,
-    `Según tu objetivo (${v.objective}), el Pack que mejor se adapta a ti es el ${v.packName}.`, ``,
-    `Aquí tienes el enlace para formalizar tu inscripción — en la página podrás elegir el método de pago que más te convenga:`,
-    v.packUrl, ``,
-    `Si tienes cualquier duda, dime sin problema.`, ``,
-    `Avísame por favor cuando hayas realizado el pago.`, ``,
-    `* Aprender-Aleman.de`,
+    `Según tu objetivo (${v.objective}), el pack que mejor se adapta a ti es el ${v.packName}.`, ``,
+    `Aquí tienes el enlace para formalizar tu inscripción:`,
+    `👉 ${v.packUrl}`, ``,
+    `Avísame cuando hayas realizado el pago. Cualquier duda, aquí estoy.`, ``,
+    `Gelfis | Aprender-Aleman.de`,
   ].join("\n");
   return { subject, html, text };
 }
@@ -98,22 +144,20 @@ function renderDE(v: PostTrialFollowupVars): RenderedEmail {
     ${h2(`Hallo ${escapeHtml(v.name)}! 😊`)}
     ${p("Es war mir eine Freude, dich heute in der Probestunde dabei zu haben — schön, dass es dir gefallen hat.")}
     ${p(`Basierend auf deinem Ziel (<strong>${escapeHtml(v.objective)}</strong>) passt das Paket <strong>${escapeHtml(v.packName)}</strong> am besten zu dir.`)}
-    ${p("Hier dein Anmeldelink — auf der Seite kannst du die Zahlungsart wählen, die dir am besten passt:")}
-    <div style="text-align:center;margin:24px 0 28px 0;">${button(v.packUrl, "Anmelden →")}</div>
-    ${p("Wenn du Fragen hast, schreib mir gerne.")}
-    ${p("Bitte sag mir Bescheid, sobald du die Zahlung abgeschlossen hast.")}
-    ${p(`<em style="color:#64748b;">* Aprender-Aleman.de</em>`)}
+    ${p("Hier dein Anmeldelink:")}
+    <div style="text-align:center;margin:24px 0 28px 0;">${button(v.packUrl, "👉 Anmelden")}</div>
+    ${p("Sag mir Bescheid, sobald du die Zahlung abgeschlossen hast. Bei Fragen bin ich da.")}
+    ${p(`<em style="color:#64748b;">Gelfis | Aprender-Aleman.de</em>`)}
   `;
   const html = renderEnvelope(body, "Du erhältst diese E-Mail nach deiner Probestunde bei Aprender-Aleman.de.");
   const text = [
     `Hallo ${v.name}! 😊`, ``,
     `Es war mir eine Freude, dich heute in der Probestunde dabei zu haben — schön, dass es dir gefallen hat.`, ``,
     `Basierend auf deinem Ziel (${v.objective}) passt das Paket ${v.packName} am besten zu dir.`, ``,
-    `Hier dein Anmeldelink — auf der Seite kannst du die Zahlungsart wählen, die dir am besten passt:`,
-    v.packUrl, ``,
-    `Wenn du Fragen hast, schreib mir gerne.`, ``,
-    `Bitte sag mir Bescheid, sobald du die Zahlung abgeschlossen hast.`, ``,
-    `* Aprender-Aleman.de`,
+    `Hier dein Anmeldelink:`,
+    `👉 ${v.packUrl}`, ``,
+    `Sag mir Bescheid, sobald du die Zahlung abgeschlossen hast. Bei Fragen bin ich da.`, ``,
+    `Gelfis | Aprender-Aleman.de`,
   ].join("\n");
   return { subject, html, text };
 }

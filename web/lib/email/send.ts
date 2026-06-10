@@ -1,8 +1,8 @@
 import { fromAddress, getResend, getSmtp, emailBackendConfigured } from "./client";
 import { renderWelcomeStudent, type WelcomeStudentVars } from "./templates/welcome-student";
 import {
-  renderPostTrialFollowup, renderPostTrialFollowupGeneric,
-  type PostTrialFollowupVars, type PostTrialFollowupGenericVars,
+  renderPostTrialFollowup, renderPostTrialFollowupGeneric, renderPostTrialFinal,
+  type PostTrialFollowupVars, type PostTrialFollowupGenericVars, type PostTrialFinalVars,
 } from "./templates/post-trial-followup";
 import { renderWelcomeStaff,   type WelcomeStaffVars }   from "./templates/welcome-staff";
 import { renderPasswordReset,  type PasswordResetVars }  from "./templates/password-reset";
@@ -195,6 +195,19 @@ export async function sendPostTrialFollowupGenericEmail(
   vars: PostTrialFollowupGenericVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderPostTrialFollowupGeneric(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Email del Mensaje 3 — último de la cadena post-clase de prueba.
+ * Coincide con el WhatsApp final ("liberamos tu espacio"). No incluye
+ * link.
+ */
+export async function sendPostTrialFinalEmail(
+  to: string,
+  vars: PostTrialFinalVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderPostTrialFinal(vars);
   return sendRaw(to, subject, html, text);
 }
 
