@@ -358,7 +358,7 @@ async function runCron(req: Request) {
               ``,
               `Ich hoffe, es hilft dir! 💪`,
               ``,
-              `Gelfis | Aprender-Aleman.de`,
+              `Stiv | Aprender-Aleman.de`,
             ].join("\n")
           : [
               `¡Hola ${firstName}!`,
@@ -367,7 +367,7 @@ async function runCron(req: Request) {
               ``,
               `¡Espero que te sea útil! 💪`,
               ``,
-              `Gelfis | Aprender-Aleman.de`,
+              `Stiv | Aprender-Aleman.de`,
             ].join("\n");
 
         // 1) WhatsApp: firmamos URL R2 corta y la pasamos a Evolution.
@@ -461,7 +461,7 @@ async function runCron(req: Request) {
               ``,
               `Wann hättest du heute oder morgen 15 Minuten Zeit für ein Gespräch, damit wir dir einen maßgeschneiderten Plan erstellen?`,
               ``,
-              `Gelfis | Aprender-Aleman.de`,
+              `Stiv | Aprender-Aleman.de`,
             ].join("\n")
           : [
               `¡Hola ${firstName}!`,
@@ -470,7 +470,7 @@ async function runCron(req: Request) {
               ``,
               `¿A qué hora tienes 15 minutos hoy o mañana para una llamada y diseñarte un plan a medida?`,
               ``,
-              `Gelfis | Aprender-Aleman.de`,
+              `Stiv | Aprender-Aleman.de`,
             ].join("\n");
 
         const sendEmail = lead.email

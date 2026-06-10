@@ -138,7 +138,7 @@ function waText(name: string, level: string, language: "es" | "de"): string {
       ``,
       `Ich hoffe, es hilft dir! 💪`,
       ``,
-      `Gelfis | Aprender-Aleman.de`,
+      `Stiv | Aprender-Aleman.de`,
     ].join("\n");
   }
   return [
@@ -148,7 +148,7 @@ function waText(name: string, level: string, language: "es" | "de"): string {
     ``,
     `¡Espero que te sea útil! 💪`,
     ``,
-    `Gelfis | Aprender-Aleman.de`,
+    `Stiv | Aprender-Aleman.de`,
   ].join("\n");
 }
 
