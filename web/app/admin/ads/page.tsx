@@ -94,6 +94,13 @@ export default async function FunnelAdsPage({
   // a ventas — mide la calidad del cierre, no del ad.
   const trialToPaidConv = trialBooked > 0 ? (100 * data.totalConverted / trialBooked) : 0;
 
+  // Asistencia a clases de prueba — sub-embudo entre "agendó" y "convirtió".
+  // Mide la calidad de los leads que pasan por trial: ¿se presentan?
+  const ta = data.trialAttendance;
+  const taTotalResolved = ta.attended + ta.absent;
+  const attendanceRate  = taTotalResolved > 0 ? (100 * ta.attended / taTotalResolved) : 0;
+  const noShowRate      = taTotalResolved > 0 ? (100 * ta.absent   / taTotalResolved) : 0;
+
   return (
     <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
       <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
@@ -206,6 +213,64 @@ export default async function FunnelAdsPage({
                   : "text-red-300"
           }
         />
+      </section>
+
+      {/* ── Asistencia a clases de prueba ──────────────────────── */}
+      {/* Sub-fila de KPIs entre "Trial agendada" y "Convirtieron".
+          Mide cuántos de los leads que reservaron clase se presentaron.
+          Si el % de no-show es alto, hay que mejorar la cadena de
+          recordatorios o la calidad del lead que entra al funnel. */}
+      <section className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div className="flex items-baseline justify-between flex-wrap gap-2">
+          <h3 className="text-sm font-semibold text-white">
+            🎓 Asistencia a las clases de prueba
+          </h3>
+          <span className="text-xs text-white/55">
+            De {ta.scheduled} trial{ta.scheduled === 1 ? "" : "s"} agendado{ta.scheduled === 1 ? "" : "s"} en el rango
+          </span>
+        </div>
+        <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+          <MiniStat
+            label="✅ Asistieron"
+            value={ta.attended.toLocaleString()}
+            subtitle={taTotalResolved > 0 ? `${attendanceRate.toFixed(1)}% de los marcados` : "—"}
+            accent="text-emerald-300"
+          />
+          <MiniStat
+            label="❌ No asistieron"
+            value={ta.absent.toLocaleString()}
+            subtitle={taTotalResolved > 0 ? `${noShowRate.toFixed(1)}% no-show` : "—"}
+            accent={noShowRate >= 40 ? "text-red-300" : noShowRate >= 20 ? "text-amber-300" : "text-white"}
+          />
+          <MiniStat
+            label="⏳ Pendientes"
+            value={ta.pending.toLocaleString()}
+            subtitle={ta.pending > 0 ? "clase próxima o sin marcar" : "todo marcado"}
+            accent="text-white/80"
+          />
+          <MiniStat
+            label="🎯 Tasa de asistencia"
+            value={taTotalResolved > 0 ? `${attendanceRate.toFixed(0)}%` : "—"}
+            subtitle={taTotalResolved > 0
+              ? `${ta.attended}/${taTotalResolved} marcados`
+              : "Aún sin marcas"}
+            accent={
+              taTotalResolved === 0
+                ? "text-white/60"
+                : attendanceRate >= 70
+                  ? "text-emerald-300"
+                  : attendanceRate >= 50
+                    ? "text-amber-300"
+                    : "text-red-300"
+            }
+          />
+        </div>
+        {ta.absent > 0 && noShowRate >= 30 && (
+          <div className="mt-3 text-xs text-amber-200/90">
+            ⚠️ Tasa de no-show alta ({noShowRate.toFixed(0)}%). Revisar recordatorios
+            (cron pre-trial), calidad del lead por motivo, y país.
+          </div>
+        )}
       </section>
 
       {partialTelemetry && (
@@ -545,6 +610,24 @@ function KpiCard({
       <div className="text-[11px] uppercase tracking-wider text-white/50">{label}</div>
       <div className={`mt-1 text-2xl md:text-3xl font-bold tabular-nums ${accent}`}>{value}</div>
       {subtitle && <div className="text-xs text-white/45 mt-0.5">{subtitle}</div>}
+    </div>
+  );
+}
+
+/** Variante compacta de KpiCard para sub-fila de asistencia. */
+function MiniStat({
+  label, value, subtitle, accent,
+}: {
+  label:    string;
+  value:    string;
+  subtitle?: string;
+  accent:   string;
+}) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
+      <div className="text-[10px] uppercase tracking-wider text-white/55">{label}</div>
+      <div className={`mt-1 text-xl md:text-2xl font-bold tabular-nums ${accent}`}>{value}</div>
+      {subtitle && <div className="text-[11px] text-white/45 mt-0.5">{subtitle}</div>}
     </div>
   );
 }

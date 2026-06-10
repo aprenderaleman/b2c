@@ -55,6 +55,22 @@ export type MotivoBreakdownRow = {
   converted:  number;
 };
 
+/**
+ * Asistencia a la clase de prueba: de los leads que AGENDARON un trial
+ * en la ventana, cuántos terminaron asistiendo, no asistiendo o quedaron
+ * pendientes de marcar.
+ *
+ * Fuente: lead_timeline.status_change con texto "Lead attended trial" /
+ * "Lead did not attend trial" — los emite markTrialAttendedAwaitingConversion
+ * y markTrialAbsent en lib/admin-actions.ts.
+ */
+export type TrialAttendance = {
+  scheduled: number;   // total trials agendados en la ventana
+  attended:  number;   // de esos, cuántos asistieron
+  absent:    number;   // de esos, cuántos no asistieron
+  pending:   number;   // de esos, cuántos no se han marcado todavía (clase aún por venir o sin marcar)
+};
+
 export type FunnelAdsData = {
   days:        number;
   steps:       FunnelStepStats[];
@@ -68,6 +84,7 @@ export type FunnelAdsData = {
   // El sumar motivoBreakdown.converted se queda corto porque excluye
   // leads con motivo NULL. (Caso Alejandra 2026-06-02.)
   totalConverted: number;
+  trialAttendance: TrialAttendance;
   alerts:      FunnelAlert[];
   telemetryStartsAt: string;
   microFunnel: MicroFunnelData;
@@ -321,6 +338,45 @@ export async function getFunnelAdsData(
   if (country) convQ = convQ.eq("country", country);
   const { count: totalConverted } = await convQ;
 
+  // ── 3b. Asistencia a clases de prueba ──────────────────────────
+  //
+  // De los leads que agendaron un trial en la ventana, contamos cuántos
+  // asistieron (lead_timeline con "Lead attended trial") vs cuántos no
+  // asistieron ("Lead did not attend trial"). Resto = pendiente (clase
+  // aún por venir o Gelfis no la marcó todavía).
+  const trialLeadIds: string[] = (leadsRows ?? [])
+    .filter((l: { trial_scheduled_at: string | null }) => l.trial_scheduled_at !== null)
+    .map((l: { id: string }) => l.id);
+
+  let attendedCount = 0;
+  let absentCount   = 0;
+  if (trialLeadIds.length > 0) {
+    const [attendedRes, absentRes] = await Promise.all([
+      sb.from("lead_timeline")
+        .select("lead_id")
+        .in("lead_id", trialLeadIds)
+        .eq("type", "status_change")
+        .ilike("content", "%attended trial%"),
+      sb.from("lead_timeline")
+        .select("lead_id")
+        .in("lead_id", trialLeadIds)
+        .eq("type", "status_change")
+        .ilike("content", "%did not attend trial%"),
+    ]);
+    attendedCount = new Set(
+      (attendedRes.data ?? []).map((r: { lead_id: string }) => r.lead_id),
+    ).size;
+    absentCount = new Set(
+      (absentRes.data ?? []).map((r: { lead_id: string }) => r.lead_id),
+    ).size;
+  }
+  const trialAttendance: TrialAttendance = {
+    scheduled: trialLeadIds.length,
+    attended:  attendedCount,
+    absent:    absentCount,
+    pending:   Math.max(0, trialLeadIds.length - attendedCount - absentCount),
+  };
+
   // ── 4. Micro-embudo del paso 3 (form) ──────────────────────────
   const microFunnel = await getMicroFunnel(sb, since, sessionsStep2);
 
@@ -385,6 +441,7 @@ export async function getFunnelAdsData(
     answers,
     motivoBreakdown,
     totalConverted: totalConverted ?? 0,
+    trialAttendance,
     alerts,
     telemetryStartsAt: TELEMETRY_STARTS_AT,
     microFunnel,
