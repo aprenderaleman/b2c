@@ -1,5 +1,9 @@
 import { fromAddress, getResend, getSmtp, emailBackendConfigured } from "./client";
 import { renderWelcomeStudent, type WelcomeStudentVars } from "./templates/welcome-student";
+import {
+  renderPostTrialFollowup, renderPostTrialFollowupGeneric,
+  type PostTrialFollowupVars, type PostTrialFollowupGenericVars,
+} from "./templates/post-trial-followup";
 import { renderWelcomeStaff,   type WelcomeStaffVars }   from "./templates/welcome-staff";
 import { renderPasswordReset,  type PasswordResetVars }  from "./templates/password-reset";
 import { renderDailyDigest,    type DailyDigestVars }    from "./templates/daily-digest";
@@ -165,6 +169,32 @@ export async function sendWelcomeStudentEmail(
   vars: WelcomeStudentVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderWelcomeStudent(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Email espejo del WhatsApp post-clase de prueba — el mismo wording
+ * con un botón clickable al checkout del pack. Disparado desde
+ * `markTrialAttendedAwaitingConversion` cuando el admin marca "Asistió".
+ */
+export async function sendPostTrialFollowupEmail(
+  to: string,
+  vars: PostTrialFollowupVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderPostTrialFollowup(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Variante genérica del email post-clase, cuando el admin no rellenó
+ * el modal con pack/objetivo. Mismo wording que la versión genérica
+ * de WhatsApp ("¿Qué te pareció?…").
+ */
+export async function sendPostTrialFollowupGenericEmail(
+  to: string,
+  vars: PostTrialFollowupGenericVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderPostTrialFollowupGeneric(vars);
   return sendRaw(to, subject, html, text);
 }
 
