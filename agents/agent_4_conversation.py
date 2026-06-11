@@ -559,22 +559,12 @@ def _handle_trial_already_booked(
     )
 
     if is_short_confirm:
-        # Acuse breve, sin pregunta ni profesor.
-        if lang == "de":
-            body = (
-                f"Perfekt, {name}! 👍\n\n"
-                f"Bestätigt: deine Probestunde ist am {when_str}.\n\n"
-                f"— Stiv · Aprender-Aleman.de"
-            )
-        else:
-            body = (
-                f"¡Perfecto, {name}! 👍\n\n"
-                f"Confirmado: tu clase de prueba es el {when_str}.\n\n"
-                f"— Stiv · Aprender-Aleman.de"
-            )
-        result = send_approved(lead, body, is_new_conversation=False,
-                               advance_followup=False, wa=wa)
-        return HandleResult("trial_already_booked", sent=result.success, message_sent=body)
+        # Política Gelfis 2026-06-10: NO respondemos al acuse del lead.
+        # El WhatsApp de confirmación de booking ya pide el "Sí"; cuando
+        # llega, el sistema lo recibe vía webhook entrante y los
+        # recordatorios automáticos (T-24h / mañana / T-30min) cubren el
+        # resto. Mandar un "Perfecto, confirmado" extra solo era ruido.
+        return HandleResult("trial_already_booked", sent=False, message_sent=None)
 
     # Mensaje no-confirmación → pasar al AI con contexto fáctico.
     facts_es = (
