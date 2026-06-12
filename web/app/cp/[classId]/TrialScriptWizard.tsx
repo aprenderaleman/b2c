@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect, useMemo } from "react";
+import { useState, useTransition, useEffect, useMemo, useCallback } from "react";
 import { saveStepAction, completeAttendedAction, completeAbsentAction } from "./actions";
 import { TRIAL_PACKS, recommendPacks, getPack, type PackId, type PaymentType } from "@/lib/trial-packs";
 import type { ScriptRow, ClassContext } from "@/lib/trial-script";
@@ -31,6 +31,16 @@ export function TrialScriptWizard({
 }) {
   const [step, setStep] = useState<number>(initial.current_step || 1);
   const [pending, startTransition] = useTransition();
+
+  // Outcome global — si el profe marca "No asistio" desde el header
+  // (atajo disponible en TODOS los pasos), o si lo marca al final, el
+  // wizard pinta la pantalla de cierre en vez del paso actual. Esto
+  // evita que tenga que recorrer los 8 pasos si el lead nunca aparece.
+  const [outcome, setOutcome] = useState<"attended" | "absent" | null>(
+    (initial.final_outcome as "attended" | "absent" | null) ?? null,
+  );
+  const [absentPending, setAbsentPending] = useState(false);
+  const [absentErr, setAbsentErr] = useState<string | null>(null);
 
   // Campos del script — controlados localmente, persistidos al pulsar Siguiente.
   const [objetivo,       setObjetivo]       = useState(initial.objetivo       ?? "");
@@ -103,12 +113,71 @@ export function TrialScriptWizard({
     setError(null);
   };
 
+  // Atajo global "No asistio" — visible en TODOS los pasos desde el
+  // header. Para que el profe no tenga que recorrer 8 pasos cuando el
+  // lead jamas aparecio en la clase. Pide confirmacion porque dispara
+  // la cadena de follow-ups y marca el script como cerrado.
+  const onQuickAbsent = useCallback(() => {
+    if (!confirm("¿Marcar al lead como NO ASISTIÓ?\n\n" +
+      "• El sistema activa la cadena de re-toques automáticos.\n" +
+      "• Esta pantalla del guion se cierra.\n\n" +
+      "¿Continuar?")) return;
+    setAbsentErr(null);
+    setAbsentPending(true);
+    (async () => {
+      try {
+        await completeAbsentAction({
+          scriptId,
+          leadId:       classCtx.leadId,
+          teacherNotes: "",
+        });
+        setOutcome("absent");
+      } catch (e) {
+        setAbsentErr(e instanceof Error ? e.message : "Error al marcar.");
+      } finally {
+        setAbsentPending(false);
+      }
+    })();
+  }, [scriptId, classCtx.leadId]);
+
   // Cronómetro del Paso 2 (visual, no bloquea).
   const TimerBar = step === 2 ? <ClassTimer /> : null;
 
+  // Si ya hay outcome (marcado desde header o desde paso 8), pintamos
+  // la pantalla de cierre en vez del paso actual.
+  if (outcome === "absent") {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <FinalDone
+          title="❌ Marcado como no asistió"
+          body="La cadena de re-toques se activa automáticamente. Puedes cerrar esta pestaña."
+        />
+      </div>
+    );
+  }
+  if (outcome === "attended") {
+    return (
+      <div className="max-w-3xl mx-auto">
+        <FinalDone
+          title="✅ Asistió — todo registrado"
+          body="El lead ha recibido el WhatsApp con el enlace de pago. Stiv hace el seguimiento."
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto">
-      <LeadHeader ctx={classCtx} stepNum={step} totalSteps={8} />
+      <LeadHeader
+        ctx={classCtx} stepNum={step} totalSteps={8}
+        onQuickAbsent={onQuickAbsent}
+        absentPending={absentPending}
+      />
+      {absentErr && (
+        <div className="mt-2 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
+          {absentErr}
+        </div>
+      )}
       {TimerBar}
 
       <div className="mt-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm p-6 md:p-8">
@@ -242,11 +311,16 @@ export function TrialScriptWizard({
 // Layout helpers
 // ─────────────────────────────────────────────────────────────────
 
-function LeadHeader({ ctx, stepNum, totalSteps }: { ctx: ClassContext; stepNum: number; totalSteps: number }) {
+function LeadHeader({
+  ctx, stepNum, totalSteps, onQuickAbsent, absentPending,
+}: {
+  ctx: ClassContext; stepNum: number; totalSteps: number;
+  onQuickAbsent: () => void; absentPending: boolean;
+}) {
   const stepLabel = stepNum === 3.5 ? "3b" : String(stepNum);
   return (
-    <header className="rounded-2xl bg-gradient-to-br from-emerald-500/10 to-amber-500/10 border border-emerald-300/30 px-4 py-3 flex items-center justify-between gap-3">
-      <div>
+    <header className="rounded-2xl bg-gradient-to-br from-emerald-500/10 to-amber-500/10 border border-emerald-300/30 px-4 py-3 flex items-start justify-between gap-3 flex-wrap">
+      <div className="min-w-0">
         <div className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
           Clase de prueba · Paso {stepLabel} de {totalSteps}
         </div>
@@ -257,16 +331,30 @@ function LeadHeader({ ctx, stepNum, totalSteps }: { ctx: ClassContext; stepNum: 
           Motivo inicial: {ctx.lead.motivo ?? "—"} · Profe: {ctx.teacherName ?? "—"}
         </div>
       </div>
-      {ctx.lead.whatsapp && (
-        <a
-          href={`https://wa.me/${ctx.lead.whatsapp.replace(/[^\d]/g, "")}`}
-          target="_blank" rel="noreferrer"
-          className="shrink-0 text-xs font-semibold rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1.5 text-emerald-800 hover:bg-emerald-200"
-          title="Abrir WhatsApp del lead"
+      <div className="shrink-0 flex items-center gap-1.5">
+        {ctx.lead.whatsapp && (
+          <a
+            href={`https://wa.me/${ctx.lead.whatsapp.replace(/[^\d]/g, "")}`}
+            target="_blank" rel="noreferrer"
+            className="text-xs font-semibold rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1.5 text-emerald-800 hover:bg-emerald-200"
+            title="Abrir WhatsApp del lead"
+          >
+            💬 WhatsApp
+          </a>
+        )}
+        {/* Atajo "No asistio" disponible en TODOS los pasos. Si el
+            lead nunca aparecio, el profe no tiene que recorrer 8
+            pasos antes de marcarlo. Cierra el guion al instante. */}
+        <button
+          type="button"
+          onClick={onQuickAbsent}
+          disabled={absentPending}
+          className="text-xs font-semibold rounded-full border border-amber-400 bg-amber-100 dark:bg-amber-500/15 px-3 py-1.5 text-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-500/25 disabled:opacity-50"
+          title="Marcar al lead como NO ASISTIÓ (atajo desde cualquier paso)"
         >
-          💬 WhatsApp
-        </a>
-      )}
+          {absentPending ? "Marcando..." : "❌ No asistió"}
+        </button>
+      </div>
     </header>
   );
 }
