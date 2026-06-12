@@ -11,7 +11,18 @@
  */
 
 import { DiagnosticoFunnel } from "@/components/diagnostico/DiagnosticoFunnel";
+import { SiteFooter } from "@/components/landings/SiteFooter";
 
 export default function HomePage() {
-  return <DiagnosticoFunnel />;
+  return (
+    <>
+      {/* La home es el funnel completo (100dvh). landingIntent='home'
+          se setea implícitamente por el default del componente. */}
+      <DiagnosticoFunnel />
+      {/* Footer con links a las 6 landings dedicadas. Vive BAJO el
+          funnel (fuera del primer scroll del usuario) pero el crawler
+          lo ve para distribuir la autoridad SEO. */}
+      <SiteFooter />
+    </>
+  );
 }
