@@ -54,14 +54,51 @@ export function LandingStep0({
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col md:flex-row bg-white"
+    <div className="min-h-[100dvh] flex flex-col bg-white"
          style={{ overscrollBehavior: "contain" }}>
+
+      {/* ═══ Header full-width — ocupa todo el ancho horizontal con
+            el logo CENTRADO (Gelfis 2026-06-14). Logo = imagen +
+            wordmark "Aprender-Aleman.de" con ".de" en naranja. ═══ */}
+      <header
+        className="sticky top-0 z-40 backdrop-blur bg-white/95 border-b border-slate-100 w-full"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
+        <div className="flex items-center justify-center h-14 md:h-16 px-4">
+          <Link
+            href="/"
+            aria-label="Aprender-Aleman.de"
+            className="inline-flex items-center gap-2.5 active:scale-[0.97] transition"
+          >
+            <Image
+              src="/Logonewwithbg.png"
+              alt=""
+              width={40}
+              height={40}
+              priority
+              className="h-8 w-8 md:h-10 md:w-10 rounded-md object-contain"
+            />
+            <span className="font-extrabold tracking-tight text-slate-900 text-[16px] md:text-[18px]">
+              Aprender-Aleman<span className="text-warm">.de</span>
+            </span>
+          </Link>
+        </div>
+        {/* Barra de progreso — 0% al inicio para reforzar "estás empezando". */}
+        <div className="h-1 w-full bg-slate-100">
+          <div className="h-full bg-warm transition-[width] duration-300" style={{ width: "0%" }} />
+        </div>
+      </header>
+
+      {/* ═══ Cuerpo: 2 columnas en desktop (ilustración + contenido),
+            apiladas en mobile. Antes el header vivía DENTRO de la
+            columna derecha; ahora es full-width arriba. ═══ */}
+      <div className="flex-1 flex flex-col md:flex-row">
 
       {/* ═══ Panel izquierdo (desktop) / banda superior (mobile)
           con la ilustración + fondo pastel cálido. Igual que el
           resto del funnel para coherencia Preply. ═══ */}
       <aside
-        className="relative w-full md:w-1/2 md:min-h-[100dvh]
+        className="relative w-full md:w-1/2
                    bg-gradient-to-br from-rose-50 via-orange-50 to-amber-50
                    flex items-center justify-center
                    py-6 md:py-12
@@ -74,36 +111,6 @@ export function LandingStep0({
 
       {/* ═══ Panel derecho (desktop) / contenido (mobile) ═══ */}
       <section className="flex-1 md:w-1/2 flex flex-col">
-
-        {/* Header compacto con brand + progreso visual */}
-        <header
-          className="sticky top-0 z-40 backdrop-blur bg-white/95 border-b border-slate-100"
-          style={{ paddingTop: "env(safe-area-inset-top)" }}
-        >
-          <div className="mx-auto max-w-xl flex items-center justify-between gap-2 h-14 md:h-16 px-4">
-            {/* Sin botón "atrás" — el paso 0 es la entrada. */}
-            <span className="h-10 w-10" aria-hidden />
-            <Link href="/" aria-label="Aprender-Aleman.de"
-                  className="inline-flex items-center gap-2 font-extrabold tracking-tight text-slate-900 text-[15px]">
-              <Image
-                src="/Logonewwithbg.png"
-                alt=""
-                width={32}
-                height={32}
-                priority
-                className="h-7 w-7 md:h-8 md:w-8 rounded-md object-contain"
-              />
-              <span>Aprender-Aleman<span className="text-warm">.de</span></span>
-            </Link>
-            <span className="text-[11px] font-semibold text-slate-500 tabular-nums">
-              Paso <strong className="text-slate-900">1 / 3</strong>
-            </span>
-          </div>
-          {/* Barra de progreso — 0% al inicio para reforzar "estás empezando". */}
-          <div className="h-1 w-full bg-slate-100">
-            <div className="h-full bg-warm transition-[width] duration-300" style={{ width: "0%" }} />
-          </div>
-        </header>
 
         <main className="flex-1 px-5 md:px-8 lg:px-10 py-6 md:py-10
                          mx-auto max-w-xl w-full">
@@ -201,6 +208,7 @@ export function LandingStep0({
           </div>
         </div>
       </section>
+      </div>
     </div>
   );
 }
