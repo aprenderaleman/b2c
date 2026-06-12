@@ -277,10 +277,33 @@ function countryNameForCc(cc: string): string {
   return CC_TO_NAME[cc] ?? "otro país";
 }
 
-export function DiagnosticoFunnel() {
-  const [step, setStep]       = useState<Step>(1);
+/**
+ * Props para entrada desde landings dedicadas (Gelfis 2026-06-XX).
+ *
+ *   presetMotivo: si la landing tiene una intención inequívoca, pre-
+ *     seleccionamos el motivo y saltamos el paso 1. Si la landing es
+ *     genérica/ambigua, lo dejamos null y el lead lo elige.
+ *
+ *   landingIntent: slug estable que identifica la landing de origen
+ *     ('home','curso-online','particulares','intensivo','certificado',
+ *     'b2-trabajar','ciudades'). Se propaga a TODOS los trackStep
+ *     + register para que /admin/ads pueda hacer breakdown por
+ *     landing, separado de motivo_inicial.
+ */
+export type DiagnosticoFunnelProps = {
+  presetMotivo?:  MotivoId | null;
+  landingIntent?: string;
+};
+
+export function DiagnosticoFunnel({
+  presetMotivo = null,
+  landingIntent = "home",
+}: DiagnosticoFunnelProps = {}) {
+  // Si la landing pre-setea un motivo, arrancamos en step=2 (nivel)
+  // con motivo ya poblado. Si no, flujo normal desde step=1.
+  const [step, setStep]       = useState<Step>(presetMotivo ? 2 : 1);
   const [answers, setAnswers] = useState<Answers>({
-    motivo: null, level: null, goal: null, urgency: null, budget: null,
+    motivo: presetMotivo, level: null, goal: null, urgency: null, budget: null,
   });
   const [form, setForm] = useState<FormData>({
     // Defaults DE/+49 (Gelfis 2026-05-22). La mayoría del tráfico esperado
@@ -343,21 +366,21 @@ export function DiagnosticoFunnel() {
     } catch { /* ignore */ }
   }, []);
 
-  // Progreso visual — 3 pasos visibles tras la simplificación 2026-05-26:
-  //   1: motivo → 1/3
-  //   2: nivel  → 2/3
-  //   6: datos  → 3/3
-  //   7: calendario → 3/3 (mismo bucket que datos para no parecer "más"
-  //                        después de haber dado el WhatsApp)
-  const visualStepNum =
-    step === 1 ? 1 :
-    step === "particulares_offer" ? 1 : // todavía en paso 1 visual
-    step === 2 ? 2 :
-    step === "low_budget_exit" ? 3 :
-    step === 6 ? 3 :
-    step === 7 ? 3 :
-    3;
-  const totalSteps = 3;
+  // Progreso visual. En el flujo normal (3 pasos): motivo→nivel→datos.
+  // Cuando viene de una landing con presetMotivo, paso 1 (motivo)
+  // está saltado → solo 2 pasos visibles: nivel→datos.
+  const totalSteps = presetMotivo ? 2 : 3;
+  const visualStepNum = presetMotivo
+    ? (step === 2 ? 1 : step === 6 || step === 7 || step === "low_budget_exit" ? 2 : 2)
+    : (
+        step === 1 ? 1 :
+        step === "particulares_offer" ? 1 :
+        step === 2 ? 2 :
+        step === "low_budget_exit" ? 3 :
+        step === 6 ? 3 :
+        step === 7 ? 3 :
+        3
+      );
   const progressPct = (visualStepNum / totalSteps) * 100;
 
   // Handlers ────────────────────────────────────────────────────
@@ -373,7 +396,12 @@ export function DiagnosticoFunnel() {
       fetch("/api/public/funnel/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId, step: stepNum, answer }),
+        body: JSON.stringify({
+          session_id:     sessionId,
+          step:           stepNum,
+          answer,
+          landing_intent: landingIntent,
+        }),
         keepalive: true,
       }).catch(() => { /* silencioso */ });
     } catch { /* silencioso */ }
@@ -394,7 +422,11 @@ export function DiagnosticoFunnel() {
         await fetch("/api/public/motivo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: sessionId, motivo: id }),
+          body: JSON.stringify({
+            session_id:     sessionId,
+            motivo:         id,
+            landing_intent: landingIntent,
+          }),
         });
       } catch { /* silencioso */ }
     }
@@ -438,7 +470,11 @@ export function DiagnosticoFunnel() {
     else if (step === 4) setStep(3);
     else if (step === 3) setStep(2);
     else if (step === 2) {
-      // Si motivo=particulares, paso 2 vuelve a la oferta de pricing.
+      // Si el motivo viene PRE-SETEADO de la landing, paso 2 es el
+      // primer step visible — no hay 'atrás' lógico. Bloqueamos.
+      if (presetMotivo) return;
+      // Si motivo=particulares (autoseleccionado en quiz), paso 2 vuelve
+      // a la oferta de pricing.
       setStep(answers.motivo === "particulares" ? "particulares_offer" : 1);
     }
   }
@@ -458,6 +494,7 @@ export function DiagnosticoFunnel() {
       gdpr_accepted:  true,
       session_id:     sessionId ?? undefined,
       motivo_inicial: answers.motivo ?? undefined,
+      landing_intent: landingIntent,
       gclid:          attr("gclid"),
       gbraid:         attr("gbraid"),
       wbraid:         attr("wbraid"),
