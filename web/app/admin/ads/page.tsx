@@ -517,6 +517,57 @@ export default async function FunnelAdsPage({
         </div>
       </section>
 
+      {/* ── Desglose por landing dedicada (post-058) ───────────── */}
+      <section className="mt-8">
+        <h2 className="text-lg font-semibold text-white">Por landing</h2>
+        <p className="mt-1 text-xs text-white/55">
+          Qué intención de búsqueda convierte mejor (separado del motivo
+          que el usuario eligió en el quiz). 'home' = ruta /, el resto son
+          landings dedicadas de Google Ads.
+        </p>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-white/50 border-b border-white/10">
+              <tr>
+                <th className="text-left py-2 pr-3">Landing</th>
+                <th className="text-right py-2 px-3">Sesiones</th>
+                <th className="text-right py-2 px-3">→ Form completado</th>
+                <th className="text-right py-2 px-3">→ Trial agendada</th>
+                <th className="text-right py-2 pl-3">Convirtieron</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.landingBreakdown.map(l => (
+                <tr key={l.landing} className="border-b border-white/5">
+                  <td className="py-2 pr-3 text-white font-mono text-[12px]">{l.landing}</td>
+                  <td className="py-2 px-3 text-right text-white/80 tabular-nums">{l.sessions}</td>
+                  <td className="py-2 px-3 text-right tabular-nums">
+                    <span className={l.pct_form < 5 ? "text-red-300" : l.pct_form < 10 ? "text-amber-300" : "text-emerald-300"}>
+                      {l.form_completed} ({l.pct_form.toFixed(1)}%)
+                    </span>
+                  </td>
+                  <td className="py-2 px-3 text-right tabular-nums">
+                    <span className={l.pct_trial < 2 ? "text-red-300" : l.pct_trial < 5 ? "text-amber-300" : "text-emerald-300"}>
+                      {l.trial_booked} ({l.pct_trial.toFixed(1)}%)
+                    </span>
+                  </td>
+                  <td className="py-2 pl-3 text-right text-white/80 tabular-nums">{l.converted}</td>
+                </tr>
+              ))}
+              {data.landingBreakdown.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-4 text-center text-white/40 italic">
+                    Sin datos por landing — el tracking de landing_intent
+                    se activó el 2026-06-XX (migration 058). Los rangos
+                    largos pueden tener buckets vacíos al principio.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <div className="mt-10 text-center text-xs text-white/35">
         Datos en vivo. Quiz simplificado activado el {TELEMETRY_STARTS_AT}.
       </div>

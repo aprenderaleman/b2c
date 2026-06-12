@@ -78,6 +78,10 @@ export type FunnelAdsData = {
   // Los pasos 3 (datos) y 4 (trial) no tienen "respuesta de selección".
   answers:     Record<number, AnswerBucket[]>;
   motivoBreakdown: MotivoBreakdownRow[];
+  // Desglose por landing dedicada (Google Ads, post-058). Separado
+  // del motivo porque la landing es 'de dónde llega' y el motivo es
+  // 'qué dice que quiere'.
+  landingBreakdown: LandingBreakdownRow[];
   // Conteo bruto de leads con status='converted' cuya conversión cae
   // en la ventana de días. Cuenta TODOS — incluso los que no tienen
   // motivo_inicial (creados manualmente o por canales no-funnel).
@@ -435,17 +439,100 @@ export async function getFunnelAdsData(
     }
   }
 
+  // Desglose por landing — añadido tras 058 (landing_intent). Cada landing
+  // dedicada de Google Ads queda etiquetada a nivel de sesión y de lead,
+  // así que podemos ver qué intención convierte mejor (independiente del
+  // motivo que el usuario eligió en el quiz).
+  const landingBreakdown = await getLandingBreakdown(sb, since, country);
+
   return {
     days,
     steps,
     answers,
     motivoBreakdown,
+    landingBreakdown,
     totalConverted: totalConverted ?? 0,
     trialAttendance,
     alerts,
     telemetryStartsAt: TELEMETRY_STARTS_AT,
     microFunnel,
   };
+}
+
+export type LandingBreakdownRow = {
+  landing:        string;     // 'home','curso-online','particulares','intensivo','certificado','b2-trabajar','ciudades','(sin landing)'
+  sessions:       number;     // sesiones únicas vistas en funnel_progress
+  form_completed: number;     // leads con landing_intent = landing
+  trial_booked:   number;     // de esos, cuántos agendaron trial
+  converted:      number;     // y cuántos convirtieron (pagaron)
+  pct_form:       number;     // form_completed / sessions
+  pct_trial:      number;     // trial_booked / sessions
+};
+
+async function getLandingBreakdown(
+  sb: SB,
+  since: string,
+  country: string | null,
+): Promise<LandingBreakdownRow[]> {
+  // Sesiones por landing — funnel_progress lleva la landing_intent
+  // desde commit Fase 1.
+  const { data: fp } = await sb
+    .from("funnel_progress")
+    .select("session_id, landing_intent")
+    .gte("created_at", since);
+  const sessionsByLanding: Record<string, Set<string>> = {};
+  for (const r of (fp ?? []) as Array<{ session_id: string; landing_intent: string | null }>) {
+    const k = r.landing_intent ?? "(sin landing)";
+    if (!sessionsByLanding[k]) sessionsByLanding[k] = new Set();
+    sessionsByLanding[k].add(r.session_id);
+  }
+
+  // Leads por landing
+  let leadsQ = sb
+    .from("leads")
+    .select("landing_intent, trial_scheduled_at, status")
+    .gte("created_at", since);
+  if (country) leadsQ = leadsQ.eq("country", country);
+  const { data: leads } = await leadsQ;
+
+  const formByLanding:  Record<string, number> = {};
+  const trialByLanding: Record<string, number> = {};
+  const convByLanding:  Record<string, number> = {};
+  for (const r of (leads ?? []) as Array<{
+    landing_intent: string | null;
+    trial_scheduled_at: string | null;
+    status: string;
+  }>) {
+    const k = r.landing_intent ?? "(sin landing)";
+    formByLanding[k] = (formByLanding[k] ?? 0) + 1;
+    if (r.trial_scheduled_at) trialByLanding[k] = (trialByLanding[k] ?? 0) + 1;
+    if (r.status === "converted") convByLanding[k] = (convByLanding[k] ?? 0) + 1;
+  }
+
+  // Union de claves: una landing puede tener sesiones sin lead (abandono
+  // antes del form), o leads sin sesión registrada (cliente cacheado pre-058).
+  const allKeys = new Set<string>([
+    ...Object.keys(sessionsByLanding),
+    ...Object.keys(formByLanding),
+  ]);
+
+  return Array.from(allKeys)
+    .map(landing => {
+      const sessions = sessionsByLanding[landing]?.size ?? 0;
+      const form     = formByLanding[landing]     ?? 0;
+      const trial    = trialByLanding[landing]    ?? 0;
+      const conv     = convByLanding[landing]     ?? 0;
+      return {
+        landing,
+        sessions,
+        form_completed: form,
+        trial_booked:   trial,
+        converted:      conv,
+        pct_form:       sessions > 0 ? 100 * form / sessions : 0,
+        pct_trial:      sessions > 0 ? 100 * trial / sessions : 0,
+      };
+    })
+    .sort((a, b) => b.sessions - a.sessions);
 }
 
 // ── Micro-embudo paso 3 (form) ────────────────────────────────────
