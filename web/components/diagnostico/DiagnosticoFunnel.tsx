@@ -120,7 +120,7 @@ const MOTIVO_OPTIONS = [
   { id: "profesional",  emoji: "💼", h3: "Alemán para trabajar (profesionales)" },
 ] as const;
 
-type MotivoId = typeof MOTIVO_OPTIONS[number]["id"];
+export type MotivoId = typeof MOTIVO_OPTIONS[number]["id"];
 
 const MOTIVO_PERSONALIZED_H2: Record<MotivoId, string> = {
   particulares: "Genial 👋 Tu primera clase con un profesor nativo certificado es gratis",
