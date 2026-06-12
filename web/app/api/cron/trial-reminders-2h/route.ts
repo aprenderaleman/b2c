@@ -4,28 +4,30 @@ import { sendWhatsappText } from "@/lib/whatsapp";
 import { buildLeadJoinUrl } from "@/lib/trial-token";
 
 /**
- * GET/POST /api/cron/trial-reminders-30m
+ * GET/POST /api/cron/trial-reminders-2h
  *
- * Recordatorio WhatsApp ~30 min antes de la clase de prueba al lead.
- * Cubre el hueco que dejaba `class-reminders` (que solo procesa
- * estudiantes registrados via class_participants — los leads aún no
- * son estudiantes y no aparecen ahí).
+ * Recordatorio WhatsApp 2h antes de la clase de prueba al lead, con
+ * consejos prácticos de preparación (cámara, micrófono, lugar tranquilo).
  *
- * - Ventana: 25-35 min antes del start.
- * - Se ejecuta cada 5 min (vercel.json) — la ventana de 10 min absorbe
+ * Reemplaza el antiguo trial-reminders-30m (Gelfis 2026-06-14): 30 min
+ * era muy tarde para "preparar el setup" — el lead ya estaba en el sofá
+ * y no tenía tiempo de cambiar de cuarto si la cámara fallaba.
+ *
+ * - Ventana: 110-130 min antes del start.
+ * - Se ejecuta cada 5 min (vercel.json) — la ventana de 20 min absorbe
  *   cualquier deriva del cron.
- * - Idempotencia: marker en classes.notes_admin = "[trial_reminder_30m_sent]".
- * - Solo WhatsApp (el email matutino ya cubrió el resumen del día).
+ * - Idempotencia: marker en classes.notes_admin = "[trial_reminder_2h_sent]".
+ * - Solo WhatsApp.
  *
  * Auth: Authorization: Bearer <CRON_SECRET> o X-Cron-Secret.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const REMINDER_TAG = "[trial_reminder_30m_sent]";
+const REMINDER_TAG = "[trial_reminder_2h_sent]";
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
-const WINDOW_LOW_MS  = 25 * 60_000;
-const WINDOW_HIGH_MS = 35 * 60_000;
+const WINDOW_LOW_MS  = 110 * 60_000;
+const WINDOW_HIGH_MS = 130 * 60_000;
 
 function authorisedCronRequest(req: Request): boolean {
   const expected = process.env.CRON_SECRET;
@@ -47,17 +49,16 @@ async function run(req: Request) {
   }
 
   const nowMs = Date.now();
-  // Pull anything starting in the next 40 min — wider than the window
-  // so we can filter precisely below.
+  // Pull anything starting in the next 140 min — wider than the precise
+  // window so we can filter below.
   const lo = new Date(nowMs).toISOString();
-  const hi = new Date(nowMs + 40 * 60_000).toISOString();
+  const hi = new Date(nowMs + 140 * 60_000).toISOString();
 
   const sb = supabaseAdmin();
   const { data: classes } = await sb
     .from("classes")
     .select(`
       id, scheduled_at, duration_minutes, notes_admin, short_code,
-      teacher:teachers!inner(users!inner(full_name, email)),
       lead:leads!inner(id, name, language, whatsapp_normalized, ai_paused_until)
     `)
     .eq("is_trial", true)
@@ -67,8 +68,6 @@ async function run(req: Request) {
 
   type Row = {
     id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null; short_code: string | null;
-    teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
-             Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
     lead: { id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null; ai_paused_until: string | null } |
           Array<{ id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null; ai_paused_until: string | null }>;
   };
@@ -76,43 +75,28 @@ async function run(req: Request) {
 
   let sent = 0, skipped = 0, failed = 0;
   for (const r of (classes ?? []) as Row[]) {
-    // Filter to the precise 25-35 min window.
     const startMs = new Date(r.scheduled_at).getTime();
     const msUntil = startMs - nowMs;
     if (msUntil < WINDOW_LOW_MS || msUntil > WINDOW_HIGH_MS) { skipped++; continue; }
     if ((r.notes_admin ?? "").includes(REMINDER_TAG))         { skipped++; continue; }
 
     const lead = flat(r.lead);
-    const teacherWrap = flat(r.teacher);
-    const tu = teacherWrap ? flat(teacherWrap.users) : null;
     if (!lead || !lead.whatsapp_normalized) { skipped++; continue; }
 
     // "Tomo yo desde aquí": admin pausó toda automatización para este lead.
-    // Honramos la pausa también en los crons de recordatorios — caso Asmaa
-    // 2026-05-04 que recibió WhatsApp 30min mientras Gelfis manejaba el
-    // cambio de hora manualmente.
     if (lead.ai_paused_until) {
       const until = new Date(lead.ai_paused_until).getTime();
       if (until > nowMs) { skipped++; continue; }
     }
 
-    const leadFirst   = (lead.name || "").split(/\s+/)[0] || lead.name || "";
-    const teacherName = tu?.full_name ?? "tu profesor/a";
-    // Usar shortcode (/c/{code}) — el bare /aula/{id} bouncea al lead
-    // a /login porque no trae token. Bug reportado 2026-05-11.
-    const joinUrl     = buildLeadJoinUrl({
-      classId:   r.id, leadId: lead.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
+    // Usar shortcode (/c/{code}) — el bare /aula/{id} bouncea al lead a /login.
+    const joinUrl = buildLeadJoinUrl({
+      classId: r.id, leadId: lead.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
     });
 
     const text = lead.language === "de"
-      ? `Hallo ${leadFirst}! 👋\n\n` +
-        `Deine Deutsch-Probestunde mit ${teacherName} startet in 30 Minuten.\n\n` +
-        `Zum Klassenzimmer:\n${joinUrl}\n\n` +
-        `(Tipp: Mikro & Kamera 5 Min vorher testen — der Raum öffnet 15 Min vorher)`
-      : `¡Hola ${leadFirst}! 👋\n\n` +
-        `Tu clase de prueba de alemán con ${teacherName} empieza en 30 minutos.\n\n` +
-        `Entrar al aula:\n${joinUrl}\n\n` +
-        `(Tip: prueba el micro y la cámara 5 min antes — el aula abre 15 min antes)`;
+      ? `In 2 Stunden hast du deine Deutsch-Stunde.\n\nIch empfehle dir:\n- Computer mit Kamera und Mikrofon bereit\n- Ruhiger Ort\n\nDirektlink: ${joinUrl}`
+      : `En 2 horas tu clase de alemán.\n\nTe recomiendo:\n- Tener computador con cámara y micrófono\n- Lugar tranquilo\n\nLink directo: ${joinUrl}`;
 
     const res = await sendWhatsappText(lead.whatsapp_normalized, text);
 
@@ -122,21 +106,21 @@ async function run(req: Request) {
         lead_id: lead.id,
         type:    "trial_reminder",
         author:  "system",
-        content: `💬 Recordatorio WhatsApp 30 min antes → lead (${lead.whatsapp_normalized})`,
-        metadata: { channel: "whatsapp", kind: "30m_before", class_id: r.id, message_id: res.messageId },
+        content: `💬 Recordatorio WhatsApp 2h antes (prep)`,
+        metadata: { channel: "whatsapp", kind: "2h_before", class_id: r.id, message_id: res.messageId },
       });
       await sb.from("classes")
         .update({ notes_admin: `${r.notes_admin ?? ""}\n${REMINDER_TAG}`.trim() })
         .eq("id", r.id);
     } else {
       failed++;
-      console.error(`[trial-reminders-30m] WA send failed for ${r.id}: ${res.reason}`);
+      console.error(`[trial-reminders-2h] WA send failed for ${r.id}: ${res.reason}`);
       await sb.from("lead_timeline").insert({
         lead_id: lead.id,
         type:    "send_failed",
         author:  "system",
-        content: `💬 Falló el envío WhatsApp del recordatorio 30 min antes`,
-        metadata: { channel: "whatsapp", kind: "30m_before", class_id: r.id, error: res.reason },
+        content: `💬 Falló el envío WhatsApp del recordatorio 2h antes`,
+        metadata: { channel: "whatsapp", kind: "2h_before", class_id: r.id, error: res.reason },
       });
     }
   }

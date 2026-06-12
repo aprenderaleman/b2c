@@ -350,10 +350,13 @@ export async function POST(req: Request) {
   const leadFirst = b.name.split(/\s+/)[0] || b.name;
   // Política Gelfis 2026-04-30: NO mencionar nombre del profesor en
   // mensajes salientes al lead (información interna, no relevante).
+  // Copy nuevo 2026-06-14 (Gelfis): confirmación ACTIVA con prompt
+  // CONFIRMO / CAMBIAR / CANCELAR + ventana 12h. La consecuencia clara
+  // (slot se libera) reduce los no-shows drásticamente.
   const waText = b.whatsapp_e164
     ? (b.language === "de"
-        ? `✅ ${leadFirst}, deine kostenlose Probestunde DEUTSCH ist bestätigt.\n\n📅 ${startDate}\n⏱ 45 Min\n🔗 LINK ZUM UNTERRICHT: ${shortLinkUrl}\n\n💡 Tipp: Wenn du den Link öffnest, fragt dein Browser nach Mikrofon- und Kamerazugriff — bitte erlauben, sonst kann dich der Lehrer nicht hören oder sehen.\n\nKannst du mir mit "Ja" bestätigen, dass du dabei bist? 🙌\n\n— Aprender-Aleman.de`
-        : `✅ ${leadFirst}, tu clase de prueba GRATUITA de ALEMÁN está confirmada.\n\n📅 ${startDate}\n⏱ 45 min\n🔗 ENLACE A LA CLASE: ${shortLinkUrl}\n\n💡 Importante: al abrir el enlace, tu navegador te pedirá permiso para usar micrófono y cámara — pulsa "Permitir", si no el profesor no te oirá ni te verá.\n\n¿Me confirmas con un "Sí" que asistirás? 🙌\n\n— Aprender-Aleman.de`)
+        ? `Hallo ${leadFirst}! Ich bin Stiv von Aprender-Aleman.de.\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\n⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.\n\nAntworte mit:\n👉 "CONFIRMO" wenn du dabei bist\n👉 "CAMBIAR" wenn du einen anderen Termin brauchst\n👉 "CANCELAR" wenn du nicht mehr interessiert bist\n\nOhne deine Antwort innerhalb von 12 Stunden wird dein Slot für einen anderen Schüler auf der Warteliste freigegeben.\n\n— Stiv · Aprender-Aleman.de`
+        : `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de.\n\nTu clase de alemán está agendada para\n${startDate}.\n\n⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.\n\nResponde con:\n👉 "CONFIRMO" si vas a asistir\n👉 "CAMBIAR" si necesitas otra fecha\n👉 "CANCELAR" si ya no te interesa\n\nSin tu respuesta en 12h, tu slot se libera para otro estudiante en lista de espera.\n\n— Stiv · Aprender-Aleman.de`)
     : null;
 
   // Build the .ics inline so we attach it to the email AND can later

@@ -21,103 +21,107 @@ export function renderTrialConfirmation(v: TrialConfirmationVars): RenderedEmail
 }
 
 function renderES(v: TrialConfirmationVars): RenderedEmail {
-  const subject = `✅ Tu clase de prueba de alemán está agendada — ${v.startDate}`;
+  const subject = `${v.leadName}, confirma tu clase de prueba — ${v.startDate}`;
   const body = `
-    ${h2(`¡Hola ${escapeHtml(v.leadName)}! 👋`)}
-    ${p(`Tu <strong>clase de prueba gratuita de alemán</strong> está confirmada. Apúntala en tu calendario y nos vemos en el aula online.`)}
+    ${h2(`¡Hola ${escapeHtml(v.leadName)}! Soy Stiv de Aprender-Aleman.de 👋`)}
+    ${p(`Tu <strong>clase de alemán</strong> está agendada para:`)}
     ${kvBlock([
       ["📅 Fecha",     escapeHtml(v.startDate)],
       ["⏱ Duración",   `${v.durationMin} minutos`],
     ])}
-    <div style="text-align:center;margin:24px 0 8px 0;">
-      ${button(v.joinUrl, "Entrar al aula →")}
-    </div>
-    ${p(`<em style="color:#64748b;">Este enlace es exclusivo para ti. Guárdalo, lo usarás el día de la clase para entrar directamente sin contraseña.</em>`)}
-    <div style="margin:18px 0 4px 0;padding:14px 16px;border-radius:12px;background:#FFF7ED;border:1px solid #FED7AA;">
-      <p style="margin:0;font-size:14px;color:#7C2D12;line-height:1.5;">
-        <strong>⚠️ Importante:</strong> al pulsar el botón, tu navegador pedirá permiso para usar el <strong>micrófono y la cámara</strong>. Pulsa <strong>"Permitir"</strong> — sin eso el profesor no podrá oírte ni verte.
+    <div style="margin:18px 0;padding:14px 16px;border-radius:12px;background:#FEE2E2;border:1px solid #FCA5A5;">
+      <p style="margin:0 0 10px 0;font-size:14px;color:#7F1D1D;line-height:1.5;">
+        <strong>⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.</strong>
+      </p>
+      <p style="margin:0;font-size:14px;color:#7F1D1D;line-height:1.6;">
+        Responde a este correo (o por WhatsApp) con:<br>
+        👉 <strong>"CONFIRMO"</strong> si vas a asistir<br>
+        👉 <strong>"CAMBIAR"</strong> si necesitas otra fecha<br>
+        👉 <strong>"CANCELAR"</strong> si ya no te interesa<br><br>
+        <strong>Sin tu respuesta en 12h, tu slot se libera</strong> para otro estudiante en lista de espera.
       </p>
     </div>
+    <div style="text-align:center;margin:24px 0 8px 0;">
+      ${button(v.joinUrl, "Entrar al aula el día de la clase →")}
+    </div>
+    ${p(`<em style="color:#64748b;">Este enlace es exclusivo para ti. Guárdalo, lo usarás el día de la clase para entrar directamente sin contraseña.</em>`)}
     ${h2(`Cómo prepararte`)}
     ${p(`No necesitas estudiar nada — la clase es 100% conversacional y tu profesor/a se adapta a tu nivel. Solo asegúrate de tener:`)}
     ${p(`• Buena conexión a internet<br>• Cámara y micrófono funcionando<br>• Un sitio tranquilo durante 45 min`)}
-    ${h2(`Recordatorios`)}
-    ${p(`Te enviaremos recordatorios por email <strong>24 horas antes</strong> y la <strong>mañana del día</strong> de la clase. 30 minutos antes recibirás un aviso por WhatsApp${" "}(si nos diste tu número).`)}
-    ${p(`Si necesitas cancelar o reagendar, responde a este correo.`)}
-    ${p(`¡Hasta pronto!`)}
-    ${p(`<em style="color:#64748b;">— Aprender-Aleman.de</em>`)}
+    ${p(`<em style="color:#64748b;">— Stiv · Aprender-Aleman.de</em>`)}
   `;
   const footerNote =
     "Recibes este correo porque acabas de agendar una clase de prueba en Aprender-Aleman.de.";
   const text = [
-    `¡Hola ${v.leadName}!`, ``,
-    `Tu clase de prueba gratuita de alemán está confirmada.`,
-    `Fecha: ${v.startDate}`,
-    `Duración: ${v.durationMin} min`, ``,
-    `Entrar al aula: ${v.joinUrl}`,
+    `¡Hola ${v.leadName}! Soy Stiv de Aprender-Aleman.de.`, ``,
+    `Tu clase de alemán está agendada para:`,
+    `📅 ${v.startDate}`,
+    `⏱ ${v.durationMin} min`, ``,
+    `⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.`, ``,
+    `Responde con:`,
+    `👉 "CONFIRMO" si vas a asistir`,
+    `👉 "CAMBIAR" si necesitas otra fecha`,
+    `👉 "CANCELAR" si ya no te interesa`, ``,
+    `Sin tu respuesta en 12h, tu slot se libera para otro estudiante en lista de espera.`, ``,
+    `Entrar al aula el día de la clase: ${v.joinUrl}`,
     `(este enlace es exclusivo para ti — no requiere contraseña)`, ``,
-    `⚠️ IMPORTANTE: al abrir el enlace, tu navegador te pedirá permiso para usar`,
-    `micrófono y cámara. Pulsa "Permitir" — sin eso el profesor no podrá oírte ni verte.`, ``,
     `Cómo prepararte:`,
     `• La clase es conversacional, no necesitas estudiar nada antes.`,
     `• Asegúrate de tener buena conexión, cámara y micrófono.`, ``,
-    `Recordatorios:`,
-    `• Email 24 horas antes`,
-    `• Email la mañana del día de la clase`,
-    `• WhatsApp 30 minutos antes (si nos diste tu número)`, ``,
-    `Si necesitas cancelar, responde a este correo.`, ``,
-    `— Aprender-Aleman.de`,
+    `— Stiv · Aprender-Aleman.de`,
   ].join("\n");
   return { subject, html: renderEnvelope(body, footerNote), text };
 }
 
 function renderDE(v: TrialConfirmationVars): RenderedEmail {
-  const subject = `✅ Deine kostenlose Deutsch-Probestunde ist gebucht — ${v.startDate}`;
+  const subject = `${v.leadName}, bestätige deine Probestunde — ${v.startDate}`;
   const body = `
-    ${h2(`Hallo ${escapeHtml(v.leadName)}! 👋`)}
-    ${p(`Deine <strong>kostenlose Probestunde Deutsch</strong> ist bestätigt. Trag sie in deinen Kalender ein und wir sehen uns im Online-Klassenzimmer.`)}
+    ${h2(`Hallo ${escapeHtml(v.leadName)}! Ich bin Stiv von Aprender-Aleman.de 👋`)}
+    ${p(`Deine <strong>Deutsch-Probestunde</strong> ist gebucht für:`)}
     ${kvBlock([
       ["📅 Datum",     escapeHtml(v.startDate)],
       ["⏱ Dauer",      `${v.durationMin} Minuten`],
     ])}
-    <div style="text-align:center;margin:24px 0 8px 0;">
-      ${button(v.joinUrl, "Zum Klassenzimmer →")}
-    </div>
-    ${p(`<em style="color:#64748b;">Dieser Link ist nur für dich. Speichere ihn — du brauchst ihn am Tag der Stunde, um ohne Passwort einzutreten.</em>`)}
-    <div style="margin:18px 0 4px 0;padding:14px 16px;border-radius:12px;background:#FFF7ED;border:1px solid #FED7AA;">
-      <p style="margin:0;font-size:14px;color:#7C2D12;line-height:1.5;">
-        <strong>⚠️ Wichtig:</strong> Beim Klick fragt dein Browser nach <strong>Mikrofon- und Kamerazugriff</strong>. Bitte auf <strong>"Erlauben"</strong> klicken — sonst kann dich die Lehrkraft nicht hören oder sehen.
+    <div style="margin:18px 0;padding:14px 16px;border-radius:12px;background:#FEE2E2;border:1px solid #FCA5A5;">
+      <p style="margin:0 0 10px 0;font-size:14px;color:#7F1D1D;line-height:1.5;">
+        <strong>⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.</strong>
+      </p>
+      <p style="margin:0;font-size:14px;color:#7F1D1D;line-height:1.6;">
+        Antworte auf diese E-Mail (oder per WhatsApp) mit:<br>
+        👉 <strong>"CONFIRMO"</strong> wenn du dabei bist<br>
+        👉 <strong>"CAMBIAR"</strong> wenn du einen anderen Termin brauchst<br>
+        👉 <strong>"CANCELAR"</strong> wenn du nicht mehr interessiert bist<br><br>
+        <strong>Ohne deine Antwort innerhalb von 12 Stunden wird dein Slot</strong> für einen anderen Schüler auf der Warteliste freigegeben.
       </p>
     </div>
+    <div style="text-align:center;margin:24px 0 8px 0;">
+      ${button(v.joinUrl, "Zum Klassenzimmer am Tag der Stunde →")}
+    </div>
+    ${p(`<em style="color:#64748b;">Dieser Link ist nur für dich. Speichere ihn — du brauchst ihn am Tag der Stunde, um ohne Passwort einzutreten.</em>`)}
     ${h2(`Wie du dich vorbereitest`)}
     ${p(`Du musst nichts lernen — die Stunde ist konversationsbasiert und deine Lehrer/in passt sich deinem Niveau an. Stell nur Folgendes sicher:`)}
     ${p(`• Stabile Internetverbindung<br>• Funktionierende Kamera und Mikrofon<br>• Ein ruhiger Ort für 45 Minuten`)}
-    ${h2(`Erinnerungen`)}
-    ${p(`Wir schicken dir Erinnerungs-E-Mails <strong>24 Stunden vorher</strong> und am <strong>Morgen des Klassentags</strong>. 30 Minuten vorher erhältst du eine WhatsApp${" "}(falls du uns deine Nummer gegeben hast).`)}
-    ${p(`Wenn du absagen oder verschieben musst, antworte einfach auf diese E-Mail.`)}
-    ${p(`Bis bald!`)}
-    ${p(`<em style="color:#64748b;">— Aprender-Aleman.de</em>`)}
+    ${p(`<em style="color:#64748b;">— Stiv · Aprender-Aleman.de</em>`)}
   `;
   const footerNote =
     "Du erhältst diese E-Mail, weil du gerade eine Probestunde auf Aprender-Aleman.de gebucht hast.";
   const text = [
-    `Hallo ${v.leadName}!`, ``,
-    `Deine kostenlose Probestunde Deutsch ist bestätigt.`,
-    `Datum: ${v.startDate}`,
-    `Dauer: ${v.durationMin} Min`, ``,
-    `Zum Klassenzimmer: ${v.joinUrl}`,
+    `Hallo ${v.leadName}! Ich bin Stiv von Aprender-Aleman.de.`, ``,
+    `Deine Deutsch-Probestunde ist gebucht für:`,
+    `📅 ${v.startDate}`,
+    `⏱ ${v.durationMin} Min`, ``,
+    `⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.`, ``,
+    `Antworte mit:`,
+    `👉 "CONFIRMO" wenn du dabei bist`,
+    `👉 "CAMBIAR" wenn du einen anderen Termin brauchst`,
+    `👉 "CANCELAR" wenn du nicht mehr interessiert bist`, ``,
+    `Ohne deine Antwort innerhalb von 12 Stunden wird dein Slot freigegeben.`, ``,
+    `Zum Klassenzimmer am Tag der Stunde: ${v.joinUrl}`,
     `(dieser Link ist nur für dich — kein Passwort nötig)`, ``,
-    `⚠️ WICHTIG: Beim Öffnen des Links fragt dein Browser nach Mikrofon- und`,
-    `Kamerazugriff. Klick auf "Erlauben" — sonst kann dich die Lehrkraft nicht hören oder sehen.`, ``,
     `Vorbereitung:`,
     `• Konversationsbasierte Stunde — nichts zu lernen vorher.`,
     `• Stabile Internetverbindung, Kamera und Mikrofon.`, ``,
-    `Erinnerungen:`,
-    `• E-Mail 24 Stunden vorher`,
-    `• E-Mail am Morgen des Klassentags`,
-    `• WhatsApp 30 Minuten vorher (falls du uns deine Nummer gegeben hast)`, ``,
-    `Wenn du absagen musst, antworte einfach auf diese E-Mail.`, ``,
-    `— Aprender-Aleman.de`,
+    `— Stiv · Aprender-Aleman.de`,
   ].join("\n");
   return { subject, html: renderEnvelope(body, footerNote), text };
 }

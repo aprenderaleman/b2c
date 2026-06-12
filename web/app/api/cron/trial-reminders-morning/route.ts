@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTrialReminderEmail } from "@/lib/email/send";
+import { sendWhatsappText } from "@/lib/whatsapp";
 import { buildLeadJoinUrl, buildTrialClassUrl } from "@/lib/trial-token";
 
 /**
@@ -87,7 +88,7 @@ async function run(req: Request) {
     .select(`
       id, scheduled_at, duration_minutes, notes_admin, short_code,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads!inner(id, name, language, email, ai_paused_until)
+      lead:leads!inner(id, name, language, email, whatsapp_normalized, ai_paused_until)
     `)
     .eq("is_trial", true)
     .eq("status", "scheduled")
@@ -98,12 +99,12 @@ async function run(req: Request) {
     id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null; short_code: string | null;
     teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
-    lead: { id: string; name: string; language: "es" | "de"; email: string | null; ai_paused_until: string | null } |
-          Array<{ id: string; name: string; language: "es" | "de"; email: string | null; ai_paused_until: string | null }>;
+    lead: { id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null } |
+          Array<{ id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null => !x ? null : Array.isArray(x) ? x[0] ?? null : x;
 
-  let sentLead = 0, sentTeacher = 0, skipped = 0;
+  let sentLead = 0, sentTeacher = 0, sentLeadWa = 0, skipped = 0;
   for (const r of (classes ?? []) as Row[]) {
     if ((r.notes_admin ?? "").includes(REMINDER_TAG)) { skipped++; continue; }
 
@@ -174,17 +175,35 @@ async function run(req: Request) {
       else console.error(`[trial-reminders-morning] teacher email failed for ${r.id}: ${res.error}`);
     }
 
+    // ── Lead WhatsApp (NUEVO 2026-06-14)
+    // Copy "Buenos días, hoy es el día" + cierre en alemán "Wir sehen
+    // uns endlich heute" para crear afecto y cercanía cultural.
+    let leadWaDelivered = false;
+    if (lead.whatsapp_normalized) {
+      const timeLabel = new Date(r.scheduled_at).toLocaleString(
+        lead.language === "de" ? "de-DE" : "es-ES",
+        { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" },
+      );
+      const waText = lead.language === "de"
+        ? `Guten Morgen ${leadFirst}! Heute ist der Tag.\n\nDeutsch-Stunde um ${timeLabel}.\n\nWir sehen uns endlich heute 😊`
+        : `¡Buenos días ${leadFirst}! Hoy es el día.\n\nClase de alemán a las ${timeLabel}.\n\nWir sehen uns endlich heute 😊`;
+      const wa = await sendWhatsappText(lead.whatsapp_normalized, waText);
+      if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
+      else console.error(`[trial-reminders-morning] lead WA failed for ${r.id}: ${wa.reason}`);
+    }
+
     // ── Timeline entry for /admin/leads/{id}
-    if (leadDelivered || teacherDelivered) {
+    if (leadDelivered || teacherDelivered || leadWaDelivered) {
       const recipients: string[] = [];
-      if (leadDelivered)    recipients.push(`lead (${lead.email})`);
-      if (teacherDelivered) recipients.push(`profesor (${tu?.email})`);
+      if (leadDelivered)    recipients.push(`✉️ lead (${lead.email})`);
+      if (leadWaDelivered)  recipients.push(`💬 lead WA (${lead.whatsapp_normalized})`);
+      if (teacherDelivered) recipients.push(`✉️ profesor (${tu?.email})`);
       await sb.from("lead_timeline").insert({
         lead_id: lead.id,
         type:    "trial_reminder",
         author:  "system",
-        content: `📧 Recordatorio email mañana del día → ${recipients.join(" + ")}`,
-        metadata: { channel: "email", kind: "morning_of", class_id: r.id },
+        content: `Recordatorio mañana del día → ${recipients.join(" + ")}`,
+        metadata: { channel: "multi", kind: "morning_of", class_id: r.id },
       });
     } else if (lead.email || tu?.email) {
       await sb.from("lead_timeline").insert({
@@ -203,8 +222,9 @@ async function run(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    candidates: classes?.length ?? 0,
-    sent_lead: sentLead,
+    candidates:   classes?.length ?? 0,
+    sent_lead:    sentLead,
+    sent_lead_wa: sentLeadWa,
     sent_teacher: sentTeacher,
     skipped,
   });

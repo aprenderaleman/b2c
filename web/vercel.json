@@ -19,11 +19,19 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/trial-reminders-12h",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/cron/trial-reminders-morning",
       "schedule": "0 6,7 * * *"
     },
     {
-      "path": "/api/cron/trial-reminders-30m",
+      "path": "/api/cron/trial-reminders-2h",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/trial-reminders-15m",
       "schedule": "*/5 * * * *"
     },
     {
