@@ -2,80 +2,158 @@
  * Catálogo de KINDS conocidos: nombre legible, descripción, dónde se
  * usa en código, lista de placeholders disponibles para editar.
  *
- * Esto es metadata de UI — el cuerpo editable vive en la tabla
- * message_templates. Si un kind aparece en lead_timeline pero NO está
- * aquí, la página lo muestra como "(desconocido)" y NO ofrece edición
- * hasta que se añada a este catálogo + se refactore el código para
- * usar el helper renderTemplate.
+ * Soporta sub_n: un mismo kind puede tener varios mensajes distintos
+ * en una cadena (#1, #2, ...). Cada uno editable por separado.
+ *
+ * Esto es metadata de UI — el cuerpo editable vive en message_templates.
  */
 
 export type KindCatalogEntry = {
   kind:         string;
+  sub_n:        number | null;          // null = único mensaje del kind
   name:         string;
   description:  string;
   channel:      "whatsapp" | "email" | "both";
-  placeholders: string[];                    // documentadas
-  editable:     boolean;                     // ya cableado al template DB?
-  codePath:     string;                      // dónde vive en código
+  placeholders: string[];
+  editable:     boolean;
+  codePath:     string;
 };
 
 export const KIND_CATALOG: KindCatalogEntry[] = [
+  // ─── trial_confirmation (la mejor tasa del sistema 33-39%) ───
   {
-    kind:        "diagnostico_followup",
-    name:        "Drip post-funnel (msgs #1-6)",
-    description: "Cadena de 6 followups a leads que completaron el quiz pero NO agendaron clase de prueba. Disparada por /api/cron/diagnostico-followups cada 30 min.",
-    channel:     "both",
-    placeholders: ["firstName", "bookUrl", "testUrl"],
-    editable:    false,
-    codePath:    "web/app/api/cron/diagnostico-followups/route.ts (templates inline por nextN)",
+    kind: "trial_confirmation", sub_n: null,
+    name: "Confirmación de clase de prueba",
+    description: "Email + WA inmediato tras agendar trial. La mejor tasa del sistema. NO tocar sin probar.",
+    channel: "both", placeholders: ["firstName", "classDate", "teacherName", "joinUrl"],
+    editable: false,
+    codePath: "web/app/api/public/book-trial/route.ts",
+  },
+
+  // ─── post_trial_followup (cierre con link de pago) ───
+  {
+    kind: "post_trial_followup", sub_n: null,
+    name: "Post-clase con link de pago",
+    description: "Tras marcar 'Asistió' con pack + tipo de pago, envía el link de Stripe.",
+    channel: "whatsapp", placeholders: ["firstName", "objective", "packName", "packLink"],
+    editable: true,
+    codePath: "web/lib/admin-actions.ts → markTrialAttendedAwaitingConversion()",
+  },
+
+  // ─── diagnostico_followup (drip de 6 msgs) ───
+  // Welcome — el primero, MÁS importante. 1ª impresión.
+  {
+    kind: "diagnostico_followup", sub_n: 1,
+    name: "Drip post-funnel · Msg #1 (welcome)",
+    description: "Welcome a leads que terminaron el quiz pero no agendaron. T+15min. WA + Email.",
+    channel: "both", placeholders: ["firstName", "bookUrl"],
+    editable: true,
+    codePath: "web/app/api/cron/diagnostico-followups/route.ts (nextN===1)",
   },
   {
-    kind:        "trial_confirmation",
-    name:        "Confirmación de clase de prueba",
-    description: "Email + WA inmediato tras agendar trial vía /api/public/book-trial. La mejor tasa del sistema (33-39%).",
-    channel:     "both",
-    placeholders: ["firstName", "classDate", "teacherName", "joinUrl"],
-    editable:    false,
-    codePath:    "web/app/api/public/book-trial/route.ts",
+    kind: "diagnostico_followup", sub_n: 2,
+    name: "Drip post-funnel · Msg #2 (PDF gratis)",
+    description: "T+24h: PDF gratuito por nivel + email con adjunto. Regalo de valor.",
+    channel: "both", placeholders: ["firstName", "level"],
+    editable: false,
+    codePath: "web/app/api/cron/diagnostico-followups/route.ts (nextN===2)",
   },
   {
-    kind:        "email_only_nudge",
-    name:        "Nudge a leads sin WhatsApp",
-    description: "Drip agresivo para leads que NO dejaron número. Actualmente 0% respuesta — candidato a rediseño urgente.",
-    channel:     "email",
-    placeholders: ["firstName", "bookUrl"],
-    editable:    false,
-    codePath:    "web/app/api/cron/diagnostico-followups/route.ts → runEmailOnlyNudges()",
+    kind: "diagnostico_followup", sub_n: 3,
+    name: "Drip post-funnel · Msg #3 (test de nivel)",
+    description: "T+2d: invita al test de nivel gratis en SCHULE.",
+    channel: "whatsapp", placeholders: ["firstName", "testUrl"],
+    editable: true,
+    codePath: "web/app/api/cron/diagnostico-followups/route.ts (nextN===3)",
   },
   {
-    kind:        "post_trial_followup",
-    name:        "Post-clase con link de pago",
-    description: "Mensaje que envía Gelfis tras marcar 'Asistió' con pack + tipo de pago. Lleva link de Stripe.",
-    channel:     "both",
-    placeholders: ["firstName", "objective", "packName", "packLink"],
-    editable:    true,
-    codePath:    "web/lib/admin-actions.ts → markTrialAttendedAwaitingConversion()",
+    kind: "diagnostico_followup", sub_n: 4,
+    name: "Drip post-funnel · Msg #4 (follow-up test)",
+    description: "T+3d (24h tras el test): '¿descubriste tu nivel?'",
+    channel: "both", placeholders: ["firstName", "bookUrl"],
+    editable: true,
+    codePath: "web/app/api/cron/diagnostico-followups/route.ts (nextN===4)",
   },
   {
-    kind:        "bulk_pdf_reactivation",
-    name:        "Reactivación con PDF gratis",
-    description: "Drip a leads dormidos enviando un PDF gratuito por nivel. Caption del documento. 4.3% respuesta — sospechoso para WhatsApp anti-spam.",
-    channel:     "whatsapp",
-    placeholders: ["firstName", "level"],
-    editable:    false,
-    codePath:    "web/app/api/cron/bulk-pdf-reactivation/route.ts → waText()",
+    kind: "diagnostico_followup", sub_n: 5,
+    name: "Drip post-funnel · Msg #5 (última llamada WA)",
+    description: "T+5d: última llamada por WhatsApp.",
+    channel: "whatsapp", placeholders: ["firstName", "bookUrl"],
+    editable: true,
+    codePath: "web/app/api/cron/diagnostico-followups/route.ts (nextN===5)",
   },
   {
-    kind:        "trial_confirmation_resend",
-    name:        "Reenvío manual de confirmación",
+    kind: "diagnostico_followup", sub_n: 6,
+    name: "Drip post-funnel · Msg #6 (email final)",
+    description: "T+8d: email final. Tras este el lead pasa a 'cold'.",
+    channel: "email", placeholders: ["firstName"],
+    editable: false,
+    codePath: "web/app/api/cron/diagnostico-followups/route.ts (nextN===6)",
+  },
+
+  // ─── email_only_nudge (drip 5 msgs · 0% RESPUESTA — rediseñar) ───
+  {
+    kind: "email_only_nudge", sub_n: 1,
+    name: "Email-only · Nudge #1 (T+30min)",
+    description: "⚠️ TASA 0%. Lead saltó WA; este email INSISTE en WA — error de UX. Rediseñar dándole vía email-only.",
+    channel: "email", placeholders: ["firstName", "funnelUrl"],
+    editable: true,
+    codePath: "web/lib/email/templates/email-only-nudge.ts",
+  },
+  {
+    kind: "email_only_nudge", sub_n: 2,
+    name: "Email-only · Nudge #2 (T+6h)",
+    description: "⚠️ TASA 0%. Misma trampa que #1.",
+    channel: "email", placeholders: ["firstName", "funnelUrl"],
+    editable: true,
+    codePath: "web/lib/email/templates/email-only-nudge.ts",
+  },
+  {
+    kind: "email_only_nudge", sub_n: 3,
+    name: "Email-only · Nudge #3 (T+24h)",
+    description: "⚠️ TASA 0%. Idem.",
+    channel: "email", placeholders: ["firstName", "funnelUrl"],
+    editable: true,
+    codePath: "web/lib/email/templates/email-only-nudge.ts",
+  },
+  {
+    kind: "email_only_nudge", sub_n: 4,
+    name: "Email-only · Nudge #4 (T+3d)",
+    description: "⚠️ TASA 0%. Idem.",
+    channel: "email", placeholders: ["firstName", "funnelUrl"],
+    editable: true,
+    codePath: "web/lib/email/templates/email-only-nudge.ts",
+  },
+  {
+    kind: "email_only_nudge", sub_n: 5,
+    name: "Email-only · Nudge #5 (T+7d, última)",
+    description: "⚠️ TASA 0%. Última llamada.",
+    channel: "email", placeholders: ["firstName", "funnelUrl"],
+    editable: true,
+    codePath: "web/lib/email/templates/email-only-nudge.ts",
+  },
+
+  // ─── bulk_pdf_reactivation (4% — sospechoso anti-spam WA) ───
+  {
+    kind: "bulk_pdf_reactivation", sub_n: null,
+    name: "Reactivación con PDF gratis",
+    description: "Caption del documento PDF a leads dormidos. 4% respuesta — sospechoso para anti-spam.",
+    channel: "whatsapp", placeholders: ["firstName", "level"],
+    editable: false,
+    codePath: "web/app/api/cron/bulk-pdf-reactivation/route.ts → waText()",
+  },
+
+  // ─── trial_confirmation_resend (reenvío manual) ───
+  {
+    kind: "trial_confirmation_resend", sub_n: null,
+    name: "Reenvío manual de confirmación",
     description: "Cuando Gelfis pulsa 'Reenviar confirmación' desde el panel del lead.",
-    channel:     "whatsapp",
-    placeholders: ["firstName", "classDate", "joinUrl"],
-    editable:    false,
-    codePath:    "web/app/api/admin/leads/[id]/resend-confirmation/route.ts",
+    channel: "whatsapp", placeholders: ["firstName", "classDate", "joinUrl"],
+    editable: false,
+    codePath: "web/app/api/admin/leads/[id]/resend-confirmation/route.ts",
   },
 ];
 
-export function getCatalogEntry(kind: string): KindCatalogEntry | undefined {
-  return KIND_CATALOG.find(k => k.kind === kind);
+export function getCatalogEntry(kind: string, sub_n: number | null = null): KindCatalogEntry | undefined {
+  return KIND_CATALOG.find(k => k.kind === kind && (k.sub_n ?? null) === (sub_n ?? null));
 }

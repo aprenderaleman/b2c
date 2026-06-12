@@ -8,6 +8,7 @@ import {
 } from "@/lib/email/send";
 import { sendWhatsappText, sendWhatsappDocument } from "@/lib/whatsapp";
 import { getSystemPauseStatus } from "@/lib/system-pause";
+import { getActiveTemplate, renderTemplate } from "@/lib/message-stats";
 import { signRecordingUrl } from "@/lib/r2";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
@@ -350,22 +351,23 @@ async function runCron(req: Request) {
         // handler nuevo (`_handle_call_time_proposal`) que parsea la
         // hora vía Claude y la agenda en Google Calendar si está libre.
         kind = "wa+email";
-        // Welcome v4 (Gelfis 2026-05-27): copy unificado en español
-        // para TODOS los leads (incluso los marcados `language='de'`).
-        // Decisión: en B2C aplicamos un único idioma para mantener
-        // consistencia operativa — Stiv responde en español y el funnel
-        // está en español. El campo lead.language sigue existiendo
-        // pero ya no bifurca el copy.
-        const waText = [
-          `¡Hola, ${firstName}! 👋`,
-          ``,
-          `Soy Stiv de la academia Aprender-Aleman.de, un gusto saludarte.`,
-          `Recibimos tu solicitud para aprender alemán. Para avanzar más rápido, te propongo hablar 15 minutos para conocer tus objetivos y diseñarte un plan personalizado.`,
-          ``,
-          `¿A qué hora te viene bien hoy o mañana? 🇩🇪`,
-          ``,
-          `Stiv | Aprender-Aleman.de`,
-        ].join("\n");
+        // Override editable desde /admin/mensajes (kind='diagnostico_followup',
+        // sub_n=1, channel='whatsapp'). Si no hay override activo, usa el
+        // copy hardcoded v4 (Gelfis 2026-05-27). Welcome v4: copy unificado
+        // en español para TODOS los leads (incluso `language='de'`).
+        const welcomeTpl = await getActiveTemplate("diagnostico_followup", "whatsapp", 1);
+        const waText = welcomeTpl
+          ? renderTemplate(welcomeTpl.body, { firstName, bookUrl })
+          : [
+              `¡Hola, ${firstName}! 👋`,
+              ``,
+              `Soy Stiv de la academia Aprender-Aleman.de, un gusto saludarte.`,
+              `Recibimos tu solicitud para aprender alemán. Para avanzar más rápido, te propongo hablar 15 minutos para conocer tus objetivos y diseñarte un plan personalizado.`,
+              ``,
+              `¿A qué hora te viene bien hoy o mañana? 🇩🇪`,
+              ``,
+              `Stiv | Aprender-Aleman.de`,
+            ].join("\n");
 
         const sendEmail = lead.email
           ? sendDiagnosticoWelcomeEmail(lead.email, {

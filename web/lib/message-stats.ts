@@ -17,6 +17,7 @@ import { supabaseAdmin } from "./supabase";
 export type MessageStats = {
   kind:          string;
   channel:       string;
+  sub_n:         number | null;      // sub-secuencia (1..N) o null si es único
   sent:          number;
   responded7d:   number;
   responseRate:  number;     // 0..100
@@ -64,7 +65,7 @@ export async function getMessageStats(filters: StatsFilters = {}): Promise<Messa
   }
 
   type Bucket = {
-    kind: string; channel: string;
+    kind: string; channel: string; sub_n: number | null;
     sent: number; responded: number;
     lastSentAt: string | null;
     samples: Array<{ at: string; preview: string }>;
@@ -79,12 +80,18 @@ export async function getMessageStats(filters: StatsFilters = {}): Promise<Messa
     const md = r.metadata ?? {};
     const kind    = (md.kind    as string | undefined) ?? "(sin kind)";
     const channel = (md.channel as string | undefined) ?? "?";
+    // Distintos crons usan distintos nombres para el sub-numero. Aceptamos
+    // los tres y caemos a null si no esta presente.
+    const rawSubN = (md.sub_n ?? md.step ?? md.message_n) as number | string | undefined;
+    const sub_n   = typeof rawSubN === "number" ? rawSubN
+                  : typeof rawSubN === "string" && /^\d+$/.test(rawSubN) ? parseInt(rawSubN, 10)
+                  : null;
     if (filters.kind    && filters.kind    !== kind   ) continue;
     if (filters.channel && filters.channel !== channel) continue;
-    const key = `${kind}::${channel}`;
+    const key = `${kind}::${channel}::${sub_n ?? "null"}`;
     let b = buckets.get(key);
     if (!b) {
-      b = { kind, channel, sent: 0, responded: 0, lastSentAt: null, samples: [] };
+      b = { kind, channel, sub_n, sent: 0, responded: 0, lastSentAt: null, samples: [] };
       buckets.set(key, b);
     }
     b.sent++;
@@ -105,6 +112,7 @@ export async function getMessageStats(filters: StatsFilters = {}): Promise<Messa
     out.push({
       kind:          b.kind,
       channel:       b.channel,
+      sub_n:         b.sub_n,
       sent:          b.sent,
       responded7d:   b.responded,
       responseRate:  b.sent > 0 ? (100 * b.responded / b.sent) : 0,
@@ -116,6 +124,36 @@ export async function getMessageStats(filters: StatsFilters = {}): Promise<Messa
   // que más impacto tienen.
   out.sort((a, b) => b.sent - a.sent);
   return out;
+}
+
+/**
+ * Busca un template activo en BD. Devuelve null si no existe o esta
+ * inactivo. Caller usa fallback hardcoded en ese caso.
+ *
+ * Cache en proceso de 60s: los crons que iteran sobre muchos leads
+ * con el mismo kind no golpean la BD por cada lead.
+ */
+const _tplCache = new Map<string, { tpl: Template | null; ts: number }>();
+const _TPL_TTL_MS = 60_000;
+
+export async function getActiveTemplate(
+  kind:    string,
+  channel: "whatsapp" | "email" | "both",
+  sub_n:   number | null = null,
+): Promise<Template | null> {
+  const cacheKey = `${kind}::${channel}::${sub_n ?? "null"}`;
+  const now = Date.now();
+  const cached = _tplCache.get(cacheKey);
+  if (cached && now - cached.ts < _TPL_TTL_MS) return cached.tpl;
+
+  const sb = supabaseAdmin();
+  let q = sb.from("message_templates").select("*").eq("kind", kind).eq("channel", channel).eq("active", true);
+  if (sub_n === null) q = q.is("sub_n", null);
+  else                q = q.eq("sub_n", sub_n);
+  const { data } = await q.maybeSingle();
+  const tpl = (data as Template | null) ?? null;
+  _tplCache.set(cacheKey, { tpl, ts: now });
+  return tpl;
 }
 
 /**

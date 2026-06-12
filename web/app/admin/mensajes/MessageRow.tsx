@@ -43,7 +43,7 @@ export function MessageRow({
               {catalog?.name ?? "(sin catálogo)"}
             </span>
             <span className="font-mono text-[11px] text-white/40">
-              {stats.kind} · {stats.channel}
+              {stats.kind}{stats.sub_n != null && ` · #${stats.sub_n}`} · {stats.channel}
             </span>
             {editable && (
               <span className="text-[10px] uppercase tracking-wider rounded-full bg-emerald-500/20 text-emerald-200 px-2 py-0.5">
@@ -124,6 +124,7 @@ export function MessageRow({
                 <EditForm
                   catalog={catalog}
                   channel={stats.channel}
+                  sub_n={stats.sub_n}
                   current={template}
                   onClose={() => setEditing(false)}
                 />
@@ -142,10 +143,11 @@ export function MessageRow({
 }
 
 function EditForm({
-  catalog, channel, current, onClose,
+  catalog, channel, sub_n, current, onClose,
 }: {
   catalog: KindCatalogEntry;
   channel: string;
+  sub_n:   number | null;
   current: Template | null;
   onClose: () => void;
 }) {
@@ -166,7 +168,7 @@ function EditForm({
       try {
         await saveTemplateAction({
           kind:         catalog.kind,
-          sub_n:        null,
+          sub_n:        sub_n,
           channel:      normalizedChannel,
           name:         catalog.name,
           description:  catalog.description,

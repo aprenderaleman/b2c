@@ -422,7 +422,7 @@ export async function sendEmailOnlyNudge(
   to: string,
   vars: EmailOnlyNudgeVars,
 ): Promise<SendResult> {
-  const { subject, html, text } = renderEmailOnlyNudge(vars);
+  const { subject, html, text } = await renderEmailOnlyNudge(vars);
   return sendRaw(to, subject, html, text);
 }
 

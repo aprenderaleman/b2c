@@ -40,16 +40,10 @@ export default async function MensajesPage({
     listTemplates(),
   ]);
 
-  // Index templates por (kind, channel) para pasarlos al componente row.
-  const templatesByKey = new Map<string, ReturnType<typeof templates[0] extends never ? never : (a: typeof templates[0]) => typeof templates[0]>>();
-  for (const t of templates) {
-    templatesByKey.set(`${t.kind}::${t.channel}`, t as unknown as never);
-  }
-
   // Búsqueda de texto: por kind, name o sample preview.
   const visible = q
     ? stats.filter(s => {
-        const cat = getCatalogEntry(s.kind);
+        const cat = getCatalogEntry(s.kind, s.sub_n);
         return s.kind.toLowerCase().includes(q)
           || (cat?.name ?? "").toLowerCase().includes(q)
           || s.samples.some(x => x.preview.toLowerCase().includes(q));
@@ -61,8 +55,8 @@ export default async function MensajesPage({
   const globalRate     = totalSent > 0 ? (100 * totalResponded / totalSent) : 0;
 
   // Kinds del catálogo que no aparecieron en los stats (sin envíos).
-  const seenKindChannels = new Set(stats.map(s => `${s.kind}::${s.channel}`));
-  const orphanCatalog = KIND_CATALOG.filter(c => !Array.from(seenKindChannels).some(k => k.startsWith(c.kind + "::")));
+  const seenKeys = new Set(stats.map(s => `${s.kind}::${s.sub_n ?? "null"}`));
+  const orphanCatalog = KIND_CATALOG.filter(c => !seenKeys.has(`${c.kind}::${c.sub_n ?? "null"}`));
 
   return (
     <div className="px-5 md:px-8 py-8 max-w-6xl mx-auto">
@@ -153,14 +147,22 @@ export default async function MensajesPage({
             </div>
           )}
           {visible.map(s => {
-            const cat = getCatalogEntry(s.kind);
-            const tpl = templatesByKey.get(`${s.kind}::${s.channel}`) ?? null;
+            const cat = getCatalogEntry(s.kind, s.sub_n);
+            // El template DB se busca por (kind, sub_n, channel). El
+            // canal del stat puede ser 'wa+email' o 'wa' — los normalizamos
+            // a 'whatsapp'/'email'/'both' al guardar.
+            const normCh = s.channel === "email" ? "email"
+                         : s.channel === "whatsapp" || s.channel === "wa" ? "whatsapp"
+                         : "both";
+            const tpl = templates.find(t =>
+              t.kind === s.kind && (t.sub_n ?? null) === (s.sub_n ?? null) && t.channel === normCh
+            ) ?? null;
             return (
               <MessageRow
-                key={`${s.kind}::${s.channel}`}
+                key={`${s.kind}::${s.channel}::${s.sub_n ?? "null"}`}
                 stats={s}
                 catalog={cat}
-                template={tpl as unknown as Parameters<typeof MessageRow>[0]["template"]}
+                template={tpl}
               />
             );
           })}

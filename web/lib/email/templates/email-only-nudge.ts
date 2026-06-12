@@ -1,4 +1,5 @@
 import { button, escapeHtml, h2, p, renderEnvelope, type RenderedEmail } from "./base";
+import { getActiveTemplate, renderTemplate } from "../../message-stats";
 
 /**
  * Email "nudge" para leads que completaron el form pero NO dejaron
@@ -7,6 +8,10 @@ import { button, escapeHtml, h2, p, renderEnvelope, type RenderedEmail } from ".
  *
  * El CTA es siempre el mismo: link al funnel para retomar y dar el
  * WhatsApp (anclado en #wa para auto-focus del campo).
+ *
+ * Override editable desde /admin/mensajes por sub_n. Si la plantilla
+ * existe en message_templates con active=true, se renderiza ESA con
+ * placeholders {firstName}, {funnelUrl}. Si no, cae al hardcoded.
  */
 export type EmailOnlyNudgeVars = {
   leadName: string;        // first name
@@ -57,10 +62,19 @@ const BODIES: Record<EmailOnlyNudgeVars["step"], (name: string) => string> = {
   `,
 };
 
-export function renderEmailOnlyNudge(v: EmailOnlyNudgeVars): RenderedEmail {
+export async function renderEmailOnlyNudge(v: EmailOnlyNudgeVars): Promise<RenderedEmail> {
+  // Override editable: si hay plantilla activa para este sub_n, la
+  // usamos como cuerpo (el subject sigue siendo del catalogo
+  // hardcoded por simplicidad — si el body lleva su propio H1 esta
+  // todo dentro). El body del template se mete en un <p> envuelto.
+  const tpl = await getActiveTemplate("email_only_nudge", "email", v.step);
   const subject = SUBJECTS[v.step].replace(/\{name\}/g, v.leadName);
   const headline = HEADLINES[v.step].replace(/\{name\}/g, v.leadName);
-  const bodyMain = BODIES[v.step](v.leadName);
+  const bodyMain = tpl
+    ? `<div style="white-space:pre-wrap">${escapeHtml(renderTemplate(tpl.body, {
+        firstName: v.leadName, funnelUrl: v.funnelUrl,
+      }))}</div>`
+    : BODIES[v.step](v.leadName);
 
   const body = `
     ${h2(`${escapeHtml(headline)}`)}
