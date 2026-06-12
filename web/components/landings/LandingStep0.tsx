@@ -141,7 +141,10 @@ export function LandingStep0({
               <span><strong>Aprende alemán desde casa</strong> con profesor nativo que habla español</span>
             </li>
             <li className="flex items-start gap-2.5 text-[14.5px] md:text-[15px] text-slate-700">
-              <span className="text-[18px] leading-tight shrink-0" aria-hidden>🇩🇪</span>
+              {/* Antes 🇩🇪 (regional indicator) — no renderiza bien
+                  en Windows sin font de banderas. 🗺️ funciona en
+                  todas las plataformas y representa "destinos DACH". */}
+              <span className="text-[18px] leading-tight shrink-0" aria-hidden>🗺️</span>
               <span><strong>Prepárate para trabajar o vivir</strong> en Alemania, Suiza o Austria</span>
             </li>
             {bullets.map((b, i) => {
