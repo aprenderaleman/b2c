@@ -64,6 +64,37 @@ export function packUrl(pack: Pack, payment: PaymentType): string {
   return payment === "single" ? pack.urlSingle : pack.urlFlexible;
 }
 
+/**
+ * Recomienda 2 packs para presentar al lead en el wizard /cp,
+ * basado en sus respuestas a los filtros del Paso 4:
+ *
+ *   - horarios "changing" → siempre 2 packs INDIVIDUALES (grupales
+ *     requieren compromiso de horario fijo).
+ *   - horarios "fixed" + 1 nivel → Pack Inicio + VIP Express
+ *     (grupal económico vs individual rápido).
+ *   - horarios "fixed" + confianza al hablar → Pack Fluidez Total +
+ *     VIP Individuales (grupal completo vs individual premium).
+ *
+ * Decisión Gelfis 2026-06-08: siempre 2 packs para que el lead "elija"
+ * y se sienta dueño de la decisión (mejor cierre que 1 sola opción).
+ */
+export type ScheduleType = "fixed" | "changing";
+export type LearningGoal = "one_level" | "confidence";
+
+export function recommendPacks(
+  schedule: ScheduleType,
+  goal:     LearningGoal,
+): [PackId, PackId] {
+  if (schedule === "changing") {
+    return ["vip_individual", "vip_express"];
+  }
+  // fixed schedule
+  if (goal === "one_level") {
+    return ["inicio_grupal", "vip_express"];
+  }
+  return ["fluidez_total_grupal", "vip_individual"];
+}
+
 /** Override por env var (PACK_URL_<PACKID>_<SINGLE|FLEXIBLE>) — sin redeploy. */
 export function getPackUrlWithOverride(packId: PackId, payment: PaymentType): string {
   const envKey = `PACK_URL_${packId.toUpperCase()}_${payment.toUpperCase()}`;

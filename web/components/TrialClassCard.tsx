@@ -125,6 +125,25 @@ export function TrialClassCard({
             🎥 Aula
           </Link>
 
+          {/* Botón "Iniciar cp" — abre el guion del profesor en pestaña
+              nueva. Acceso restringido a profe asignado + superadmin
+              (lo gatekeepea el server-side de /cp/[classId]); aquí
+              siempre lo mostramos. */}
+          <a
+            href={`/cp/${row.classId}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl
+                       border border-emerald-300 dark:border-emerald-500/40
+                       bg-emerald-50 dark:bg-emerald-500/10
+                       hover:bg-emerald-100 dark:hover:bg-emerald-500/20
+                       text-emerald-800 dark:text-emerald-200
+                       px-3.5 py-2 text-xs font-semibold transition-colors"
+            title="Abrir guion paso a paso de la clase de prueba"
+          >
+            ▶ Iniciar cp
+          </a>
+
           {showLeadDetailLink && row.leadId && (
             <Link
               href={`/admin/leads/${row.leadId}`}
