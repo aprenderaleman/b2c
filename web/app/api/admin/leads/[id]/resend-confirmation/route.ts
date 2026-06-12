@@ -155,8 +155,8 @@ export async function POST(
       lead_id: id,
       type:    "system_message_sent",
       author:  "gelfis",
-      content: `💬 WhatsApp de confirmación REENVIADO manualmente a ${l.whatsapp_normalized}`,
-      metadata: { channel: "whatsapp", kind: "trial_confirmation_resend", class_id: c.id },
+      content: text,
+      metadata: { channel: "whatsapp", kind: "trial_confirmation_resend", class_id: c.id, sent_to: l.whatsapp_normalized },
     });
     return NextResponse.json({ ok: true, messageId: result.messageId });
   } else {

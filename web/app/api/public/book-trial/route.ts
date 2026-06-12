@@ -451,8 +451,11 @@ export async function POST(req: Request) {
         lead_id: leadId,
         type:    "system_message_sent",
         author:  "system",
-        content: `📧 Email de confirmación enviado a ${b.email}`,
-        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
+        // El email es un template HTML; guardamos un resumen textual
+        // estructurado (asunto + bloque clave) para que /admin/mensajes
+        // muestre algo util sin renderizar el HTML aqui.
+        content: `[Email: Confirmación clase de prueba ${startDate}]\n\nEnviado a ${b.email}`,
+        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId, sent_to: b.email },
       });
     } else {
       const reason = emailResult.status === "fulfilled"
@@ -482,10 +485,12 @@ export async function POST(req: Request) {
           lead_id: leadId,
           type:    "system_message_sent",
           author:  "system",
-          content: `💬 WhatsApp de confirmación enviado a ${b.whatsapp_e164}`,
+          // Body real del WhatsApp enviado al lead.
+          content: waText ?? `💬 WhatsApp de confirmación enviado a ${b.whatsapp_e164}`,
           metadata: {
             channel: "whatsapp", kind: "trial_confirmation", class_id: classId,
             message_id: waResult.value.messageId ?? null,
+            sent_to: b.whatsapp_e164,
           },
         });
       } else {

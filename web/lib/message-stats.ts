@@ -108,10 +108,14 @@ export async function getMessageStats(filters: StatsFilters = {}): Promise<Messa
     if (!b.lastSentAt || r.timestamp > b.lastSentAt) b.lastSentAt = r.timestamp;
 
     const content = r.content ?? "";
-    // Heuristica: si el content empieza con emoji-summary tipico de los
-    // crons TS ("📨 Followup", "📧 Nudge", "💬 ", etc.) NO es el body
-    // real, es un resumen. Los Python agents si guardan body completo.
-    const isSummary = /^[📨📧💬📩]\s/.test(content) || content.startsWith("Falló");
+    // Heuristica para detectar si el content es un resumen historico
+    // ("📨 Followup #N enviado") o el body real. Los envios nuevos (post
+    // 2026-06-12) guardan el cuerpo completo: WhatsApp como texto plano,
+    // emails con prefijo "[Email: ...]\n\n" o "[PDF ...]\n\n", contenido
+    // sin "X enviado a"/"X FALLÓ" al inicio.
+    const isSummary = (/^[📨📧💬📩]\s/.test(content) && /\benviado(\s|$)/.test(content.slice(0, 60)))
+                      || content.startsWith("Falló")
+                      || /^Email correctivo (con enlace|FALLÓ)/.test(content);
     if (b.samples.length < 3) {
       b.samples.push({
         at: r.timestamp,

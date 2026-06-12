@@ -355,7 +355,10 @@ async function runCron(req: Request) {
           lead_id: lead.id,
           type:    "system_message_sent",
           author:  "system",
-          content: `📨 Bulk reactivation PDF enviado (nivel ${pdf.level})`,
+          // Body real: el caption del documento PDF (lo que ve el lead
+          // debajo del archivo en WhatsApp). Anteponemos el nivel del PDF
+          // y el filename para que sea autocompleto en /admin/mensajes.
+          content: `[PDF ${pdf.level}: ${pdf.fileName}]\n\n${text}`,
           metadata: {
             kind: "bulk_pdf_reactivation",
             level: pdf.level,

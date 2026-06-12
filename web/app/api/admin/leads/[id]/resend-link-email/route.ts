@@ -111,7 +111,7 @@ export async function POST(
     type:    "system_message_sent",
     author:  "admin",
     content: res.ok
-      ? `Email correctivo con enlace de la clase enviado (${joinUrl})`
+      ? `[Email: ${subject}]\n\n${text}`
       : `Email correctivo FALLÓ: ${res.error}`,
     metadata: {
       kind:      "resend_link_email",

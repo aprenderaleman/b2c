@@ -136,8 +136,8 @@ async function run(req: Request) {
         lead_id: l.id,
         type:    "system_message_sent",
         author:  "system",
-        content: `💬 Follow-up 24h sin rebook enviado a ${l.whatsapp_normalized}`,
-        metadata: { kind: "reschedule_followup_24h", channel: "whatsapp", message_id: res.messageId },
+        content: text,
+        metadata: { kind: "reschedule_followup_24h", channel: "whatsapp", message_id: res.messageId, sent_to: l.whatsapp_normalized },
       });
       await sb.from("leads")
         .update({ reschedule_state: { ...rs, followup_sent_at: new Date().toISOString() } })

@@ -336,6 +336,10 @@ async function runCron(req: Request) {
     const firstName = lead.name.split(/\s+/)[0] || lead.name;
     let ok = false;
     let kind: "wa" | "email" | "wa+email" = "wa";
+    // Body real del mensaje enviado — lo guardamos en lead_timeline.content
+    // para que /admin/mensajes muestre el texto real, no un resumen.
+    // Si se mandan ambos canales, priorizamos el WA (el lead lo ve igual).
+    let sentBody = "";
 
     // Helper: ¿el lead respondió al msg 1?
     // Lo usamos para saltar msg 2 (nudge de baja fricción) si ya
@@ -387,6 +391,7 @@ async function runCron(req: Request) {
             })
           : Promise.resolve({ ok: false as const, error: "no_email" });
 
+        sentBody = waText;
         const [waRes, emailRes] = await Promise.allSettled([
           sendWA(lead.whatsapp_normalized, waText),
           sendEmail,
@@ -437,6 +442,7 @@ async function runCron(req: Request) {
           ``,
           `Te tomará 3 segundos 👇`,
         ].join("\n");
+        sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
         ok = r.ok;
       } else if (nextN === 3) {
@@ -499,6 +505,7 @@ async function runCron(req: Request) {
           ``,
           `Test de nivel: ${testUrl}`,
         ].join("\n");
+        sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
         ok = r.ok;
       } else if (nextN === 5) {
@@ -516,6 +523,7 @@ async function runCron(req: Request) {
           ``,
           `Sea cual sea, te entiendo. Solo dime para ajustarme a ti 👇`,
         ].join("\n");
+        sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
         ok = r.ok;
       } else if (nextN === 6) {
@@ -537,6 +545,7 @@ async function runCron(req: Request) {
           ``,
           `Stiv`,
         ].join("\n");
+        sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
         ok = r.ok;
       } else if (nextN === 7) {
@@ -573,6 +582,7 @@ async function runCron(req: Request) {
               variant:  "final_goodbye",
             })
           : Promise.resolve({ ok: false as const, error: "no_email" });
+        sentBody = waText;
         const [waRes, emailRes] = await Promise.allSettled([
           sendWA(lead.whatsapp_normalized, waText),
           sendEmail,
@@ -613,7 +623,11 @@ async function runCron(req: Request) {
       lead_id: lead.id,
       type:    "system_message_sent",
       author:  "system",
-      content: `📨 Followup #${nextN} (${kind}) enviado`,
+      // Body real del mensaje. Si por algún motivo no se setea (no
+      // debería tras los assignments de cada nextN), caemos al summary
+      // viejo para no romper la fila — pero las stats lo marcarán como
+      // "resumen" en /admin/mensajes.
+      content: sentBody || `📨 Followup #${nextN} (${kind}) enviado`,
       metadata: { kind: "diagnostico_followup", message_n: nextN, channel: kind },
     });
 
@@ -640,6 +654,7 @@ type SB = ReturnType<typeof supabaseAdmin>;
 
 async function runEmailOnlyNudges(sb: SB, baseUrl: string, nowMs: number) {
   const { sendEmailOnlyNudge } = await import("@/lib/email/send");
+  const { renderEmailOnlyNudge } = await import("@/lib/email/templates/email-only-nudge");
 
   const { data, error } = await sb
     .from("leads")
@@ -681,6 +696,14 @@ async function runEmailOnlyNudges(sb: SB, baseUrl: string, nowMs: number) {
     const funnelUrl = `${baseUrl}/?resume=${encodeURIComponent(row.id)}#wa`;
 
     try {
+      // Renderizamos para enviar Y para guardar el body real en
+      // lead_timeline. Renderizar dos veces seria caro, pero sendEmailOnlyNudge
+      // tambien renderiza dentro — alternativa seria exportar una version
+      // que acepte el RenderedEmail ya hecho. Por ahora: render una vez
+      // para body, otra vez para send (idempotente y barato).
+      const renderedForLog = await renderEmailOnlyNudge({
+        leadName: firstName, funnelUrl, step: nextN,
+      });
       const r = await sendEmailOnlyNudge(row.email, {
         leadName: firstName, funnelUrl, step: nextN,
       });
@@ -695,8 +718,10 @@ async function runEmailOnlyNudges(sb: SB, baseUrl: string, nowMs: number) {
         lead_id: row.id,
         type:    "system_message_sent",
         author:  "system",
-        content: `📧 Nudge #${nextN} (email-only) enviado a ${row.email}`,
-        metadata: { channel: "email", kind: "email_only_nudge", step: nextN },
+        // Body real del email (texto plano, sin HTML) para que el
+        // editor de /admin/mensajes muestre lo que recibe el lead.
+        content: `[Asunto: ${renderedForLog.subject}]\n\n${renderedForLog.text}`,
+        metadata: { channel: "email", kind: "email_only_nudge", step: nextN, subject: renderedForLog.subject },
       });
       sent++;
     } catch (e) {
