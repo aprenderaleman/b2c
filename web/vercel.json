@@ -67,6 +67,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/email-inbound-poll",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/bulk-pdf-reactivation",
       "schedule": "0 6 * * *"
     },
