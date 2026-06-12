@@ -23,6 +23,49 @@ export default async function TeacherDetailPage({
   const teacher = await getTeacherById(id);
   if (!teacher) notFound();
 
+  // ─── Métricas de trials del profe ─────────────────────────────────
+  // Cuántos trials dió, cuántos se convirtieron, tasa, ingresos.
+  // Sumamos en JS porque las queries son chiquitas.
+  const trialsAllRes = await supabaseAdmin()
+    .from("classes")
+    .select(`
+      id, scheduled_at, status,
+      lead_id,
+      participants:class_participants(attended)
+    `)
+    .eq("teacher_id", id)
+    .eq("is_trial", true);
+  type TrialRow = {
+    id: string; scheduled_at: string; status: string; lead_id: string | null;
+    participants: Array<{ attended: boolean | null }> | null;
+  };
+  const allTrials = (trialsAllRes.data ?? []) as unknown as TrialRow[];
+  const trialsCount    = allTrials.length;
+  const trialsAttended = allTrials.filter(t =>
+    t.status === "completed" &&
+    (t.participants ?? []).some(p => p.attended === true)
+  ).length;
+  // Conversiones: cuántos students apuntan a este profe via trial_teacher_id
+  const convertedRes = await supabaseAdmin()
+    .from("students")
+    .select("id", { count: "exact", head: true })
+    .eq("trial_teacher_id", id);
+  const trialsConverted = convertedRes.count ?? 0;
+  const conversionRate  = trialsAttended > 0
+    ? (trialsConverted / trialsAttended) * 100
+    : 0;
+  // Beneficio total del profe por trials (base + comisiones), todo
+  // tiempo. Sumamos amount_cents de class_hours_log de TODAS las trial
+  // classes de este profe.
+  const earningsRes = await supabaseAdmin()
+    .from("class_hours_log")
+    .select("amount_cents, class:classes!inner(is_trial, teacher_id)")
+    .eq("teacher_id", id)
+    .eq("classes.is_trial", true);
+  type ELog = { amount_cents: number };
+  const trialEarningsCents = ((earningsRes.data ?? []) as unknown as ELog[])
+    .reduce((s, r) => s + Number(r.amount_cents), 0);
+
   const [notes, optOutRow, futureClassesRes, reviewsRes] = await Promise.all([
     listAdminNotes("teacher", id),
     supabaseAdmin()
@@ -168,6 +211,33 @@ export default async function TeacherDetailPage({
         </Panel>
       </div>
 
+      {/* Métricas de clases de prueba */}
+      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+            Clases de prueba
+          </h2>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Base 8 € por trial asistida · comisión 50/80/100/200 € al convertir
+          </span>
+        </div>
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">
+          <Metric label="Recibidas" value={String(trialsCount)} />
+          <Metric label="Asistidas" value={String(trialsAttended)} />
+          <Metric label="Convertidas" value={String(trialsConverted)} accent="emerald" />
+          <Metric
+            label="Tasa conversión"
+            value={trialsAttended > 0 ? `${conversionRate.toFixed(0)}%` : "—"}
+            accent={conversionRate >= 30 ? "emerald" : conversionRate >= 15 ? "amber" : undefined}
+          />
+          <Metric
+            label="Beneficio (€)"
+            value={(trialEarningsCents / 100).toFixed(2)}
+            accent="brand"
+          />
+        </div>
+      </section>
+
       <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
@@ -243,6 +313,26 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       </h2>
       <div className="mt-3">{children}</div>
     </section>
+  );
+}
+
+function Metric({
+  label, value, accent,
+}: {
+  label: string;
+  value: string;
+  accent?: "emerald" | "amber" | "brand";
+}) {
+  const valColor =
+    accent === "emerald" ? "text-emerald-600 dark:text-emerald-400" :
+    accent === "amber"   ? "text-amber-600 dark:text-amber-400"     :
+    accent === "brand"   ? "text-brand-600 dark:text-brand-400"     :
+                            "text-slate-900 dark:text-slate-50";
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-3">
+      <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
+      <div className={`mt-1 text-2xl font-bold ${valColor}`}>{value}</div>
+    </div>
   );
 }
 

@@ -11,6 +11,11 @@ import {
 } from "@/lib/students";
 import { sendWelcomeStudentEmail } from "@/lib/email/send";
 import { sendWhatsappText } from "@/lib/whatsapp";
+import {
+  getLeadTrialTeacher,
+  payConversionCommission,
+  PACK_COMMISSION_CENTS,
+} from "@/lib/trial-compensation";
 
 /**
  * POST /api/admin/leads/[id]/convert
@@ -131,6 +136,54 @@ export async function POST(
       );
     }
     return NextResponse.json({ error: "create_student_failed", message: msg }, { status: 500 });
+  }
+
+  // ─── Atribución del trial al estudiante recién creado ─────────────
+  // Buscamos la trial class del lead (completada o programada) para
+  // saber QUÉ profe le dió la prueba. Lo guardamos en students para
+  // poder calcular tasa de conversión + pagar la comisión al cierre.
+  const trial = await getLeadTrialTeacher(lead.id);
+  if (trial) {
+    await sb.from("students")
+      .update({
+        trial_teacher_id: trial.teacherId,
+        trial_class_id:   trial.classId,
+      })
+      .eq("id", created.studentId);
+  }
+
+  // ─── Comisión por conversión al profe del trial ───────────────────
+  // Cuando admin pulsa "Convertir en estudiante", el profe cobra una
+  // comisión según el pack (guardado en leads.meta.last_offered_pack).
+  // Si no hay trial vinculado o pack en meta, skip (best-effort).
+  if (trial) {
+    try {
+      const { data: leadMetaRow } = await sb
+        .from("leads")
+        .select("meta")
+        .eq("id", lead.id)
+        .maybeSingle();
+      const meta = (leadMetaRow?.meta ?? {}) as Record<string, unknown>;
+      const packId = typeof meta.last_offered_pack === "string" ? meta.last_offered_pack : null;
+      if (packId && PACK_COMMISSION_CENTS[packId] != null) {
+        const paid = await payConversionCommission({
+          trialClassId: trial.classId,
+          teacherId:    trial.teacherId,
+          packId,
+        });
+        if (paid && paid > 0) {
+          await sb.from("lead_timeline").insert({
+            lead_id: lead.id,
+            type:    "agent_note",
+            author:  "system",
+            content: `💰 Pagada comisión de ${(paid/100).toFixed(2)}€ al profe por conversión (pack ${packId})`,
+            metadata: { kind: "conversion_commission_paid", class_id: trial.classId, teacher_id: trial.teacherId, pack_id: packId, amount_cents: paid },
+          });
+        }
+      }
+    } catch (e) {
+      console.error("[convert] payConversionCommission failed:", e instanceof Error ? e.message : e);
+    }
   }
 
   // Mark the lead as converted and log the event. `converted_at` se usa

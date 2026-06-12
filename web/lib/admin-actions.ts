@@ -5,6 +5,7 @@ import { supabaseAdmin } from "./supabase";
 import { sendWhatsappText } from "./whatsapp";
 import { sendPostTrialFollowupEmail, sendPostTrialFollowupGenericEmail } from "./email/send";
 import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "./trial-packs";
+import { payTrialBase, getLeadTrialTeacher } from "./trial-compensation";
 import { renderTemplate } from "./message-stats";
 
 /**
@@ -142,6 +143,32 @@ export async function markTrialAttendedAwaitingConversion(
       : "Lead attended trial — awaiting conversion decision. Soft follow-up scheduled +24h.",
     metadata: opts ? { pack_id: opts.packId, payment_type: opts.paymentType, objective: opts.objective, awaiting_payment: true } : null,
   });
+
+  // ─── BASE 8€ al profesor que dió el trial ──────────────────────────
+  // El profe cobra 8€ por trial cuando confirmamos asistencia.
+  // Si el admin marca "No asistió" → 0€.
+  // Idempotente: si ya se pagó el base (re-clic accidental), no
+  // insertamos otra fila.
+  try {
+    const trial = await getLeadTrialTeacher(leadId);
+    if (trial) {
+      const paid = await payTrialBase({
+        classId:   trial.classId,
+        teacherId: trial.teacherId,
+      });
+      if (paid !== null) {
+        await sb.from("lead_timeline").insert({
+          lead_id: leadId,
+          type:    "agent_note",
+          author:  "system",
+          content: `💰 Pagado 8€ base de trial al profesor (class ${trial.classId.slice(0,8)})`,
+          metadata: { kind: "trial_base_paid", class_id: trial.classId, teacher_id: trial.teacherId, amount_cents: paid },
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[markTrialAttended] payTrialBase failed:", e instanceof Error ? e.message : e);
+  }
 
   // Best-effort follow-up. Skip silently if no WhatsApp on file.
   if (!lead?.whatsapp_normalized) return;
