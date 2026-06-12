@@ -83,7 +83,11 @@ export async function getClassContext(classId: string): Promise<ClassContext | n
     .eq("id", classId)
     .maybeSingle();
 
-  if (error || !data) return null;
+  // Si Supabase devuelve un error (sintaxis de embed, RLS, FK
+  // ambiguo, etc.) lo propagamos — antes lo silenciábamos como null
+  // y la página caía a notFound() con 404 falso, ocultando el bug.
+  if (error) throw new Error(`getClassContext SELECT: ${error.message}`);
+  if (!data) return null;
   type TeacherJoin = {
     user_id: string;
     users: { full_name: string | null } | Array<{ full_name: string | null }> | null;
