@@ -5,6 +5,7 @@ import { supabaseAdmin } from "./supabase";
 import { sendWhatsappText } from "./whatsapp";
 import { sendPostTrialFollowupEmail, sendPostTrialFollowupGenericEmail } from "./email/send";
 import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "./trial-packs";
+import { renderTemplate } from "./message-stats";
 
 /**
  * Tag interno: cuando se setea, Stiv debe escalar a `needs_human` la
@@ -153,6 +154,24 @@ export async function markTrialAttendedAwaitingConversion(
     const packLink = getPackUrlWithOverride(opts.packId, opts.paymentType);
     const packName = pack?.name ?? opts.packId;
 
+    // Si hay un override activo en message_templates para el kind
+    // 'post_trial_followup' canal whatsapp, lo usamos. Si no, caemos
+    // al copy hardcoded de abajo. Editor: /admin/mensajes.
+    const { data: tplRow } = await sb
+      .from("message_templates")
+      .select("body, active")
+      .eq("kind", "post_trial_followup")
+      .eq("channel", "whatsapp")
+      .eq("active", true)
+      .maybeSingle();
+    if (tplRow && (tplRow as { body?: string }).body) {
+      text = renderTemplate((tplRow as { body: string }).body, {
+        firstName,
+        objective: opts.objective,
+        packName,
+        packLink: packLink || "",
+      });
+    } else {
     // Copy fijo aprobado por Gelfis. NO modificar el wording sin pedirle
     // antes — el equipo lo usa palabra por palabra.
     // Copy Mensaje 1 — aprobado por Gelfis 08/06.
@@ -185,6 +204,7 @@ export async function markTrialAttendedAwaitingConversion(
           ``,
           `Gelfis | Aprender-Aleman.de`,
         ].join("\n");
+    }  // fin del else del template-override
   } else {
     // Fallback (sin pack/objetivo seleccionado) — mensaje genérico de antes.
     text = lead.language === "de"
