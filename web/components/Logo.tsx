@@ -1,12 +1,9 @@
-import Link from "next/link";
-import { RobotMark } from "./RobotMark";
+import { BrandLogo } from "./BrandLogo";
 
 /**
- * Aprender-Aleman.de brand mark + wordmark. Uses the inline SVG
- * RobotMark (adaptive to light/dark mode) instead of the old
- * /public/logo.png. Two layouts:
- *   - full:    icon + "Aprender-Aleman.de" wordmark (sidebar open)
- *   - compact: icon only                            (sidebar collapsed / mobile)
+ * Wrapper compat para el sidebar admin. Delega en BrandLogo (logo único
+ * de Aprender-Aleman.de) y mantiene la API anterior (variant / href /
+ * size) para no romper los callers.
  */
 export function Logo({
   variant = "full",
@@ -17,27 +14,13 @@ export function Logo({
   href?:    string;
   size?:    number;
 }) {
-  const mark = <RobotMark size={size} />;
-
-  if (variant === "compact") {
-    return (
-      <Link href={href} aria-label="Aprender-Aleman.de" className="inline-flex items-center">
-        {mark}
-      </Link>
-    );
-  }
-
+  // Mapeo aproximado del tamaño numérico legacy al sistema sm/md/lg.
+  const sized = size <= 30 ? "sm" : size <= 40 ? "md" : "lg";
   return (
-    <Link href={href} className="inline-flex items-center gap-2.5 group">
-      {mark}
-      <span className="flex flex-col leading-tight">
-        <span className="text-[13px] font-bold text-slate-900 dark:text-slate-50 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
-          Aprender-Aleman
-        </span>
-        <span className="text-[10px] font-medium tracking-wider uppercase text-slate-400 dark:text-slate-500">
-          .de · LMS
-        </span>
-      </span>
-    </Link>
+    <BrandLogo
+      size={sized}
+      href={href}
+      showWordmark={variant === "full"}
+    />
   );
 }

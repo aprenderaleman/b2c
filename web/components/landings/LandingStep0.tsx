@@ -15,8 +15,7 @@
  * de "click → funnel" sea cliente.
  */
 import { useState, type ReactNode } from "react";
-import Image from "next/image";
-import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 import { DiagnosticoFunnel, type MotivoId } from "@/components/diagnostico/DiagnosticoFunnel";
 
 /** Bullet de ventaja con icono propio (Gelfis 2026-06-14: TODAS las
@@ -65,23 +64,7 @@ export function LandingStep0({
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
         <div className="flex items-center justify-center h-14 md:h-16 px-4">
-          <Link
-            href="/"
-            aria-label="Aprender-Aleman.de"
-            className="inline-flex items-center gap-2.5 active:scale-[0.97] transition"
-          >
-            <Image
-              src="/Logonewwithbg.png"
-              alt=""
-              width={40}
-              height={40}
-              priority
-              className="h-8 w-8 md:h-10 md:w-10 rounded-md object-contain"
-            />
-            <span className="font-extrabold tracking-tight text-slate-900 text-[16px] md:text-[18px]">
-              Aprender-Aleman<span className="text-warm">.de</span>
-            </span>
-          </Link>
+          <BrandLogo size="md" />
         </div>
         {/* Barra de progreso — 0% al inicio para reforzar "estás empezando". */}
         <div className="h-1 w-full bg-slate-100">

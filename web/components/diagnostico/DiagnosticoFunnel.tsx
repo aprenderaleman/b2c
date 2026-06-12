@@ -28,7 +28,7 @@ import Link                             from "next/link";
 import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
 import { MobileDayStrip }               from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem }      from "@/components/agendar/TimeList";
-import { RobotMark }                    from "@/components/RobotMark";
+import { BrandLogo }                    from "@/components/BrandLogo";
 import { IllustrationPanel }            from "./IllustrationPanel";
 import { resolvePhone }                 from "@/lib/phone";
 
@@ -744,17 +744,8 @@ export function DiagnosticoFunnel({
                 </svg>
               </button>
 
-              <Link
-                href="/"
-                aria-label="Aprender-Aleman.de"
-                className="flex items-center gap-1.5 md:gap-2 text-slate-900 active:scale-[0.97] transition"
-              >
-                <span className="md:hidden"><RobotMark size={26} /></span>
-                <span className="hidden md:inline-block"><RobotMark size={32} /></span>
-                <span className="text-[13px] sm:text-sm md:text-base font-semibold tracking-tight">
-                  Aprender-Aleman<span className="text-warm">.de</span>
-                </span>
-              </Link>
+              <BrandLogo size="md" />
+
 
               <div className="h-10 w-10 inline-flex items-center justify-end pr-1">
                 {step !== "low_budget_exit" && step !== 7 && (
