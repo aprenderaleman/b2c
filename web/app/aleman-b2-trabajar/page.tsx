@@ -14,9 +14,9 @@ export default function Page() {
       h1="Alemán B2 para trabajar en Alemania"
       subtitle="Alcanza el nivel B2 que piden para trabajar, estudiar o convalidar tu título. Curso enfocado en lo que de verdad necesitas para empezar tu vida profesional en Alemania."
       bullets={[
-        <>Plan específico para llegar al <strong>B2</strong> — el nivel laboral estándar</>,
-        <>Vocabulario y simulaciones del <strong>sector sanitario</strong> (enfermería, medicina)</>,
-        <>Preparación para <strong>Ausbildung</strong>, entrevistas e integración profesional</>,
+        { icon: "🎯", text: <>Plan específico para llegar al <strong>B2</strong> — el nivel laboral estándar</> },
+        { icon: "🩺", text: <>Vocabulario y simulaciones del <strong>sector sanitario</strong> (enfermería, medicina)</> },
+        { icon: "💼", text: <>Preparación para <strong>Ausbildung</strong>, entrevistas e integración profesional</> },
       ]}
       presetMotivo="profesional"
       landingIntent="b2-trabajar"

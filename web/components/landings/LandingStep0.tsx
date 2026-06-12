@@ -15,22 +15,32 @@
  * de "click → funnel" sea cliente.
  */
 import { useState, type ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { DiagnosticoFunnel, type MotivoId } from "@/components/diagnostico/DiagnosticoFunnel";
+
+/** Bullet de ventaja con icono propio (Gelfis 2026-06-14: TODAS las
+ *  features tienen que tener icono, no solo "desde casa"). */
+export type LandingBullet = { icon: string; text: ReactNode };
 
 export type LandingStep0Props = {
   /** H1 con la keyword target. */
   h1:       string;
   /** Subtítulo conversacional bajo el H1. */
   subtitle: string;
-  /** Bullets de ventaja específicos de la landing — 2-4 idealmente.
-   *  Cada uno puede empezar con un emoji para humanizar. */
-  bullets:  ReactNode[];
+  /** Bullets específicos de la landing — 2-4 idealmente. Cada uno trae
+   *  su propio emoji/icon en `icon` para que ninguno quede con check
+   *  genérico. Acepta string suelto (legacy) por retro-compat. */
+  bullets:  Array<LandingBullet | ReactNode>;
   /** Preset del motivo (si la intención de la landing es inequívoca). */
   presetMotivo?: MotivoId | null;
   /** Slug de la landing — se propaga a tracking. */
   landingIntent: string;
 };
+
+function isBullet(b: unknown): b is LandingBullet {
+  return Boolean(b && typeof b === "object" && "icon" in b && "text" in b);
+}
 
 export function LandingStep0({
   h1, subtitle, bullets, presetMotivo = null, landingIntent,
@@ -74,8 +84,16 @@ export function LandingStep0({
             {/* Sin botón "atrás" — el paso 0 es la entrada. */}
             <span className="h-10 w-10" aria-hidden />
             <Link href="/" aria-label="Aprender-Aleman.de"
-                  className="font-extrabold tracking-tight text-slate-900 text-[15px]">
-              Aprender-Aleman<span className="text-warm">.de</span>
+                  className="inline-flex items-center gap-2 font-extrabold tracking-tight text-slate-900 text-[15px]">
+              <Image
+                src="/Logonewwithbg.png"
+                alt=""
+                width={32}
+                height={32}
+                priority
+                className="h-7 w-7 md:h-8 md:w-8 rounded-md object-contain"
+              />
+              <span>Aprender-Aleman<span className="text-warm">.de</span></span>
             </Link>
             <span className="text-[11px] font-semibold text-slate-500 tabular-nums">
               Paso <strong className="text-slate-900">1 / 3</strong>
@@ -108,8 +126,8 @@ export function LandingStep0({
             {subtitle}
           </p>
 
-          {/* Ventajas genéricas (mismas en las 6 landings) con emojis
-              concretos a la izquierda — humanizan sin saturar. */}
+          {/* Ventajas genéricas (mismas en las 6 landings) — todas con
+              icono propio (Gelfis 2026-06-14: no más check ✓ genérico). */}
           <ul className="mt-5 space-y-2 md:space-y-2.5">
             <li className="flex items-start gap-2.5 text-[14.5px] md:text-[15px] text-slate-700">
               <span className="text-[18px] leading-tight shrink-0" aria-hidden>🏠</span>
@@ -119,15 +137,16 @@ export function LandingStep0({
               <span className="text-[18px] leading-tight shrink-0" aria-hidden>🇩🇪</span>
               <span><strong>Prepárate para trabajar o vivir</strong> en Alemania, Suiza o Austria</span>
             </li>
-            {/* Bullets específicas de la landing — bullets traen su propio
-                emoji al inicio si quieren. Para mantener jerarquía visual
-                usamos el mismo check warm como icono fijo. */}
-            {bullets.map((b, i) => (
-              <li key={i} className="flex items-start gap-2.5 text-[14.5px] md:text-[15px] text-slate-700">
-                <span className="mt-[3px] text-warm-foreground font-bold shrink-0" aria-hidden>✓</span>
-                <span>{b}</span>
-              </li>
-            ))}
+            {bullets.map((b, i) => {
+              const icon = isBullet(b) ? b.icon : "✨";
+              const text = isBullet(b) ? b.text : b;
+              return (
+                <li key={i} className="flex items-start gap-2.5 text-[14.5px] md:text-[15px] text-slate-700">
+                  <span className="text-[18px] leading-tight shrink-0" aria-hidden>{icon}</span>
+                  <span>{text}</span>
+                </li>
+              );
+            })}
           </ul>
 
           {/* Pricing — destacando la clase GRATIS */}
@@ -137,8 +156,11 @@ export function LandingStep0({
               Sesiones desde <strong className="text-slate-900">18 €/hora</strong>
               {" "}y packs flexibles desde <strong className="text-slate-900">280 €</strong>.
             </p>
+            {/* Badge GRATIS — verde esmeralda en vez de warm para no
+                competir con el color de marca del CTA "Empezar ahora"
+                (Gelfis 2026-06-14). */}
             <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-full
-                          bg-warm text-warm-foreground px-3 py-1.5
+                          bg-emerald-600 text-white px-3 py-1.5
                           text-[12.5px] md:text-[13px] font-bold">
               <span aria-hidden>🎁</span>
               <span>Primera clase de prueba GRATIS</span>
