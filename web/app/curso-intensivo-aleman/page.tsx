@@ -14,9 +14,9 @@ export default function Page() {
       h1="Curso intensivo de alemán online"
       subtitle="Avanza rápido con más horas semanales. Pensado para quienes tienen una mudanza, un examen o un trabajo en Alemania cerca."
       bullets={[
-        { icon: "🚀", text: <><strong>3-5 clases por semana</strong> — el doble de progreso vs el curso estándar</> },
-        { icon: "📈", text: <>Programa estructurado: <strong>de A1 a B1 en 6 meses</strong> · A1 a B2 en 10-12 meses</> },
-        { icon: "📊", text: <>Mini-evaluaciones cada 2 semanas para ajustar el ritmo</> },
+        { icon: "🎯", text: <>Plan <strong>a medida de tu deadline real</strong> (mudanza, examen oficial, Ausbildung, contrato)</> },
+        { icon: "👩‍🏫", text: <>El <strong>mismo profesor nativo</strong> en toda la formación — continuidad y seguimiento real</> },
+        { icon: "💬", text: <>Hablas alemán <strong>desde la primera clase</strong> — fluidez práctica, no solo gramática</> },
       ]}
       presetMotivo="intensivo"
       landingIntent="intensivo"
