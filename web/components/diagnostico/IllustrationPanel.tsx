@@ -30,11 +30,15 @@ export function IllustrationPanel({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-[100dvh] flex flex-col md:flex-row">
+    // Wrapper sin min-h-[100dvh] propio — la altura la determina el
+    // contenedor padre (DiagnosticoFunnel u otra página) que monta el
+    // header full-width arriba. Antes este wrapper forzaba 100dvh y
+    // tras meter el header full-width se desbordaba la pantalla.
+    <div className="w-full flex flex-col md:flex-row flex-1">
       {/* Panel izquierdo (desktop) / banda superior (mobile) con la
           ilustración + fondo pastel. */}
       <aside
-        className="relative w-full md:w-1/2 md:min-h-[100dvh]
+        className="relative w-full md:w-1/2
                    bg-gradient-to-br from-rose-50 via-orange-50 to-amber-50
                    flex items-center justify-center
                    py-6 md:py-12

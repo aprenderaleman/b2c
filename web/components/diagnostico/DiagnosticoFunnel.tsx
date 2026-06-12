@@ -720,48 +720,55 @@ export function DiagnosticoFunnel({
     "motivo";
 
   return (
-    <div className="min-h-[100dvh] bg-white text-slate-900"
+    <div className="min-h-[100dvh] bg-white text-slate-900 flex flex-col"
          style={{ overscrollBehavior: "contain" }}>
-      <IllustrationPanel step={illustrationKey}>
-        <div className="flex flex-col min-h-[100dvh] md:min-h-[100dvh]">
-          {/* Header sticky con back + brand + step counter */}
-          <header
-            className="sticky top-0 z-40 backdrop-blur bg-white/95 border-b border-slate-100"
-            style={{ paddingTop: "env(safe-area-inset-top)" }}
+
+      {/* ═══ Header full-width — FUERA del IllustrationPanel para que
+          ocupe los dos paneles a la vez. Antes vivía dentro del panel
+          derecho y la imagen lo cortaba en desktop a partir del paso 1
+          (Gelfis 2026-06-14). Sticky en su posición. ═══ */}
+      <header
+        className="sticky top-0 z-40 backdrop-blur bg-white/95 border-b border-slate-100 w-full"
+        style={{ paddingTop: "env(safe-area-inset-top)" }}
+      >
+        <div className="mx-auto max-w-xl flex items-center justify-between gap-2 h-14 md:h-16 px-4">
+          <button
+            type="button"
+            onClick={goBack}
+            disabled={step === 1 || step === 7}
+            className="h-10 w-10 inline-flex items-center justify-center rounded-full
+                       text-slate-700 hover:bg-slate-100 active:scale-95 transition
+                       disabled:opacity-30 disabled:active:scale-100"
+            aria-label="Paso anterior"
           >
-            <div className="mx-auto max-w-xl flex items-center justify-between gap-2 h-14 md:h-16 px-4">
-              <button
-                type="button"
-                onClick={goBack}
-                disabled={step === 1 || step === 7}
-                className="h-10 w-10 inline-flex items-center justify-center rounded-full
-                           text-slate-700 hover:bg-slate-100 active:scale-95 transition
-                           disabled:opacity-30 disabled:active:scale-100"
-                aria-label="Paso anterior"
-              >
-                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M15 18l-6-6 6-6" />
-                </svg>
-              </button>
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
 
-              <BrandLogo size="md" />
+          <BrandLogo size="md" />
 
+          <div className="h-10 w-10 inline-flex items-center justify-end pr-1">
+            {step !== "low_budget_exit" && step !== 7 && (
+              <span className="text-[11px] font-semibold tracking-wide text-slate-500 tabular-nums">
+                {visualStepNum}/{totalSteps}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="h-1 bg-slate-100">
+          <div
+            className="h-full bg-warm transition-[width] duration-300 ease-out"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+      </header>
 
-              <div className="h-10 w-10 inline-flex items-center justify-end pr-1">
-                {step !== "low_budget_exit" && step !== 7 && (
-                  <span className="text-[11px] font-semibold tracking-wide text-slate-500 tabular-nums">
-                    {visualStepNum}/{totalSteps}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="h-1 bg-slate-100">
-              <div
-                className="h-full bg-warm transition-[width] duration-300 ease-out"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-          </header>
+      {/* ═══ Cuerpo: IllustrationPanel BAJO el header. flex-1 para
+          rellenar lo que queda del viewport. ═══ */}
+      <div className="flex-1 flex">
+      <IllustrationPanel step={illustrationKey}>
+        <div className="flex flex-col w-full">
 
           {/* Prueba social — sólo en pasos del quiz (1, 2) y del form (6). */}
           {(step === 1 || step === 2 || step === 6) && (
@@ -774,7 +781,7 @@ export function DiagnosticoFunnel({
                 <span className="hidden sm:inline text-slate-300">·</span>
                 <span>💬 Respuesta en &lt;5 min</span>
                 <span className="hidden sm:inline text-slate-300">·</span>
-                <span>🇩🇪 Profesores nativos certificados</span>
+                <span>🗺️ Profesores nativos certificados</span>
               </div>
             </div>
           )}
@@ -870,6 +877,7 @@ export function DiagnosticoFunnel({
           </main>
         </div>
       </IllustrationPanel>
+      </div>
     </div>
   );
 }
