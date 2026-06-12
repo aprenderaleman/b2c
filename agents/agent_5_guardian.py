@@ -168,12 +168,13 @@ def _process_absent_followup(lead: dict) -> None:
     # (ej. después de FU1 esperamos +2d para FU2 → total 3d).
     if status == "trial_absent":
         body = (
-            f"Hallo {name}, ich habe gesehen, dass du gestern nicht in deine "
-            f"Probestunde reinkonntest. Möchtest du immer noch Deutsch lernen?\n"
+            f"Hallo {name}, ich habe gesehen, dass du nicht in deine "
+            f"Probestunde reinkonntest. Hast du immer noch Interesse, "
+            f"Deutsch zu lernen?\n"
             f"— Stiv | Aprender-Aleman.de"
         ) if lang == "de" else (
-            f"Hola {name}, vi que ayer no pudiste conectarte a tu clase de prueba. "
-            f"¿Sigues interesado/a en aprender alemán?\n"
+            f"Hola {name}, vi que no pudiste conectarte a tu clase de prueba. "
+            f"¿Mantienes el interés en aprender alemán?\n"
             f"— Stiv | Aprender-Aleman.de"
         )
         next_status = "absent_followup_1"
