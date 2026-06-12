@@ -7,6 +7,7 @@ import {
   sendDiagnosticoTestFollowupEmail,
 } from "@/lib/email/send";
 import { sendWhatsappText, sendWhatsappDocument } from "@/lib/whatsapp";
+import { getSystemPauseStatus } from "@/lib/system-pause";
 import { signRecordingUrl } from "@/lib/r2";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
@@ -243,6 +244,18 @@ async function runCron(req: Request) {
   const testUrl  = "https://schule.aprender-aleman.de/test-de-nivel";
   const now      = Date.now();
 
+  // ── PAUSA GLOBAL ─────────────────────────────────────────────────
+  // Si Evolution esta banned o Gelfis pauso manualmente, este cron
+  // hace SOLO emails y deja WhatsApp completamente quieto. Esto evita
+  // que la cadena de followups extienda el ban actual o nos meta en
+  // otro nuevo. Importado de lib/system-pause.ts.
+  const pauseStatus = await getSystemPauseStatus();
+  const waPaused = pauseStatus.paused;
+  if (waPaused) {
+    console.warn("[diagnostico-followups] WhatsApp PAUSADO hasta", pauseStatus.until,
+      "— este run hace email-only.");
+  }
+
   // ── PRE-PASE: Email-only nudge ───────────────────────────────────
   // Drip AGRESIVO para leads que llenaron el form pero NO dejaron
   // WhatsApp (form 2-pasos, pulsaron "Continuar sin WhatsApp"). Sin
@@ -269,6 +282,24 @@ async function runCron(req: Request) {
   let sent      = 0;
   let skipped   = 0;
   let errors    = 0;
+  let coldCapped = 0;
+
+  // ── Anti-spam: leads que ya recibieron 2+ msgs sin responder NUNCA
+  // dejan de recibir WhatsApp (solo email a partir de ahora). El 86%
+  // de los leads top-mensajeados pre-ban (12-jun) jamas respondieron
+  // — perfil clasico que reporta "spam" en WA → ban.
+  // Sacamos los lead_ids con 0 inbound entre los candidatos del run.
+  const candidateIds = leads.map(l => l.id);
+  const coldLeadIds = new Set<string>();
+  if (candidateIds.length > 0) {
+    const { data: inboundRows } = await sb
+      .from("lead_timeline")
+      .select("lead_id")
+      .eq("type", "lead_message_received")
+      .in("lead_id", candidateIds);
+    const withInbound = new Set((inboundRows ?? []).map(r => (r as { lead_id: string }).lead_id));
+    for (const id of candidateIds) if (!withInbound.has(id)) coldLeadIds.add(id);
+  }
 
   for (const lead of leads) {
     const completedAt = new Date(lead.diagnostico_completed_at).getTime();
@@ -277,6 +308,30 @@ async function runCron(req: Request) {
     const gate        = GATES_MS[nextN];
 
     if (elapsed < gate) { skipped++; continue; }
+
+    // Cold-lead cap: si ya van 2 msgs sin respuesta NUNCA, este lead
+    // solo recibe email (no WA). Tras el msg #3 sin respuesta paramos
+    // tambien el email. Reduce drasticamente el ratio "no responden"
+    // que dispara reportes spam en WA.
+    const isCold = coldLeadIds.has(lead.id);
+    if (isCold && nextN >= 3) {
+      coldCapped++;
+      skipped++;
+      continue;
+    }
+    const forceEmailOnly = waPaused || (isCold && nextN >= 2);
+
+    // Wrappers locales que cortocircuitan WhatsApp cuando estamos en
+    // modo email-only (pausa global o cold-lead cap). Devuelven el
+    // mismo shape que las funciones reales para no romper callers.
+    const sendWA: typeof sendWhatsappText = async (phone, text) => {
+      if (forceEmailOnly) return { ok: false, reason: "force_email_only" };
+      return sendWhatsappText(phone, text);
+    };
+    const sendWADoc: typeof sendWhatsappDocument = async (phone, url, fileName, opts) => {
+      if (forceEmailOnly) return { ok: false, reason: "force_email_only" };
+      return sendWADoc(phone, url, fileName, opts);
+    };
 
     const firstName = lead.name.split(/\s+/)[0] || lead.name;
     let ok = false;
@@ -321,7 +376,7 @@ async function runCron(req: Request) {
           : Promise.resolve({ ok: false as const, error: "no_email" });
 
         const [waRes, emailRes] = await Promise.allSettled([
-          sendWhatsappText(lead.whatsapp_normalized, waText),
+          sendWA(lead.whatsapp_normalized, waText),
           sendEmail,
         ]);
         const waOk = waRes.status === "fulfilled" && waRes.value.ok;
@@ -383,7 +438,7 @@ async function runCron(req: Request) {
           // Evolution lo muestra como una sola tarjeta de archivo +
           // texto debajo. Antes mandábamos 2 (texto + doc) pero Gelfis
           // pidió consolidar en 1 para no parecer spam.
-          return sendWhatsappDocument(
+          return sendWADoc(
             lead.whatsapp_normalized, signedUrl, pdf.fileName,
             { caption: captionWa, kind: "diagnostico_pdf_t24h", leadId: lead.id },
           );
@@ -446,7 +501,7 @@ async function runCron(req: Request) {
               ``,
               `Cuando termines, cuéntame tu resultado y te digo cuál sería tu siguiente paso. 🇩🇪`,
             ].join("\n");
-        const r = await sendWhatsappText(lead.whatsapp_normalized, text);
+        const r = await sendWA(lead.whatsapp_normalized, text);
         ok = r.ok;
       } else if (nextN === 4) {
         // T+3d — Follow-up tras PDF (msg 2). Pregunta si le sirvió y
@@ -483,7 +538,7 @@ async function runCron(req: Request) {
           : Promise.resolve({ ok: false as const, error: "no_email" });
 
         const [waRes, emailRes] = await Promise.allSettled([
-          sendWhatsappText(lead.whatsapp_normalized, waText),
+          sendWA(lead.whatsapp_normalized, waText),
           sendEmail,
         ]);
         const waOk = waRes.status === "fulfilled" && waRes.value.ok;
@@ -509,7 +564,7 @@ async function runCron(req: Request) {
         const text = lead.language === "de"
           ? `Hallo ${firstName}, letzte Nachfrage. Buchen wir deine Probestunde oder lieber später?  ${bookUrl}`
           : `Hola ${firstName}, última llamada por si te interesa. ¿Agendamos tu clase o lo dejamos para más adelante?  ${bookUrl}`;
-        const r = await sendWhatsappText(lead.whatsapp_normalized, text);
+        const r = await sendWA(lead.whatsapp_normalized, text);
         ok = r.ok;
       } else if (nextN === 6) {
         // T+8d — Email final + cold.

@@ -593,10 +593,55 @@ async def internal_send_text(request: Request):
     instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
     wa = WhatsAppService()
 
+    # ─── PAUSA GLOBAL ─────────────────────────────────────────────
+    # Si Gelfis (o el auto-detect) activó `system_paused_until`
+    # en BD, paramos todos los envios hasta que pase la pausa. Esto
+    # nos permite absorber un ban de 5h sin que los crons sigan
+    # disparando contra Evolution (lo que extiende el ban).
+    try:
+        from agents.shared.db import get_config
+        pause_until = get_config("system_paused_until")
+        if pause_until:
+            import datetime
+            try:
+                p = datetime.datetime.fromisoformat(pause_until.replace("Z", "+00:00"))
+                now = datetime.datetime.now(p.tzinfo or datetime.timezone.utc)
+                if p > now:
+                    log.warning("[paused] system_paused_until=%s — skipping send to %s", pause_until, normalized)
+                    raise HTTPException(status_code=503, detail=f"system_paused_until:{pause_until}")
+            except (ValueError, TypeError):
+                pass
+    except HTTPException: raise
+    except Exception as e:                                       # noqa: BLE001
+        log.warning("[paused] config check failed (continuing): %s", e)
+
+    # ─── PRE-CHECK exists ─────────────────────────────────────────
+    # Causa #1 documentada del ban de 5h: enviar a numeros que NO
+    # tienen WhatsApp. Evolution registra el intento y WhatsApp lo
+    # cuenta como spam. Validamos antes de enviar. Si no existe,
+    # devolvemos 410 (Gone) — el caller puede marcar lead.has_wa=false
+    # y dejar de intentar. Cache positivo durante 24h para no
+    # multiplicar las llamadas (idempotente, exists no cambia rapido).
+    try:
+        if not _exists_on_whatsapp_cached(wa, instance, normalized):
+            log.warning("[no_wa] %s no tiene WhatsApp — NO se manda", normalized)
+            raise HTTPException(status_code=410, detail="number_not_on_whatsapp")
+    except HTTPException: raise
+    except Exception as e:                                       # noqa: BLE001
+        # Si la validacion falla por error de red, NO bloqueamos el
+        # envio — el send normal seguira y si tampoco va devolvera
+        # 502 como siempre.
+        log.warning("[no_wa] check fallo (continuando con envio): %s", e)
+
     try:
         message_id = wa.send_text(instance, normalized, text, kind=kind, lead_id=lead_id)
     except WhatsAppError as e:
         log.warning("internal/send-text failed (queued for retry): %s", e)
+        # Auto-detect ban: si el error es 5XX de Evolution o el state
+        # paso a 'close' aqui mismo, activamos pausa de 6h. Los
+        # siguientes calls a este endpoint cortan en 503 sin tocar
+        # Evolution, dando a la sesion tiempo de re-pairing limpio.
+        _maybe_auto_pause_on_evolution_error(str(e))
         # The send_text helper already enqueued for retry on its way
         # out. We still return 502 so the caller logs the FIRST attempt
         # as a known failure — but the queue will redeliver in 30 s,
@@ -605,6 +650,64 @@ async def internal_send_text(request: Request):
         raise HTTPException(status_code=502, detail=f"whatsapp_error:{e}", headers={"X-Queued-For-Retry": "1"})
 
     return {"ok": True, "messageId": message_id}
+
+
+# ─────────────────────────────────────────────────────────────────
+# Cache local de "este numero tiene WhatsApp" (24h positivo, 1h
+# negativo). Evita golpear el endpoint /chat/whatsappNumbers en
+# cada send (rate-limited tambien por WhatsApp). Reseteado en cada
+# restart del proceso — suficiente para nuestra escala.
+# ─────────────────────────────────────────────────────────────────
+_WA_EXISTS_CACHE: dict[str, tuple[bool, float]] = {}
+
+def _exists_on_whatsapp_cached(wa, instance: str, phone: str) -> bool:
+    import time
+    now = time.time()
+    cached = _WA_EXISTS_CACHE.get(phone)
+    if cached:
+        exists, ts = cached
+        ttl = 24 * 3600 if exists else 3600
+        if now - ts < ttl:
+            return exists
+    try:
+        exists = bool(wa.is_number_on_whatsapp(instance, phone))
+    except Exception:                                            # noqa: BLE001
+        # Si la API falla, asumimos True (no bloqueamos por error de
+        # validacion — el send normal cogera el error real si toca).
+        return True
+    _WA_EXISTS_CACHE[phone] = (exists, now)
+    return exists
+
+
+def _maybe_auto_pause_on_evolution_error(err_str: str) -> None:
+    """Detecta señales de ban / sesion caida y activa pausa global de 6h.
+
+    Heuristicas:
+      - http 5xx repetidos (>= 3 en 5 min)
+      - "exists":false con frecuencia (numero no-WA)
+      - texto "rate" / "spam" / "blocked"
+    """
+    import re, datetime
+    triggers = (
+        "rate" in err_str.lower()
+        or "spam" in err_str.lower()
+        or "blocked" in err_str.lower()
+        or "logged out" in err_str.lower()
+        or re.search(r"\[5\d{2}\]", err_str) is not None
+    )
+    if not triggers:
+        return
+    try:
+        from agents.shared.db import get_conn
+        until = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=6)).isoformat()
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO config (key, value, updated_at) VALUES ('system_paused_until', %s, NOW())
+                ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+            """, (until,))
+        log.error("[auto-pause] Senial de ban detectada — pausando envios hasta %s", until)
+    except Exception as e:                                       # noqa: BLE001
+        log.error("[auto-pause] No pude setear system_paused_until: %s", e)
 
 
 @app.post("/internal/send-document")

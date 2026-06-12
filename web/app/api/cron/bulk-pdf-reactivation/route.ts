@@ -4,6 +4,7 @@ import {
   sendDiagnosticoFollowupPdfEmail,
 } from "@/lib/email/send";
 import { sendWhatsappDocument } from "@/lib/whatsapp";
+import { getSystemPauseStatus } from "@/lib/system-pause";
 import { signRecordingUrl } from "@/lib/r2";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
@@ -182,6 +183,16 @@ async function runCron(req: Request) {
   }
   if (!authorised(req, url)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  // Bulk-PDF manda DOCUMENTOS PDF a leads fríos — el contenido más
+  // escrutinado por WhatsApp anti-spam. Si hay pausa global activa,
+  // este cron NO corre en absoluto (ni siquiera email). Reanuda solo
+  // cuando la pausa se libera.
+  const pauseStatus = await getSystemPauseStatus();
+  if (pauseStatus.paused) {
+    console.warn("[bulk-pdf] PAUSADO hasta", pauseStatus.until, "— skip run.");
+    return NextResponse.json({ ok: true, paused: true, until: pauseStatus.until, sent: 0 });
   }
 
   const mode = url.searchParams.get("mode") === "test" ? "test" : "live";
