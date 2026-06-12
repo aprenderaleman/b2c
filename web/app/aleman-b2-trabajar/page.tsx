@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <LandingStep0
-      h1="Alemán B2 para trabajar en Alemania"
+      h1="Alemán para Profesionales"
       subtitle="Alcanza el nivel B2 que piden para trabajar, estudiar o convalidar tu título. Curso enfocado en lo que de verdad necesitas para empezar tu vida profesional en Alemania."
       bullets={[
         { icon: "🎯", text: <>Plan específico para llegar al <strong>B2</strong> — el nivel laboral estándar</> },
