@@ -18,11 +18,18 @@ export type MessageStats = {
   kind:          string;
   channel:       string;
   sub_n:         number | null;      // sub-secuencia (1..N) o null si es único
-  sent:          number;
-  responded7d:   number;
-  responseRate:  number;     // 0..100
+  sent:          number;             // TODOS los envios en la ventana
+  sentMature:    number;             // envios con >=7d para que el lead haya podido responder
+  responded7d:   number;             // respuestas (solo cuenta sobre sentMature para evitar survivorship)
+  responseRate:  number;             // 0..100, calculada sobre sentMature
   lastSentAt:    string | null;
-  samples:       Array<{ at: string; preview: string }>;  // 3 más recientes
+  samples:       Array<{ at: string; preview: string; isRealBody: boolean }>;  // 3 más recientes
+  // Flags de fiabilidad de la metrica para que la UI los marque:
+  reliability:   {
+    emailBlind:        boolean;   // canal email puro → respuestas no trackeadas
+    immatureCohort:    boolean;   // mucha % de envios <7d → tasa subestimada
+    summaryContent:    boolean;   // samples son resumen, no body real
+  };
 };
 
 export type StatsFilters = {
@@ -66,12 +73,15 @@ export async function getMessageStats(filters: StatsFilters = {}): Promise<Messa
 
   type Bucket = {
     kind: string; channel: string; sub_n: number | null;
-    sent: number; responded: number;
+    sent: number;        // todos
+    sentMature: number;  // solo los que tienen ya >=7d (ventana completa)
+    responded: number;
     lastSentAt: string | null;
-    samples: Array<{ at: string; preview: string }>;
+    samples: Array<{ at: string; preview: string; isRealBody: boolean }>;
   };
   const buckets = new Map<string, Bucket>();
   const WINDOW_MS = 7 * 86_400_000;
+  const MATURE_CUTOFF_MS = Date.now() - WINDOW_MS;
 
   for (const r of (sentRows ?? []) as Array<{
     lead_id: string; timestamp: string;
@@ -91,33 +101,62 @@ export async function getMessageStats(filters: StatsFilters = {}): Promise<Messa
     const key = `${kind}::${channel}::${sub_n ?? "null"}`;
     let b = buckets.get(key);
     if (!b) {
-      b = { kind, channel, sub_n, sent: 0, responded: 0, lastSentAt: null, samples: [] };
+      b = { kind, channel, sub_n, sent: 0, sentMature: 0, responded: 0, lastSentAt: null, samples: [] };
       buckets.set(key, b);
     }
     b.sent++;
     if (!b.lastSentAt || r.timestamp > b.lastSentAt) b.lastSentAt = r.timestamp;
+
+    const content = r.content ?? "";
+    // Heuristica: si el content empieza con emoji-summary tipico de los
+    // crons TS ("📨 Followup", "📧 Nudge", "💬 ", etc.) NO es el body
+    // real, es un resumen. Los Python agents si guardan body completo.
+    const isSummary = /^[📨📧💬📩]\s/.test(content) || content.startsWith("Falló");
     if (b.samples.length < 3) {
-      b.samples.push({ at: r.timestamp, preview: (r.content ?? "").slice(0, 140) });
+      b.samples.push({
+        at: r.timestamp,
+        preview: content.slice(0, 200),
+        isRealBody: !isSummary,
+      });
     }
 
     const sentMs = new Date(r.timestamp).getTime();
+    // sentMature: solo cuenta para la tasa los envios con >=7d, porque
+    // los mas recientes aun no han tenido oportunidad de respuesta.
+    const isMature = sentMs <= MATURE_CUTOFF_MS;
+    if (isMature) b.sentMature++;
+
     const ibs = inboundByLead.get(r.lead_id) ?? [];
-    if (ibs.some(t => t > sentMs && t - sentMs < WINDOW_MS)) {
+    if (isMature && ibs.some(t => t > sentMs && t - sentMs < WINDOW_MS)) {
       b.responded++;
     }
   }
 
   const out: MessageStats[] = [];
   for (const b of buckets.values()) {
+    // Email-blind: el canal es email puro → respuestas no se trackean
+    // en lead_message_received (que solo registra inbound WhatsApp).
+    // Cualquier tasa para esta fila es engañosa.
+    const emailBlind = b.channel === "email";
+    // Inmaduro: si >40% de los envios estan en los ultimos 7d, la tasa
+    // sobre 'sentMature' tampoco refleja bien — pero al menos no esta
+    // sesgada hacia abajo. La marcamos para que la UI advierta.
+    const immatureCohort = b.sent > 5 && (b.sent - b.sentMature) / b.sent > 0.4;
+    // Summary content: si todos los samples son resumen (cron TS), el
+    // editor no puede ensenar el body real.
+    const summaryContent = b.samples.length > 0 && b.samples.every(s => !s.isRealBody);
+
     out.push({
       kind:          b.kind,
       channel:       b.channel,
       sub_n:         b.sub_n,
       sent:          b.sent,
+      sentMature:    b.sentMature,
       responded7d:   b.responded,
-      responseRate:  b.sent > 0 ? (100 * b.responded / b.sent) : 0,
+      responseRate:  b.sentMature > 0 ? (100 * b.responded / b.sentMature) : 0,
       lastSentAt:    b.lastSentAt,
-      samples:       b.samples,
+      samples:       b.samples.map(({ at, preview, isRealBody }) => ({ at, preview, isRealBody })),
+      reliability:   { emailBlind, immatureCohort, summaryContent },
     });
   }
   // Ordenamos por volumen descendente para que arriba aparezcan los

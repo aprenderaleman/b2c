@@ -21,8 +21,11 @@ export function MessageRow({
   const [editing, setEditing] = useState(false);
 
   const rate = stats.responseRate;
+  const { emailBlind, immatureCohort, summaryContent } = stats.reliability;
+  const rateUnreliable = emailBlind;
   const rateColor =
-    stats.sent === 0 ? "text-white" :
+    rateUnreliable ? "text-white/40" :
+    stats.sentMature === 0 ? "text-white/40" :
     rate >= 25 ? "text-emerald-300" :
     rate >= 10 ? "text-amber-300" :
                  "text-red-300";
@@ -70,24 +73,56 @@ export function MessageRow({
             <div className="text-base font-bold text-white tabular-nums">{stats.responded7d}</div>
           </div>
           <div>
-            <div className="text-[10px] uppercase text-white/40">Tasa</div>
-            <div className={`text-base font-bold tabular-nums ${rateColor}`}>
-              {stats.sent > 0 ? `${rate.toFixed(1)}%` : "—"}
+            <div className="text-[10px] uppercase text-white/40">
+              Tasa {immatureCohort && <span title="Cohorte parcialmente inmadura — algunos envíos aún no han tenido ventana de 7d completa">⚠</span>}
             </div>
+            <div className={`text-base font-bold tabular-nums ${rateColor}`}>
+              {rateUnreliable ? "N/A" : stats.sentMature > 0 ? `${rate.toFixed(1)}%` : "—"}
+            </div>
+            {stats.sent !== stats.sentMature && (
+              <div className="text-[9px] text-white/40 tabular-nums">
+                sobre {stats.sentMature} maduros
+              </div>
+            )}
           </div>
         </div>
       </button>
 
       {open && (
         <div className="border-t border-white/10 p-3 space-y-3">
+          {/* Banner de advertencias de fiabilidad — solo aparece si aplica. */}
+          {(emailBlind || immatureCohort || summaryContent) && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200 space-y-1">
+              {emailBlind && (
+                <div>📧 <strong>Tasa no medible:</strong> el canal email no registra respuestas en lead_timeline.
+                  Una respuesta del lead vía email NO la detectamos — el “0%” o similar no refleja efectividad real.</div>
+              )}
+              {immatureCohort && (
+                <div>⏳ <strong>Cohorte parcialmente inmadura:</strong> {stats.sent - stats.sentMature} de {stats.sent}
+                  envíos tienen menos de 7d — aún pueden generar respuesta. La tasa se calcula solo sobre los {stats.sentMature} maduros.</div>
+              )}
+              {summaryContent && (
+                <div>📋 <strong>Muestras son resumen, no el texto real:</strong> el cron que envía estos mensajes guarda
+                  un resumen en lead_timeline (ej. “Followup #4 enviado”) en vez del cuerpo. Para ver el texto exacto, mira la
+                  plantilla en código (o edítala desde aquí si está marcada como editable).</div>
+              )}
+            </div>
+          )}
+
           {/* Muestras */}
           {stats.samples.length > 0 && (
             <div>
-              <div className="text-[11px] uppercase tracking-wider text-white/45 mb-1">Últimos {stats.samples.length} mensajes</div>
+              <div className="text-[11px] uppercase tracking-wider text-white/45 mb-1">
+                Últimos {stats.samples.length} mensajes
+                {summaryContent && <span className="ml-1 text-amber-400">(resumen, no cuerpo)</span>}
+              </div>
               <div className="space-y-1.5">
                 {stats.samples.map((s, i) => (
                   <div key={i} className="rounded-md bg-white/[0.03] border border-white/5 px-2.5 py-1.5">
-                    <div className="text-[10px] text-white/40 tabular-nums">{new Date(s.at).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })}</div>
+                    <div className="text-[10px] text-white/40 tabular-nums">
+                      {new Date(s.at).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })}
+                      {!s.isRealBody && <span className="ml-2 text-amber-400/70">resumen</span>}
+                    </div>
                     <div className="text-sm text-white/85 whitespace-pre-wrap break-words">{s.preview || "(sin contenido)"}</div>
                   </div>
                 ))}
