@@ -82,8 +82,24 @@ export function TrialScriptWizard({
     });
   };
 
+  // Mapa de "atrás" por paso. step-1 simple no sirve porque hay
+  // ramas (paso 3 puede llevar a 3.5 si dijo NO, o a 4 si dijo SÍ;
+  // paso 8 puede venir de 3.5 o de 7). Lo definimos explícito.
+  const previousStep = (cur: number): number | null => {
+    if (cur === 8)   return enrollmentSense === false ? 3.5 : 7;
+    if (cur === 7)   return 6;
+    if (cur === 6)   return 5;
+    if (cur === 5)   return 4;
+    if (cur === 4)   return 3;
+    if (cur === 3.5) return 3;
+    if (cur === 3)   return 2;
+    if (cur === 2)   return 1;
+    return null;  // paso 1 no tiene anterior
+  };
+
   const goBack = () => {
-    if (step > 1) setStep(step - 1);
+    const prev = previousStep(step);
+    if (prev !== null) setStep(prev);
     setError(null);
   };
 
@@ -164,6 +180,7 @@ export function TrialScriptWizard({
             teacherNotes={teacherNotes}
             setTeacherNotes={setTeacherNotes}
             pending={pending}
+            onBack={goBack}
           />
         )}
 
@@ -177,7 +194,7 @@ export function TrialScriptWizard({
           <NavRow
             step={step}
             pending={pending}
-            onBack={step > 1 ? goBack : undefined}
+            onBack={previousStep(step) !== null ? goBack : "/admin/clasedeprueba"}
             onNext={() => {
               // Routing de pasos + payload por paso.
               if (step === 1) {
@@ -277,11 +294,15 @@ function ClassTimer() {
 function NavRow({
   step, pending, onBack, onNext,
 }: {
-  step: number; pending: boolean; onBack?: () => void; onNext: () => void;
+  step: number; pending: boolean;
+  /** Si es función → handler de "Atrás" dentro del wizard.
+   *  Si es string → href absoluto (ej. salir del wizard). */
+  onBack?: (() => void) | string;
+  onNext: () => void;
 }) {
   return (
     <div className="mt-6 flex items-center justify-between">
-      {onBack ? (
+      {typeof onBack === "function" ? (
         <button
           type="button"
           onClick={onBack}
@@ -290,6 +311,13 @@ function NavRow({
         >
           ← Atrás
         </button>
+      ) : typeof onBack === "string" ? (
+        <a
+          href={onBack}
+          className="text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+        >
+          ← Salir
+        </a>
       ) : <span />}
       <button
         type="button"
@@ -601,7 +629,7 @@ function Step7Closing({
 }
 
 function Step8Final({
-  classCtx, scriptId, chosenPack, paymentType, objetivo, teacherNotes, setTeacherNotes, pending,
+  classCtx, scriptId, chosenPack, paymentType, objetivo, teacherNotes, setTeacherNotes, pending, onBack,
 }: {
   classCtx: ClassContext;
   scriptId: string;
@@ -611,6 +639,7 @@ function Step8Final({
   teacherNotes: string;
   setTeacherNotes: (v: string) => void;
   pending: boolean;
+  onBack: () => void;
 }) {
   const [submitting, startTransition] = useTransition();
   const [done, setDone] = useState<"attended" | "absent" | null>(null);
@@ -721,6 +750,18 @@ function Step8Final({
           {err}
         </div>
       )}
+      {/* Boton 'Atras' en paso 8 — corrige pack / pago / objetivo
+          antes de enviar el WhatsApp con el enlace de pago. */}
+      <div className="mt-5 flex justify-start">
+        <button
+          type="button"
+          onClick={onBack}
+          disabled={busy}
+          className="text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
+        >
+          ← Atrás
+        </button>
+      </div>
     </div>
   );
 }
