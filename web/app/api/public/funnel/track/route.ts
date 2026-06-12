@@ -36,6 +36,10 @@ const BodySchema = z.object({
   // 200 chars cubre los textos más largos del quiz (e.g., los niveles
   // MCER con descripción). Truncamos en BD para evitar abuso.
   answer:     z.string().trim().max(200).nullable().optional(),
+  // De qué landing llega el visitante. Slugs estables: 'home',
+  // 'curso-online', 'particulares', 'intensivo', 'certificado',
+  // 'b2-trabajar', 'ciudades' (más futuros). Migration 058.
+  landing_intent: z.string().trim().max(40).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -52,7 +56,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const { session_id, step, answer } = parsed.data;
+  const { session_id, step, answer, landing_intent } = parsed.data;
 
   // Hash de IP para detectar bots sin guardar PII.
   const ip = ipFromHeaders(req);
@@ -70,6 +74,7 @@ export async function POST(req: NextRequest) {
       answer: answer ?? null,
       user_agent: ua,
       ip_hash:    ipHash,
+      landing_intent: landing_intent ?? null,
     });
   } catch (e) {
     // Fail-soft — no rompemos el UX por telemetría.

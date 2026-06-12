@@ -26,6 +26,8 @@ const MOTIVOS = ["particulares","intensivo","certificado","profesional"] as cons
 const BodySchema = z.object({
   session_id: z.string().trim().min(8).max(64),
   motivo:     z.enum(MOTIVOS),
+  // De qué landing llega el visitante. Slug estable, migration 058.
+  landing_intent: z.string().trim().max(40).nullable().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -55,7 +57,12 @@ export async function POST(req: NextRequest) {
   const { error } = await sb
     .from("lead_motivo_inicial")
     .upsert(
-      { session_id: parsed.data.session_id, motivo: parsed.data.motivo, lead_id: null },
+      {
+        session_id:     parsed.data.session_id,
+        motivo:         parsed.data.motivo,
+        lead_id:        null,
+        landing_intent: parsed.data.landing_intent ?? null,
+      },
       { onConflict: "session_id" },
     );
   if (error) {

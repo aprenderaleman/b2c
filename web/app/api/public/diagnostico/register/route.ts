@@ -171,6 +171,9 @@ const BodySchema = z.object({
   // clientes viejos que aún no envían el campo.
   session_id:     z.string().trim().min(8).max(64).optional(),
   motivo_inicial: z.enum(MOTIVOS).optional(),
+  // De qué landing llega el lead. Slug estable, migration 058.
+  // 'home' para la ruta /, slug específico por landing dedicada.
+  landing_intent: z.string().trim().max(40).nullable().optional(),
   // Atribución publicitaria (Google Ads / UTM) — todo opcional.
   gclid:        z.string().trim().max(200).optional().nullable(),
   gbraid:       z.string().trim().max(200).optional().nullable(),
@@ -306,6 +309,9 @@ export async function POST(req: NextRequest) {
   // Solo escribimos motivo_inicial si vino — preservamos el valor previo
   // de leads existentes que no lo tengan.
   if (b.motivo_inicial) baseFields.motivo_inicial = b.motivo_inicial;
+  // landing_intent: solo si vino. Para leads viejos sin landing tracking
+  // queda NULL, que es la señal de "atribución desconocida".
+  if (b.landing_intent) baseFields.landing_intent = b.landing_intent;
 
   // Atribución publicitaria — sólo escribimos si vino un valor, para no
   // borrar un gclid capturado en una visita anterior del mismo lead.
