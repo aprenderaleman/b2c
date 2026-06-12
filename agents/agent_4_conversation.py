@@ -20,6 +20,7 @@ Public surface:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import Literal
@@ -407,6 +408,16 @@ def handle_incoming_message(
     # once the lead has reserved.
     if status in ("trial_scheduled", "trial_reminded"):
         return _handle_trial_already_booked(lead, text, wa)
+
+    # WELCOME MOTIVATION REPLY — el msg 1 del drip ahora pregunta motivación
+    # (1=Trabajo · 2=Estudios · 3=Pareja · 4=Otra). Si el lead respondió con
+    # uno de esos números, mandamos copy específico con CTA agendar trial
+    # (Gelfis 2026-06-14). Gate: last_drip_msg_n EXACTAMENTE 1 — sólo el
+    # primer ciclo de respuesta, no después de avanzar el drip.
+    if status == "registered" and (lead.get("last_drip_msg_n") or 0) == 1:
+        res = _try_handle_welcome_motivation(lead, text, wa)
+        if res is not None:
+            return res
 
     # INFO-CALL TIME PROPOSAL — el msg 1 del drip ahora le propone al lead
     # una llamada informativa de 15 min con Gelfis (cambio 2026-05-14). Si
@@ -853,6 +864,89 @@ def _try_handle_call_time_proposal(
         return HandleResult("ai_reply", sent=result.success, message_sent=body)
 
     return None  # error inesperado → caer al flujo normal (LLM intentará)
+
+
+# ──────────────────────────────────────────────────────────
+# WELCOME MOTIVATION (msg 1 del drip)
+# ──────────────────────────────────────────────────────────
+
+_BOOK_URL = f"{os.environ.get('PLATFORM_URL', 'https://b2c.aprender-aleman.de').rstrip('/')}/agendar/cuando"
+
+# Match "1", "1.", "1)", "  1  ", "número 1", "respondo 1", etc.
+# Limitado a 30 chars para evitar matchear "1 cosa más:..." (donde el 1
+# es enumeración, no respuesta motivacional).
+_DIGIT_RE = re.compile(r"^\s*(?:respuesta\s+|opci[óo]n\s+|n[úu]mero\s+|el\s+)?([1-4])\s*[\.\)\,]?\s*$", re.IGNORECASE)
+
+
+def _motivation_reply(choice: str, name_first: str) -> str:
+    """Copy específico por motivación 1/2/3/4. Gelfis 2026-06-14."""
+    if choice == "1":   # Trabajo
+        return (
+            f"¡Genial {name_first}! 💼\n\n"
+            f"Trabajar en Alemania o Suiza puede cambiar tu vida. Los salarios son altos y el nivel de alemán que tengas determina cuánto puedes ganar.\n\n"
+            f"En tu clase de prueba GRATIS (30 min) te muestro el plan exacto para llegar al nivel que necesitas para tu sector.\n\n"
+            f"📅 Agenda aquí: {_BOOK_URL}"
+        )
+    if choice == "2":   # Universidad
+        return (
+            f"¡Excelente {name_first}! 🎓\n\n"
+            f"Las universidades alemanas son top mundial y GRATUITAS. Pero los plazos son estrictos y necesitas C1 + TestDaF.\n\n"
+            f"En tu clase de prueba GRATIS (30 min) te muestro el roadmap exacto para llegar a tiempo a la aplicación de tu carrera.\n\n"
+            f"📅 Agenda aquí: {_BOOK_URL}"
+        )
+    if choice == "3":   # Pareja
+        return (
+            f"¡Qué lindo {name_first}! 💕\n\n"
+            f"Aprender alemán por tu pareja es una de las mejores razones. Te abre las puertas a su familia, su cultura y vuestro futuro juntos.\n\n"
+            f"En tu clase de prueba GRATIS (30 min) te muestro cómo llegar a hablar con su familia naturalmente en pocos meses.\n\n"
+            f"📅 Agenda aquí: {_BOOK_URL}"
+        )
+    # choice == "4" — Otra razón
+    return (
+        f"Cada motivación es válida {name_first} 😊\n\n"
+        f"Cuéntame más cuando hablemos. Lo importante es que quieres aprender alemán y nosotros te ayudamos a lograrlo.\n\n"
+        f"En tu clase de prueba GRATIS (30 min) vemos tu nivel, te muestro el método y decides si encaja contigo.\n\n"
+        f"📅 Agenda aquí: {_BOOK_URL}"
+    )
+
+
+_MOTIVATION_LABEL = {
+    "1": "trabajo",
+    "2": "estudios",
+    "3": "pareja",
+    "4": "otra",
+}
+
+
+def _try_handle_welcome_motivation(
+    lead: dict, text: str, wa: WhatsAppService | None,
+) -> HandleResult | None:
+    """Si el lead responde 1/2/3/4 al msg 1 del drip, mandamos copy
+    específico por motivación. Si responde otra cosa, devolvemos None
+    y dejamos que el flujo normal (keywords + AI) lo gestione.
+
+    Return None → caer al flujo normal.
+    Return HandleResult → ya manejado, no seguir.
+    """
+    digit_m = _DIGIT_RE.match(text)
+    if not digit_m:
+        return None   # no es 1/2/3/4 — flujo normal sigue
+
+    choice     = digit_m.group(1)
+    name_first = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
+    body       = _motivation_reply(choice, name_first)
+
+    log_timeline(
+        lead["id"],
+        type="agent_note",
+        author="agent_4",
+        content=f"💡 Lead respondió motivación: {choice} ({_MOTIVATION_LABEL[choice]})",
+        metadata={"kind": "welcome_motivation_reply", "choice": choice, "label": _MOTIVATION_LABEL[choice]},
+    )
+    result = send_approved(
+        lead, body, is_new_conversation=False, advance_followup=False, wa=wa,
+    )
+    return HandleResult("welcome_motivation_reply", sent=result.success, message_sent=body)
 
 
 def _handle_info_call_request(lead: dict, wa: WhatsAppService | None) -> HandleResult:
