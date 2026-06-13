@@ -39,7 +39,7 @@ export function LeadActions({ lead }: { lead: Lead }) {
   const canRestoreFromLost   = lead.status === "lost" && !alreadyConverted;
   const canRestoreFromAbsent = ["trial_absent", "absent_followup_1", "absent_followup_2", "absent_followup_3"].includes(lead.status) && !alreadyConverted;
   const canMarkLost      = lead.status !== "lost" && !alreadyConverted;
-  const canMarkAttendance = lead.status === "trial_scheduled" || lead.status === "trial_reminded";
+  const canMarkAttendance = ["trial_scheduled", "trial_reminded", "trial_absent", "absent_followup_1", "absent_followup_2", "absent_followup_3"].includes(lead.status);
 
   // Stiv (AI) is paused for this lead while ai_paused_until is in
   // the future. The pause does NOT change the funnel status — it
