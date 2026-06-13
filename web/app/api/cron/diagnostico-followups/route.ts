@@ -283,6 +283,15 @@ async function runCron(req: Request) {
   let skipped   = 0;
   let errors    = 0;
   let coldCapped = 0;
+  let runCapped  = 0;
+
+  // ── Cap MAX_PER_RUN ─────────────────────────────────────────────
+  // Limite duro de envios por ejecucion del cron para evitar avalanchas
+  // (caso 2026-06-12 tras pausa de 6h: 25 leads acumulados saldrian de
+  // golpe en el primer run y disparar otro ban WA). Con 5/run x 12 runs/h
+  // = 60 msgs/h max, que es soportable. Cron cada 30 min: ~10 msgs/h.
+  // Override via env var (sin redeploy si Vercel lo permite).
+  const MAX_PER_RUN = Number(process.env.DIAGNOSTICO_FOLLOWUPS_MAX_PER_RUN ?? 5);
 
   // ── Anti-spam: leads que ya recibieron 2+ msgs sin responder NUNCA
   // dejan de recibir WhatsApp (solo email a partir de ahora). El 86%
@@ -302,6 +311,10 @@ async function runCron(req: Request) {
   }
 
   for (const lead of leads) {
+    // Cap por run — si ya enviamos el maximo, paramos. Los restantes
+    // siguen pendientes y los procesa el proximo run del cron.
+    if (sent >= MAX_PER_RUN) { runCapped++; skipped++; continue; }
+
     const completedAt = new Date(lead.diagnostico_completed_at).getTime();
     const elapsed     = now - completedAt;
     const nextN       = (lead.last_drip_msg_n + 1) as 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
