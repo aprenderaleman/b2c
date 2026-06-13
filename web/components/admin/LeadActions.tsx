@@ -36,7 +36,8 @@ export function LeadActions({ lead }: { lead: Lead }) {
   const alreadyConverted = Boolean(lead.converted_to_user_id);
   const canConvert       = !alreadyConverted && lead.status !== "lost";
   const canReactivate    = lead.status === "needs_human";
-  const canRestoreFromLost = lead.status === "lost" && !alreadyConverted;
+  const canRestoreFromLost   = lead.status === "lost" && !alreadyConverted;
+  const canRestoreFromAbsent = ["trial_absent", "absent_followup_1", "absent_followup_2", "absent_followup_3"].includes(lead.status) && !alreadyConverted;
   const canMarkLost      = lead.status !== "lost" && !alreadyConverted;
   const canMarkAttendance = lead.status === "trial_scheduled" || lead.status === "trial_reminded";
 
@@ -258,6 +259,28 @@ export function LeadActions({ lead }: { lead: Lead }) {
             title="Quitar el estado 'Perdido' y devolver el lead al pipeline."
           >
             ↻ Quitar &apos;Perdido&apos;
+          </button>
+        </form>
+      )}
+
+      {canRestoreFromAbsent && (
+        <form
+          action={`/api/admin/leads/${lead.id}/reactivate`}
+          method="post"
+          onSubmit={(e) => {
+            if (!confirm(
+              "Quitar el estado 'No asistió' y volver a 'En conversación'.\n\n" +
+              "Se detendrán los follow-ups automáticos de ausencia.\n" +
+              "Podrás reagendar la clase de prueba o continuar el pipeline normal."
+            )) e.preventDefault();
+          }}
+        >
+          <button
+            type="submit"
+            className="text-xs font-semibold rounded-full border border-blue-300 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/15 hover:bg-blue-100 dark:hover:bg-blue-500/25 px-3 py-1 text-blue-700 dark:text-blue-300"
+            title="Quitar el estado 'No asistió' y devolver el lead al pipeline."
+          >
+            ↻ Quitar &apos;No asistió&apos;
           </button>
         </form>
       )}
