@@ -55,7 +55,7 @@ async function run() {
   const { data, error } = await sb
     .from("leads")
     .select("id, name, email, whatsapp_normalized, language, meta")
-    .eq("status", "in_conversation")
+    .in("status", ["trial_attended", "in_conversation"])
     .lte("next_contact_date", new Date().toISOString())
     .not("meta->>awaiting_payment_confirmation_since", "is", null)
     .limit(50);

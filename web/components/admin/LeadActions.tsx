@@ -38,10 +38,11 @@ export function LeadActions({ lead }: { lead: Lead }) {
   const canConvert       = !alreadyConverted && lead.status !== "lost";
   const canReactivate    = lead.status === "needs_human";
   const canRestoreFromLost   = lead.status === "lost" && !alreadyConverted;
-  const canRestoreFromAbsent = ["trial_absent", "absent_followup_1", "absent_followup_2", "absent_followup_3"].includes(lead.status) && !alreadyConverted;
+  const canRestoreFromAbsent   = ["trial_absent", "absent_followup_1", "absent_followup_2", "absent_followup_3"].includes(lead.status) && !alreadyConverted;
+  const canRestoreFromAttended = lead.status === "trial_attended" && !alreadyConverted;
   const canMarkLost      = lead.status !== "lost" && !alreadyConverted;
   const canMarkAttendance = ["trial_scheduled", "trial_reminded", "trial_absent", "absent_followup_1", "absent_followup_2", "absent_followup_3"].includes(lead.status)
-    || (lead.has_trial && ["in_conversation", "cold", "needs_human"].includes(lead.status));
+    || (lead.has_trial && ["in_conversation", "cold", "needs_human", "trial_attended"].includes(lead.status));
 
   // Stiv (AI) is paused for this lead while ai_paused_until is in
   // the future. The pause does NOT change the funnel status — it
@@ -261,6 +262,27 @@ export function LeadActions({ lead }: { lead: Lead }) {
             title="Quitar el estado 'Perdido' y devolver el lead al pipeline."
           >
             ↻ Quitar &apos;Perdido&apos;
+          </button>
+        </form>
+      )}
+
+      {canRestoreFromAttended && (
+        <form
+          action={`/api/admin/leads/${lead.id}/reactivate`}
+          method="post"
+          onSubmit={(e) => {
+            if (!confirm(
+              "Quitar el estado 'Asistió' y volver a 'En conversación'.\n\n" +
+              "Se detendrán los follow-ups post-clase."
+            )) e.preventDefault();
+          }}
+        >
+          <button
+            type="submit"
+            className="text-xs font-semibold rounded-full border border-blue-300 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/15 hover:bg-blue-100 dark:hover:bg-blue-500/25 px-3 py-1 text-blue-700 dark:text-blue-300"
+            title="Quitar el estado 'Asistió' y devolver el lead al pipeline."
+          >
+            ↻ Quitar &apos;Asistió&apos;
           </button>
         </form>
       )}

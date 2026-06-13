@@ -123,7 +123,7 @@ export async function markTrialAttendedAwaitingConversion(
   await sb
     .from("leads")
     .update({
-      status: "in_conversation",
+      status: "trial_attended",
       next_contact_date: followupAt,
       meta: opts ? {
         ...existingMeta,
@@ -144,8 +144,8 @@ export async function markTrialAttendedAwaitingConversion(
     metadata: opts ? { pack_id: opts.packId, payment_type: opts.paymentType, objective: opts.objective, awaiting_payment: true } : null,
   });
 
-  // ─── BASE 8€ al profesor que dió el trial ──────────────────────────
-  // El profe cobra 8€ por trial cuando confirmamos asistencia.
+  // ─── BASE 15€ al profesor que dió el trial ─────────────────────────
+  // El profe cobra 15€ por trial cuando confirmamos asistencia.
   // Si el admin marca "No asistió" → 0€.
   // Idempotente: si ya se pagó el base (re-clic accidental), no
   // insertamos otra fila.
@@ -161,7 +161,7 @@ export async function markTrialAttendedAwaitingConversion(
           lead_id: leadId,
           type:    "agent_note",
           author:  "system",
-          content: `💰 Pagado 8€ base de trial al profesor (class ${trial.classId.slice(0,8)})`,
+          content: `💰 Pagado 15€ base de trial al profesor (class ${trial.classId.slice(0,8)})`,
           metadata: { kind: "trial_base_paid", class_id: trial.classId, teacher_id: trial.teacherId, amount_cents: paid },
         });
       }

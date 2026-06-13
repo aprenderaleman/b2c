@@ -50,6 +50,7 @@ PAUSED_STATUSES = (
     "lost",
     "trial_scheduled",
     "trial_reminded",
+    "trial_attended",
     # Estos los maneja tick_absent_followups (agent_5_guardian) en su propio
     # cron; Agent 0 no debe tocarlos para no duplicar mensajes.
     "trial_absent",
