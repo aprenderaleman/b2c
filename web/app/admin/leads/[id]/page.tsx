@@ -167,6 +167,7 @@ export default async function LeadDetail({
               converted_to_user_id: (lead as { converted_to_user_id?: string | null }).converted_to_user_id ?? null,
               student_id:           studentId,
               ai_paused_until:      (lead as { ai_paused_until?: string | null }).ai_paused_until ?? null,
+              has_trial:            (trialRows ?? []).length > 0,
             }}
           />
         </div>

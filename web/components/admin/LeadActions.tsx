@@ -20,6 +20,7 @@ type Lead = {
   converted_to_user_id: string | null;
   student_id:   string | null;   // resolved server-side if converted_to_user_id exists
   ai_paused_until: string | null; // ISO; Stiv holds replies while > now()
+  has_trial: boolean;
 };
 
 /**
@@ -39,7 +40,8 @@ export function LeadActions({ lead }: { lead: Lead }) {
   const canRestoreFromLost   = lead.status === "lost" && !alreadyConverted;
   const canRestoreFromAbsent = ["trial_absent", "absent_followup_1", "absent_followup_2", "absent_followup_3"].includes(lead.status) && !alreadyConverted;
   const canMarkLost      = lead.status !== "lost" && !alreadyConverted;
-  const canMarkAttendance = ["trial_scheduled", "trial_reminded", "trial_absent", "absent_followup_1", "absent_followup_2", "absent_followup_3"].includes(lead.status);
+  const canMarkAttendance = ["trial_scheduled", "trial_reminded", "trial_absent", "absent_followup_1", "absent_followup_2", "absent_followup_3"].includes(lead.status)
+    || (lead.has_trial && ["in_conversation", "cold", "needs_human"].includes(lead.status));
 
   // Stiv (AI) is paused for this lead while ai_paused_until is in
   // the future. The pause does NOT change the funnel status — it
