@@ -361,6 +361,15 @@ def compose_message(lead: dict) -> MessageDraft | None:
             language=lang,
         )
     if status == "in_conversation" and rc < 1:
+        # FIX bug Saul 2026-06-13: tras marcar attended/absent un trial,
+        # status pasa a in_conversation y next_contact_date al instante,
+        # provocando que el cron Python dispare un revival ("¿quedó alguna
+        # duda?") que no tiene sentido tras una clase de prueba. Si hubo
+        # cualquier evento de trial en las ultimas 6h, saltamos el revival
+        # — el flujo natural es: post_trial_followup (TS) lleva el link de
+        # pago, no necesita revival.
+        if _had_recent_trial_event(lead["id"], hours=6):
+            return None
         return MessageDraft(
             text=_template_conversation_revive(lead),
             kind="template_conversation_revive",
@@ -368,6 +377,27 @@ def compose_message(lead: dict) -> MessageDraft | None:
         )
 
     return None
+
+
+def _had_recent_trial_event(lead_id: str, hours: int = 6) -> bool:
+    """True si en las ultimas N horas hubo un status_change que marca
+    asistencia (attended) o ausencia (did not attend) de trial.
+    Cubre tanto 'Lead attended trial' como 'Lead did not attend trial'
+    (este ultimo matchea 'attended trial' tambien por sustring)."""
+    from agents.shared.db import get_conn
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT 1 FROM lead_timeline
+             WHERE lead_id = %s
+               AND type = 'status_change'
+               AND content ILIKE '%%attended trial%%'
+               AND timestamp > NOW() - (%s * INTERVAL '1 hour')
+             LIMIT 1
+            """,
+            (lead_id, hours),
+        )
+        return cur.fetchone() is not None
 
 
 # ──────────────────────────────────────────────────────────

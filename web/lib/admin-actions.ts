@@ -134,6 +134,35 @@ export async function markTrialAttendedAwaitingConversion(
       } : existingMeta,
     })
     .eq("id", leadId);
+
+  // FIX bug Saul 2026-06-13: si entre la "no asistencia" + reactivacion
+  // y el "asistio" final se encolaron mensajes auto-generados (revival,
+  // follow-ups Stiv pendientes, recordatorios atrasados), cancelarlos
+  // todos AHORA. Asi solo sale el post_trial_followup con el link de
+  // pago — no un "¿quedó alguna duda?" descontextualizado.
+  try {
+    const phone = lead?.whatsapp_normalized ?? null;
+    if (phone) {
+      const { error: cancelErr, count } = await sb
+        .from("outbound_queue")
+        .update({
+          status: "failed_permanent",
+          last_error: "Auto-cancelado: lead marcado attended posteriormente; el mensaje queda obsoleto",
+          updated_at: new Date().toISOString(),
+        }, { count: "exact" })
+        .eq("phone_e164", phone)
+        .eq("status", "queued")
+        .neq("kind", "post_trial_followup");
+      if (cancelErr) {
+        console.warn(`[markTrialAttended] no pude cancelar queued de ${phone}: ${cancelErr.message}`);
+      } else if ((count ?? 0) > 0) {
+        console.log(`[markTrialAttended] cancelados ${count} mensajes obsoletos en cola para ${phone}`);
+      }
+    }
+  } catch (e) {
+    console.warn("[markTrialAttended] cleanup queue exception:", e instanceof Error ? e.message : e);
+  }
+
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type: "status_change",
