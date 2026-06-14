@@ -7,10 +7,11 @@ import {
   getPulseData,
   getRevenueByStudent,
   getTeacherPayrollBreakdown,
+  getLtvWithProjections,
   resolvePeriod,
   moneyFromCents,
 } from "@/lib/empresa";
-import type { PeriodPreset, StudentRevenue, TeacherPayrollRow, FunnelMetrics, EmpresaAlert } from "@/lib/empresa";
+import type { PeriodPreset, StudentRevenue, TeacherPayrollRow, FunnelMetrics, EmpresaAlert, LtvSummary, LtvClientRow } from "@/lib/empresa";
 import { PeriodSelector } from "./PeriodSelector";
 import { AlertBanner } from "./AlertBanner";
 import { MonthlyChart } from "./MonthlyChart";
@@ -39,6 +40,7 @@ export default async function EmpresaPage({
   ]);
 
   const adsEfficiency = computeAdsScore(m.marketing.roas, m.funnel.rate_lead_to_sale);
+  const ltv = await getLtvWithProjections(m.marketing.cac_cents);
 
   return (
     <main className="space-y-6">
@@ -168,6 +170,53 @@ export default async function EmpresaPage({
           </p>
         )}
         <AdsUpload />
+      </Panel>
+
+      {/* ============ SECCION 4b: LTV Real vs Proyectado ============ */}
+      <Panel title="LTV — Valor de vida del cliente">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <MiniStat label="LTV Real" value={moneyFromCents(ltv.ltv_real_cents)} />
+          <MiniStat label="LTV Proyectado" value={moneyFromCents(ltv.ltv_projected_cents)} />
+          <MiniStat label="LTV/CAC (real)" value={`${ltv.ltv_cac_real.toFixed(1)}x`} />
+          <MiniStat label="LTV/CAC (proy.)" value={`${ltv.ltv_cac_projected.toFixed(1)}x`} />
+        </div>
+        {ltv.clients.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-left text-slate-500 dark:text-slate-400">
+                  <th className="pb-2 font-medium">Cliente</th>
+                  <th className="pb-2 font-medium">Tipo</th>
+                  <th className="pb-2 font-medium text-right">Cobrado</th>
+                  <th className="pb-2 font-medium text-right">Pendiente</th>
+                  <th className="pb-2 font-medium text-right">LTV Proyectado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {ltv.clients.slice(0, 20).map((c) => (
+                  <tr key={c.email}>
+                    <td className="py-1.5 text-slate-700 dark:text-slate-200">{c.name}</td>
+                    <td className="py-1.5 text-slate-500">
+                      {c.type === "subscription" ? "Suscripcion" : "Pack unico"}
+                    </td>
+                    <td className="py-1.5 text-right font-mono text-slate-700 dark:text-slate-200">
+                      {moneyFromCents(c.paid_cents)}
+                    </td>
+                    <td className="py-1.5 text-right font-mono text-amber-600 dark:text-amber-400">
+                      {c.pending_cents > 0 ? moneyFromCents(c.pending_cents) : "—"}
+                    </td>
+                    <td className="py-1.5 text-right font-mono font-semibold text-slate-900 dark:text-slate-100">
+                      {moneyFromCents(c.ltv_projected_cents)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {ltv.clients.length > 20 && (
+              <p className="mt-2 text-xs text-slate-400">Mostrando top 20 de {ltv.clients.length} clientes</p>
+            )}
+          </div>
+        )}
       </Panel>
 
       {/* ============ SECCION 5: Nominas profesores ============ */}

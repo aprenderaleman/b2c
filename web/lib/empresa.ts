@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { getTotalRevenue, getTotalExpenses, moneyFromCents } from "./finance";
+import { stripeDE } from "./stripe";
 
 // =============================================================================
 // Types
@@ -933,6 +934,126 @@ export async function getPulseData(
     ads_spend_cents: adsCents,
     revenue_projected_cents: projectedRevenue,
     cpl_cents: cplCents,
+  };
+}
+
+// =============================================================================
+// LTV with projected payments from Stripe subscriptions
+// =============================================================================
+
+export type LtvClientRow = {
+  name: string;
+  email: string;
+  type: "subscription" | "package";
+  paid_cents: number;
+  pending_cents: number;
+  ltv_projected_cents: number;
+};
+
+export type LtvSummary = {
+  ltv_real_cents: number;
+  ltv_projected_cents: number;
+  ltv_cac_real: number;
+  ltv_cac_projected: number;
+  clients: LtvClientRow[];
+};
+
+export async function getLtvWithProjections(cacCents: number): Promise<LtvSummary> {
+  const sb = supabaseAdmin();
+  const stripe = stripeDE();
+
+  // 1. Get all paid amounts from DB grouped by student
+  const { data: payments } = await sb
+    .from("payments")
+    .select("student_id, amount_cents, student:students!inner(users!inner(full_name, email))")
+    .eq("status", "paid");
+
+  const byStudent = new Map<string, { name: string; email: string; paid: number }>();
+  for (const r of (payments ?? []) as any[]) {
+    const s = Array.isArray(r.student) ? r.student[0] : r.student;
+    const u = s?.users;
+    const uu = Array.isArray(u) ? u[0] : u;
+    const name = uu?.full_name ?? "—";
+    const email = uu?.email ?? "";
+    const existing = byStudent.get(r.student_id);
+    if (existing) {
+      existing.paid += Number(r.amount_cents);
+    } else {
+      byStudent.set(r.student_id, { name, email, paid: Number(r.amount_cents) });
+    }
+  }
+
+  // 2. Get active subscriptions from Stripe DE
+  const pendingByEmail = new Map<string, number>();
+  try {
+    const subscriptions = await stripe.subscriptions.list({
+      status: "active",
+      limit: 100,
+      expand: ["data.customer"],
+    });
+
+    for (const sub of subscriptions.data) {
+      const customer = sub.customer as { email?: string } | string;
+      const email = typeof customer === "string" ? "" : (customer.email ?? "");
+      if (!email) continue;
+
+      let pendingCents = 0;
+      for (const item of sub.items.data) {
+        const unitAmount = item.price.unit_amount ?? 0;
+        const qty = item.quantity ?? 1;
+        const monthlyAmount = unitAmount * qty;
+
+        if (sub.cancel_at) {
+          // Has a scheduled cancellation — calculate remaining payments
+          const nowSec = Math.floor(Date.now() / 1000);
+          const remainingSec = Math.max(0, sub.cancel_at - nowSec);
+          const remainingMonths = Math.ceil(remainingSec / (30 * 86400));
+          pendingCents += monthlyAmount * remainingMonths;
+        } else {
+          // No cancellation scheduled — project 6 months of payments
+          pendingCents += monthlyAmount * 6;
+        }
+      }
+
+      const current = pendingByEmail.get(email.toLowerCase()) ?? 0;
+      pendingByEmail.set(email.toLowerCase(), current + pendingCents);
+    }
+  } catch {
+    // Stripe API error — continue with 0 projections
+  }
+
+  // 3. Build client rows
+  const clients: LtvClientRow[] = [];
+  let totalPaid = 0;
+  let totalPending = 0;
+
+  for (const [, info] of byStudent) {
+    const pending = pendingByEmail.get(info.email.toLowerCase()) ?? 0;
+    const hasSubscription = pending > 0;
+    clients.push({
+      name: info.name,
+      email: info.email,
+      type: hasSubscription ? "subscription" : "package",
+      paid_cents: info.paid,
+      pending_cents: pending,
+      ltv_projected_cents: info.paid + pending,
+    });
+    totalPaid += info.paid;
+    totalPending += pending;
+  }
+
+  clients.sort((a, b) => b.ltv_projected_cents - a.ltv_projected_cents);
+
+  const studentCount = Math.max(clients.length, 1);
+  const ltvReal = Math.round(totalPaid / studentCount);
+  const ltvProjected = Math.round((totalPaid + totalPending) / studentCount);
+
+  return {
+    ltv_real_cents: ltvReal,
+    ltv_projected_cents: ltvProjected,
+    ltv_cac_real: cacCents > 0 ? ltvReal / cacCents : 0,
+    ltv_cac_projected: cacCents > 0 ? ltvProjected / cacCents : 0,
+    clients,
   };
 }
 
