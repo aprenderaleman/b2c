@@ -2,7 +2,7 @@
  * Compensación a profesores por clases de prueba.
  *
  * Política Gelfis 2026-06-12:
- *   BASE: 8€ por trial DADA (admin marca "✓ Asistió"). 0€ si "No asistió".
+ *   BASE: 15€ por trial DADA (admin marca "✓ Asistió"). 0€ si "No asistió".
  *
  *   COMISIÓN por conversión (al pulsar "Convertir en estudiante"):
  *     Pack Inicio       →  50€
@@ -18,7 +18,7 @@
  */
 import { supabaseAdmin } from "./supabase";
 
-export const TRIAL_BASE_CENTS = 800;  // 8€
+export const TRIAL_BASE_CENTS = 1500;  // 15€
 
 export const PACK_COMMISSION_CENTS: Record<string, number> = {
   "pack-inicio":      5_000,    //  50€
@@ -52,7 +52,7 @@ export async function payTrialBase(args: {
       class_id:         args.classId,
       teacher_id:       args.teacherId,
       duration_minutes: 50,
-      rate_at_time:     8,
+      rate_at_time:     15,
       amount_cents:     TRIAL_BASE_CENTS,
       currency:         "EUR",
     });
