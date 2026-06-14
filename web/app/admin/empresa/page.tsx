@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/rbac";
-import { getEmpresaMetrics, resolvePeriod, moneyFromCents } from "@/lib/empresa";
-import type { PeriodPreset, EmpresaMetrics } from "@/lib/empresa";
+import { getEmpresaMetrics, getMonthlyReport, resolvePeriod, moneyFromCents } from "@/lib/empresa";
+import type { PeriodPreset, EmpresaMetrics, MonthlyRow } from "@/lib/empresa";
 import { PeriodSelector } from "./PeriodSelector";
 import { AlertBanner } from "./AlertBanner";
 import { RevenueChart } from "./RevenueChart";
+import { MonthlyChart } from "./MonthlyChart";
 import { AdsUpload } from "./AdsUpload";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,10 @@ export default async function EmpresaPage({
   const preset = (sp.period ?? "month") as PeriodPreset;
   const { from, to, prevFrom, prevTo } = resolvePeriod(preset, sp.from, sp.to);
 
-  const m = await getEmpresaMetrics(from, to, prevFrom, prevTo);
+  const [m, monthly] = await Promise.all([
+    getEmpresaMetrics(from, to, prevFrom, prevTo),
+    getMonthlyReport(8),
+  ]);
 
   return (
     <main className="space-y-6">
@@ -158,6 +162,73 @@ export default async function EmpresaPage({
           </div>
         </Panel>
       </section>
+
+      {/* Monthly report */}
+      <Panel title="Historial mensual">
+        <div className="mt-4">
+          <MonthlyChart data={monthly} />
+        </div>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-left text-slate-600 dark:text-slate-300 text-xs">
+              <tr>
+                <th className="px-3 py-2 font-medium">Mes</th>
+                <th className="px-3 py-2 font-medium text-right">Ingresos</th>
+                <th className="px-3 py-2 font-medium text-right">Profes</th>
+                <th className="px-3 py-2 font-medium text-right">Ads</th>
+                <th className="px-3 py-2 font-medium text-right">Fijos</th>
+                <th className="px-3 py-2 font-medium text-right">Neto</th>
+                <th className="px-3 py-2 font-medium text-right">Margen</th>
+                <th className="px-3 py-2 font-medium text-right">ROAS</th>
+                <th className="px-3 py-2 font-medium text-right">Leads</th>
+                <th className="px-3 py-2 font-medium text-right">Conv.</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+              {monthly.map(row => (
+                <tr key={row.label} className={row.neto_cents < 0 ? "bg-red-50/50 dark:bg-red-500/5" : ""}>
+                  <td className="px-3 py-2 whitespace-nowrap font-medium">{row.label}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-right font-mono">{moneyFromCents(row.revenue_cents)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-right font-mono text-slate-500">{moneyFromCents(row.payroll_cents)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-right font-mono text-slate-500">{moneyFromCents(row.ads_cents)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-right font-mono text-slate-500">{moneyFromCents(row.fixed_cents)}</td>
+                  <td className={`px-3 py-2 whitespace-nowrap text-right font-mono font-semibold ${row.neto_cents >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                    {moneyFromCents(row.neto_cents)}
+                  </td>
+                  <td className={`px-3 py-2 whitespace-nowrap text-right font-mono ${row.margen_neto_pct >= 30 ? "text-emerald-600 dark:text-emerald-400" : row.margen_neto_pct >= 0 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
+                    {row.margen_neto_pct.toFixed(0)}%
+                  </td>
+                  <td className={`px-3 py-2 whitespace-nowrap text-right font-mono ${row.roas >= 3 ? "text-emerald-600 dark:text-emerald-400" : row.roas >= 1 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
+                    {row.roas.toFixed(1)}x
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-right">{row.leads}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-right">{row.conversions}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 font-semibold">
+              <tr>
+                <td className="px-3 py-2">Total</td>
+                <td className="px-3 py-2 text-right font-mono">{moneyFromCents(monthly.reduce((s, r) => s + r.revenue_cents, 0))}</td>
+                <td className="px-3 py-2 text-right font-mono">{moneyFromCents(monthly.reduce((s, r) => s + r.payroll_cents, 0))}</td>
+                <td className="px-3 py-2 text-right font-mono">{moneyFromCents(monthly.reduce((s, r) => s + r.ads_cents, 0))}</td>
+                <td className="px-3 py-2 text-right font-mono">{moneyFromCents(monthly.reduce((s, r) => s + r.fixed_cents, 0))}</td>
+                <td className={`px-3 py-2 text-right font-mono ${monthly.reduce((s, r) => s + r.neto_cents, 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+                  {moneyFromCents(monthly.reduce((s, r) => s + r.neto_cents, 0))}
+                </td>
+                <td className="px-3 py-2 text-right font-mono">
+                  {(() => { const rev = monthly.reduce((s, r) => s + r.revenue_cents, 0); const net = monthly.reduce((s, r) => s + r.neto_cents, 0); return rev > 0 ? (net / rev * 100).toFixed(0) + "%" : "—"; })()}
+                </td>
+                <td className="px-3 py-2 text-right font-mono">
+                  {(() => { const rev = monthly.reduce((s, r) => s + r.revenue_cents, 0); const ads = monthly.reduce((s, r) => s + r.ads_cents, 0); return ads > 0 ? (rev / ads).toFixed(1) + "x" : "—"; })()}
+                </td>
+                <td className="px-3 py-2 text-right">{monthly.reduce((s, r) => s + r.leads, 0)}</td>
+                <td className="px-3 py-2 text-right">{monthly.reduce((s, r) => s + r.conversions, 0)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </Panel>
 
       {/* Recent transactions */}
       <Panel title="Ultimos pagos">

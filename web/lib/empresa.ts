@@ -604,5 +604,112 @@ async function getGoogleAdsSpend(sb: SB, from: Date, to: Date): Promise<number> 
   return Math.round(totalMicros / 10000);
 }
 
+// =============================================================================
+// Monthly report
+// =============================================================================
+
+export type MonthlyRow = {
+  label: string;
+  from: string;
+  to: string;
+  revenue_cents: number;
+  payroll_cents: number;
+  fixed_cents: number;
+  ads_cents: number;
+  neto_cents: number;
+  margen_neto_pct: number;
+  roas: number;
+  leads: number;
+  conversions: number;
+  payments_count: number;
+  students_count: number;
+};
+
+export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
+  const sb = supabaseAdmin();
+  const now = new Date();
+  const berlin = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Berlin" }));
+  const rows: MonthlyRow[] = [];
+
+  for (let i = monthsBack - 1; i >= 0; i--) {
+    const year = berlin.getFullYear();
+    const month = berlin.getMonth() - i;
+    const from = new Date(Date.UTC(year, month, 1));
+    const lastDay = new Date(Date.UTC(year, month + 1, 0));
+    const to = i === 0
+      ? new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), berlin.getDate(), 23, 59, 59))
+      : new Date(Date.UTC(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate(), 23, 59, 59));
+
+    const fromISO = from.toISOString();
+    const toISO = to.toISOString();
+    const fromDate = fromISO.slice(0, 10);
+    const toDate = toISO.slice(0, 10);
+
+    const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+    const label = `${monthNames[from.getUTCMonth()]} ${from.getUTCFullYear().toString().slice(2)}`;
+
+    const [revenue, payroll, fixed, ads, leadsRes, convRes] = await Promise.all([
+      sb.from("payments")
+        .select("amount_cents, student_id")
+        .eq("status", "paid")
+        .gte("paid_at", fromISO)
+        .lte("paid_at", toISO),
+      sb.from("class_hours_log")
+        .select("amount_cents")
+        .gte("created_at", fromISO)
+        .lte("created_at", toISO),
+      sb.from("costes_fijos")
+        .select("amount_cents")
+        .eq("active", true)
+        .lte("starts_at", toDate)
+        .or(`ends_at.is.null,ends_at.gte.${fromDate}`),
+      sb.from("google_ads_daily")
+        .select("cost_micros")
+        .gte("date", fromDate)
+        .lte("date", toDate),
+      sb.from("leads")
+        .select("id", { count: "exact", head: true })
+        .gte("created_at", fromISO)
+        .lte("created_at", toISO),
+      sb.from("leads")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "converted")
+        .gte("converted_at", fromISO)
+        .lte("converted_at", toISO),
+    ]);
+
+    const revenueCents = (revenue.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
+    const paymentsCount = (revenue.data ?? []).length;
+    const studentsCount = new Set((revenue.data ?? []).map((r: any) => r.student_id)).size;
+    const payrollCents = (payroll.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
+    const fixedCents = (fixed.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
+    const adsMicros = (ads.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0);
+    const adsCents = Math.round(adsMicros / 10000);
+
+    const netoCents = revenueCents - payrollCents - fixedCents - adsCents;
+    const margenPct = revenueCents > 0 ? (netoCents / revenueCents) * 100 : 0;
+    const roas = adsCents > 0 ? revenueCents / adsCents : 0;
+
+    rows.push({
+      label,
+      from: fromDate,
+      to: toDate,
+      revenue_cents: revenueCents,
+      payroll_cents: payrollCents,
+      fixed_cents: fixedCents,
+      ads_cents: adsCents,
+      neto_cents: netoCents,
+      margen_neto_pct: margenPct,
+      roas,
+      leads: leadsRes.count ?? 0,
+      conversions: convRes.count ?? 0,
+      payments_count: paymentsCount,
+      students_count: studentsCount,
+    });
+  }
+
+  return rows;
+}
+
 // Re-export for convenience
 export { moneyFromCents } from "./finance";
