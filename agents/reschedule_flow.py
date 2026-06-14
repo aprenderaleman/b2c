@@ -107,15 +107,26 @@ def _write_state(lead_id: str, state: dict | None) -> None:
 
 
 def _get_active_trial(lead_id: str) -> dict | None:
+    """Devuelve la clase de prueba 'activa' del lead. Ampliado 2026-06-14
+    (caso Nadyn): tambien matchea clases con status != 'scheduled' si
+    quedan dentro de la ventana razonable para reagendar:
+      - futuro (cualquier hora)
+      - pasadas en las ultimas 6 horas (no llegue a tiempo pero quiero
+        moverla a otro dia)
+    Asi el lead que dice 'no podré' justo despues de la hora aun entra
+    al flujo de reagendar self-serve en vez de caer al fallback."""
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             """
-            SELECT id, scheduled_at, teacher_id, duration_minutes
+            SELECT id, scheduled_at, teacher_id, duration_minutes, status
               FROM classes
              WHERE lead_id = %s
                AND is_trial = TRUE
-               AND status = 'scheduled'
-             ORDER BY scheduled_at
+               AND (
+                 status = 'scheduled'
+                 OR scheduled_at > NOW() - INTERVAL '6 hours'
+               )
+             ORDER BY scheduled_at DESC
              LIMIT 1
             """,
             (lead_id,),

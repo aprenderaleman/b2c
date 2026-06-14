@@ -599,21 +599,19 @@ def _handle_trial_already_booked(
 
     draft = compose_reply(lead, augmented)
     if draft is None or not review_single(lead, draft).approved:
-        # Static fallback — sin profesor, sin pregunta innecesaria.
-        if lang == "de":
-            body = (
-                f"Hallo {name}! 👋\n\n"
-                f"Deine Probestunde ist am {when_str}.\n\n"
-                f"— Stiv · Aprender-Aleman.de"
-            )
-        else:
-            body = (
-                f"¡Hola {name}! 👋\n\n"
-                f"Tu clase de prueba es el {when_str}.\n\n"
-                f"— Stiv · Aprender-Aleman.de"
-            )
-    else:
-        body = draft.text
+        # FIX Gelfis 2026-06-14 (caso Nadyn): el fallback estatico
+        # "Tu clase de prueba es el {when_str}" es INUTIL — repite info
+        # que el lead ya sabia e IGNORA lo que dijo (ej: "no podré,
+        # perdon"). En su lugar, escalar silenciosamente a needs_human
+        # para que Gelfis responda manualmente con contexto.
+        update_status(lead["id"], "needs_human", author="agent_4")
+        log_timeline(
+            lead["id"], type="escalation", author="agent_4",
+            content=f"Lead con trial booked escribio algo que la IA no supo manejar: \"{incoming[:200]}\"",
+            metadata={"alert_gelfis": True, "kind": "trial_booked_fallback_escalated"},
+        )
+        return HandleResult("trial_already_booked", sent=False, message_sent=None)
+    body = draft.text
 
     result = send_approved(lead, body, is_new_conversation=False,
                            advance_followup=False, wa=wa)
