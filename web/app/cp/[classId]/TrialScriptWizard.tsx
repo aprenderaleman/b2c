@@ -634,7 +634,7 @@ function Step3PostDemo({
   feedbackGusto: string; setFeedbackGusto: (v: string) => void;
   enrollmentSense: boolean | null; setEnrollmentSense: (v: boolean) => void;
 }) {
-  const objetivoQuoted = objetivo.trim() ? `"${objetivo.trim()}"` : "tu objetivo";
+  const [classTypePref, setClassTypePref] = useState("");
   return (
     <div>
       <StepTitle
@@ -675,14 +675,36 @@ function Step3PostDemo({
       </div>
 
       <Field
-        label={`¿Tendría sentido para ti inscribirte en la academia para tomar clases semanales y lograr ${objetivoQuoted}?`}
+        label="¿Crees que tomar clases semanales más practicar con SCHULE y Hans te puede ayudar a cumplir tu objetivo con el alemán?"
         required
       >
         <div className="grid grid-cols-2 gap-2 mt-1">
-          <YesNoButton active={enrollmentSense === true}  onClick={() => setEnrollmentSense(true)}  label="✅ Sí, tiene sentido" />
+          <YesNoButton active={enrollmentSense === true}  onClick={() => setEnrollmentSense(true)}  label="✅ Sí" />
           <YesNoButton active={enrollmentSense === false} onClick={() => setEnrollmentSense(false)} label="❌ No" />
         </div>
       </Field>
+
+      {enrollmentSense === true && (
+        <>
+          <Field label="¿Cómo crees que te sentirás más cómodo/a?">
+            <ChipSelect options={["Clases grupales", "Clases individuales"]} value={classTypePref} onChange={setClassTypePref} />
+          </Field>
+
+          <div className="mt-5 rounded-xl border-2 border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10 p-4">
+            <p className="text-sm font-semibold text-brand-900 dark:text-brand-100">
+              🎯 ¡Muy bien! Vamos a la página web de la academia y te muestro los packs.
+            </p>
+            <a
+              href="https://aprender-aleman.de/cursos"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2.5 text-sm transition"
+            >
+              🌐 Ver packs en aprender-aleman.de/cursos →
+            </a>
+          </div>
+        </>
+      )}
     </div>
   );
 }
