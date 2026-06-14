@@ -25,7 +25,7 @@ export default async function EmpresaPage({
   const [m, monthly, pulse] = await Promise.all([
     getEmpresaMetrics(from, to, prevFrom, prevTo),
     getMonthlyReport(8),
-    getPulseData(),
+    getPulseData(from, to, prevFrom, prevTo),
   ]);
 
   return (

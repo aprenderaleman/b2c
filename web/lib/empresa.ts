@@ -758,19 +758,17 @@ export type PulseData = {
   cpl_cents: number;
 };
 
-export async function getPulseData(): Promise<PulseData> {
+export async function getPulseData(
+  from: Date,
+  to: Date,
+  prevFrom: Date,
+  prevTo: Date,
+): Promise<PulseData> {
   const sb = supabaseAdmin();
-  const now = new Date();
-  const berlin = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Berlin" }));
-  const dayOfMonth = berlin.getDate();
+  const periodDays = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / 86_400_000));
 
-  const currFrom = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 1));
-  const currTo = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), dayOfMonth, 23, 59, 59));
-  const prevFrom = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth() - 1, 1));
-  const prevTo = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 0, 23, 59, 59));
-
-  const currFromISO = currFrom.toISOString();
-  const currToISO = currTo.toISOString();
+  const currFromISO = from.toISOString();
+  const currToISO = to.toISOString();
   const prevFromISO = prevFrom.toISOString();
   const prevToISO = prevTo.toISOString();
 
@@ -839,7 +837,7 @@ export async function getPulseData(): Promise<PulseData> {
   const roasCurr = adsCents > 0 ? currRevenue / adsCents : 0;
   const roasPrev = prevAdsCents > 0 ? prevRevenue / prevAdsCents : 0;
 
-  const projectedRevenue = dayOfMonth > 0 ? Math.round(currRevenue / dayOfMonth * 30) : 0;
+  const projectedRevenue = periodDays > 0 ? Math.round(currRevenue / periodDays * 30) : 0;
   const cplCents = leads > 0 ? Math.round(adsCents / leads) : 0;
 
   return {
