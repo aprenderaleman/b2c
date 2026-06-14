@@ -311,6 +311,26 @@ export function TrialScriptWizard({
 // Layout helpers
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * URL de presentación Gamma según el nivel del lead. El profesor pulsa
+ * el botón "📊 Presentación" y abre la slide correspondiente para guiar
+ * la clase de prueba (Gelfis 2026-06-14).
+ *
+ * Normaliza variantes (A1.1, A1.2, A1-A2 → A1; A2.1, A2.2 → A2; B2+ → B2).
+ * Devuelve null si el nivel no es reconocido — el botón no se muestra.
+ */
+function gammaPresentationUrl(level: string | null | undefined): string | null {
+  if (!level) return null;
+  const l = level.toUpperCase();
+  if (l.startsWith("A0")) return "https://gamma.app/docs/8p0c89sshy99997";
+  if (l.startsWith("A1")) return "https://gamma.app/docs/v7w2wbdxd95n3sg";
+  if (l.startsWith("A2")) return "https://gamma.app/docs/ptfb8toca4msdav";
+  if (l.startsWith("B1")) return "https://gamma.app/docs/zooeusyqq9mrhw4";
+  if (l.startsWith("B2")) return "https://gamma.app/docs/ki7poj0542swdl2";
+  if (l.startsWith("C1")) return "https://gamma.app/docs/7kaqe967ge5a4ly";
+  return null;
+}
+
 function LeadHeader({
   ctx, stepNum, totalSteps, onQuickAbsent, absentPending,
 }: {
@@ -318,6 +338,7 @@ function LeadHeader({
   onQuickAbsent: () => void; absentPending: boolean;
 }) {
   const stepLabel = stepNum === 3.5 ? "3b" : String(stepNum);
+  const presentationUrl = gammaPresentationUrl(ctx.lead.germanLevel);
   return (
     <header className="rounded-2xl bg-gradient-to-br from-emerald-500/10 to-amber-500/10 border border-emerald-300/30 px-4 py-3 flex items-start justify-between gap-3 flex-wrap">
       <div className="min-w-0">
@@ -340,6 +361,20 @@ function LeadHeader({
             title="Abrir WhatsApp del lead"
           >
             💬 WhatsApp
+          </a>
+        )}
+        {/* Presentación Gamma adaptada al nivel del lead — abre en
+            nueva pestaña para que el profe la proyecte durante la cp.
+            Solo se muestra si el nivel matchea uno de los 6 buckets
+            (A0/A1/A2/B1/B2/C1). */}
+        {presentationUrl && (
+          <a
+            href={presentationUrl}
+            target="_blank" rel="noreferrer"
+            className="text-xs font-semibold rounded-full border border-indigo-300 bg-indigo-100 dark:bg-indigo-500/15 px-3 py-1.5 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-200 dark:hover:bg-indigo-500/25"
+            title={`Abrir presentación Gamma para nivel ${ctx.lead.germanLevel}`}
+          >
+            📊 Presentación
           </a>
         )}
         {/* Atajo "No asistio" disponible en TODOS los pasos. Si el
