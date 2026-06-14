@@ -34,6 +34,18 @@ export default async function TodayView() {
         <StatCard label="Conversiones (7 días)"     value={stats.conversionsThisWeek} emoji="🎉" accent />
       </section>
 
+      {/* Acceso rápido a Empresa */}
+      <Link
+        href="/admin/empresa"
+        className="flex items-center justify-between rounded-2xl border border-brand-200 dark:border-brand-500/30 bg-brand-50 dark:bg-brand-500/10 p-5 hover:bg-brand-100 dark:hover:bg-brand-500/20 transition-colors"
+      >
+        <div>
+          <div className="text-sm font-semibold text-brand-700 dark:text-brand-300">Vista Empresa</div>
+          <div className="text-xs text-brand-600/70 dark:text-brand-400/70">Rentabilidad, funnel, marketing y alertas</div>
+        </div>
+        <span className="text-brand-600 dark:text-brand-400 text-lg">→</span>
+      </Link>
+
       {/* Risk alerts (students at risk — low attendance, inactivity, etc.) */}
       {risks.length > 0 && (
         <Section title="🔔 Alertas de estudiantes" count={risks.length} tone="red">

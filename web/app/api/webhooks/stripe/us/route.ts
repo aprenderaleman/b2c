@@ -1,0 +1,22 @@
+import { NextResponse } from "next/server";
+import { constructEvent } from "@/lib/stripe";
+import { processStripeEvent } from "../_shared";
+
+export const runtime = "nodejs";
+
+export async function POST(req: Request) {
+  const body = await req.text();
+  const sig = req.headers.get("stripe-signature");
+  if (!sig) return NextResponse.json({ error: "missing signature" }, { status: 400 });
+
+  let event;
+  try {
+    event = constructEvent(body, sig, "us");
+  } catch (err) {
+    console.error("Stripe US webhook signature verification failed:", (err as Error).message);
+    return NextResponse.json({ error: "invalid signature" }, { status: 400 });
+  }
+
+  await processStripeEvent(event, "us");
+  return NextResponse.json({ received: true });
+}

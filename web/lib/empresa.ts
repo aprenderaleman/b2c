@@ -1,0 +1,607 @@
+import { supabaseAdmin } from "./supabase";
+import { getTotalRevenue, getTotalExpenses, moneyFromCents } from "./finance";
+
+// =============================================================================
+// Types
+// =============================================================================
+
+export type EmpresaAlert = {
+  severity: "red" | "green" | "amber";
+  title: string;
+  detail: string;
+  recommendation: string;
+};
+
+export type FunnelMetrics = {
+  leads_total: number;
+  trials_scheduled: number;
+  trials_attended: number;
+  conversions: number;
+  rate_lead_to_trial: number;
+  rate_trial_attendance: number;
+  rate_attended_to_sale: number;
+  rate_lead_to_sale: number;
+};
+
+export type MarketingMetrics = {
+  ads_spend_cents: number;
+  cpl_real_cents: number;
+  cac_cents: number;
+  ltv_cents: number;
+  ltv_cac_ratio: number;
+  roas: number;
+  has_ads_data: boolean;
+};
+
+export type DailyDataPoint = {
+  date: string;
+  leads: number;
+  revenue_cents: number;
+  expenses_cents: number;
+};
+
+export type RecentPayment = {
+  id: string;
+  student_name: string | null;
+  student_email: string;
+  amount_cents: number;
+  currency: string;
+  type: string;
+  paid_at: string;
+};
+
+export type CosteFijo = {
+  id: string;
+  name: string;
+  category: string;
+  amount_cents: number;
+  currency: string;
+  active: boolean;
+  starts_at: string;
+  ends_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type EmpresaMetrics = {
+  revenue_cents: number;
+  revenue_by_type: Record<string, number>;
+  teacher_payroll_cents: number;
+  variable_expenses_cents: number;
+  fixed_costs_cents: number;
+  ads_spend_cents: number;
+  beneficio_bruto_cents: number;
+  beneficio_neto_cents: number;
+  margen_bruto_pct: number;
+  margen_neto_pct: number;
+  funnel: FunnelMetrics;
+  marketing: MarketingMetrics;
+  alerts: EmpresaAlert[];
+  daily: DailyDataPoint[];
+  recent_payments: RecentPayment[];
+  period: { from: string; to: string };
+  prev_revenue_cents: number;
+  prev_neto_cents: number;
+  active_students: number;
+};
+
+// =============================================================================
+// Period helpers
+// =============================================================================
+
+export type PeriodPreset = "7d" | "30d" | "month" | "prev_month" | "custom";
+
+export function resolvePeriod(
+  preset: PeriodPreset,
+  customFrom?: string,
+  customTo?: string,
+): { from: Date; to: Date; prevFrom: Date; prevTo: Date } {
+  const now = new Date();
+  const berlin = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Berlin" }));
+  let from: Date;
+  let to: Date;
+
+  switch (preset) {
+    case "7d":
+      to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), berlin.getDate(), 23, 59, 59));
+      from = new Date(to.getTime() - 6 * 86_400_000);
+      from.setUTCHours(0, 0, 0, 0);
+      break;
+    case "30d":
+      to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), berlin.getDate(), 23, 59, 59));
+      from = new Date(to.getTime() - 29 * 86_400_000);
+      from.setUTCHours(0, 0, 0, 0);
+      break;
+    case "month":
+      from = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 1));
+      to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth() + 1, 0, 23, 59, 59));
+      break;
+    case "prev_month":
+      from = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth() - 1, 1));
+      to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 0, 23, 59, 59));
+      break;
+    case "custom":
+      from = customFrom ? new Date(customFrom + "T00:00:00Z") : new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 1));
+      to = customTo ? new Date(customTo + "T23:59:59Z") : new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth() + 1, 0, 23, 59, 59));
+      break;
+  }
+
+  const durationMs = to.getTime() - from.getTime();
+  const prevTo = new Date(from.getTime() - 1);
+  const prevFrom = new Date(prevTo.getTime() - durationMs);
+
+  return { from, to, prevFrom, prevTo };
+}
+
+// =============================================================================
+// Main query
+// =============================================================================
+
+export async function getEmpresaMetrics(
+  from: Date,
+  to: Date,
+  prevFrom: Date,
+  prevTo: Date,
+): Promise<EmpresaMetrics> {
+  const sb = supabaseAdmin();
+
+  const [
+    revenue,
+    prevRevenue,
+    expenses,
+    earnings,
+    fixedCosts,
+    funnel,
+    prevFunnel,
+    dailyLeads,
+    dailyPayments,
+    recentPayments,
+    activeStudents,
+    ltv,
+    adsSpend,
+    googleAdsSpend,
+  ] = await Promise.all([
+    getTotalRevenue(from, to),
+    getTotalRevenue(prevFrom, prevTo),
+    getTotalExpenses(from, to),
+    getTeacherPayrollForRange(sb, from, to),
+    getFixedCostsForRange(sb, from, to),
+    getFunnelMetrics(sb, from, to),
+    getFunnelMetrics(sb, prevFrom, prevTo),
+    getDailyLeads(sb, from, to),
+    getDailyPayments(sb, from, to),
+    getRecentPayments(sb, 20),
+    countActiveStudents(sb),
+    getAverageLTV(sb),
+    getAdsSpendFromExpenses(sb, from, to),
+    getGoogleAdsSpend(sb, from, to),
+  ]);
+
+  const teacherPayrollCents = earnings;
+  const variableExpensesCents = expenses.total_cents;
+  const fixedCostsCents = fixedCosts;
+  // Prefer Google Ads API data when available, fall back to manual expenses
+  const adsSpendCents = googleAdsSpend > 0 ? googleAdsSpend : adsSpend;
+
+  const beneficioBrutoCents = revenue.revenue_cents - teacherPayrollCents;
+  const beneficioNetoCents = beneficioBrutoCents - variableExpensesCents - fixedCostsCents;
+  const margenBrutoPct = revenue.revenue_cents > 0
+    ? (beneficioBrutoCents / revenue.revenue_cents) * 100
+    : 0;
+  const margenNetoPct = revenue.revenue_cents > 0
+    ? (beneficioNetoCents / revenue.revenue_cents) * 100
+    : 0;
+
+  const cplRealCents = funnel.leads_total > 0
+    ? Math.round(adsSpendCents / funnel.leads_total)
+    : 0;
+  const cacCents = funnel.conversions > 0
+    ? Math.round((adsSpendCents + fixedCostsCents + variableExpensesCents) / funnel.conversions)
+    : 0;
+  const ltvCacRatio = cacCents > 0 ? ltv / cacCents : 0;
+  const roas = adsSpendCents > 0 ? revenue.revenue_cents / adsSpendCents : 0;
+
+  const marketing: MarketingMetrics = {
+    ads_spend_cents: adsSpendCents,
+    cpl_real_cents: cplRealCents,
+    cac_cents: cacCents,
+    ltv_cents: ltv,
+    ltv_cac_ratio: ltvCacRatio,
+    roas,
+    has_ads_data: adsSpendCents > 0,
+  };
+
+  const prevNetoCents = prevRevenue.revenue_cents - earnings - variableExpensesCents - fixedCostsCents;
+
+  const daily = mergeDailyData(dailyLeads, dailyPayments, from, to);
+
+  const alerts = computeAlerts(margenNetoPct, cacCents, ltv, roas, funnel);
+
+  return {
+    revenue_cents: revenue.revenue_cents,
+    revenue_by_type: revenue.by_type,
+    teacher_payroll_cents: teacherPayrollCents,
+    variable_expenses_cents: variableExpensesCents,
+    fixed_costs_cents: fixedCostsCents,
+    ads_spend_cents: adsSpendCents,
+    beneficio_bruto_cents: beneficioBrutoCents,
+    beneficio_neto_cents: beneficioNetoCents,
+    margen_bruto_pct: margenBrutoPct,
+    margen_neto_pct: margenNetoPct,
+    funnel,
+    marketing,
+    alerts,
+    daily,
+    recent_payments: recentPayments,
+    period: { from: from.toISOString(), to: to.toISOString() },
+    prev_revenue_cents: prevRevenue.revenue_cents,
+    prev_neto_cents: prevNetoCents,
+    active_students: activeStudents,
+  };
+}
+
+// =============================================================================
+// Sub-queries
+// =============================================================================
+
+type SB = ReturnType<typeof supabaseAdmin>;
+
+async function getTeacherPayrollForRange(sb: SB, from: Date, to: Date): Promise<number> {
+  const { data } = await sb
+    .from("class_hours_log")
+    .select("amount_cents")
+    .gte("created_at", from.toISOString())
+    .lte("created_at", to.toISOString());
+  return (data ?? []).reduce((s, r) => s + Number((r as { amount_cents: number }).amount_cents), 0);
+}
+
+async function getFixedCostsForRange(sb: SB, from: Date, to: Date): Promise<number> {
+  const fromDate = from.toISOString().slice(0, 10);
+  const toDate = to.toISOString().slice(0, 10);
+
+  const { data } = await sb
+    .from("costes_fijos")
+    .select("amount_cents")
+    .eq("active", true)
+    .lte("starts_at", toDate)
+    .or(`ends_at.is.null,ends_at.gte.${fromDate}`);
+
+  if (!data || data.length === 0) return 0;
+
+  const daysInRange = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / 86_400_000));
+  const totalMonthly = (data as Array<{ amount_cents: number }>).reduce(
+    (s, r) => s + r.amount_cents, 0,
+  );
+  return Math.round(totalMonthly * (daysInRange / 30));
+}
+
+async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMetrics> {
+  const fromISO = from.toISOString();
+  const toISO = to.toISOString();
+
+  const [leadsRes, trialsRes, attendedRes, convertedRes] = await Promise.all([
+    sb.from("leads")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO),
+    sb.from("leads")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO)
+      .not("trial_scheduled_at", "is", null),
+    sb.from("lead_timeline")
+      .select("lead_id")
+      .eq("type", "status_change")
+      .ilike("content", "%attended trial%")
+      .gte("timestamp", fromISO)
+      .lte("timestamp", toISO),
+    sb.from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "converted")
+      .or(`converted_at.gte.${fromISO},and(converted_at.is.null,created_at.gte.${fromISO})`)
+      .or(`converted_at.lte.${toISO},and(converted_at.is.null,created_at.lte.${toISO})`),
+  ]);
+
+  const leadsTotal = leadsRes.count ?? 0;
+  const trialsScheduled = trialsRes.count ?? 0;
+  const trialsAttended = new Set(
+    (attendedRes.data ?? []).map((r: { lead_id: string }) => r.lead_id),
+  ).size;
+  const conversions = convertedRes.count ?? 0;
+
+  return {
+    leads_total: leadsTotal,
+    trials_scheduled: trialsScheduled,
+    trials_attended: trialsAttended,
+    conversions,
+    rate_lead_to_trial: leadsTotal > 0 ? (trialsScheduled / leadsTotal) * 100 : 0,
+    rate_trial_attendance: trialsScheduled > 0 ? (trialsAttended / trialsScheduled) * 100 : 0,
+    rate_attended_to_sale: trialsAttended > 0 ? (conversions / trialsAttended) * 100 : 0,
+    rate_lead_to_sale: leadsTotal > 0 ? (conversions / leadsTotal) * 100 : 0,
+  };
+}
+
+async function getDailyLeads(
+  sb: SB, from: Date, to: Date,
+): Promise<Record<string, number>> {
+  const { data } = await sb
+    .from("leads")
+    .select("created_at")
+    .gte("created_at", from.toISOString())
+    .lte("created_at", to.toISOString());
+
+  const byDay: Record<string, number> = {};
+  for (const r of (data ?? []) as Array<{ created_at: string }>) {
+    const day = r.created_at.slice(0, 10);
+    byDay[day] = (byDay[day] ?? 0) + 1;
+  }
+  return byDay;
+}
+
+async function getDailyPayments(
+  sb: SB, from: Date, to: Date,
+): Promise<Record<string, number>> {
+  const { data } = await sb
+    .from("payments")
+    .select("paid_at, amount_cents")
+    .eq("status", "paid")
+    .gte("paid_at", from.toISOString())
+    .lte("paid_at", to.toISOString());
+
+  const byDay: Record<string, number> = {};
+  for (const r of (data ?? []) as Array<{ paid_at: string; amount_cents: number }>) {
+    if (!r.paid_at) continue;
+    const day = r.paid_at.slice(0, 10);
+    byDay[day] = (byDay[day] ?? 0) + Number(r.amount_cents);
+  }
+  return byDay;
+}
+
+async function getRecentPayments(sb: SB, limit: number): Promise<RecentPayment[]> {
+  const { data } = await sb
+    .from("payments")
+    .select(`
+      id, amount_cents, currency, type, paid_at,
+      student:students!inner(users!inner(full_name, email))
+    `)
+    .eq("status", "paid")
+    .not("paid_at", "is", null)
+    .order("paid_at", { ascending: false })
+    .limit(limit);
+
+  return (data ?? []).map(r => {
+    const s = (r as { student: unknown }).student;
+    const sFlat = Array.isArray(s) ? s[0] : s;
+    const u = (sFlat as { users: unknown } | null)?.users;
+    const uu = (Array.isArray(u) ? u[0] : u) as { full_name: string | null; email: string } | undefined;
+    return {
+      id: (r as { id: string }).id,
+      student_name: uu?.full_name ?? null,
+      student_email: uu?.email ?? "",
+      amount_cents: (r as { amount_cents: number }).amount_cents,
+      currency: (r as { currency: string }).currency,
+      type: (r as { type: string }).type,
+      paid_at: (r as { paid_at: string }).paid_at,
+    };
+  });
+}
+
+async function countActiveStudents(sb: SB): Promise<number> {
+  const { count } = await sb
+    .from("students")
+    .select("id", { count: "exact", head: true })
+    .eq("subscription_status", "active");
+  return count ?? 0;
+}
+
+async function getAverageLTV(sb: SB): Promise<number> {
+  const { data } = await sb
+    .from("payments")
+    .select("student_id, amount_cents")
+    .eq("status", "paid");
+
+  if (!data || data.length === 0) return 0;
+
+  const byStudent: Record<string, number> = {};
+  for (const r of data as Array<{ student_id: string; amount_cents: number }>) {
+    byStudent[r.student_id] = (byStudent[r.student_id] ?? 0) + Number(r.amount_cents);
+  }
+  const students = Object.keys(byStudent);
+  if (students.length === 0) return 0;
+  return Math.round(
+    students.reduce((s, sid) => s + byStudent[sid], 0) / students.length,
+  );
+}
+
+async function getAdsSpendFromExpenses(sb: SB, from: Date, to: Date): Promise<number> {
+  const { data } = await sb
+    .from("business_expenses")
+    .select("amount_cents")
+    .eq("category", "ads")
+    .gte("incurred_at", from.toISOString().slice(0, 10))
+    .lt("incurred_at", to.toISOString().slice(0, 10));
+
+  return (data ?? []).reduce(
+    (s, r) => s + Number((r as { amount_cents: number }).amount_cents), 0,
+  );
+}
+
+// =============================================================================
+// Daily merge
+// =============================================================================
+
+function mergeDailyData(
+  leads: Record<string, number>,
+  payments: Record<string, number>,
+  from: Date,
+  to: Date,
+): DailyDataPoint[] {
+  const result: DailyDataPoint[] = [];
+  const cursor = new Date(from);
+  while (cursor <= to) {
+    const day = cursor.toISOString().slice(0, 10);
+    result.push({
+      date: day,
+      leads: leads[day] ?? 0,
+      revenue_cents: payments[day] ?? 0,
+      expenses_cents: 0,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+  return result;
+}
+
+// =============================================================================
+// Alerts
+// =============================================================================
+
+function computeAlerts(
+  margenNetoPct: number,
+  cacCents: number,
+  ltvCents: number,
+  roas: number,
+  funnel: FunnelMetrics,
+): EmpresaAlert[] {
+  const alerts: EmpresaAlert[] = [];
+
+  if (margenNetoPct < 30 && margenNetoPct !== 0) {
+    alerts.push({
+      severity: "red",
+      title: "Margen neto bajo",
+      detail: `El margen neto es ${margenNetoPct.toFixed(1)}%, por debajo del 30% objetivo.`,
+      recommendation: "Revisa los costes variables y fijos. Considera reducir gasto en ads o renegociar tarifas.",
+    });
+  }
+
+  if (cacCents > 0 && ltvCents > 0 && cacCents > ltvCents) {
+    alerts.push({
+      severity: "red",
+      title: "CAC supera LTV",
+      detail: `Cuesta ${moneyFromCents(cacCents)} adquirir un cliente que genera ${moneyFromCents(ltvCents)} en promedio.`,
+      recommendation: "Reduce gasto en adquisicion o aumenta el valor de los packs vendidos.",
+    });
+  }
+
+  const canScale = cacCents > 0 && ltvCents > 0
+    && cacCents < ltvCents * 0.25
+    && roas > 4
+    && margenNetoPct > 50;
+  if (canScale) {
+    alerts.push({
+      severity: "green",
+      title: "Puedes escalar inversion",
+      detail: `LTV/CAC = ${(ltvCents / cacCents).toFixed(1)}x, ROAS = ${roas.toFixed(1)}x, margen neto = ${margenNetoPct.toFixed(1)}%.`,
+      recommendation: "Hay margen para aumentar el presupuesto de Google Ads entre 20-50% y seguir siendo rentable.",
+    });
+  }
+
+  if (funnel.rate_lead_to_sale > 0 && funnel.rate_trial_attendance < 50 && funnel.trials_scheduled >= 5) {
+    alerts.push({
+      severity: "amber",
+      title: "Baja asistencia a pruebas",
+      detail: `Solo ${funnel.rate_trial_attendance.toFixed(0)}% de las pruebas agendadas se atienden.`,
+      recommendation: "Refuerza los recordatorios por WhatsApp y email 2h antes de la clase.",
+    });
+  }
+
+  return alerts;
+}
+
+// =============================================================================
+// Costes fijos CRUD
+// =============================================================================
+
+export async function listCostesFijos(): Promise<CosteFijo[]> {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("costes_fijos")
+    .select("*")
+    .order("active", { ascending: false })
+    .order("category")
+    .order("name");
+  return (data ?? []) as CosteFijo[];
+}
+
+export async function createCosteFijo(input: {
+  name: string;
+  category: string;
+  amount_cents: number;
+  notes?: string;
+  starts_at?: string;
+  ends_at?: string | null;
+}): Promise<CosteFijo> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("costes_fijos")
+    .insert({
+      name: input.name,
+      category: input.category,
+      amount_cents: input.amount_cents,
+      notes: input.notes ?? null,
+      starts_at: input.starts_at ?? new Date().toISOString().slice(0, 10),
+      ends_at: input.ends_at ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data as CosteFijo;
+}
+
+export async function updateCosteFijo(
+  id: string,
+  input: Partial<{
+    name: string;
+    category: string;
+    amount_cents: number;
+    active: boolean;
+    notes: string | null;
+    starts_at: string;
+    ends_at: string | null;
+  }>,
+): Promise<CosteFijo> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("costes_fijos")
+    .update(input)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data as CosteFijo;
+}
+
+export async function deleteCosteFijo(id: string): Promise<void> {
+  const sb = supabaseAdmin();
+  const { error } = await sb
+    .from("costes_fijos")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+// =============================================================================
+// Google Ads spend (from google_ads_daily table)
+// =============================================================================
+
+async function getGoogleAdsSpend(sb: SB, from: Date, to: Date): Promise<number> {
+  const fromDate = from.toISOString().slice(0, 10);
+  const toDate = to.toISOString().slice(0, 10);
+
+  const { data } = await sb
+    .from("google_ads_daily")
+    .select("cost_micros")
+    .gte("date", fromDate)
+    .lte("date", toDate);
+
+  if (!data || data.length === 0) return 0;
+
+  const totalMicros = (data as Array<{ cost_micros: number }>).reduce(
+    (s, r) => s + Number(r.cost_micros), 0,
+  );
+  // Convert micros (1/1,000,000) to cents (1/100)
+  return Math.round(totalMicros / 10000);
+}
+
+// Re-export for convenience
+export { moneyFromCents } from "./finance";
