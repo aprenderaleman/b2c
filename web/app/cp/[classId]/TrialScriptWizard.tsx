@@ -673,7 +673,7 @@ function Step3PostDemo({
             <span className="text-2xl">📚</span>
             <div>
               <div className="text-sm font-bold text-slate-900 dark:text-slate-100">SCHULE</div>
-              <div className="text-xs text-slate-600 dark:text-slate-400">Cursos interactivos para practicar gramática y vocabulario a tu ritmo.</div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Aplicación para hacer todo tipo de ejercicios: 📝 Gramática · 📖 Lectura · 👂 Escucha · 🗣️ Habla · ✍️ Escritura</div>
             </div>
           </a>
           <a href="https://hans.aprender-aleman.de" target="_blank" rel="noopener noreferrer"
@@ -681,10 +681,11 @@ function Step3PostDemo({
             <span className="text-2xl">🤖</span>
             <div>
               <div className="text-sm font-bold text-slate-900 dark:text-slate-100">HANS</div>
-              <div className="text-xs text-slate-600 dark:text-slate-400">Tu tutor de IA para practicar conversación en alemán 24/7.</div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Profesor con IA que responde por texto y por voz.</div>
             </div>
           </a>
         </div>
+        <p className="mt-3 text-center text-sm font-bold text-emerald-800 dark:text-emerald-200">🎥 LAS CLASES QUEDAN GRABADAS</p>
       </div>
 
       <Field
