@@ -90,7 +90,7 @@ export type EmpresaMetrics = {
 // Period helpers
 // =============================================================================
 
-export type PeriodPreset = "7d" | "30d" | "month" | "prev_month" | "custom";
+export type PeriodPreset = "today" | "3d" | "7d" | "30d" | "month" | "prev_month" | "year" | "custom";
 
 export function resolvePeriod(
   preset: PeriodPreset,
@@ -103,6 +103,15 @@ export function resolvePeriod(
   let to: Date;
 
   switch (preset) {
+    case "today":
+      from = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), berlin.getDate()));
+      to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), berlin.getDate(), 23, 59, 59));
+      break;
+    case "3d":
+      to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), berlin.getDate(), 23, 59, 59));
+      from = new Date(to.getTime() - 2 * 86_400_000);
+      from.setUTCHours(0, 0, 0, 0);
+      break;
     case "7d":
       to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), berlin.getDate(), 23, 59, 59));
       from = new Date(to.getTime() - 6 * 86_400_000);
@@ -120,6 +129,10 @@ export function resolvePeriod(
     case "prev_month":
       from = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth() - 1, 1));
       to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 0, 23, 59, 59));
+      break;
+    case "year":
+      from = new Date(Date.UTC(berlin.getFullYear(), 0, 1));
+      to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), berlin.getDate(), 23, 59, 59));
       break;
     case "custom":
       from = customFrom ? new Date(customFrom + "T00:00:00Z") : new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 1));
@@ -426,6 +439,73 @@ async function getAdsSpendFromExpenses(sb: SB, from: Date, to: Date): Promise<nu
   return (data ?? []).reduce(
     (s, r) => s + Number((r as { amount_cents: number }).amount_cents), 0,
   );
+}
+
+// =============================================================================
+// Detailed breakdowns for /empresa sections
+// =============================================================================
+
+export type StudentRevenue = {
+  student_name: string;
+  type: string;
+  amount_cents: number;
+  paid_at: string;
+};
+
+export type TeacherPayrollRow = {
+  teacher_name: string;
+  total_cents: number;
+  hours: number;
+};
+
+export async function getRevenueByStudent(from: Date, to: Date): Promise<StudentRevenue[]> {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("payments")
+    .select("amount_cents, type, paid_at, student:students!inner(users!inner(full_name))")
+    .eq("status", "paid")
+    .gte("paid_at", from.toISOString())
+    .lte("paid_at", to.toISOString())
+    .order("paid_at", { ascending: false });
+
+  return (data ?? []).map((r: any) => {
+    const s = Array.isArray(r.student) ? r.student[0] : r.student;
+    const u = s?.users;
+    const name = (Array.isArray(u) ? u[0] : u)?.full_name ?? "—";
+    return {
+      student_name: name,
+      type: r.type,
+      amount_cents: Number(r.amount_cents),
+      paid_at: r.paid_at,
+    };
+  });
+}
+
+export async function getTeacherPayrollBreakdown(from: Date, to: Date): Promise<TeacherPayrollRow[]> {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("class_hours_log")
+    .select("amount_cents, duration_min, teacher:users!class_hours_log_teacher_id_fkey(full_name)")
+    .gte("created_at", from.toISOString())
+    .lte("created_at", to.toISOString());
+
+  const byTeacher = new Map<string, { total: number; mins: number }>();
+  for (const r of (data ?? []) as any[]) {
+    const t = Array.isArray(r.teacher) ? r.teacher[0] : r.teacher;
+    const name = t?.full_name ?? "—";
+    const existing = byTeacher.get(name) ?? { total: 0, mins: 0 };
+    existing.total += Number(r.amount_cents);
+    existing.mins += Number(r.duration_min ?? 0);
+    byTeacher.set(name, existing);
+  }
+
+  return [...byTeacher.entries()]
+    .map(([teacher_name, { total, mins }]) => ({
+      teacher_name,
+      total_cents: total,
+      hours: Math.round(mins / 60 * 10) / 10,
+    }))
+    .sort((a, b) => b.total_cents - a.total_cents);
 }
 
 // =============================================================================

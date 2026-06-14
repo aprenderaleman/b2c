@@ -4,10 +4,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useState, useTransition } from "react";
 
 const PRESETS = [
+  { key: "today",      label: "Hoy" },
+  { key: "3d",         label: "3 dias" },
   { key: "7d",         label: "7 dias" },
   { key: "30d",        label: "30 dias" },
   { key: "month",      label: "Este mes" },
   { key: "prev_month", label: "Mes anterior" },
+  { key: "year",       label: "Este ano" },
   { key: "custom",     label: "Personalizado" },
 ] as const;
 

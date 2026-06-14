@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/rbac";
-import { getEmpresaMetrics, getMonthlyReport, getPulseData, resolvePeriod, moneyFromCents } from "@/lib/empresa";
-import type { PeriodPreset, PulseData } from "@/lib/empresa";
+import {
+  getEmpresaMetrics,
+  getMonthlyReport,
+  getPulseData,
+  getRevenueByStudent,
+  getTeacherPayrollBreakdown,
+  resolvePeriod,
+  moneyFromCents,
+} from "@/lib/empresa";
+import type { PeriodPreset, StudentRevenue, TeacherPayrollRow, FunnelMetrics, EmpresaAlert } from "@/lib/empresa";
 import { PeriodSelector } from "./PeriodSelector";
 import { AlertBanner } from "./AlertBanner";
 import { MonthlyChart } from "./MonthlyChart";
@@ -22,11 +30,15 @@ export default async function EmpresaPage({
   const preset = (sp.period ?? "month") as PeriodPreset;
   const { from, to, prevFrom, prevTo } = resolvePeriod(preset, sp.from, sp.to);
 
-  const [m, monthly, pulse] = await Promise.all([
+  const [m, monthly, pulse, revenueByStudent, payrollBreakdown] = await Promise.all([
     getEmpresaMetrics(from, to, prevFrom, prevTo),
     getMonthlyReport(8),
     getPulseData(from, to, prevFrom, prevTo),
+    getRevenueByStudent(from, to),
+    getTeacherPayrollBreakdown(from, to),
   ]);
+
+  const adsEfficiency = computeAdsScore(m.marketing.roas, m.funnel.rate_lead_to_sale);
 
   return (
     <main className="space-y-6">
@@ -49,50 +61,100 @@ export default async function EmpresaPage({
         <PeriodSelector current={preset} />
       </Suspense>
 
-      <AlertBanner alerts={m.alerts} />
+      {/* ============ SECCION 1: Resumen ejecutivo ============ */}
+      <Panel title="Resumen del periodo">
+        <div className="mt-4 grid gap-6 lg:grid-cols-2">
+          {/* Gastos */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-red-500 dark:text-red-400 mb-2">Gastos</h3>
+            <div className="space-y-1.5 text-sm">
+              <CostLine label="Profesores" cents={m.teacher_payroll_cents} />
+              <CostLine label="Ads (Google)" cents={m.ads_spend_cents} />
+              <CostLine label="Herramientas (fijos)" cents={m.fixed_costs_cents} />
+              <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700 flex justify-between font-semibold">
+                <span>Total gastos</span>
+                <span className="font-mono text-red-600 dark:text-red-400">
+                  {moneyFromCents(m.teacher_payroll_cents + m.ads_spend_cents + m.fixed_costs_cents)}
+                </span>
+              </div>
+            </div>
+          </div>
 
-      {/* Pulse — critical operational metrics */}
-      <PulseSection pulse={pulse} />
+          {/* Ingresos */}
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-500 dark:text-emerald-400 mb-2">Ingresos</h3>
+            <div className="max-h-48 overflow-y-auto space-y-1 text-sm">
+              {revenueByStudent.length > 0 ? (
+                revenueByStudent.map((r, i) => (
+                  <div key={i} className="flex justify-between gap-2">
+                    <span className="text-slate-600 dark:text-slate-300 truncate">{r.student_name}</span>
+                    <span className="shrink-0 text-xs text-slate-400">{humanType(r.type)}</span>
+                    <span className="shrink-0 font-mono text-slate-900 dark:text-slate-100">
+                      {moneyFromCents(r.amount_cents)}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-400 text-xs">Sin pagos en este periodo</p>
+              )}
+            </div>
+            <div className="pt-1.5 mt-1.5 border-t border-slate-200 dark:border-slate-700 flex justify-between font-semibold text-sm">
+              <span>Total ingresos</span>
+              <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                {moneyFromCents(m.revenue_cents)}
+              </span>
+            </div>
+          </div>
+        </div>
 
-      {/* KPI Cards */}
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          label="Beneficio Bruto"
-          value={moneyFromCents(m.beneficio_bruto_cents)}
-          tone={m.beneficio_bruto_cents >= 0 ? "pos" : "neg"}
-          delta={deltaPct(m.beneficio_bruto_cents, m.prev_revenue_cents - m.teacher_payroll_cents)}
-        />
-        <KpiCard
-          label="Beneficio Neto"
-          value={moneyFromCents(m.beneficio_neto_cents)}
-          tone={m.beneficio_neto_cents >= 0 ? "pos" : "neg"}
-          delta={deltaPct(m.beneficio_neto_cents, m.prev_neto_cents)}
-        />
-        <KpiCard
-          label="Margen Neto"
-          value={`${m.margen_neto_pct.toFixed(1)}%`}
-          tone={m.margen_neto_pct >= 30 ? "pos" : "neg"}
-        />
-        <KpiCard
-          label="Ingresos"
-          value={moneyFromCents(m.revenue_cents)}
-          accent
-          delta={deltaPct(m.revenue_cents, m.prev_revenue_cents)}
-          sub={`${m.active_students} estudiantes activos`}
-        />
-      </section>
+        {/* KPIs en fila */}
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <MiniKpi
+            label="Beneficio Neto"
+            value={moneyFromCents(m.beneficio_neto_cents)}
+            tone={m.beneficio_neto_cents >= 0 ? "pos" : "neg"}
+          />
+          <MiniKpi
+            label="Eficiencia Ads"
+            value={`${adsEfficiency}/10`}
+            tone={adsEfficiency >= 7 ? "pos" : adsEfficiency >= 4 ? "neutral" : "neg"}
+          />
+          <MiniKpi
+            label="Tasa Conversion"
+            value={`${m.funnel.rate_lead_to_sale.toFixed(1)}%`}
+            tone={m.funnel.rate_lead_to_sale >= 5 ? "pos" : m.funnel.rate_lead_to_sale >= 2 ? "neutral" : "neg"}
+          />
+          <MiniKpi
+            label="Margen Neto"
+            value={`${m.margen_neto_pct.toFixed(1)}%`}
+            tone={m.margen_neto_pct >= 30 ? "pos" : m.margen_neto_pct >= 10 ? "neutral" : "neg"}
+          />
+          <MiniKpi
+            label="ROAS"
+            value={`${m.marketing.roas.toFixed(1)}x`}
+            tone={m.marketing.roas >= 3 ? "pos" : m.marketing.roas >= 1.5 ? "neutral" : "neg"}
+          />
+        </div>
+      </Panel>
 
-      {/* Monthly report — main section */}
+      {/* ============ SECCION 2: Grafico de evolucion ============ */}
+      <Panel title="Evolucion del periodo">
+        <div className="mt-4">
+          <DailyChart daily={m.daily} />
+        </div>
+      </Panel>
+
+      {/* ============ SECCION 3: Historial mensual ============ */}
       <Panel title="Historial mensual">
         <div className="mt-4">
           <MonthlyChart data={monthly} />
         </div>
       </Panel>
 
-      {/* Marketing */}
-      <Panel title="Marketing">
+      {/* ============ SECCION 4: Inversion Marketing ============ */}
+      <Panel title="Inversion Marketing">
         {m.marketing.has_ads_data ? (
-          <div className="mt-4 grid gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="mt-4 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
             <MiniStat label="Gasto Ads" value={moneyFromCents(m.marketing.ads_spend_cents)} />
             <MiniStat label="CPL real" value={moneyFromCents(m.marketing.cpl_real_cents)} />
             <MiniStat label="CAC" value={moneyFromCents(m.marketing.cac_cents)} />
@@ -108,36 +170,52 @@ export default async function EmpresaPage({
         <AdsUpload />
       </Panel>
 
-      {/* Costes breakdown */}
-      <section className="grid gap-4 lg:grid-cols-2">
-        <Panel title="Desglose de costes">
+      {/* ============ SECCION 5: Nominas profesores ============ */}
+      <Panel title="Nominas profesores">
+        {payrollBreakdown.length > 0 ? (
           <div className="mt-3 space-y-2 text-sm">
-            <CostLine label="Nomina profesores" cents={m.teacher_payroll_cents} />
-            <CostLine label="Gastos variables" cents={m.variable_expenses_cents} />
-            <CostLine label="Costes fijos (prorrateados)" cents={m.fixed_costs_cents} />
-            <CostLine label="Publicidad (ads)" cents={m.ads_spend_cents} />
-            <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between font-semibold">
-              <span>Total costes</span>
-              <span className="font-mono text-red-600 dark:text-red-400">
-                {moneyFromCents(m.teacher_payroll_cents + m.variable_expenses_cents + m.fixed_costs_cents + m.ads_spend_cents)}
-              </span>
-            </div>
-          </div>
-        </Panel>
-
-        <Panel title="Ingresos por tipo">
-          <div className="mt-3 space-y-2 text-sm">
-            {Object.entries(m.revenue_by_type).map(([type, cents]) => (
-              <div key={type} className="flex justify-between">
-                <span className="text-slate-600 dark:text-slate-300">{humanType(type)}</span>
+            {payrollBreakdown.map((t) => (
+              <div key={t.teacher_name} className="flex justify-between items-center">
+                <div>
+                  <span className="text-slate-700 dark:text-slate-200 font-medium">{t.teacher_name}</span>
+                  <span className="text-xs text-slate-400 ml-2">{t.hours}h</span>
+                </div>
                 <span className="font-mono text-slate-900 dark:text-slate-100">
-                  {moneyFromCents(cents)}
+                  {moneyFromCents(t.total_cents)}
                 </span>
               </div>
             ))}
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between font-semibold">
+              <span>Total nomina</span>
+              <span className="font-mono text-slate-900 dark:text-slate-100">
+                {moneyFromCents(payrollBreakdown.reduce((s, t) => s + t.total_cents, 0))}
+              </span>
+            </div>
           </div>
-        </Panel>
-      </section>
+        ) : (
+          <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+            Sin registros de horas en este periodo.
+          </p>
+        )}
+      </Panel>
+
+      {/* ============ SECCION 6: Datos del funnel ============ */}
+      <Panel title="Funnel de ventas">
+        <FunnelSection funnel={m.funnel} />
+      </Panel>
+
+      {/* ============ SECCION 7: Alertas y consejos ============ */}
+      <Panel title="Alertas y consejos">
+        {m.alerts.length > 0 ? (
+          <div className="mt-3">
+            <AlertBanner alerts={m.alerts} />
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+            Todo en orden — sin alertas activas.
+          </p>
+        )}
+      </Panel>
     </main>
   );
 }
@@ -145,144 +223,6 @@ export default async function EmpresaPage({
 // =============================================================================
 // Sub-components
 // =============================================================================
-
-function PulseSection({ pulse }: { pulse: PulseData }) {
-  const convTone = pulse.conversion_rate_pct >= 5 ? "green" : pulse.conversion_rate_pct >= 2 ? "amber" : "red";
-  const retTone = pulse.retention_pct >= 70 ? "green" : pulse.retention_pct >= 40 ? "amber" : "red";
-  const roasTone = pulse.roas_current >= 3 ? "green" : pulse.roas_current >= 1.5 ? "amber" : "red";
-  const roasDelta = pulse.roas_prev > 0
-    ? ((pulse.roas_current - pulse.roas_prev) / pulse.roas_prev * 100).toFixed(0)
-    : null;
-
-  return (
-    <section className="rounded-3xl bg-slate-900 dark:bg-slate-950 border border-slate-800 p-5 text-white">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-        </span>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
-          Pulso del negocio
-        </h2>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        {/* Conversion */}
-        <div className="space-y-1">
-          <div className="text-xs text-slate-400 uppercase tracking-wide">Conversion leads → venta</div>
-          <div className={`text-3xl font-bold font-mono ${
-            convTone === "green" ? "text-emerald-400" : convTone === "amber" ? "text-amber-400" : "text-red-400"
-          }`}>
-            {pulse.conversion_rate_pct.toFixed(1)}%
-          </div>
-          <div className="text-xs text-slate-400">
-            {pulse.conversions_this_month} de {pulse.leads_this_month} leads este mes
-          </div>
-        </div>
-
-        {/* Retention */}
-        <div className="space-y-1">
-          <div className="text-xs text-slate-400 uppercase tracking-wide">Retencion</div>
-          <div className={`text-3xl font-bold font-mono ${
-            retTone === "green" ? "text-emerald-400" : retTone === "amber" ? "text-amber-400" : "text-red-400"
-          }`}>
-            {pulse.retention_pct.toFixed(0)}%
-          </div>
-          <div className="text-xs text-slate-400">
-            {pulse.students_retained}/{pulse.students_prev_month} estudiantes renovaron
-          </div>
-        </div>
-
-        {/* ROAS */}
-        <div className="space-y-1">
-          <div className="text-xs text-slate-400 uppercase tracking-wide">ROAS</div>
-          <div className={`text-3xl font-bold font-mono ${
-            roasTone === "green" ? "text-emerald-400" : roasTone === "amber" ? "text-amber-400" : "text-red-400"
-          }`}>
-            {pulse.roas_current.toFixed(1)}x
-          </div>
-          <div className="text-xs text-slate-400">
-            {moneyFromCents(pulse.ads_spend_cents)} gastados · CPL {moneyFromCents(pulse.cpl_cents)}
-            {roasDelta && (
-              <span className={Number(roasDelta) >= 0 ? " text-emerald-400" : " text-red-400"}>
-                {" "}({Number(roasDelta) >= 0 ? "+" : ""}{roasDelta}% vs mes ant.)
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* At-risk students */}
-      {pulse.at_risk.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-slate-700/50">
-          <div className="flex items-center gap-2 mb-2">
-            <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">
-              Estudiantes en riesgo ({pulse.at_risk.length})
-            </span>
-            <span className="text-xs text-slate-500 ml-auto">
-              Pagaron el mes pasado pero no este mes
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {pulse.at_risk.map((s) => (
-              <span
-                key={s.name}
-                className="inline-flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs"
-              >
-                <span className="text-slate-200 font-medium">{s.name}</span>
-                <span className="text-amber-400 font-mono">{moneyFromCents(s.monthly_value_cents)}</span>
-              </span>
-            ))}
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            Valor en riesgo: <span className="text-red-400 font-mono font-semibold">
-              {moneyFromCents(pulse.at_risk.reduce((s, r) => s + r.monthly_value_cents, 0))}
-            </span>/mes
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-function KpiCard({ label, value, tone, accent, delta, sub }: {
-  label: string;
-  value: string;
-  tone?: "pos" | "neg";
-  accent?: boolean;
-  delta?: string | null;
-  sub?: string;
-}) {
-  const cls =
-    accent     ? "bg-brand-50 dark:bg-brand-500/10 border-brand-200 dark:border-brand-500/30" :
-    tone === "neg" ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30" :
-    tone === "pos" ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30" :
-                  "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800";
-  const valueCls =
-    accent     ? "text-brand-700 dark:text-brand-300" :
-    tone === "neg" ? "text-red-700 dark:text-red-300" :
-    tone === "pos" ? "text-emerald-700 dark:text-emerald-300" :
-                  "text-slate-900 dark:text-slate-50";
-  return (
-    <div className={`rounded-2xl border p-5 ${cls}`}>
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        {label}
-      </div>
-      <div className={`mt-2 text-2xl font-bold ${valueCls}`}>{value}</div>
-      {delta && (
-        <div className={`mt-1 text-xs font-medium ${
-          delta.startsWith("+") ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
-        }`}>
-          {delta} vs periodo anterior
-        </div>
-      )}
-      {sub && <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{sub}</div>}
-    </div>
-  );
-}
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -292,6 +232,27 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       </h2>
       {children}
     </section>
+  );
+}
+
+function MiniKpi({ label, value, tone }: {
+  label: string;
+  value: string;
+  tone: "pos" | "neg" | "neutral";
+}) {
+  const cls =
+    tone === "pos" ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30" :
+    tone === "neg" ? "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30" :
+                     "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30";
+  const valueCls =
+    tone === "pos" ? "text-emerald-700 dark:text-emerald-300" :
+    tone === "neg" ? "text-red-700 dark:text-red-300" :
+                     "text-amber-700 dark:text-amber-300";
+  return (
+    <div className={`rounded-xl border p-3 ${cls}`}>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</div>
+      <div className={`mt-1 text-lg font-bold font-mono ${valueCls}`}>{value}</div>
+    </div>
   );
 }
 
@@ -315,18 +276,91 @@ function CostLine({ label, cents }: { label: string; cents: number }) {
   );
 }
 
+function FunnelSection({ funnel }: { funnel: FunnelMetrics }) {
+  const steps = [
+    { label: "Leads", value: funnel.leads_total, rate: null },
+    { label: "Prueba agendada", value: funnel.trials_scheduled, rate: funnel.rate_lead_to_trial },
+    { label: "Asistio", value: funnel.trials_attended, rate: funnel.rate_trial_attendance },
+    { label: "Compro", value: funnel.conversions, rate: funnel.rate_attended_to_sale },
+  ];
+  const max = Math.max(funnel.leads_total, 1);
+
+  return (
+    <div className="mt-4 space-y-3">
+      {steps.map((s, i) => (
+        <div key={s.label}>
+          <div className="flex items-center justify-between text-xs mb-1">
+            <span className="text-slate-600 dark:text-slate-300 font-medium">{s.label}</span>
+            <span className="text-slate-500">
+              {s.value}
+              {s.rate !== null && (
+                <span className="ml-1 text-slate-400">({s.rate.toFixed(0)}%)</span>
+              )}
+            </span>
+          </div>
+          <div className="h-5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full bg-brand-500 dark:bg-brand-400 transition-all"
+              style={{ width: `${Math.max((s.value / max) * 100, 2)}%` }}
+            />
+          </div>
+        </div>
+      ))}
+      <div className="pt-2 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-500">
+        Tasa total lead → venta: <span className="font-semibold text-slate-700 dark:text-slate-200">{funnel.rate_lead_to_sale.toFixed(1)}%</span>
+      </div>
+    </div>
+  );
+}
+
+function DailyChart({ daily }: { daily: { date: string; leads: number; revenue_cents: number }[] }) {
+  if (daily.length === 0) return <p className="text-sm text-slate-400">Sin datos para este periodo.</p>;
+  const maxRev = Math.max(...daily.map(d => d.revenue_cents), 1);
+  const maxLeads = Math.max(...daily.map(d => d.leads), 1);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex gap-4 text-[10px] text-slate-400 mb-2">
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 bg-emerald-400 rounded" /> Ingresos</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-3 h-2 bg-blue-400 rounded" /> Leads</span>
+      </div>
+      <div className="flex items-end gap-px h-32">
+        {daily.map((d) => (
+          <div key={d.date} className="flex-1 flex flex-col items-center justify-end h-full gap-px group relative">
+            <div
+              className="w-full bg-blue-400/60 rounded-t-sm min-h-[1px]"
+              style={{ height: `${(d.leads / maxLeads) * 40}%` }}
+            />
+            <div
+              className="w-full bg-emerald-400 rounded-t-sm min-h-[1px]"
+              style={{ height: `${(d.revenue_cents / maxRev) * 60}%` }}
+            />
+            <div className="absolute bottom-full mb-1 hidden group-hover:block bg-slate-800 text-white text-[10px] rounded px-1.5 py-0.5 whitespace-nowrap z-10">
+              {d.date.slice(5)} · {moneyFromCents(d.revenue_cents)} · {d.leads} leads
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+        <span>{daily[0]?.date.slice(5)}</span>
+        <span>{daily[daily.length - 1]?.date.slice(5)}</span>
+      </div>
+    </div>
+  );
+}
+
 function humanType(type: string): string {
   return ({
-    single_class:         "Clase suelta",
-    package:              "Paquete",
-    subscription_payment: "Suscripcion",
-    other:                "Otros",
+    single_class:         "Clase",
+    package:              "Pack",
+    subscription_payment: "Suscr.",
+    other:                "Otro",
   } as Record<string, string>)[type] ?? type;
 }
 
-function deltaPct(current: number, previous: number): string | null {
-  if (previous === 0) return current > 0 ? "+100%" : null;
-  const pct = ((current - previous) / Math.abs(previous)) * 100;
-  if (Math.abs(pct) < 0.5) return null;
-  return `${pct >= 0 ? "+" : ""}${pct.toFixed(0)}%`;
+function computeAdsScore(roas: number, conversionRate: number): number {
+  // Scale 1-10: combines ROAS (weight 60%) and conversion rate (weight 40%)
+  const roasScore = Math.min(roas / 5, 1) * 6; // ROAS 5x = max 6 points
+  const convScore = Math.min(conversionRate / 10, 1) * 4; // 10% conv = max 4 points
+  return Math.max(1, Math.min(10, Math.round(roasScore + convScore)));
 }
