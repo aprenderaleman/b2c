@@ -609,6 +609,22 @@ function Step2Demo() {
   );
 }
 
+const FEEDBACK_CLASE_OPTIONS = [
+  "Me encantó",
+  "Muy bien, me gustó",
+  "Bien, interesante",
+  "Normal, esperaba más",
+  "No me convenció",
+];
+const FEEDBACK_GUSTO_OPTIONS = [
+  "El método / la dinámica",
+  "La paciencia del profesor",
+  "Que se adaptó a mi nivel",
+  "Los materiales / la plataforma",
+  "La interacción / fue divertida",
+  "Sentí que aprendí algo rápido",
+];
+
 function Step3PostDemo({
   objetivo, feedbackClase, setFeedbackClase, feedbackGusto, setFeedbackGusto,
   enrollmentSense, setEnrollmentSense,
@@ -624,16 +640,40 @@ function Step3PostDemo({
       <StepTitle
         emoji="💬"
         title="Post-demo · feedback del lead"
-        hint="Pregunta literal estas tres. Anota la respuesta del lead — más fiel mejor."
+        hint="Pregunta literal estas tres. Las respuestas las usaremos para personalizar el cierre."
       />
       <Field label="¿Qué te ha parecido la clase?">
-        <textarea value={feedbackClase} onChange={e => setFeedbackClase(e.target.value)} rows={2}
-          placeholder="Su respuesta tal como la dijo." className="input-text w-full" />
+        <ChipSelect options={FEEDBACK_CLASE_OPTIONS} value={feedbackClase} onChange={setFeedbackClase} />
       </Field>
       <Field label="¿Qué fue lo que más te gustó?">
-        <textarea value={feedbackGusto} onChange={e => setFeedbackGusto(e.target.value)} rows={2}
-          placeholder="Lo que más le impactó (lo usaremos en el cierre)." className="input-text w-full" />
+        <ChipSelect options={FEEDBACK_GUSTO_OPTIONS} value={feedbackGusto} onChange={setFeedbackGusto} multi />
       </Field>
+
+      {/* CTA Schule + Hans — se muestra siempre, el profe lo lee al lead */}
+      <div className="mt-5 rounded-xl border-2 border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 p-4">
+        <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+          💡 ¡Qué bueno que te haya gustado! Además de las clases en vivo, la academia incluye:
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <a href="https://schule.aprender-aleman.de" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-white dark:bg-slate-800 p-3 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition">
+            <span className="text-2xl">📚</span>
+            <div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">SCHULE</div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Cursos interactivos para practicar gramática y vocabulario a tu ritmo.</div>
+            </div>
+          </a>
+          <a href="https://hans.aprender-aleman.de" target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-3 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-white dark:bg-slate-800 p-3 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition">
+            <span className="text-2xl">🤖</span>
+            <div>
+              <div className="text-sm font-bold text-slate-900 dark:text-slate-100">HANS</div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Tu tutor de IA para practicar conversación en alemán 24/7.</div>
+            </div>
+          </a>
+        </div>
+      </div>
+
       <Field
         label={`¿Tendría sentido para ti inscribirte en la academia para tomar clases semanales y lograr ${objetivoQuoted}?`}
         required
