@@ -49,7 +49,6 @@ async function backfillAccount(
 
   while (hasMore) {
     const params: Record<string, unknown> = {
-      status: "succeeded" as const,
       limit: 100,
       expand: ["data.latest_charge"],
     };
@@ -58,6 +57,7 @@ async function backfillAccount(
     const list = await stripe.paymentIntents.list(params as Parameters<typeof stripe.paymentIntents.list>[0]);
 
     for (const pi of list.data) {
+      if (pi.status !== "succeeded") { skipped++; continue; }
       // Check if already imported
       const { data: existing } = await sb
         .from("payments")

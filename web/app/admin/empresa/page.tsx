@@ -6,6 +6,7 @@ import type { PeriodPreset, EmpresaMetrics } from "@/lib/empresa";
 import { PeriodSelector } from "./PeriodSelector";
 import { AlertBanner } from "./AlertBanner";
 import { RevenueChart } from "./RevenueChart";
+import { AdsUpload } from "./AdsUpload";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Empresa · Admin" };
@@ -114,10 +115,10 @@ export default async function EmpresaPage({
           </div>
         ) : (
           <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-            Sin datos de gasto en ads para este periodo. Registra gastos en la
-            seccion de gastos operativos con categoria &ldquo;ads&rdquo; o conecta Google Ads.
+            Sin datos de gasto en ads para este periodo. Sube un CSV de Google Ads o registra gastos manualmente.
           </p>
         )}
+        <AdsUpload />
       </Panel>
 
       {/* Charts */}
@@ -138,7 +139,7 @@ export default async function EmpresaPage({
             <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between font-semibold">
               <span>Total costes</span>
               <span className="font-mono text-red-600 dark:text-red-400">
-                {moneyFromCents(m.teacher_payroll_cents + m.variable_expenses_cents + m.fixed_costs_cents)}
+                {moneyFromCents(m.teacher_payroll_cents + m.variable_expenses_cents + m.fixed_costs_cents + m.ads_spend_cents)}
               </span>
             </div>
           </div>

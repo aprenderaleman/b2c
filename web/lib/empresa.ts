@@ -179,13 +179,14 @@ export async function getEmpresaMetrics(
   ]);
 
   const teacherPayrollCents = earnings;
-  const variableExpensesCents = expenses.total_cents;
   const fixedCostsCents = fixedCosts;
   // Prefer Google Ads API data when available, fall back to manual expenses
   const adsSpendCents = googleAdsSpend > 0 ? googleAdsSpend : adsSpend;
+  // Exclude ads from variable expenses to avoid double-counting
+  const variableExpensesCents = expenses.total_cents - adsSpend;
 
   const beneficioBrutoCents = revenue.revenue_cents - teacherPayrollCents;
-  const beneficioNetoCents = beneficioBrutoCents - variableExpensesCents - fixedCostsCents;
+  const beneficioNetoCents = beneficioBrutoCents - variableExpensesCents - fixedCostsCents - adsSpendCents;
   const margenBrutoPct = revenue.revenue_cents > 0
     ? (beneficioBrutoCents / revenue.revenue_cents) * 100
     : 0;
@@ -212,7 +213,7 @@ export async function getEmpresaMetrics(
     has_ads_data: adsSpendCents > 0,
   };
 
-  const prevNetoCents = prevRevenue.revenue_cents - earnings - variableExpensesCents - fixedCostsCents;
+  const prevNetoCents = prevRevenue.revenue_cents - earnings - variableExpensesCents - fixedCostsCents - adsSpendCents;
 
   const daily = mergeDailyData(dailyLeads, dailyPayments, from, to);
 
