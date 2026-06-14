@@ -14,54 +14,98 @@ export async function POST(req: Request) {
   }
 
   const text = await file.text();
-  const lines = text.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) {
+  const rawLines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (rawLines.length < 2) {
     return NextResponse.json({ error: "CSV is empty" }, { status: 400 });
   }
 
-  const header = lines[0].toLowerCase();
+  // Find the header row — skip metadata lines (e.g. "Informe de campaña", "Todo el período")
+  let headerLineIdx = 0;
+  for (let i = 0; i < Math.min(rawLines.length, 5); i++) {
+    const lower = rawLines[i].toLowerCase();
+    if (
+      lower.includes("campaign") || lower.includes("campaña") ||
+      lower.includes("cost") || lower.includes("costo") ||
+      lower.includes("click") || lower.includes("clic")
+    ) {
+      headerLineIdx = i;
+      break;
+    }
+  }
+
+  const header = rawLines[headerLineIdx].toLowerCase();
   const sep = header.includes("\t") ? "\t" : ",";
-  const cols = header.split(sep).map((c) => c.trim().replace(/^"/, "").replace(/"$/, ""));
+  const cols = parseCsvLine(rawLines[headerLineIdx], sep).map((c) => c.toLowerCase());
 
-  const dateIdx = cols.findIndex((c) => c === "day" || c === "date" || c === "dia" || c === "fecha");
-  const campaignIdx = cols.findIndex((c) => c.includes("campaign") || c.includes("campaña") || c.includes("campana"));
-  const impressionsIdx = cols.findIndex((c) => c.includes("impression") || c.includes("impresion"));
-  const clicksIdx = cols.findIndex((c) => c.includes("click"));
-  const costIdx = cols.findIndex((c) => c.includes("cost") || c.includes("coste") || c.includes("gasto"));
-  const conversionsIdx = cols.findIndex((c) => c.includes("conversion"));
+  const dateIdx = cols.findIndex((c) =>
+    c === "day" || c === "date" || c === "dia" || c === "día" || c === "fecha"
+  );
+  const campaignIdx = cols.findIndex((c) =>
+    c.includes("campaign") || c.includes("campaña") || c.includes("campana")
+  );
+  const impressionsIdx = cols.findIndex((c) =>
+    c.includes("impression") || c.includes("impresion") || c === "impr."
+  );
+  const clicksIdx = cols.findIndex((c) =>
+    c.includes("click") || c.includes("clic")
+  );
+  const costIdx = cols.findIndex((c) =>
+    c.includes("cost") || c.includes("costo") || c.includes("gasto")
+  );
+  const conversionsIdx = cols.findIndex((c) =>
+    c.includes("conversion") || c.includes("conversiones")
+  );
 
-  if (dateIdx === -1 || costIdx === -1) {
+  if (costIdx === -1) {
     return NextResponse.json(
-      { error: "CSV must have at least 'Day/Date' and 'Cost' columns" },
+      { error: "No se encontro columna de coste (Cost/Costo) en el CSV" },
       { status: 400 },
     );
   }
 
+  // If no date column, this is an aggregate report — use today's date
+  const fallbackDate = new Date().toISOString().slice(0, 10);
+  const isAggregate = dateIdx === -1;
+
   const sb = supabaseAdmin();
   let inserted = 0;
-  let updated = 0;
   const errors: string[] = [];
+  const dataLines = rawLines.slice(headerLineIdx + 1);
 
-  for (let i = 1; i < lines.length; i++) {
-    const vals = parseCsvLine(lines[i], sep);
-    if (vals.length <= Math.max(dateIdx, costIdx)) continue;
+  for (let i = 0; i < dataLines.length; i++) {
+    const line = dataLines[i];
+    // Skip total/summary rows
+    const lower = line.toLowerCase();
+    if (lower.startsWith("total") || lower.startsWith('"total')) continue;
 
-    const rawDate = vals[dateIdx].trim();
-    const date = parseDate(rawDate);
-    if (!date) {
-      errors.push(`Row ${i + 1}: invalid date "${rawDate}"`);
-      continue;
+    const vals = parseCsvLine(line, sep);
+    if (vals.length <= costIdx) continue;
+
+    const costEur = parseCost(vals[costIdx]);
+    if (costEur === 0) continue;
+
+    let date: string | null;
+    if (isAggregate) {
+      date = fallbackDate;
+    } else {
+      date = parseDate(vals[dateIdx].trim());
+      if (!date) {
+        errors.push(`Fila ${i + headerLineIdx + 2}: fecha invalida "${vals[dateIdx]}"`);
+        continue;
+      }
     }
 
     const campaignName = campaignIdx >= 0 ? vals[campaignIdx].trim() : "all";
+    // Skip rows where campaign is empty or looks like a total
+    if (!campaignName || campaignName === "--" || campaignName === "-") continue;
+
     const campaignId = campaignName.replace(/\s+/g, "_").toLowerCase();
     const impressions = impressionsIdx >= 0 ? parseNumber(vals[impressionsIdx]) : 0;
     const clicks = clicksIdx >= 0 ? parseNumber(vals[clicksIdx]) : 0;
-    const costEur = parseCost(vals[costIdx]);
     const costMicros = Math.round(costEur * 1_000_000);
-    const conversions = conversionsIdx >= 0 ? parseNumber(vals[conversionsIdx]) : 0;
+    const conversions = conversionsIdx >= 0 ? parseFloat(vals[conversionsIdx].replace(",", ".")) || 0 : 0;
 
-    const { data, error } = await sb
+    const { error } = await sb
       .from("google_ads_daily")
       .upsert(
         {
@@ -81,8 +125,8 @@ export async function POST(req: Request) {
       .select("id");
 
     if (error) {
-      errors.push(`Row ${i + 1}: ${error.message}`);
-    } else if (data && data.length > 0) {
+      errors.push(`Fila ${i + headerLineIdx + 2}: ${error.message}`);
+    } else {
       inserted++;
     }
   }
@@ -90,8 +134,9 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     inserted,
+    aggregate: isAggregate,
     errors: errors.slice(0, 10),
-    total_rows: lines.length - 1,
+    total_rows: dataLines.length,
   });
 }
 
@@ -115,7 +160,6 @@ function parseCsvLine(line: string, sep: string): string[] {
 }
 
 function parseDate(raw: string): string | null {
-  // Supports: 2026-06-13, Jun 13 2026, 13/06/2026, 2026/06/13
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
   if (iso) return iso;
 
@@ -136,8 +180,8 @@ function parseNumber(raw: string): number {
 }
 
 function parseCost(raw: string): number {
-  // Handle European format: "1.234,56" → 1234.56
   let cleaned = raw.trim().replace(/[€$\s]/g, "");
+  // European format: "1.234,56" → 1234.56
   if (/\d\.\d{3},/.test(cleaned)) {
     cleaned = cleaned.replace(/\./g, "").replace(",", ".");
   } else if (/,\d{2}$/.test(cleaned)) {
