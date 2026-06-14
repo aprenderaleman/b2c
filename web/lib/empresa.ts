@@ -18,10 +18,12 @@ export type FunnelMetrics = {
   trials_scheduled: number;
   trials_attended: number;
   conversions: number;
+  conversions_real: number;
   rate_lead_to_trial: number;
   rate_trial_attendance: number;
   rate_attended_to_sale: number;
   rate_lead_to_sale: number;
+  rate_real: number;
 };
 
 export type MarketingMetrics = {
@@ -295,7 +297,7 @@ async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMet
   const fromISO = from.toISOString();
   const toISO = to.toISOString();
 
-  const [leadsRes, trialsRes, attendedRes, convertedRes] = await Promise.all([
+  const [leadsRes, trialsRes, attendedRes, convertedRes, realPayersRes] = await Promise.all([
     sb.from("leads")
       .select("id", { count: "exact", head: true })
       .gte("created_at", fromISO)
@@ -316,6 +318,12 @@ async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMet
       .eq("status", "converted")
       .or(`converted_at.gte.${fromISO},and(converted_at.is.null,created_at.gte.${fromISO})`)
       .or(`converted_at.lte.${toISO},and(converted_at.is.null,created_at.lte.${toISO})`),
+    // Real conversions: unique students who paid in this period
+    sb.from("payments")
+      .select("student_id")
+      .eq("status", "paid")
+      .gte("paid_at", fromISO)
+      .lte("paid_at", toISO),
   ]);
 
   const leadsTotal = leadsRes.count ?? 0;
@@ -324,16 +332,21 @@ async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMet
     (attendedRes.data ?? []).map((r: { lead_id: string }) => r.lead_id),
   ).size;
   const conversions = convertedRes.count ?? 0;
+  const conversionsReal = new Set(
+    (realPayersRes.data ?? []).map((r: { student_id: string }) => r.student_id),
+  ).size;
 
   return {
     leads_total: leadsTotal,
     trials_scheduled: trialsScheduled,
     trials_attended: trialsAttended,
     conversions,
+    conversions_real: conversionsReal,
     rate_lead_to_trial: leadsTotal > 0 ? (trialsScheduled / leadsTotal) * 100 : 0,
     rate_trial_attendance: trialsScheduled > 0 ? (trialsAttended / trialsScheduled) * 100 : 0,
-    rate_attended_to_sale: trialsAttended > 0 ? (conversions / trialsAttended) * 100 : 0,
-    rate_lead_to_sale: leadsTotal > 0 ? (conversions / leadsTotal) * 100 : 0,
+    rate_attended_to_sale: trialsAttended > 0 ? (conversionsReal / trialsAttended) * 100 : 0,
+    rate_lead_to_sale: leadsTotal > 0 ? (conversionsReal / leadsTotal) * 100 : 0,
+    rate_real: leadsTotal > 0 ? (conversionsReal / leadsTotal) * 100 : 0,
   };
 }
 

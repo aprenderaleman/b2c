@@ -128,9 +128,9 @@ export default async function EmpresaPage({
             tone={adsEfficiency >= 7 ? "pos" : adsEfficiency >= 4 ? "neutral" : "neg"}
           />
           <MiniKpi
-            label="Tasa Conversion"
-            value={`${m.funnel.rate_lead_to_sale.toFixed(1)}%`}
-            tone={m.funnel.rate_lead_to_sale >= 5 ? "pos" : m.funnel.rate_lead_to_sale >= 2 ? "neutral" : "neg"}
+            label="Conversion Real"
+            value={`${m.funnel.rate_real.toFixed(1)}%`}
+            tone={m.funnel.rate_real >= 5 ? "pos" : m.funnel.rate_real >= 2 ? "neutral" : "neg"}
           />
           <MiniKpi
             label="Margen Neto"
@@ -365,13 +365,14 @@ function FunnelSection({ funnel }: { funnel: FunnelMetrics }) {
     { label: "Leads", value: funnel.leads_total, rate: null },
     { label: "Prueba agendada", value: funnel.trials_scheduled, rate: funnel.rate_lead_to_trial },
     { label: "Asistio", value: funnel.trials_attended, rate: funnel.rate_trial_attendance },
-    { label: "Compro", value: funnel.conversions, rate: funnel.rate_attended_to_sale },
+    { label: "Compro (CRM)", value: funnel.conversions, rate: funnel.conversions > 0 && funnel.trials_attended > 0 ? (funnel.conversions / funnel.trials_attended) * 100 : 0 },
+    { label: "Compro (real - pagos)", value: funnel.conversions_real, rate: funnel.conversions_real > 0 && funnel.trials_attended > 0 ? (funnel.conversions_real / funnel.trials_attended) * 100 : 0 },
   ];
   const max = Math.max(funnel.leads_total, 1);
 
   return (
     <div className="mt-4 space-y-3">
-      {steps.map((s, i) => (
+      {steps.map((s) => (
         <div key={s.label}>
           <div className="flex items-center justify-between text-xs mb-1">
             <span className="text-slate-600 dark:text-slate-300 font-medium">{s.label}</span>
@@ -384,14 +385,23 @@ function FunnelSection({ funnel }: { funnel: FunnelMetrics }) {
           </div>
           <div className="h-5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
             <div
-              className="h-full rounded-full bg-brand-500 dark:bg-brand-400 transition-all"
+              className={`h-full rounded-full transition-all ${
+                s.label.includes("real") ? "bg-emerald-500 dark:bg-emerald-400" : "bg-brand-500 dark:bg-brand-400"
+              }`}
               style={{ width: `${Math.max((s.value / max) * 100, 2)}%` }}
             />
           </div>
         </div>
       ))}
-      <div className="pt-2 border-t border-slate-200 dark:border-slate-700 text-xs text-slate-500">
-        Tasa total lead → venta: <span className="font-semibold text-slate-700 dark:text-slate-200">{funnel.rate_lead_to_sale.toFixed(1)}%</span>
+      <div className="pt-3 mt-1 border-t border-slate-200 dark:border-slate-700 grid gap-2 sm:grid-cols-2 text-xs">
+        <div className="text-slate-500">
+          Conversion CRM (lead → converted): <span className="font-semibold text-slate-700 dark:text-slate-200">{funnel.leads_total > 0 ? ((funnel.conversions / funnel.leads_total) * 100).toFixed(1) : "0"}%</span>
+          <span className="ml-1 text-slate-400">(solo {funnel.conversions} marcados)</span>
+        </div>
+        <div className="text-slate-500">
+          Conversion real (lead → pago): <span className="font-semibold text-emerald-600 dark:text-emerald-400">{funnel.rate_real.toFixed(1)}%</span>
+          <span className="ml-1 text-slate-400">({funnel.conversions_real} pagaron)</span>
+        </div>
       </div>
     </div>
   );
