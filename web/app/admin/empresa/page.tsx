@@ -2,10 +2,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/rbac";
 import { getEmpresaMetrics, getMonthlyReport, resolvePeriod, moneyFromCents } from "@/lib/empresa";
-import type { PeriodPreset, EmpresaMetrics, MonthlyRow } from "@/lib/empresa";
+import type { PeriodPreset } from "@/lib/empresa";
 import { PeriodSelector } from "./PeriodSelector";
 import { AlertBanner } from "./AlertBanner";
-import { RevenueChart } from "./RevenueChart";
 import { MonthlyChart } from "./MonthlyChart";
 import { AdsUpload } from "./AdsUpload";
 
@@ -79,31 +78,11 @@ export default async function EmpresaPage({
         />
       </section>
 
-      {/* Funnel */}
-      <Panel title="Embudo de conversion">
-        <div className="mt-4 space-y-3">
-          <FunnelBar label="Leads" count={m.funnel.leads_total} pct={100} />
-          <FunnelBar
-            label="Prueba agendada"
-            count={m.funnel.trials_scheduled}
-            pct={m.funnel.rate_lead_to_trial}
-          />
-          <FunnelBar
-            label="Asistieron"
-            count={m.funnel.trials_attended}
-            pct={m.funnel.rate_trial_attendance}
-            ofLabel="de agendadas"
-          />
-          <FunnelBar
-            label="Venta cerrada"
-            count={m.funnel.conversions}
-            pct={m.funnel.rate_attended_to_sale}
-            ofLabel="de asistentes"
-          />
+      {/* Monthly report — main section */}
+      <Panel title="Historial mensual">
+        <div className="mt-4">
+          <MonthlyChart data={monthly} />
         </div>
-        <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-          Conversion global lead → venta: <strong>{m.funnel.rate_lead_to_sale.toFixed(1)}%</strong>
-        </p>
       </Panel>
 
       {/* Marketing */}
@@ -119,17 +98,10 @@ export default async function EmpresaPage({
           </div>
         ) : (
           <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-            Sin datos de gasto en ads para este periodo. Sube un CSV de Google Ads o registra gastos manualmente.
+            Sin datos de gasto en ads para este periodo.
           </p>
         )}
         <AdsUpload />
-      </Panel>
-
-      {/* Charts */}
-      <Panel title="Evolucion diaria">
-        <div className="mt-4">
-          <RevenueChart data={m.daily} />
-        </div>
       </Panel>
 
       {/* Costes breakdown */}
@@ -162,111 +134,6 @@ export default async function EmpresaPage({
           </div>
         </Panel>
       </section>
-
-      {/* Monthly report */}
-      <Panel title="Historial mensual">
-        <div className="mt-4">
-          <MonthlyChart data={monthly} />
-        </div>
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-slate-600 dark:text-slate-300 text-xs">
-              <tr>
-                <th className="px-3 py-2 font-medium">Mes</th>
-                <th className="px-3 py-2 font-medium text-right">Ingresos</th>
-                <th className="px-3 py-2 font-medium text-right">Profes</th>
-                <th className="px-3 py-2 font-medium text-right">Ads</th>
-                <th className="px-3 py-2 font-medium text-right">Fijos</th>
-                <th className="px-3 py-2 font-medium text-right">Neto</th>
-                <th className="px-3 py-2 font-medium text-right">Margen</th>
-                <th className="px-3 py-2 font-medium text-right">ROAS</th>
-                <th className="px-3 py-2 font-medium text-right">Leads</th>
-                <th className="px-3 py-2 font-medium text-right">Conv.</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
-              {monthly.map(row => (
-                <tr key={row.label} className={row.neto_cents < 0 ? "bg-red-50/50 dark:bg-red-500/5" : ""}>
-                  <td className="px-3 py-2 whitespace-nowrap font-medium">{row.label}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-right font-mono">{moneyFromCents(row.revenue_cents)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-right font-mono text-slate-500">{moneyFromCents(row.payroll_cents)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-right font-mono text-slate-500">{moneyFromCents(row.ads_cents)}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-right font-mono text-slate-500">{moneyFromCents(row.fixed_cents)}</td>
-                  <td className={`px-3 py-2 whitespace-nowrap text-right font-mono font-semibold ${row.neto_cents >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                    {moneyFromCents(row.neto_cents)}
-                  </td>
-                  <td className={`px-3 py-2 whitespace-nowrap text-right font-mono ${row.margen_neto_pct >= 30 ? "text-emerald-600 dark:text-emerald-400" : row.margen_neto_pct >= 0 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
-                    {row.margen_neto_pct.toFixed(0)}%
-                  </td>
-                  <td className={`px-3 py-2 whitespace-nowrap text-right font-mono ${row.roas >= 3 ? "text-emerald-600 dark:text-emerald-400" : row.roas >= 1 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
-                    {row.roas.toFixed(1)}x
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-right">{row.leads}</td>
-                  <td className="px-3 py-2 whitespace-nowrap text-right">{row.conversions}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot className="border-t-2 border-slate-300 dark:border-slate-600 text-slate-900 dark:text-slate-100 font-semibold">
-              <tr>
-                <td className="px-3 py-2">Total</td>
-                <td className="px-3 py-2 text-right font-mono">{moneyFromCents(monthly.reduce((s, r) => s + r.revenue_cents, 0))}</td>
-                <td className="px-3 py-2 text-right font-mono">{moneyFromCents(monthly.reduce((s, r) => s + r.payroll_cents, 0))}</td>
-                <td className="px-3 py-2 text-right font-mono">{moneyFromCents(monthly.reduce((s, r) => s + r.ads_cents, 0))}</td>
-                <td className="px-3 py-2 text-right font-mono">{moneyFromCents(monthly.reduce((s, r) => s + r.fixed_cents, 0))}</td>
-                <td className={`px-3 py-2 text-right font-mono ${monthly.reduce((s, r) => s + r.neto_cents, 0) >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
-                  {moneyFromCents(monthly.reduce((s, r) => s + r.neto_cents, 0))}
-                </td>
-                <td className="px-3 py-2 text-right font-mono">
-                  {(() => { const rev = monthly.reduce((s, r) => s + r.revenue_cents, 0); const net = monthly.reduce((s, r) => s + r.neto_cents, 0); return rev > 0 ? (net / rev * 100).toFixed(0) + "%" : "—"; })()}
-                </td>
-                <td className="px-3 py-2 text-right font-mono">
-                  {(() => { const rev = monthly.reduce((s, r) => s + r.revenue_cents, 0); const ads = monthly.reduce((s, r) => s + r.ads_cents, 0); return ads > 0 ? (rev / ads).toFixed(1) + "x" : "—"; })()}
-                </td>
-                <td className="px-3 py-2 text-right">{monthly.reduce((s, r) => s + r.leads, 0)}</td>
-                <td className="px-3 py-2 text-right">{monthly.reduce((s, r) => s + r.conversions, 0)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </Panel>
-
-      {/* Recent transactions */}
-      <Panel title="Ultimos pagos">
-        {m.recent_payments.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">No hay pagos registrados.</p>
-        ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-slate-600 dark:text-slate-300 text-xs">
-                <tr>
-                  <th className="px-3 py-2 font-medium">Estudiante</th>
-                  <th className="px-3 py-2 font-medium">Tipo</th>
-                  <th className="px-3 py-2 font-medium">Monto</th>
-                  <th className="px-3 py-2 font-medium">Fecha</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
-                {m.recent_payments.map(p => (
-                  <tr key={p.id}>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {p.student_name ?? p.student_email}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">{humanType(p.type)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap font-mono">
-                      {moneyFromCents(p.amount_cents, p.currency)}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-xs text-slate-500">
-                      {new Date(p.paid_at).toLocaleDateString("es-ES", {
-                        day: "2-digit", month: "short", year: "numeric",
-                      })}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
     </main>
   );
 }
@@ -319,29 +186,6 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       </h2>
       {children}
     </section>
-  );
-}
-
-function FunnelBar({ label, count, pct, ofLabel }: {
-  label: string; count: number; pct: number; ofLabel?: string;
-}) {
-  const width = Math.max(2, Math.min(100, pct));
-  return (
-    <div>
-      <div className="flex items-center justify-between text-sm mb-1">
-        <span className="text-slate-700 dark:text-slate-200 font-medium">{label}</span>
-        <span className="text-slate-500 dark:text-slate-400 text-xs">
-          {count}
-          {pct < 100 && ` (${pct.toFixed(1)}%${ofLabel ? ` ${ofLabel}` : ""})`}
-        </span>
-      </div>
-      <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-        <div
-          className="h-full rounded-full bg-brand-500 transition-all"
-          style={{ width: `${width}%` }}
-        />
-      </div>
-    </div>
   );
 }
 

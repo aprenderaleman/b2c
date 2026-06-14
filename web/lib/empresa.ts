@@ -608,11 +608,19 @@ async function getGoogleAdsSpend(sb: SB, from: Date, to: Date): Promise<number> 
 // Monthly report
 // =============================================================================
 
+export type MonthlyPayment = {
+  student_name: string;
+  amount_cents: number;
+  type: string;
+  paid_at: string;
+};
+
 export type MonthlyRow = {
   label: string;
   from: string;
   to: string;
   revenue_cents: number;
+  revenue_by_type: Record<string, number>;
   payroll_cents: number;
   fixed_cents: number;
   ads_cents: number;
@@ -623,6 +631,7 @@ export type MonthlyRow = {
   conversions: number;
   payments_count: number;
   students_count: number;
+  payments: MonthlyPayment[];
 };
 
 export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
@@ -650,10 +659,11 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
 
     const [revenue, payroll, fixed, ads, leadsRes, convRes] = await Promise.all([
       sb.from("payments")
-        .select("amount_cents, student_id")
+        .select("amount_cents, student_id, type, paid_at, student:students!inner(users!inner(full_name))")
         .eq("status", "paid")
         .gte("paid_at", fromISO)
-        .lte("paid_at", toISO),
+        .lte("paid_at", toISO)
+        .order("paid_at", { ascending: false }),
       sb.from("class_hours_log")
         .select("amount_cents")
         .gte("created_at", fromISO)
@@ -678,9 +688,19 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
         .lte("converted_at", toISO),
     ]);
 
-    const revenueCents = (revenue.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
-    const paymentsCount = (revenue.data ?? []).length;
-    const studentsCount = new Set((revenue.data ?? []).map((r: any) => r.student_id)).size;
+    const revenueRows = (revenue.data ?? []) as any[];
+    const revenueCents = revenueRows.reduce((s, r) => s + Number(r.amount_cents), 0);
+    const paymentsCount = revenueRows.length;
+    const studentsCount = new Set(revenueRows.map(r => r.student_id)).size;
+    const revenueByType: Record<string, number> = {};
+    const paymentsList: MonthlyPayment[] = [];
+    for (const r of revenueRows) {
+      revenueByType[r.type] = (revenueByType[r.type] ?? 0) + Number(r.amount_cents);
+      const s = Array.isArray(r.student) ? r.student[0] : r.student;
+      const u = s?.users;
+      const name = (Array.isArray(u) ? u[0] : u)?.full_name ?? "—";
+      paymentsList.push({ student_name: name, amount_cents: Number(r.amount_cents), type: r.type, paid_at: r.paid_at });
+    }
     const payrollCents = (payroll.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
     const fixedCents = (fixed.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
     const adsMicros = (ads.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0);
@@ -695,6 +715,7 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
       from: fromDate,
       to: toDate,
       revenue_cents: revenueCents,
+      revenue_by_type: revenueByType,
       payroll_cents: payrollCents,
       fixed_cents: fixedCents,
       ads_cents: adsCents,
@@ -705,6 +726,7 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
       conversions: convRes.count ?? 0,
       payments_count: paymentsCount,
       students_count: studentsCount,
+      payments: paymentsList,
     });
   }
 
