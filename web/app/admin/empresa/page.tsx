@@ -228,28 +228,57 @@ export default async function EmpresaPage({
       {/* ============ SECCION 5: Nominas profesores ============ */}
       <Panel title="Nominas profesores">
         {payrollBreakdown.length > 0 ? (
-          <div className="mt-3 space-y-2 text-sm">
-            {payrollBreakdown.map((t) => (
-              <div key={t.teacher_name} className="flex justify-between items-center">
-                <div>
-                  <span className="text-slate-700 dark:text-slate-200 font-medium">{t.teacher_name}</span>
-                  <span className="text-xs text-slate-400 ml-2">{t.hours}h</span>
-                </div>
-                <span className="font-mono text-slate-900 dark:text-slate-100">
-                  {moneyFromCents(t.total_cents)}
-                </span>
-              </div>
-            ))}
-            <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between font-semibold">
-              <span>Total nomina</span>
-              <span className="font-mono text-slate-900 dark:text-slate-100">
-                {moneyFromCents(payrollBreakdown.reduce((s, t) => s + t.total_cents, 0))}
-              </span>
-            </div>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-left text-xs text-slate-500 dark:text-slate-400">
+                  <th className="pb-2 font-medium">Profesor</th>
+                  <th className="pb-2 font-medium text-center">Clases</th>
+                  <th className="pb-2 font-medium text-center">Grupales</th>
+                  <th className="pb-2 font-medium text-center">Individuales</th>
+                  <th className="pb-2 font-medium text-right">Total</th>
+                  <th className="pb-2 font-medium text-center">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {payrollBreakdown.map((t) => (
+                  <tr key={t.teacher_name}>
+                    <td className="py-2 text-slate-700 dark:text-slate-200 font-medium">{t.teacher_name}</td>
+                    <td className="py-2 text-center text-slate-600 dark:text-slate-300">{t.classes_count}</td>
+                    <td className="py-2 text-center text-slate-600 dark:text-slate-300">{t.group_classes}</td>
+                    <td className="py-2 text-center text-slate-600 dark:text-slate-300">{t.individual_classes}</td>
+                    <td className="py-2 text-right font-mono text-slate-900 dark:text-slate-100">
+                      {moneyFromCents(t.total_cents)}
+                    </td>
+                    <td className="py-2 text-center">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        t.paid
+                          ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                          : "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                      }`}>
+                        {t.paid ? "Pagado" : "Pendiente"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-slate-200 dark:border-slate-700 font-semibold">
+                  <td className="pt-2">Total</td>
+                  <td className="pt-2 text-center">{payrollBreakdown.reduce((s, t) => s + t.classes_count, 0)}</td>
+                  <td className="pt-2 text-center">{payrollBreakdown.reduce((s, t) => s + t.group_classes, 0)}</td>
+                  <td className="pt-2 text-center">{payrollBreakdown.reduce((s, t) => s + t.individual_classes, 0)}</td>
+                  <td className="pt-2 text-right font-mono">
+                    {moneyFromCents(payrollBreakdown.reduce((s, t) => s + t.total_cents, 0))}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
           </div>
         ) : (
           <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-            Sin registros de horas en este periodo.
+            Sin registros de nomina en este periodo.
           </p>
         )}
       </Panel>

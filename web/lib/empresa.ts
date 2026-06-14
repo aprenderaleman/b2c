@@ -456,7 +456,10 @@ export type StudentRevenue = {
 export type TeacherPayrollRow = {
   teacher_name: string;
   total_cents: number;
-  hours: number;
+  classes_count: number;
+  group_classes: number;
+  individual_classes: number;
+  paid: boolean;
 };
 
 export async function getRevenueByStudent(from: Date, to: Date): Promise<StudentRevenue[]> {
@@ -484,28 +487,59 @@ export async function getRevenueByStudent(from: Date, to: Date): Promise<Student
 
 export async function getTeacherPayrollBreakdown(from: Date, to: Date): Promise<TeacherPayrollRow[]> {
   const sb = supabaseAdmin();
-  const { data } = await sb
-    .from("class_hours_log")
-    .select("amount_cents, duration_min, teacher:users!class_hours_log_teacher_id_fkey(full_name)")
-    .gte("created_at", from.toISOString())
-    .lte("created_at", to.toISOString());
+  const fromDate = from.toISOString().slice(0, 10);
+  const toDate = to.toISOString().slice(0, 10);
 
-  const byTeacher = new Map<string, { total: number; mins: number }>();
-  for (const r of (data ?? []) as any[]) {
+  const [earningsRes, classTypesRes] = await Promise.all([
+    sb.from("teacher_earnings")
+      .select("amount_cents, classes_count, paid, teacher:teachers!inner(users!inner(full_name))")
+      .gte("month", fromDate)
+      .lte("month", toDate),
+    sb.from("class_hours_log")
+      .select("teacher:teachers!inner(users!inner(full_name)), class:classes!inner(type)")
+      .gte("created_at", from.toISOString())
+      .lte("created_at", to.toISOString()),
+  ]);
+
+  if (!earningsRes.data || earningsRes.data.length === 0) return [];
+
+  // Class type breakdown by teacher name
+  const typesByName = new Map<string, { group: number; individual: number }>();
+  for (const r of (classTypesRes.data ?? []) as any[]) {
     const t = Array.isArray(r.teacher) ? r.teacher[0] : r.teacher;
-    const name = t?.full_name ?? "—";
-    const existing = byTeacher.get(name) ?? { total: 0, mins: 0 };
+    const name = (Array.isArray(t?.users) ? t.users[0] : t?.users)?.full_name ?? "—";
+    const cls = Array.isArray(r.class) ? r.class[0] : r.class;
+    const type = cls?.type ?? "";
+    const existing = typesByName.get(name) ?? { group: 0, individual: 0 };
+    if (type === "group") existing.group++;
+    else existing.individual++;
+    typesByName.set(name, existing);
+  }
+
+  // Aggregate earnings by teacher name
+  const byTeacher = new Map<string, { total: number; classes: number; paid: boolean }>();
+  for (const r of earningsRes.data as any[]) {
+    const t = Array.isArray(r.teacher) ? r.teacher[0] : r.teacher;
+    const name = (Array.isArray(t?.users) ? t.users[0] : t?.users)?.full_name ?? "—";
+    const existing = byTeacher.get(name) ?? { total: 0, classes: 0, paid: true };
     existing.total += Number(r.amount_cents);
-    existing.mins += Number(r.duration_min ?? 0);
+    existing.classes += Number(r.classes_count ?? 0);
+    if (!r.paid) existing.paid = false;
     byTeacher.set(name, existing);
   }
 
   return [...byTeacher.entries()]
-    .map(([teacher_name, { total, mins }]) => ({
-      teacher_name,
-      total_cents: total,
-      hours: Math.round(mins / 60 * 10) / 10,
-    }))
+    .map(([teacher_name, info]) => {
+      const types = typesByName.get(teacher_name) ?? { group: 0, individual: 0 };
+      return {
+        teacher_name,
+        total_cents: info.total,
+        classes_count: info.classes,
+        group_classes: types.group,
+        individual_classes: types.individual,
+        paid: info.paid,
+      };
+    })
     .sort((a, b) => b.total_cents - a.total_cents);
 }
 
