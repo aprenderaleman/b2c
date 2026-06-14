@@ -511,6 +511,48 @@ function ProgressDots({ step }: { step: number }) {
 // Steps
 // ─────────────────────────────────────────────────────────────────
 
+const PREV_EXPERIENCE_OPTIONS = ["No, empiezo desde cero", "Un poco por mi cuenta", "Sí, tomé clases antes"];
+const LEVEL_OPTIONS = ["A0 — Principiante", "A1", "A2", "B1", "B2", "C1"];
+const DIFFICULTY_OPTIONS = [
+  "Pronunciación",
+  "Gramática",
+  "Vocabulario",
+  "Comprensión auditiva",
+  "Expresión oral / fluidez",
+  "Expresión escrita",
+  "Todo — estoy empezando",
+];
+
+function ChipSelect({ options, value, onChange, multi }: {
+  options: string[]; value: string; onChange: (v: string) => void; multi?: boolean;
+}) {
+  const selected = multi ? value.split("||").filter(Boolean) : [value];
+  const toggle = (opt: string) => {
+    if (multi) {
+      const set = new Set(selected);
+      if (set.has(opt)) set.delete(opt); else set.add(opt);
+      onChange([...set].join("||"));
+    } else {
+      onChange(opt === value ? "" : opt);
+    }
+  };
+  return (
+    <div className="flex flex-wrap gap-2 mt-1">
+      {options.map(opt => (
+        <button key={opt} type="button" onClick={() => toggle(opt)}
+          className={`rounded-xl px-4 py-2.5 text-sm font-medium transition border-2 ${
+            selected.includes(opt)
+              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-emerald-300"
+          }`}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Step1Discovery({
   objetivo, setObjetivo, nivelObjetivo, setNivelObjetivo,
   deadline, setDeadline, motivacion, setMotivacion,
@@ -527,25 +569,19 @@ function Step1Discovery({
         title="Discovery (5 min — antes de la demo)"
         hint="Habla con el lead, captura los 4 datos. Estas respuestas las usaremos para personalizar el cierre."
       />
-      <Field label="¿Cuál es tu objetivo con el alemán?" required>
+      <Field label="¿Por qué quieres aprender alemán?" required>
         <textarea value={objetivo} onChange={e => setObjetivo(e.target.value)} rows={2}
-          placeholder='Ej: "Mudarme a Berlín en 6 meses para trabajar como enfermera"'
+          placeholder='Ej: "Quiero mudarme a Alemania para trabajar como enfermera"'
           className="input-text w-full" />
       </Field>
-      <Field label="¿Qué nivel necesitas alcanzar?">
-        <input value={nivelObjetivo} onChange={e => setNivelObjetivo(e.target.value)}
-          placeholder="Ej: B2 para reconocimiento del título"
-          className="input-text w-full" />
+      <Field label="¿Has aprendido alemán antes?">
+        <ChipSelect options={PREV_EXPERIENCE_OPTIONS} value={deadline} onChange={setDeadline} />
       </Field>
-      <Field label="¿Para cuándo?">
-        <input value={deadline} onChange={e => setDeadline(e.target.value)}
-          placeholder='Ej: "Septiembre 2026"'
-          className="input-text w-full" />
+      <Field label="Nivel actual">
+        <ChipSelect options={LEVEL_OPTIONS} value={nivelObjetivo} onChange={setNivelObjetivo} />
       </Field>
-      <Field label="¿Qué lograrías cuando alcances ese objetivo? (motivación)">
-        <textarea value={motivacion} onChange={e => setMotivacion(e.target.value)} rows={2}
-          placeholder='Ej: "Empezar mi trabajo y reunirme con mi pareja"'
-          className="input-text w-full" />
+      <Field label="¿Qué te resulta más difícil al hablar y escribir en alemán?">
+        <ChipSelect options={DIFFICULTY_OPTIONS} value={motivacion} onChange={setMotivacion} multi />
       </Field>
     </div>
   );
