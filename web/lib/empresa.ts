@@ -733,5 +733,130 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
   return rows;
 }
 
+// =============================================================================
+// Pulse — key operational metrics shown at the top of /empresa
+// =============================================================================
+
+export type AtRiskStudent = {
+  name: string;
+  last_paid: string;
+  monthly_value_cents: number;
+};
+
+export type PulseData = {
+  conversion_rate_pct: number;
+  leads_this_month: number;
+  conversions_this_month: number;
+  retention_pct: number;
+  students_prev_month: number;
+  students_retained: number;
+  at_risk: AtRiskStudent[];
+  roas_current: number;
+  roas_prev: number;
+  ads_spend_cents: number;
+  revenue_projected_cents: number;
+  cpl_cents: number;
+};
+
+export async function getPulseData(): Promise<PulseData> {
+  const sb = supabaseAdmin();
+  const now = new Date();
+  const berlin = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Berlin" }));
+  const dayOfMonth = berlin.getDate();
+
+  const currFrom = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 1));
+  const currTo = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), dayOfMonth, 23, 59, 59));
+  const prevFrom = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth() - 1, 1));
+  const prevTo = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 0, 23, 59, 59));
+
+  const currFromISO = currFrom.toISOString();
+  const currToISO = currTo.toISOString();
+  const prevFromISO = prevFrom.toISOString();
+  const prevToISO = prevTo.toISOString();
+
+  const [leadsRes, convRes, currPayments, prevPayments, adsRes, prevAdsRes] = await Promise.all([
+    sb.from("leads").select("id", { count: "exact", head: true })
+      .gte("created_at", currFromISO).lte("created_at", currToISO),
+    sb.from("leads").select("id", { count: "exact", head: true })
+      .eq("status", "converted")
+      .gte("converted_at", currFromISO).lte("converted_at", currToISO),
+    sb.from("payments")
+      .select("student_id, amount_cents, paid_at, student:students!inner(users!inner(full_name))")
+      .eq("status", "paid")
+      .gte("paid_at", currFromISO).lte("paid_at", currToISO),
+    sb.from("payments")
+      .select("student_id, amount_cents, paid_at, student:students!inner(users!inner(full_name))")
+      .eq("status", "paid")
+      .gte("paid_at", prevFromISO).lte("paid_at", prevToISO),
+    sb.from("google_ads_daily").select("cost_micros")
+      .gte("date", currFromISO.slice(0, 10)).lte("date", currToISO.slice(0, 10)),
+    sb.from("google_ads_daily").select("cost_micros")
+      .gte("date", prevFromISO.slice(0, 10)).lte("date", prevToISO.slice(0, 10)),
+  ]);
+
+  const leads = leadsRes.count ?? 0;
+  const conversions = convRes.count ?? 0;
+  const convRate = leads > 0 ? (conversions / leads) * 100 : 0;
+
+  const currRows = (currPayments.data ?? []) as any[];
+  const prevRows = (prevPayments.data ?? []) as any[];
+  const currStudentIds = new Set(currRows.map(r => r.student_id));
+  const prevStudentIds = new Set(prevRows.map(r => r.student_id));
+  const retained = [...prevStudentIds].filter(id => currStudentIds.has(id));
+  const retentionPct = prevStudentIds.size > 0 ? (retained.length / prevStudentIds.size) * 100 : 100;
+
+  // At-risk: paid last month but not this month
+  const atRisk: AtRiskStudent[] = [];
+  const prevByStudent = new Map<string, { name: string; total: number; lastPaid: string }>();
+  for (const r of prevRows) {
+    const sid = r.student_id;
+    const s = Array.isArray(r.student) ? r.student[0] : r.student;
+    const u = s?.users;
+    const name = (Array.isArray(u) ? u[0] : u)?.full_name ?? "—";
+    const existing = prevByStudent.get(sid);
+    if (existing) {
+      existing.total += Number(r.amount_cents);
+    } else {
+      prevByStudent.set(sid, { name, total: Number(r.amount_cents), lastPaid: r.paid_at });
+    }
+  }
+  for (const [sid, info] of prevByStudent) {
+    if (!currStudentIds.has(sid)) {
+      atRisk.push({ name: info.name, last_paid: info.lastPaid, monthly_value_cents: info.total });
+    }
+  }
+  atRisk.sort((a, b) => b.monthly_value_cents - a.monthly_value_cents);
+
+  // Ads
+  const adsCents = Math.round(
+    (adsRes.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0) / 10000
+  );
+  const prevAdsCents = Math.round(
+    (prevAdsRes.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0) / 10000
+  );
+  const currRevenue = currRows.reduce((s, r) => s + Number(r.amount_cents), 0);
+  const prevRevenue = prevRows.reduce((s, r) => s + Number(r.amount_cents), 0);
+  const roasCurr = adsCents > 0 ? currRevenue / adsCents : 0;
+  const roasPrev = prevAdsCents > 0 ? prevRevenue / prevAdsCents : 0;
+
+  const projectedRevenue = dayOfMonth > 0 ? Math.round(currRevenue / dayOfMonth * 30) : 0;
+  const cplCents = leads > 0 ? Math.round(adsCents / leads) : 0;
+
+  return {
+    conversion_rate_pct: convRate,
+    leads_this_month: leads,
+    conversions_this_month: conversions,
+    retention_pct: retentionPct,
+    students_prev_month: prevStudentIds.size,
+    students_retained: retained.length,
+    at_risk: atRisk,
+    roas_current: roasCurr,
+    roas_prev: roasPrev,
+    ads_spend_cents: adsCents,
+    revenue_projected_cents: projectedRevenue,
+    cpl_cents: cplCents,
+  };
+}
+
 // Re-export for convenience
 export { moneyFromCents } from "./finance";

@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { requireRole } from "@/lib/rbac";
-import { getEmpresaMetrics, getMonthlyReport, resolvePeriod, moneyFromCents } from "@/lib/empresa";
-import type { PeriodPreset } from "@/lib/empresa";
+import { getEmpresaMetrics, getMonthlyReport, getPulseData, resolvePeriod, moneyFromCents } from "@/lib/empresa";
+import type { PeriodPreset, PulseData } from "@/lib/empresa";
 import { PeriodSelector } from "./PeriodSelector";
 import { AlertBanner } from "./AlertBanner";
 import { MonthlyChart } from "./MonthlyChart";
@@ -22,9 +22,10 @@ export default async function EmpresaPage({
   const preset = (sp.period ?? "month") as PeriodPreset;
   const { from, to, prevFrom, prevTo } = resolvePeriod(preset, sp.from, sp.to);
 
-  const [m, monthly] = await Promise.all([
+  const [m, monthly, pulse] = await Promise.all([
     getEmpresaMetrics(from, to, prevFrom, prevTo),
     getMonthlyReport(8),
+    getPulseData(),
   ]);
 
   return (
@@ -49,6 +50,9 @@ export default async function EmpresaPage({
       </Suspense>
 
       <AlertBanner alerts={m.alerts} />
+
+      {/* Pulse — critical operational metrics */}
+      <PulseSection pulse={pulse} />
 
       {/* KPI Cards */}
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -141,6 +145,108 @@ export default async function EmpresaPage({
 // =============================================================================
 // Sub-components
 // =============================================================================
+
+function PulseSection({ pulse }: { pulse: PulseData }) {
+  const convTone = pulse.conversion_rate_pct >= 5 ? "green" : pulse.conversion_rate_pct >= 2 ? "amber" : "red";
+  const retTone = pulse.retention_pct >= 70 ? "green" : pulse.retention_pct >= 40 ? "amber" : "red";
+  const roasTone = pulse.roas_current >= 3 ? "green" : pulse.roas_current >= 1.5 ? "amber" : "red";
+  const roasDelta = pulse.roas_prev > 0
+    ? ((pulse.roas_current - pulse.roas_prev) / pulse.roas_prev * 100).toFixed(0)
+    : null;
+
+  return (
+    <section className="rounded-3xl bg-slate-900 dark:bg-slate-950 border border-slate-800 p-5 text-white">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+        </span>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+          Pulso del negocio
+        </h2>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        {/* Conversion */}
+        <div className="space-y-1">
+          <div className="text-xs text-slate-400 uppercase tracking-wide">Conversion leads → venta</div>
+          <div className={`text-3xl font-bold font-mono ${
+            convTone === "green" ? "text-emerald-400" : convTone === "amber" ? "text-amber-400" : "text-red-400"
+          }`}>
+            {pulse.conversion_rate_pct.toFixed(1)}%
+          </div>
+          <div className="text-xs text-slate-400">
+            {pulse.conversions_this_month} de {pulse.leads_this_month} leads este mes
+          </div>
+        </div>
+
+        {/* Retention */}
+        <div className="space-y-1">
+          <div className="text-xs text-slate-400 uppercase tracking-wide">Retencion</div>
+          <div className={`text-3xl font-bold font-mono ${
+            retTone === "green" ? "text-emerald-400" : retTone === "amber" ? "text-amber-400" : "text-red-400"
+          }`}>
+            {pulse.retention_pct.toFixed(0)}%
+          </div>
+          <div className="text-xs text-slate-400">
+            {pulse.students_retained}/{pulse.students_prev_month} estudiantes renovaron
+          </div>
+        </div>
+
+        {/* ROAS */}
+        <div className="space-y-1">
+          <div className="text-xs text-slate-400 uppercase tracking-wide">ROAS</div>
+          <div className={`text-3xl font-bold font-mono ${
+            roasTone === "green" ? "text-emerald-400" : roasTone === "amber" ? "text-amber-400" : "text-red-400"
+          }`}>
+            {pulse.roas_current.toFixed(1)}x
+          </div>
+          <div className="text-xs text-slate-400">
+            {moneyFromCents(pulse.ads_spend_cents)} gastados · CPL {moneyFromCents(pulse.cpl_cents)}
+            {roasDelta && (
+              <span className={Number(roasDelta) >= 0 ? " text-emerald-400" : " text-red-400"}>
+                {" "}({Number(roasDelta) >= 0 ? "+" : ""}{roasDelta}% vs mes ant.)
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* At-risk students */}
+      {pulse.at_risk.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-slate-700/50">
+          <div className="flex items-center gap-2 mb-2">
+            <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">
+              Estudiantes en riesgo ({pulse.at_risk.length})
+            </span>
+            <span className="text-xs text-slate-500 ml-auto">
+              Pagaron el mes pasado pero no este mes
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {pulse.at_risk.map((s) => (
+              <span
+                key={s.name}
+                className="inline-flex items-center gap-1.5 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs"
+              >
+                <span className="text-slate-200 font-medium">{s.name}</span>
+                <span className="text-amber-400 font-mono">{moneyFromCents(s.monthly_value_cents)}</span>
+              </span>
+            ))}
+          </div>
+          <div className="mt-2 text-xs text-slate-500">
+            Valor en riesgo: <span className="text-red-400 font-mono font-semibold">
+              {moneyFromCents(pulse.at_risk.reduce((s, r) => s + r.monthly_value_cents, 0))}
+            </span>/mes
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 function KpiCard({ label, value, tone, accent, delta, sub }: {
   label: string;
