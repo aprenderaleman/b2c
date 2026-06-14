@@ -312,22 +312,37 @@ export function TrialScriptWizard({
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * URL de presentación Gamma según el nivel del lead. El profesor pulsa
- * el botón "📊 Presentación" y abre la slide correspondiente para guiar
- * la clase de prueba (Gelfis 2026-06-14).
- *
- * Normaliza variantes (A1.1, A1.2, A1-A2 → A1; A2.1, A2.2 → A2; B2+ → B2).
- * Devuelve null si el nivel no es reconocido — el botón no se muestra.
+ * URLs de presentación Gamma por bucket de nivel. El profesor abre la
+ * slide adecuada al nivel del lead durante la cp. Si en mitad de la
+ * clase detecta que el nivel real es otro, puede cambiarlo desde el
+ * selector del header (Gelfis 2026-06-14).
  */
-function gammaPresentationUrl(level: string | null | undefined): string | null {
+type LevelBucket = "A0" | "A1" | "A2" | "B1" | "B2" | "C1";
+
+const LEVEL_PRESENTATION_URL: Record<LevelBucket, string> = {
+  A0: "https://gamma.app/docs/8p0c89sshy99997",
+  A1: "https://gamma.app/docs/v7w2wbdxd95n3sg",
+  A2: "https://gamma.app/docs/ptfb8toca4msdav",
+  B1: "https://gamma.app/docs/zooeusyqq9mrhw4",
+  B2: "https://gamma.app/docs/ki7poj0542swdl2",
+  C1: "https://gamma.app/docs/7kaqe967ge5a4ly",
+};
+
+/**
+ * Normaliza variantes del enum german_level a uno de los 6 buckets de
+ * presentación. A1.1/A1.2/A1-A2 → A1; A2.1/A2.2 → A2; B2+ → B2.
+ * Devuelve null si el nivel es 'unsure' / null — el caller decide
+ * default (A1 funciona como entry-level más común).
+ */
+function normalizeLevelBucket(level: string | null | undefined): LevelBucket | null {
   if (!level) return null;
   const l = level.toUpperCase();
-  if (l.startsWith("A0")) return "https://gamma.app/docs/8p0c89sshy99997";
-  if (l.startsWith("A1")) return "https://gamma.app/docs/v7w2wbdxd95n3sg";
-  if (l.startsWith("A2")) return "https://gamma.app/docs/ptfb8toca4msdav";
-  if (l.startsWith("B1")) return "https://gamma.app/docs/zooeusyqq9mrhw4";
-  if (l.startsWith("B2")) return "https://gamma.app/docs/ki7poj0542swdl2";
-  if (l.startsWith("C1")) return "https://gamma.app/docs/7kaqe967ge5a4ly";
+  if (l.startsWith("A0")) return "A0";
+  if (l.startsWith("A1")) return "A1";
+  if (l.startsWith("A2")) return "A2";
+  if (l.startsWith("B1")) return "B1";
+  if (l.startsWith("B2")) return "B2";
+  if (l.startsWith("C1")) return "C1";
   return null;
 }
 
@@ -338,7 +353,12 @@ function LeadHeader({
   onQuickAbsent: () => void; absentPending: boolean;
 }) {
   const stepLabel = stepNum === 3.5 ? "3b" : String(stepNum);
-  const presentationUrl = gammaPresentationUrl(ctx.lead.germanLevel);
+  // Nivel para la presentación — arranca con el del lead, pero el profe
+  // puede cambiarlo si en la cp detecta que el lead está en otro nivel
+  // (Gelfis 2026-06-14). State ephemeral — no se persiste en BD.
+  const defaultBucket = normalizeLevelBucket(ctx.lead.germanLevel) ?? "A1";
+  const [selectedLevel, setSelectedLevel] = useState<LevelBucket>(defaultBucket);
+  const presentationUrl = LEVEL_PRESENTATION_URL[selectedLevel];
   return (
     <header className="rounded-2xl bg-gradient-to-br from-emerald-500/10 to-amber-500/10 border border-emerald-300/30 px-4 py-3 flex items-start justify-between gap-3 flex-wrap">
       <div className="min-w-0">
@@ -363,20 +383,33 @@ function LeadHeader({
             💬 WhatsApp
           </a>
         )}
-        {/* Presentación Gamma adaptada al nivel del lead — abre en
-            nueva pestaña para que el profe la proyecte durante la cp.
-            Solo se muestra si el nivel matchea uno de los 6 buckets
-            (A0/A1/A2/B1/B2/C1). */}
-        {presentationUrl && (
+        {/* Presentación Gamma + selector de nivel — el botón abre en
+            nueva pestaña la slide del nivel seleccionado. El selector
+            arranca con el nivel del lead pero el profe puede cambiarlo
+            si en la cp detecta que el lead está en otro nivel real
+            (caso típico: lead se autoasigna A1 pero hace todo en A2,
+            o viceversa). */}
+        <div className="inline-flex items-center rounded-full border border-indigo-300 bg-indigo-100 dark:bg-indigo-500/15 overflow-hidden">
           <a
             href={presentationUrl}
             target="_blank" rel="noreferrer"
-            className="text-xs font-semibold rounded-full border border-indigo-300 bg-indigo-100 dark:bg-indigo-500/15 px-3 py-1.5 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-200 dark:hover:bg-indigo-500/25"
-            title={`Abrir presentación Gamma para nivel ${ctx.lead.germanLevel}`}
+            className="text-xs font-semibold px-3 py-1.5 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-200 dark:hover:bg-indigo-500/25"
+            title={`Abrir presentación Gamma para nivel ${selectedLevel}`}
           >
             📊 Presentación
           </a>
-        )}
+          <select
+            value={selectedLevel}
+            onChange={(e) => setSelectedLevel(e.target.value as LevelBucket)}
+            className="text-xs font-semibold bg-transparent border-l border-indigo-300/60 dark:border-indigo-500/40 px-2 py-1.5 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-200/60 dark:hover:bg-indigo-500/25 focus:outline-none"
+            title="Cambiar nivel de la presentación"
+            aria-label="Nivel de presentación"
+          >
+            {(["A0","A1","A2","B1","B2","C1"] as const).map(lvl => (
+              <option key={lvl} value={lvl}>{lvl}</option>
+            ))}
+          </select>
+        </div>
         {/* Atajo "No asistio" disponible en TODOS los pasos. Si el
             lead nunca aparecio, el profe no tiene que recorrer 8
             pasos antes de marcarlo. Cierra el guion al instante. */}
