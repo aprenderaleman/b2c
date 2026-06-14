@@ -38,12 +38,12 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
               tick={{ fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v: number) => `${v >= 1000 ? (v / 1000).toFixed(0) + "k" : v}`}
+              tickFormatter={(v) => `${Number(v) >= 1000 ? (Number(v) / 1000).toFixed(0) + "k" : v}`}
             />
             <Tooltip
-              formatter={(value: number, name: string) => [
-                `${value.toLocaleString("es-ES")} EUR`,
-                { ingresos: "Ingresos", ads: "Google Ads", profes: "Profesores", fijos: "Fijos", neto: "Neto" }[name] ?? name,
+              formatter={(value, name) => [
+                `${Number(value).toLocaleString("es-ES")} EUR`,
+                ({ ingresos: "Ingresos", ads: "Google Ads", profes: "Profesores", fijos: "Fijos", neto: "Neto" } as Record<string, string>)[String(name)] ?? name,
               ]}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
             />
@@ -88,7 +88,7 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
               tick={{ fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v: number) => `${v}%`}
+              tickFormatter={(v) => `${v}%`}
             />
             <YAxis
               yAxisId="right"
@@ -96,12 +96,12 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
               tick={{ fontSize: 11 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(v: number) => `${v}x`}
+              tickFormatter={(v) => `${v}x`}
             />
             <Tooltip
-              formatter={(value: number, name: string) => [
-                name === "margen" ? `${value}%` : `${value}x`,
-                name === "margen" ? "Margen neto" : "ROAS",
+              formatter={(value, name) => [
+                String(name) === "margen" ? `${value}%` : `${value}x`,
+                String(name) === "margen" ? "Margen neto" : "ROAS",
               ]}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
             />
