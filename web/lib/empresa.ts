@@ -960,12 +960,13 @@ export type LtvSummary = {
 
 export async function getLtvWithProjections(cacCents: number): Promise<LtvSummary> {
   const sb = supabaseAdmin();
-  const stripe = stripeDE();
+  let stripe: ReturnType<typeof stripeDE> | null = null;
+  try { stripe = stripeDE(); } catch { /* env var missing */ }
 
   // 1. Get all paid amounts from DB grouped by student
   const { data: payments } = await sb
     .from("payments")
-    .select("student_id, amount_cents, student:students!inner(users!inner(full_name, email))")
+    .select("student_id, amount_cents, student:students(users(full_name, email))")
     .eq("status", "paid");
 
   const byStudent = new Map<string, { name: string; email: string; paid: number }>();
@@ -986,6 +987,7 @@ export async function getLtvWithProjections(cacCents: number): Promise<LtvSummar
   // 2. Get active subscriptions from Stripe DE
   const pendingByEmail = new Map<string, number>();
   try {
+    if (!stripe) throw new Error("no stripe client");
     const subscriptions = await stripe.subscriptions.list({
       status: "active",
       limit: 100,

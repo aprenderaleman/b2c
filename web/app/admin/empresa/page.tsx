@@ -40,7 +40,13 @@ export default async function EmpresaPage({
   ]);
 
   const adsEfficiency = computeAdsScore(m.marketing.roas, m.funnel.rate_lead_to_sale);
-  const ltv = await getLtvWithProjections(m.marketing.cac_cents);
+  const ltv = await getLtvWithProjections(m.marketing.cac_cents).catch(() => ({
+    ltv_real_cents: 0,
+    ltv_projected_cents: 0,
+    ltv_cac_real: 0,
+    ltv_cac_projected: 0,
+    clients: [],
+  } as import("@/lib/empresa").LtvSummary));
 
   return (
     <main className="space-y-6">
