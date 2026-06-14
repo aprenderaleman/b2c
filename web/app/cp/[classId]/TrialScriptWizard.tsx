@@ -588,22 +588,35 @@ function Step1Discovery({
 }
 
 function Step2Demo() {
+  const LEVELS: LevelBucket[] = ["A0", "A1", "A2", "B1", "B2", "C1"];
   return (
     <div>
       <StepTitle
-        emoji="🎬"
-        title="Demo (15 min)"
-        hint="Da la clase de demostración. Cuando termines, pulsa 'Siguiente' para pasar al cierre."
+        emoji="📖"
+        title="Probestunde"
+        hint="Ok! Dann lass uns Deutsch lernen! Ich habe für dich eine Präsentation vorbereitet:"
       />
-      <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-5 text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-        <p className="font-semibold text-slate-900 dark:text-slate-100">
-          Recordatorio del esquema:
-        </p>
-        <ul className="mt-2 space-y-1 list-disc list-inside">
-          <li>Demuestra el método, no solo enseñes vocabulario.</li>
-          <li>Conecta con el objetivo que captaste en el Paso 1.</li>
-          <li>Mantén el ritmo: ~15 min de demo, no más.</li>
-        </ul>
+      <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-5 text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-4">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {LEVELS.map((lvl) => (
+            <a
+              key={lvl}
+              href={LEVEL_PRESENTATION_URL[lvl]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-3 py-2 font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
+            >
+              {lvl}
+            </a>
+          ))}
+        </div>
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 p-3 text-amber-800 dark:text-amber-300 text-xs">
+          <p className="font-semibold mb-1">💡 Tips:</p>
+          <ul className="space-y-1 list-disc list-inside">
+            <li>Compartir pestaña con la presentación.</li>
+            <li>Abrir documento de Word para escribir ejemplos.</li>
+          </ul>
+        </div>
       </div>
     </div>
   );
