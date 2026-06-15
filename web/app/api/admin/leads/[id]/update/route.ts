@@ -153,6 +153,25 @@ export async function POST(
     metadata: { diff },
   });
 
+  // ── Auto-pausa Stiv si cambió el WhatsApp ──
+  // Caso patrón observado: lead pone WA mal → Gelfis corrige → Gelfis
+  // escribe manualmente al lead → Stiv NO se entera de la conversa
+  // → Stiv sigue mandando drips ciegos al lead que ya está hablando
+  // con Gelfis. Solución: al detectar cambio de WhatsApp, pausamos
+  // Stiv 12h para que el manual takeover de Gelfis no compita con
+  // mensajes automáticos. Gelfis decide cuándo reactivar.
+  if (diff.whatsapp_normalized) {
+    const pauseUntil = new Date(Date.now() + 12 * 60 * 60_000).toISOString();
+    await sb.from("leads").update({ ai_paused_until: pauseUntil }).eq("id", id);
+    await sb.from("lead_timeline").insert({
+      lead_id: id,
+      type:    "agent_note",
+      author:  "gelfis",
+      content: `📵 Stiv pausado 12h tras corrección de WhatsApp — toma tú el control manual`,
+      metadata: { kind: "ai_auto_paused_on_phone_edit", paused_until: pauseUntil },
+    });
+  }
+
   // ── Auto-reenvío de confirmación si cambió el WhatsApp ──
   // Caso real Juan José 2026-05-08: doble +34 → falló confirmación →
   // admin corrigió el número → nadie reenvió → lead se queda sin

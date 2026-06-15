@@ -310,10 +310,68 @@ async function runCron(req: Request) {
     for (const id of candidateIds) if (!withInbound.has(id)) coldLeadIds.add(id);
   }
 
+  // ── Drip CONTEXTUAL ─────────────────────────────────────────────
+  // Antes de enviar el siguiente msg del drip a CADA lead, verificamos
+  // que NO haya actividad relevante desde el último envío del drip:
+  //   - lead_message_received   → el lead respondió, Stiv debe leerlo no spamear
+  //   - agent_note autor gelfis → Gelfis tomó control manual
+  //   - escalation              → ya está marcado needs_human
+  // Si hay → SKIP el envío (lo dejamos en pause hasta intervención manual).
+  //
+  // Esto resuelve el caso documentado de Jenni (sat 13/06): respondió
+  // al welcome con "Solo porque me gustaría aprender" pero el webhook
+  // estaba caído. Aunque hayamos arreglado el webhook, este check
+  // protege contra futuras caídas y contra ediciones manuales que el
+  // sistema no ve (escenarios donde Gelfis escribe desde su WA personal).
+  const blockedByActivity = new Set<string>();
+  if (candidateIds.length > 0) {
+    const { data: recentActivity } = await sb
+      .from("lead_timeline")
+      .select("lead_id, type, author, timestamp")
+      .in("lead_id", candidateIds)
+      .in("type", ["lead_message_received", "agent_note", "escalation"])
+      .order("timestamp", { ascending: false });
+    // Para cada lead, comparamos el ultimo evento de ESTOS tipos con su
+    // last_drip_sent_at. Si el evento es POSTERIOR al ultimo drip → bloquear.
+    const lastActivityByLead = new Map<string, { ts: string; type: string; author: string | null }>();
+    for (const r of (recentActivity ?? []) as Array<{ lead_id: string; type: string; author: string | null; timestamp: string }>) {
+      // Solo conservar el más reciente por lead (rows ya ordenadas DESC).
+      if (!lastActivityByLead.has(r.lead_id)) lastActivityByLead.set(r.lead_id, { ts: r.timestamp, type: r.type, author: r.author });
+    }
+    for (const lead of leads) {
+      const activity = lastActivityByLead.get(lead.id);
+      if (!activity) continue;
+      const activityMs = new Date(activity.ts).getTime();
+      // El cron almacena last_drip_sent_at; si no existe (primer envío
+      // pendiente, msg #1), no hay drip previo que comparar.
+      const lastDripMs = lead.last_drip_sent_at ? new Date(lead.last_drip_sent_at).getTime() : 0;
+      // Si la actividad es posterior al último drip → bloquear.
+      // Excepción: agent_note de author=system (auto-pause, trial events,
+      // etc.) son ruido del propio sistema, no actividad humana real.
+      if (activityMs > lastDripMs) {
+        const isSystemNoise = activity.type === "agent_note" && activity.author === "system";
+        if (!isSystemNoise) {
+          blockedByActivity.add(lead.id);
+        }
+      }
+    }
+  }
+
+  let contextSkipped = 0;
   for (const lead of leads) {
     // Cap por run — si ya enviamos el maximo, paramos. Los restantes
     // siguen pendientes y los procesa el proximo run del cron.
     if (sent >= MAX_PER_RUN) { runCapped++; skipped++; continue; }
+
+    // Drip CONTEXTUAL: si hay actividad humana posterior al último drip
+    // (lead respondió, Gelfis tomó control, escalado a needs_human),
+    // saltamos el envío. Solo se reanuda cuando Gelfis explícitamente
+    // reactiva (con el botón "Reactivar Stiv" o desde admin).
+    if (blockedByActivity.has(lead.id)) {
+      contextSkipped++;
+      skipped++;
+      continue;
+    }
 
     const completedAt = new Date(lead.diagnostico_completed_at).getTime();
     const elapsed     = now - completedAt;

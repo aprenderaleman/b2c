@@ -71,6 +71,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/evolution-health",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/bulk-pdf-reactivation",
       "schedule": "0 6 * * *"
     },
