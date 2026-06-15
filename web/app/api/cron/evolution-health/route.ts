@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { pauseSystem, getSystemPauseStatus } from "@/lib/system-pause";
+import { createAdminNotification } from "@/lib/admin-notifications";
 
 /**
  * GET/POST /api/cron/evolution-health
@@ -92,6 +93,15 @@ async function run(req: Request) {
   // No-OK → incrementar contador.
   const newCount = failCount + 1;
   await sb.from("system_config").upsert({ key: HEALTH_FAIL_KEY, value: String(newCount) });
+  // Marcar el inicio del downtime para que el recovery posterior sepa
+  // desde cuándo buscar mensajes perdidos. Solo se setea la PRIMERA vez
+  // (cuando failCount pasa de 0 a 1).
+  if (failCount === 0) {
+    await sb.from("system_config").upsert({
+      key: "evolution_was_down_at",
+      value: new Date().toISOString(),
+    });
+  }
 
   // Umbral alcanzado → activar pausa global y notificar.
   if (newCount >= FAIL_THRESHOLD) {
@@ -102,9 +112,18 @@ async function run(req: Request) {
     // Reset contador después de activar pausa.
     await sb.from("system_config").upsert({ key: HEALTH_FAIL_KEY, value: "0" });
 
-    // Notificación: dejamos rastro en lead_timeline pseudo-global no es ideal;
-    // por simplicidad alertamos via console y dejamos que Gelfis vea el banner
-    // de pausa en /admin/system. Para Slack/SMS habría que añadir integración.
+    // Notificación in-app — el bell del header parpadea + dropdown
+    // muestra la alerta con link a /admin/system. dedup: 6h (evitar
+    // re-disparar si el monitor sigue detectando el mismo problema).
+    await createAdminNotification({
+      type: "system_paused_auto",
+      severity: "critical",
+      title: `🚨 Evolution caído — pausa automática ${PAUSE_HOURS}h activada`,
+      body: `El monitor detectó Evolution state='${state}' durante ${newCount} chequeos seguidos (~${newCount * 5} min). ${reason ?? ""}`.trim(),
+      action_url: "/admin/system",
+      metadata: { state, fail_count: newCount, reason, paused_for_hours: PAUSE_HOURS },
+      dedupeHours: 6,
+    });
     console.error(`[health-monitor] PAUSA AUTOMATICA — Evolution state=${state} x${newCount}, paused ${PAUSE_HOURS}h`);
 
     return NextResponse.json({
