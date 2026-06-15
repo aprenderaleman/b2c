@@ -329,40 +329,54 @@ export default function StepCuando() {
 
       {slots && slots.length > 0 && (
         <div className="space-y-5">
-          {showDualTz && (
-            <div className="rounded-xl border border-sky-300 bg-sky-50 px-3.5 py-2.5">
-              <p className="text-[13px] text-sky-900 leading-snug">
-                🌎 Detectamos que estás en <strong>{leadTimezone}</strong>. Te mostramos los horarios en <strong>tu zona</strong> y al lado la hora del profesor en <strong>Berlín</strong>.
-              </p>
-            </div>
-          )}
+          {/* Calendario — se colapsa tras seleccionar slot para que el form se vea limpio */}
+          {!selectedSlot && (
+            <>
+              {showDualTz && (
+                <div className="rounded-xl border border-sky-300 bg-sky-50 px-3.5 py-2.5">
+                  <p className="text-[13px] text-sky-900 leading-snug">
+                    🌎 Detectamos que estás en <strong>{leadTimezone}</strong>. Te mostramos los horarios en <strong>tu zona</strong> y al lado la hora del profesor en <strong>Berlín</strong>.
+                  </p>
+                </div>
+              )}
 
-          <MobileDayStrip
-            daysWithSlots={daysWithSlots}
-            selectedDay={selectedDay}
-            onSelect={setDay}
-            lightMode
-            displayTimezone={displayTz}
-          />
-
-          {selectedDay && (
-            <div>
-              <p className="text-[11px] font-semibold uppercase text-slate-500 tracking-wider mb-2 capitalize">
-                {fullDateLabel(selectedDay)}
-              </p>
-              <TimeList
-                slots={slotsToday}
-                selectedIso={selectedSlot?.startIso ?? state.slot_iso ?? null}
-                selectedTeacherId={selectedSlot?.teacherId ?? state.teacher_id ?? null}
-                onSelect={onPickSlot}
+              <MobileDayStrip
+                daysWithSlots={daysWithSlots}
+                selectedDay={selectedDay}
+                onSelect={setDay}
                 lightMode
-                leadTimezone={leadTimezone}
+                displayTimezone={displayTz}
               />
-            </div>
+
+              {selectedDay && (
+                <div>
+                  <p className="text-[11px] font-semibold uppercase text-slate-500 tracking-wider mb-2 capitalize">
+                    {fullDateLabel(selectedDay)}
+                  </p>
+                  <TimeList
+                    slots={slotsToday}
+                    selectedIso={selectedSlot?.startIso ?? state.slot_iso ?? null}
+                    selectedTeacherId={selectedSlot?.teacherId ?? state.teacher_id ?? null}
+                    onSelect={onPickSlot}
+                    lightMode
+                    leadTimezone={leadTimezone}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {/* Form inline — solo si el lead vino DIRECTO (no del quiz)
               y ya seleccionó slot. Pide los 3 datos mínimos y reserva. */}
+          {selectedSlot && !isFromDiagnostico && slotLabel && !submitting && (
+            <button
+              type="button"
+              onClick={() => setSelectedSlot(null)}
+              className="text-[13px] text-warm font-semibold hover:underline"
+            >
+              ← Cambiar horario
+            </button>
+          )}
           {selectedSlot && !isFromDiagnostico && slotLabel && (
             <div className="mt-2 rounded-2xl border-2 border-warm bg-warm/5 p-4 space-y-4">
               <div>
