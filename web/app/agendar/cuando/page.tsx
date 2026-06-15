@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { StepFrame } from "@/components/agendar/FunnelShell";
@@ -41,7 +41,21 @@ function fullDateLabel(key: string): string {
   });
 }
 
+/**
+ * Wrapper con Suspense — necesario porque StepCuandoInner usa
+ * `useSearchParams()`, que en Next 15 fuerza un CSR bailout en
+ * prerender y exige un boundary explícito (ver build error
+ * "useSearchParams() should be wrapped in a suspense boundary").
+ */
 export default function StepCuando() {
+  return (
+    <Suspense fallback={null}>
+      <StepCuandoInner />
+    </Suspense>
+  );
+}
+
+function StepCuandoInner() {
   const router = useRouter();
   const { lang } = useLang();
   const { state, update, hydrated } = useBookingState();
