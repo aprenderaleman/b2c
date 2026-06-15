@@ -70,6 +70,12 @@ const Body = z.object({
   language:       z.enum(["es", "de"]).default("es"),
   slot_iso:       z.string().datetime(),
   teacher_id:     z.string().uuid(),
+  // Atribución a landing (Gelfis 2026-06-15). Solo lo manda el atajo
+  // /agendar/cuando — el flujo del quiz ya lo persiste por register.
+  // Cuando viene, el lead se marca como motivo_inicial='direct' y se
+  // inserta una fila en lead_motivo_inicial con session sintético para
+  // que la cadena del funnel en /admin/ads cuadre.
+  landing_intent: z.string().trim().max(40).nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -170,7 +176,7 @@ export async function POST(req: Request) {
   }
   const { data: existingLead } = await sb
     .from("leads")
-    .select("id, email, whatsapp_normalized")
+    .select("id, email, whatsapp_normalized, motivo_inicial, landing_intent")
     .or(orFilters.join(","))
     .order("created_at", { ascending: false })
     .limit(1)
@@ -189,6 +195,8 @@ export async function POST(req: Request) {
       id: string;
       email: string | null;
       whatsapp_normalized: string | null;
+      motivo_inicial: string | null;
+      landing_intent: string | null;
     };
     leadId = existing.id;
     // Preserve any contact info we already had — only fill blanks.
@@ -197,6 +205,12 @@ export async function POST(req: Request) {
     // trial_zoom_link is filled in below right after we know the
     // class id + short code so old agent_5 reminder code (running
     // on a not-yet-redeployed VPS) doesn't ship an empty "Enlace:".
+    // Marcador shortcut (Gelfis 2026-06-15): si viene landing_intent
+    // ('agendar-directo' del atajo) y el lead aún no tiene motivo_inicial,
+    // lo etiquetamos como 'direct' para que aparezca en /admin/ads sin
+    // romper la ratio trial/form. No pisamos un motivo existente del quiz.
+    const updateLanding   = b.landing_intent ?? existing.landing_intent ?? null;
+    const updateMotivoIni = existing.motivo_inicial ?? (b.landing_intent ? "direct" : null);
     await sb.from("leads").update({
       name:                 b.name,
       email:                existing.email ?? b.email,
@@ -208,11 +222,15 @@ export async function POST(req: Request) {
       language:             b.language,
       status:               "trial_scheduled",
       trial_scheduled_at:   b.slot_iso,
+      landing_intent:       updateLanding,
+      motivo_inicial:       updateMotivoIni,
       gdpr_accepted:        true,
       gdpr_accepted_at:     new Date().toISOString(),
       source:               "funnel_trial_self_book",
     }).eq("id", leadId);
   } else {
+    const insertLanding   = b.landing_intent ?? null;
+    const insertMotivoIni = b.landing_intent ? "direct" : null;
     const { data: newLead, error: insErr } = await sb.from("leads").insert({
       name:                 b.name,
       email:                b.email,
@@ -224,6 +242,8 @@ export async function POST(req: Request) {
       language:             b.language,
       status:               "trial_scheduled",
       trial_scheduled_at:   b.slot_iso,
+      landing_intent:       insertLanding,
+      motivo_inicial:       insertMotivoIni,
       gdpr_accepted:        true,
       gdpr_accepted_at:     new Date().toISOString(),
       source:               "funnel_trial_self_book",
@@ -234,7 +254,20 @@ export async function POST(req: Request) {
         message: insErr?.message ?? "unknown",
       }, { status: 500 });
     }
+    // Atajo desde landing: registramos una entrada sintética en
+    // lead_motivo_inicial para que el dashboard /admin/ads cuente
+    // este lead en "Entradas paso 1" y la cadena del funnel no quede
+    // descuadrada. session_id = 'direct_{leadId}' garantiza unicidad
+    // (índice único) y deja claro el origen al auditar la tabla.
     leadId = (newLead as { id: string }).id;
+    if (b.landing_intent && insertMotivoIni === "direct") {
+      await sb.from("lead_motivo_inicial").insert({
+        lead_id:        leadId,
+        session_id:     `direct_${leadId}`,
+        motivo:         "direct",
+        landing_intent: b.landing_intent,
+      });
+    }
   }
 
   // ── 3.5. Anti-double-booking. If this lead already has an active

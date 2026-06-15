@@ -233,6 +233,11 @@ export default function StepCuando() {
           language:      lang,
           slot_iso:      selectedSlot.startIso,
           teacher_id:    selectedSlot.teacherId,
+          // Atribución a /admin/ads: marca este lead como atajo desde
+          // landing (no pasó por el quiz). Sin esto el dashboard lo
+          // contaba en "Trial agendada" pero no en "Form completado",
+          // rompiendo la ratio trial/form.
+          landing_intent: "agendar-directo",
         }),
       });
       const json = await res.json();
