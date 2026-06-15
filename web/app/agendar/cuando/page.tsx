@@ -294,8 +294,8 @@ export default function StepCuando() {
 
   return (
     <StepFrame
-      title="Tu clase de alemán de prueba"
-      subtitle="100% gratis · 45 min con profesor nativo · online · sin compromiso"
+      title="Reserva tu Clase de Alemán"
+      subtitle="100% gratis · 30 min con profesor nativo · online · sin compromiso"
     >
       {/* Loading skeleton */}
       {slots === null && !loadErr && (

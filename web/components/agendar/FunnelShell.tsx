@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { IllustrationPanel } from "@/components/diagnostico/IllustrationPanel";
+import { BrandLogo } from "@/components/BrandLogo";
 
 /**
  * Mobile-first app-shell for the booking funnel.
@@ -93,9 +94,7 @@ export function FunnelShell({ children }: { children: React.ReactNode }) {
                 </svg>
               </button>
 
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                Paso {stepNum} de {total}
-              </div>
+              <BrandLogo size="sm" href="/" />
 
               <Link
                 href="/"
