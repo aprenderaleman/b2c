@@ -52,6 +52,11 @@ export default function StepCuando() {
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
+  // Modal de doble confirmación dual-TZ. Igual que el CalendarStep
+  // del DiagnosticoFunnel — exige confirmación extra cuando la TZ del
+  // lead difiere de Berlin (caso recurrente: LATAM se presentaba a
+  // su hora local).
+  const [pendingConfirmation, setPendingConfirmation] = useState(false);
 
   // TZ del lead — para mostrar dual-TZ en slots y agrupar días.
   const [leadTimezone, setLeadTimezone] = useState<string | null>(null);
@@ -448,7 +453,14 @@ export default function StepCuando() {
 
               <button
                 type="button"
-                onClick={submitInlineForm}
+                onClick={() => {
+                  if (!canSubmitForm) return;
+                  if (showDualTz) {
+                    setPendingConfirmation(true);
+                  } else {
+                    submitInlineForm();
+                  }
+                }}
                 disabled={!canSubmitForm}
                 className="w-full h-12 rounded-2xl bg-warm text-warm-foreground font-bold
                            shadow-lg shadow-warm/20 active:scale-[0.98] transition
@@ -458,6 +470,89 @@ export default function StepCuando() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal dual-TZ — solo si la TZ del lead difiere de Berlin.
+          Igual que el del CalendarStep en /diagnostico: muestra ambas
+          horas en paralelo y exige confirmación explícita antes del
+          submit. Cierra el bug de leads LATAM que confundían hora local
+          con hora del profe. */}
+      {pendingConfirmation && selectedSlot && slotLabel && showDualTz && (
+        <div
+          className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+          onClick={() => { if (!submitting) setPendingConfirmation(false); }}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-extrabold text-slate-900">
+              ✅ Confirma el horario
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 leading-snug">
+              Tu clase es en hora de Berlín (donde está el profe). Revisa que coincida con tu agenda local.
+            </p>
+
+            <div className="mt-5 space-y-3">
+              <div className="rounded-2xl border-2 border-warm bg-warm/10 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-warm-foreground">
+                  🕐 En tu zona ({leadTimezone})
+                </p>
+                <p className="mt-1 text-[15px] font-bold text-slate-900 capitalize">
+                  {slotLabel.day}
+                </p>
+                <p className="text-2xl font-extrabold text-slate-900 tabular-nums leading-tight">
+                  {slotLabel.time}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  🇩🇪 En Berlín (zona del profesor)
+                </p>
+                <p className="text-xl font-bold text-slate-700 tabular-nums leading-tight mt-1">
+                  {slotLabel.berlinTime}
+                </p>
+              </div>
+            </div>
+
+            {submitErr && (
+              <div className="mt-4 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-[13px] text-red-800">
+                {submitErr}
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={submitInlineForm}
+                disabled={submitting}
+                className="h-12 rounded-2xl bg-warm text-warm-foreground font-bold
+                           shadow-lg shadow-warm/20 active:scale-[0.98] transition
+                           disabled:opacity-50 disabled:cursor-not-allowed
+                           flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
+                    Confirmando…
+                  </>
+                ) : (
+                  "Sí, confirmar reserva"
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingConfirmation(false)}
+                disabled={submitting}
+                className="h-11 rounded-2xl border border-slate-200 text-slate-700 font-semibold text-sm
+                           hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cambiar horario
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </StepFrame>
