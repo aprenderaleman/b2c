@@ -160,12 +160,16 @@ export default async function FunnelAdsPage({
 
   const formVsEntry        = entry         > 0 ? (100 * formCompleted  / entry)         : 0;
   const trialVsForm        = formCompleted > 0 ? (100 * trialBooked    / formCompleted) : 0;
-  const attendedVsTrial    = trialBooked   > 0 ? (100 * trialAttended  / trialBooked)   : 0;
+  // Tasa de asistencia HONESTA — solo trials ya resueltas (attended o
+  // absent). Excluye `pending` del denominador porque pending son
+  // clases futuras o sin marcar (≠ "no asistió"). Antes mostrábamos
+  // attended/scheduled, lo que daba % falsamente bajo durante la ventana.
+  // Source: leads.trial_attended_at / leads.trial_absent_at (migration 063).
+  const attendanceRatePct = ta.attendance_rate !== null ? 100 * ta.attendance_rate : null;
   const convertedVsAttended = trialAttended > 0 ? (100 * data.totalConverted / trialAttended) : 0;
 
-  // % de no-show solo para la alerta opcional bajo la fila (no se
-  // pinta como card propio — los KPIs principales son la cadena
-  // de conversión).
+  // % de no-show derivado del mismo denominador resuelto. Solo info
+  // secundaria para la alerta automática.
   const taResolved  = ta.attended + ta.absent;
   const noShowRate  = taResolved > 0 ? (100 * ta.absent / taResolved) : 0;
 
@@ -289,17 +293,19 @@ export default async function FunnelAdsPage({
           accent={trialBooked === 0 && formCompleted >= 5 ? "text-red-300" : trialVsForm < 30 ? "text-amber-300" : "text-emerald-300"}
         />
         <KpiCard
-          label="Trial asistido"
-          value={`${trialAttended.toLocaleString()}`}
-          subtitle={trialBooked > 0
-            ? `${attendedVsTrial.toFixed(1)}% de Trial agendada${ta.pending > 0 ? ` · ${ta.pending} pend.` : ""}`
-            : "Sin trials en el rango"}
+          label="Tasa asistencia"
+          value={attendanceRatePct !== null ? `${attendanceRatePct.toFixed(1)}%` : "—"}
+          subtitle={attendanceRatePct !== null
+            ? `${ta.attended}/${taResolved} resueltos${ta.pending > 0 ? ` · ${ta.pending} pend.` : ""}`
+            : ta.pending > 0
+              ? `${ta.pending} trials sin resolver aún`
+              : "Sin trials en el rango"}
           accent={
-            trialBooked === 0
+            attendanceRatePct === null
               ? "text-white"
-              : attendedVsTrial >= 70
+              : attendanceRatePct >= 70
                 ? "text-emerald-300"
-                : attendedVsTrial >= 50
+                : attendanceRatePct >= 50
                   ? "text-amber-300"
                   : "text-red-300"
           }

@@ -35,6 +35,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/trial-auto-absent",
+      "schedule": "0 3 * * *"
+    },
+    {
       "path": "/api/cron/comunicados-dispatch",
       "schedule": "*/5 * * * *"
     },

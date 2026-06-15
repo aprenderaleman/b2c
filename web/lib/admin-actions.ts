@@ -124,6 +124,11 @@ export async function markTrialAttendedAwaitingConversion(
     .from("leads")
     .update({
       status: "trial_attended",
+      // Timestamp explícito — fuente de verdad para la métrica de
+      // asistencia en /admin/ads (migration 063). Antes el dashboard
+      // contaba con substring match en lead_timeline; ahora lee este
+      // campo directamente, sin riesgo de romperse por cambios de copy.
+      trial_attended_at: new Date().toISOString(),
       next_contact_date: followupAt,
       meta: opts ? {
         ...existingMeta,
@@ -350,7 +355,12 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
   const nextContact = new Date(Date.now() + 60 * 60_000).toISOString();
   await sb
     .from("leads")
-    .update({ status: "trial_absent", next_contact_date: nextContact })
+    .update({
+      status: "trial_absent",
+      // Fuente de verdad para la métrica de asistencia (migration 063).
+      trial_absent_at: new Date().toISOString(),
+      next_contact_date: nextContact,
+    })
     .eq("id", leadId);
   await sb.from("lead_timeline").insert({
     lead_id: leadId,

@@ -69,6 +69,10 @@ export type TrialAttendance = {
   attended:  number;   // de esos, cuántos asistieron
   absent:    number;   // de esos, cuántos no asistieron
   pending:   number;   // de esos, cuántos no se han marcado todavía (clase aún por venir o sin marcar)
+  /** Tasa de asistencia REAL = attended / (attended + absent). Excluye
+   * los pending del denominador — solo considera trials ya resueltos.
+   * null si no hay trials resueltos en la ventana. */
+  attendance_rate: number | null;
 };
 
 export type FunnelAdsData = {
@@ -210,7 +214,7 @@ export async function getFunnelAdsData(
   // de trials daba 0 falsamente.
   let leadsQ = sb
     .from("leads")
-    .select("id, motivo_inicial, trial_scheduled_at, status, source, country")
+    .select("id, motivo_inicial, trial_scheduled_at, trial_attended_at, trial_absent_at, status, source, country")
     .gte("created_at", since)
     .or("motivo_inicial.not.is.null,source.eq.diagnostico,source.eq.funnel_trial_self_book");
   if (country) leadsQ = leadsQ.eq("country", country);
@@ -344,41 +348,36 @@ export async function getFunnelAdsData(
 
   // ── 3b. Asistencia a clases de prueba ──────────────────────────
   //
-  // De los leads que agendaron un trial en la ventana, contamos cuántos
-  // asistieron (lead_timeline con "Lead attended trial") vs cuántos no
-  // asistieron ("Lead did not attend trial"). Resto = pendiente (clase
-  // aún por venir o Gelfis no la marcó todavía).
-  const trialLeadIds: string[] = (leadsRows ?? [])
-    .filter((l: { trial_scheduled_at: string | null }) => l.trial_scheduled_at !== null)
-    .map((l: { id: string }) => l.id);
-
-  let attendedCount = 0;
-  let absentCount   = 0;
-  if (trialLeadIds.length > 0) {
-    const [attendedRes, absentRes] = await Promise.all([
-      sb.from("lead_timeline")
-        .select("lead_id")
-        .in("lead_id", trialLeadIds)
-        .eq("type", "status_change")
-        .ilike("content", "%attended trial%"),
-      sb.from("lead_timeline")
-        .select("lead_id")
-        .in("lead_id", trialLeadIds)
-        .eq("type", "status_change")
-        .ilike("content", "%did not attend trial%"),
-    ]);
-    attendedCount = new Set(
-      (attendedRes.data ?? []).map((r: { lead_id: string }) => r.lead_id),
-    ).size;
-    absentCount = new Set(
-      (absentRes.data ?? []).map((r: { lead_id: string }) => r.lead_id),
-    ).size;
-  }
+  // Fuente de verdad: columnas `leads.trial_attended_at` y
+  // `leads.trial_absent_at` (migration 063). Antes el dashboard usaba
+  // substring matching contra lead_timeline, lo que era frágil ante
+  // cambios de copy y forzaba un JOIN extra. Ahora basta con leer
+  // las columnas que ya trae leadsRows.
+  //
+  // De los leads que agendaron trial en la ventana:
+  //   - attended = trial_attended_at IS NOT NULL
+  //   - absent   = trial_absent_at IS NOT NULL
+  //   - pending  = ni una ni la otra (clase futura o sin marcar aún)
+  type LeadRow = {
+    id: string;
+    trial_scheduled_at: string | null;
+    trial_attended_at:  string | null;
+    trial_absent_at:    string | null;
+  };
+  const trialLeads = (leadsRows ?? []).filter(
+    (l: LeadRow) => l.trial_scheduled_at !== null,
+  );
+  const attendedCount = trialLeads.filter((l: LeadRow) => l.trial_attended_at !== null).length;
+  const absentCount   = trialLeads.filter(
+    (l: LeadRow) => l.trial_absent_at !== null && l.trial_attended_at === null,
+  ).length;
+  const resolved = attendedCount + absentCount;
   const trialAttendance: TrialAttendance = {
-    scheduled: trialLeadIds.length,
+    scheduled: trialLeads.length,
     attended:  attendedCount,
     absent:    absentCount,
-    pending:   Math.max(0, trialLeadIds.length - attendedCount - absentCount),
+    pending:   Math.max(0, trialLeads.length - attendedCount - absentCount),
+    attendance_rate: resolved > 0 ? attendedCount / resolved : null,
   };
 
   // ── 4. Micro-embudo del paso 3 (form) ──────────────────────────
