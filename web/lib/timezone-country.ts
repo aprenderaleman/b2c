@@ -12,87 +12,118 @@
  */
 
 export type CountryPrefix = {
-  countryCode: string; // E.164 prefix con "+"
-  country:     string; // ISO 3166-1 alpha-2
+  countryCode:  string; // E.164 prefix con "+"
+  country:      string; // ISO 3166-1 alpha-2
+  /** Número de ejemplo (solo dígitos locales, SIN prefijo).
+   *  Se usa como placeholder del input para guiar al lead. */
+  examplePhone: string;
 };
 
 /**
  * Mapa explícito IANA TZ → prefix. Lista basada en CLDR + Wikipedia.
  * Mantener ordenado por continente/país para que sea fácil de auditar.
  */
+// Ejemplos de móviles por país. Solo los dígitos del número local
+// (SIN prefijo de país). Tomados de planes de numeración reales para
+// que el placeholder se vea verosímil. Si el lead deja ese valor
+// literal nuestro validador lo rechazará — es solo visual.
+const _DE = "15253409644";
+const _AT = "660123456";
+const _CH = "761234567";
+const _ES = "612345678";
+const _MX = "5512345678";
+const _AR = "91123456789";
+const _CO = "3123456789";
+const _PE = "912345678";
+const _CL = "912345678";
+const _VE = "4141234567";
+const _BO = "71234567";
+const _PY = "961234567";
+const _UY = "94123456";
+const _EC = "991234567";
+const _CR = "61234567";
+const _PA = "61234567";
+const _SV = "70123456";
+const _HN = "91234567";
+const _NI = "81234567";
+const _GT = "51234567";
+const _CU = "51234567";
+const _DO = "8091234567";
+const _BR = "11912345678";
+
 const TZ_TO_COUNTRY: Record<string, CountryPrefix> = {
   // --- DACH + ES ---
-  "Europe/Berlin":          { countryCode: "+49",  country: "DE" },
-  "Europe/Busingen":        { countryCode: "+49",  country: "DE" },
-  "Europe/Vienna":          { countryCode: "+43",  country: "AT" },
-  "Europe/Zurich":          { countryCode: "+41",  country: "CH" },
-  "Europe/Madrid":          { countryCode: "+34",  country: "ES" },
-  "Atlantic/Canary":        { countryCode: "+34",  country: "ES" },
-  "Africa/Ceuta":           { countryCode: "+34",  country: "ES" },
+  "Europe/Berlin":          { countryCode: "+49",  country: "DE", examplePhone: _DE },
+  "Europe/Busingen":        { countryCode: "+49",  country: "DE", examplePhone: _DE },
+  "Europe/Vienna":          { countryCode: "+43",  country: "AT", examplePhone: _AT },
+  "Europe/Zurich":          { countryCode: "+41",  country: "CH", examplePhone: _CH },
+  "Europe/Madrid":          { countryCode: "+34",  country: "ES", examplePhone: _ES },
+  "Atlantic/Canary":        { countryCode: "+34",  country: "ES", examplePhone: _ES },
+  "Africa/Ceuta":           { countryCode: "+34",  country: "ES", examplePhone: _ES },
 
   // --- LATAM hispanohablante ---
-  "America/Mexico_City":    { countryCode: "+52",  country: "MX" },
-  "America/Cancun":         { countryCode: "+52",  country: "MX" },
-  "America/Merida":         { countryCode: "+52",  country: "MX" },
-  "America/Monterrey":      { countryCode: "+52",  country: "MX" },
-  "America/Matamoros":      { countryCode: "+52",  country: "MX" },
-  "America/Chihuahua":      { countryCode: "+52",  country: "MX" },
-  "America/Ciudad_Juarez":  { countryCode: "+52",  country: "MX" },
-  "America/Hermosillo":     { countryCode: "+52",  country: "MX" },
-  "America/Mazatlan":       { countryCode: "+52",  country: "MX" },
-  "America/Ojinaga":        { countryCode: "+52",  country: "MX" },
-  "America/Tijuana":        { countryCode: "+52",  country: "MX" },
-  "America/Bahia_Banderas": { countryCode: "+52",  country: "MX" },
+  "America/Mexico_City":    { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Cancun":         { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Merida":         { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Monterrey":      { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Matamoros":      { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Chihuahua":      { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Ciudad_Juarez":  { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Hermosillo":     { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Mazatlan":       { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Ojinaga":        { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Tijuana":        { countryCode: "+52",  country: "MX", examplePhone: _MX },
+  "America/Bahia_Banderas": { countryCode: "+52",  country: "MX", examplePhone: _MX },
 
-  "America/Argentina/Buenos_Aires":  { countryCode: "+54", country: "AR" },
-  "America/Argentina/Cordoba":       { countryCode: "+54", country: "AR" },
-  "America/Argentina/Mendoza":       { countryCode: "+54", country: "AR" },
-  "America/Argentina/Salta":         { countryCode: "+54", country: "AR" },
-  "America/Argentina/Jujuy":         { countryCode: "+54", country: "AR" },
-  "America/Argentina/Tucuman":       { countryCode: "+54", country: "AR" },
-  "America/Argentina/Catamarca":     { countryCode: "+54", country: "AR" },
-  "America/Argentina/La_Rioja":      { countryCode: "+54", country: "AR" },
-  "America/Argentina/San_Juan":      { countryCode: "+54", country: "AR" },
-  "America/Argentina/San_Luis":      { countryCode: "+54", country: "AR" },
-  "America/Argentina/Rio_Gallegos":  { countryCode: "+54", country: "AR" },
-  "America/Argentina/Ushuaia":       { countryCode: "+54", country: "AR" },
+  "America/Argentina/Buenos_Aires":  { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/Cordoba":       { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/Mendoza":       { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/Salta":         { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/Jujuy":         { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/Tucuman":       { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/Catamarca":     { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/La_Rioja":      { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/San_Juan":      { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/San_Luis":      { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/Rio_Gallegos":  { countryCode: "+54", country: "AR", examplePhone: _AR },
+  "America/Argentina/Ushuaia":       { countryCode: "+54", country: "AR", examplePhone: _AR },
 
-  "America/Bogota":         { countryCode: "+57",  country: "CO" },
-  "America/Lima":           { countryCode: "+51",  country: "PE" },
-  "America/Santiago":       { countryCode: "+56",  country: "CL" },
-  "America/Punta_Arenas":   { countryCode: "+56",  country: "CL" },
-  "Pacific/Easter":         { countryCode: "+56",  country: "CL" },
-  "America/Caracas":        { countryCode: "+58",  country: "VE" },
-  "America/La_Paz":         { countryCode: "+591", country: "BO" },
-  "America/Asuncion":       { countryCode: "+595", country: "PY" },
-  "America/Montevideo":     { countryCode: "+598", country: "UY" },
-  "America/Guayaquil":      { countryCode: "+593", country: "EC" },
-  "Pacific/Galapagos":      { countryCode: "+593", country: "EC" },
+  "America/Bogota":         { countryCode: "+57",  country: "CO", examplePhone: _CO },
+  "America/Lima":           { countryCode: "+51",  country: "PE", examplePhone: _PE },
+  "America/Santiago":       { countryCode: "+56",  country: "CL", examplePhone: _CL },
+  "America/Punta_Arenas":   { countryCode: "+56",  country: "CL", examplePhone: _CL },
+  "Pacific/Easter":         { countryCode: "+56",  country: "CL", examplePhone: _CL },
+  "America/Caracas":        { countryCode: "+58",  country: "VE", examplePhone: _VE },
+  "America/La_Paz":         { countryCode: "+591", country: "BO", examplePhone: _BO },
+  "America/Asuncion":       { countryCode: "+595", country: "PY", examplePhone: _PY },
+  "America/Montevideo":     { countryCode: "+598", country: "UY", examplePhone: _UY },
+  "America/Guayaquil":      { countryCode: "+593", country: "EC", examplePhone: _EC },
+  "Pacific/Galapagos":      { countryCode: "+593", country: "EC", examplePhone: _EC },
 
-  "America/Costa_Rica":     { countryCode: "+506", country: "CR" },
-  "America/Panama":         { countryCode: "+507", country: "PA" },
-  "America/El_Salvador":    { countryCode: "+503", country: "SV" },
-  "America/Tegucigalpa":    { countryCode: "+504", country: "HN" },
-  "America/Managua":        { countryCode: "+505", country: "NI" },
-  "America/Guatemala":      { countryCode: "+502", country: "GT" },
-  "America/Havana":         { countryCode: "+53",  country: "CU" },
-  "America/Santo_Domingo":  { countryCode: "+1",   country: "DO" },
-  "America/Puerto_Rico":    { countryCode: "+1",   country: "PR" },
+  "America/Costa_Rica":     { countryCode: "+506", country: "CR", examplePhone: _CR },
+  "America/Panama":         { countryCode: "+507", country: "PA", examplePhone: _PA },
+  "America/El_Salvador":    { countryCode: "+503", country: "SV", examplePhone: _SV },
+  "America/Tegucigalpa":    { countryCode: "+504", country: "HN", examplePhone: _HN },
+  "America/Managua":        { countryCode: "+505", country: "NI", examplePhone: _NI },
+  "America/Guatemala":      { countryCode: "+502", country: "GT", examplePhone: _GT },
+  "America/Havana":         { countryCode: "+53",  country: "CU", examplePhone: _CU },
+  "America/Santo_Domingo":  { countryCode: "+1",   country: "DO", examplePhone: _DO },
+  "America/Puerto_Rico":    { countryCode: "+1",   country: "DO", examplePhone: _DO },
 
   // --- Brasil (no es target hispanohablante pero llega tráfico) ---
-  "America/Sao_Paulo":      { countryCode: "+55",  country: "BR" },
-  "America/Bahia":          { countryCode: "+55",  country: "BR" },
-  "America/Fortaleza":      { countryCode: "+55",  country: "BR" },
-  "America/Recife":         { countryCode: "+55",  country: "BR" },
-  "America/Belem":          { countryCode: "+55",  country: "BR" },
-  "America/Manaus":         { countryCode: "+55",  country: "BR" },
+  "America/Sao_Paulo":      { countryCode: "+55",  country: "BR", examplePhone: _BR },
+  "America/Bahia":          { countryCode: "+55",  country: "BR", examplePhone: _BR },
+  "America/Fortaleza":      { countryCode: "+55",  country: "BR", examplePhone: _BR },
+  "America/Recife":         { countryCode: "+55",  country: "BR", examplePhone: _BR },
+  "America/Belem":          { countryCode: "+55",  country: "BR", examplePhone: _BR },
+  "America/Manaus":         { countryCode: "+55",  country: "BR", examplePhone: _BR },
 };
 
 /**
  * Default fallback cuando la TZ del navegador no está en la tabla o no
  * podemos detectarla. DACH es nuestro mercado principal.
  */
-export const DEFAULT_COUNTRY: CountryPrefix = { countryCode: "+49", country: "DE" };
+export const DEFAULT_COUNTRY: CountryPrefix = { countryCode: "+49", country: "DE", examplePhone: _DE };
 
 /**
  * Detecta el prefijo desde la TZ del navegador. Lado cliente only —

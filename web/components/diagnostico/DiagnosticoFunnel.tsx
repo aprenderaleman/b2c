@@ -327,9 +327,13 @@ export function DiagnosticoFunnel({
   // lead dejaba el +49 por defecto pensando que era opcional o no veía
   // el desplegable. Ahora si el navegador reporta TZ LATAM/ES, precargamos
   // el prefijo correspondiente. El lead sigue pudiendo cambiarlo manualmente.
+  // Placeholder del campo WhatsApp también se ajusta a un número típico
+  // del país detectado para guiar el formato esperado.
+  const [phonePlaceholder, setPhonePlaceholder] = useState("15253409644");
   useEffect(() => {
     const detected = detectCountryFromBrowser();
     if (!detected) return;
+    setPhonePlaceholder(detected.examplePhone);
     setForm(f => {
       // No pisamos si el usuario ya tecleó algo distinto al default
       if (f.countryCode !== "+49" || f.country !== "DE") return f;
@@ -864,6 +868,7 @@ export function DiagnosticoFunnel({
               setForm={setForm}
               submitting={submitting}
               submitErr={submitErr}
+              phonePlaceholder={phonePlaceholder}
               onSubmit={submitData}
               onMicroEvent={(e) => {
                 if (e === "form_opened") trackStep(3, "form_opened");
@@ -1174,13 +1179,14 @@ function LowBudgetExit({ onBack }: { onBack: () => void }) {
 }
 
 function DataCaptureStep({
-  form, setForm, submitting, submitErr, onSubmit, onMicroEvent,
+  form, setForm, submitting, submitErr, phonePlaceholder, onSubmit, onMicroEvent,
   leadId, answers, name,
 }: {
   form:        FormData;
   setForm:     React.Dispatch<React.SetStateAction<FormData>>;
   submitting:  boolean;
   submitErr:   string | null;
+  phonePlaceholder: string;
   onSubmit:    () => void;
   onMicroEvent?: (event: "form_opened" | "field_typed") => void;
   // Cuando leadId está set (post-register), el formulario se contrae y
@@ -1354,7 +1360,7 @@ function DataCaptureStep({
                              ? "border-red-400 focus:border-red-500"
                              : "border-slate-200 focus:border-warm"
                          }`}
-              placeholder="612 345 678"
+              placeholder={phonePlaceholder}
               aria-invalid={!!phoneError}
               aria-describedby={phoneError ? "wa-error" : undefined}
             />

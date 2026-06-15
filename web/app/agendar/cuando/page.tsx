@@ -68,9 +68,12 @@ export default function StepCuando() {
   const [form, setForm] = useState({
     name: "", email: "", whatsapp: "", countryCode: "+49",
   });
+  // Placeholder del input WhatsApp — número de ejemplo del país detectado.
+  const [phonePlaceholder, setPhonePlaceholder] = useState("15253409644");
   useEffect(() => {
     const det = detectCountryFromBrowser();
     if (!det) return;
+    setPhonePlaceholder(det.examplePhone);
     setForm(f => (f.countryCode === "+49" ? { ...f, countryCode: det.countryCode } : f));
   }, []);
 
@@ -440,7 +443,7 @@ export default function StepCuando() {
                                    ? "border-red-400 focus:border-red-500"
                                    : "border-slate-200 focus:border-warm"
                                }`}
-                    placeholder="612 345 678"
+                    placeholder={phonePlaceholder}
                   />
                 </div>
                 {phoneError && (
