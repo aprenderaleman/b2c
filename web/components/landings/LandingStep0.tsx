@@ -143,27 +143,26 @@ export function LandingStep0({
             })}
           </ul>
 
-          {/* Pricing — destacando la clase GRATIS */}
+          {/* CTA principal — propuesta de valor + atajo directo al
+              calendario. Decisión Gelfis 2026-06-15: el lead que ya
+              sabe lo que quiere no debe pasar por el quiz. */}
           <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 md:p-5">
-            <p className="text-[13.5px] md:text-[14px] text-slate-700 leading-snug">
-              <span className="mr-1" aria-hidden>💶</span>
-              Sesiones desde <strong className="text-slate-900">18 €/hora</strong>
-              {" "}y packs flexibles desde <strong className="text-slate-900">280 €</strong>.
+            <p className="text-[14px] md:text-[15px] text-slate-700 leading-relaxed">
+              Vive la experiencia de clase de alemán en la academia{" "}
+              <strong className="text-slate-900">Aprender-Aleman.de</strong>.
+              Así conoces nuestro método y te diseñamos tu plan de estudios.
+              Totalmente gratis y sin compromisos.
             </p>
-            {/* CTA atajo — bypass del quiz: link directo al calendario.
-                Decisión Gelfis 2026-06-15: el lead que ya sabe lo que
-                quiere no debe pasar por las 4 preguntas. */}
             <Link
               href="/agendar/cuando"
-              className="mt-3 inline-flex items-center gap-1.5 rounded-full
-                         bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2
-                         text-[13px] md:text-[14px] font-bold
+              className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-full
+                         bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5
+                         text-[14px] md:text-[15px] font-bold
                          shadow-md shadow-emerald-600/25
                          active:scale-[0.98] transition"
             >
               <span aria-hidden>🎁</span>
-              <span>Primera clase de prueba GRATIS</span>
-              <span aria-hidden>→</span>
+              <span>Agendar Clase de Prueba Gratis</span>
             </Link>
           </div>
 
