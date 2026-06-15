@@ -78,6 +78,32 @@ function daysFromPeriod(period: PeriodKey): number {
 }
 
 // Nombre legible por código ISO-2 para el dropdown de país.
+// Mapa de landing_intent → label amigable + badge de fuente.
+// Centraliza la nomenclatura: si añades una landing nueva en Vercel,
+// añadela aquí también para que aparezca con su nombre humano.
+type LandingMeta = { label: string; sourceLabel: string; sourceIcon: string; sourceCls: string };
+const SRC_ADS    = "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
+const SRC_SOCIAL = "bg-purple-500/15  text-purple-300  border border-purple-500/30";
+const SRC_DIRECT = "bg-sky-500/15     text-sky-300     border border-sky-500/30";
+const SRC_OTHER  = "bg-white/5         text-white/60    border border-white/10";
+const LANDING_META: Record<string, LandingMeta> = {
+  // ── Home (redes sociales) ────────────────────────────────────────
+  "socialmedia":               { label: "Home (redes sociales)",            sourceLabel: "Social Media", sourceIcon: "📱", sourceCls: SRC_SOCIAL },
+  "home":                      { label: "Home (legacy pre-socialmedia)",    sourceLabel: "Social Media", sourceIcon: "📱", sourceCls: SRC_SOCIAL },
+  // ── 6 landings de Google Ads ─────────────────────────────────────
+  "curso-online":              { label: "Curso de alemán online",           sourceLabel: "Google Ads",   sourceIcon: "🟢", sourceCls: SRC_ADS },
+  "particulares":              { label: "Clases particulares",              sourceLabel: "Google Ads",   sourceIcon: "🟢", sourceCls: SRC_ADS },
+  "intensivo":                 { label: "Curso intensivo",                  sourceLabel: "Google Ads",   sourceIcon: "🟢", sourceCls: SRC_ADS },
+  "certificado":               { label: "Certificado oficial",              sourceLabel: "Google Ads",   sourceIcon: "🟢", sourceCls: SRC_ADS },
+  "b2-trabajar":               { label: "B2 para trabajar",                 sourceLabel: "Google Ads",   sourceIcon: "🟢", sourceCls: SRC_ADS },
+  "clases-aleman-ciudades":    { label: "Clases por ciudades",              sourceLabel: "Google Ads",   sourceIcon: "🟢", sourceCls: SRC_ADS },
+  "ciudades":                  { label: "Clases por ciudades (alias)",      sourceLabel: "Google Ads",   sourceIcon: "🟢", sourceCls: SRC_ADS },
+  // ── Atajo directo ────────────────────────────────────────────────
+  "agendar-directo":           { label: "Atajo CTA verde",                  sourceLabel: "Directo",      sourceIcon: "⚡", sourceCls: SRC_DIRECT },
+  // ── Catchall ─────────────────────────────────────────────────────
+  "(sin landing)":             { label: "(sin atribución)",                 sourceLabel: "Otro",         sourceIcon: "❓", sourceCls: SRC_OTHER },
+};
+
 const COUNTRY_NAMES: Record<string, string> = {
   ES: "🇪🇸 España",     DE: "🇩🇪 Alemania",   AT: "🇦🇹 Austria",
   CH: "🇨🇭 Suiza",      AR: "🇦🇷 Argentina",  MX: "🇲🇽 México",
@@ -525,47 +551,72 @@ export default async function FunnelAdsPage({
 
       {/* ── Desglose por landing dedicada (post-058) ───────────── */}
       <section className="mt-8">
-        <h2 className="text-lg font-semibold text-white">Por landing</h2>
+        <h2 className="text-lg font-semibold text-white">Por landing / fuente</h2>
         <p className="mt-1 text-xs text-white/55">
-          Qué intención de búsqueda convierte mejor (separado del motivo
-          que el usuario eligió en el quiz). 'home' = ruta /, el resto son
-          landings dedicadas de Google Ads.
+          Qué fuente de tráfico convierte mejor. Ordenado por trials
+          reservados (señal de calidad). Distingue las 3 grandes
+          fuentes: Google Ads (landings dedicadas), redes sociales
+          (home) y atajo directo (CTA verde desde landings).
         </p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-xs uppercase text-white/50 border-b border-white/10">
               <tr>
                 <th className="text-left py-2 pr-3">Landing</th>
+                <th className="text-left py-2 px-3">Fuente</th>
                 <th className="text-right py-2 px-3">Sesiones</th>
-                <th className="text-right py-2 px-3">→ Form completado</th>
-                <th className="text-right py-2 px-3">→ Trial agendada</th>
-                <th className="text-right py-2 pl-3">Convirtieron</th>
+                <th className="text-right py-2 px-3">Form</th>
+                <th className="text-right py-2 px-3">Trial</th>
+                <th className="text-right py-2 px-3">Asistencia</th>
+                <th className="text-right py-2 pl-3">Pagaron</th>
               </tr>
             </thead>
             <tbody>
-              {data.landingBreakdown.map(l => (
-                <tr key={l.landing} className="border-b border-white/5">
-                  <td className="py-2 pr-3 text-white font-mono text-[12px]">{l.landing}</td>
-                  <td className="py-2 px-3 text-right text-white/80 tabular-nums">{l.sessions}</td>
-                  <td className="py-2 px-3 text-right tabular-nums">
-                    <span className={l.pct_form < 5 ? "text-red-300" : l.pct_form < 10 ? "text-amber-300" : "text-emerald-300"}>
-                      {l.form_completed} ({l.pct_form.toFixed(1)}%)
-                    </span>
-                  </td>
-                  <td className="py-2 px-3 text-right tabular-nums">
-                    <span className={l.pct_trial < 2 ? "text-red-300" : l.pct_trial < 5 ? "text-amber-300" : "text-emerald-300"}>
-                      {l.trial_booked} ({l.pct_trial.toFixed(1)}%)
-                    </span>
-                  </td>
-                  <td className="py-2 pl-3 text-right text-white/80 tabular-nums">{l.converted}</td>
-                </tr>
-              ))}
+              {data.landingBreakdown.map(l => {
+                const info = LANDING_META[l.landing] ?? LANDING_META["(sin landing)"];
+                const attRate = l.attendance_rate;
+                return (
+                  <tr key={l.landing} className="border-b border-white/5">
+                    <td className="py-2 pr-3">
+                      <div className="text-white font-semibold">{info.label}</div>
+                      <div className="text-[10px] text-white/40 font-mono">{l.landing}</div>
+                    </td>
+                    <td className="py-2 px-3">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${info.sourceCls}`}>
+                        {info.sourceIcon} {info.sourceLabel}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-right text-white/80 tabular-nums">{l.sessions}</td>
+                    <td className="py-2 px-3 text-right tabular-nums">
+                      <span className={l.pct_form < 5 ? "text-red-300" : l.pct_form < 10 ? "text-amber-300" : "text-emerald-300"}>
+                        {l.form_completed}
+                        <span className="ml-1 text-[10px] text-white/40">({l.pct_form.toFixed(1)}%)</span>
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums">
+                      <span className={l.pct_trial < 2 ? "text-red-300" : l.pct_trial < 5 ? "text-amber-300" : "text-emerald-300"}>
+                        {l.trial_booked}
+                        <span className="ml-1 text-[10px] text-white/40">({l.pct_trial.toFixed(1)}%)</span>
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums">
+                      {attRate === null ? (
+                        <span className="text-white/30">—</span>
+                      ) : (
+                        <span className={attRate >= 0.7 ? "text-emerald-300" : attRate >= 0.5 ? "text-amber-300" : "text-red-300"}>
+                          {(100 * attRate).toFixed(0)}%
+                          <span className="ml-1 text-[10px] text-white/40">({l.trial_attended}/{l.trial_attended + l.trial_absent})</span>
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 pl-3 text-right text-white/80 tabular-nums">{l.converted}</td>
+                  </tr>
+                );
+              })}
               {data.landingBreakdown.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center text-white/40 italic">
-                    Sin datos por landing — el tracking de landing_intent
-                    se activó el 2026-06-XX (migration 058). Los rangos
-                    largos pueden tener buckets vacíos al principio.
+                  <td colSpan={7} className="py-4 text-center text-white/40 italic">
+                    Sin datos por landing en este rango.
                   </td>
                 </tr>
               )}

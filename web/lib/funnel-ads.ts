@@ -459,13 +459,18 @@ export async function getFunnelAdsData(
 }
 
 export type LandingBreakdownRow = {
-  landing:        string;     // 'home','curso-online','particulares','intensivo','certificado','b2-trabajar','ciudades','(sin landing)'
+  landing:        string;     // 'socialmedia','curso-online','particulares','intensivo','certificado','b2-trabajar','clases-aleman-ciudades','agendar-directo','(sin landing)'
   sessions:       number;     // sesiones únicas vistas en funnel_progress
   form_completed: number;     // leads con landing_intent = landing
   trial_booked:   number;     // de esos, cuántos agendaron trial
+  trial_attended: number;     // de los agendados, cuántos asistieron
+  trial_absent:   number;     // de los agendados, cuántos no asistieron
   converted:      number;     // y cuántos convirtieron (pagaron)
   pct_form:       number;     // form_completed / sessions
   pct_trial:      number;     // trial_booked / sessions
+  /** Tasa real de asistencia por landing: attended / (attended + absent).
+   *  Null si no hay trials resueltos en la ventana. */
+  attendance_rate: number | null;
 };
 
 async function getLandingBreakdown(
@@ -486,25 +491,34 @@ async function getLandingBreakdown(
     sessionsByLanding[k].add(r.session_id);
   }
 
-  // Leads por landing
+  // Leads por landing — incluye timestamps de asistencia para calcular
+  // la tasa real por landing (no solo la global).
   let leadsQ = sb
     .from("leads")
-    .select("landing_intent, trial_scheduled_at, status")
+    .select("landing_intent, trial_scheduled_at, trial_attended_at, trial_absent_at, status")
     .gte("created_at", since);
   if (country) leadsQ = leadsQ.eq("country", country);
   const { data: leads } = await leadsQ;
 
-  const formByLanding:  Record<string, number> = {};
-  const trialByLanding: Record<string, number> = {};
-  const convByLanding:  Record<string, number> = {};
+  const formByLanding:     Record<string, number> = {};
+  const trialByLanding:    Record<string, number> = {};
+  const attendedByLanding: Record<string, number> = {};
+  const absentByLanding:   Record<string, number> = {};
+  const convByLanding:     Record<string, number> = {};
   for (const r of (leads ?? []) as Array<{
-    landing_intent: string | null;
+    landing_intent:     string | null;
     trial_scheduled_at: string | null;
-    status: string;
+    trial_attended_at:  string | null;
+    trial_absent_at:    string | null;
+    status:             string;
   }>) {
     const k = r.landing_intent ?? "(sin landing)";
     formByLanding[k] = (formByLanding[k] ?? 0) + 1;
     if (r.trial_scheduled_at) trialByLanding[k] = (trialByLanding[k] ?? 0) + 1;
+    if (r.trial_attended_at)  attendedByLanding[k] = (attendedByLanding[k] ?? 0) + 1;
+    if (r.trial_absent_at && !r.trial_attended_at) {
+      absentByLanding[k] = (absentByLanding[k] ?? 0) + 1;
+    }
     if (r.status === "converted") convByLanding[k] = (convByLanding[k] ?? 0) + 1;
   }
 
@@ -520,18 +534,26 @@ async function getLandingBreakdown(
       const sessions = sessionsByLanding[landing]?.size ?? 0;
       const form     = formByLanding[landing]     ?? 0;
       const trial    = trialByLanding[landing]    ?? 0;
+      const attended = attendedByLanding[landing] ?? 0;
+      const absent   = absentByLanding[landing]   ?? 0;
       const conv     = convByLanding[landing]     ?? 0;
+      const resolved = attended + absent;
       return {
         landing,
         sessions,
-        form_completed: form,
-        trial_booked:   trial,
-        converted:      conv,
-        pct_form:       sessions > 0 ? 100 * form / sessions : 0,
-        pct_trial:      sessions > 0 ? 100 * trial / sessions : 0,
+        form_completed:  form,
+        trial_booked:    trial,
+        trial_attended:  attended,
+        trial_absent:    absent,
+        converted:       conv,
+        pct_form:        sessions > 0 ? 100 * form / sessions : 0,
+        pct_trial:       sessions > 0 ? 100 * trial / sessions : 0,
+        attendance_rate: resolved > 0 ? attended / resolved : null,
       };
     })
-    .sort((a, b) => b.sessions - a.sessions);
+    // Ranking por trials reservados (signal de calidad principal — más
+    // valioso que sesiones brutas porque excluye tráfico que rebota).
+    .sort((a, b) => b.trial_booked - a.trial_booked || b.sessions - a.sessions);
 }
 
 // ── Micro-embudo paso 3 (form) ────────────────────────────────────
