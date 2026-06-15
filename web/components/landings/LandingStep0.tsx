@@ -148,10 +148,9 @@ export function LandingStep0({
               sabe lo que quiere no debe pasar por el quiz. */}
           <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 md:p-5">
             <p className="text-[14px] md:text-[15px] text-slate-700 leading-relaxed">
-              Vive la experiencia de clase de alemán en la academia{" "}
-              <strong className="text-slate-900">Aprender-Aleman.de</strong>.
-              Así conoces nuestro método y te diseñamos tu plan de estudios.
-              Totalmente gratis y sin compromisos.
+              Antes de invertir en cualquier curso, vívelo. Una clase real
+              con un profesor nativo, una conversación honesta sobre tu
+              nivel y un plan diseñado para ti.
             </p>
             <Link
               href="/agendar/cuando"
@@ -162,7 +161,7 @@ export function LandingStep0({
                          active:scale-[0.98] transition"
             >
               <span aria-hidden>🎁</span>
-              <span>Agendar Clase de Prueba Gratis</span>
+              <span>Reservar mi Clase Gratis</span>
             </Link>
           </div>
 
