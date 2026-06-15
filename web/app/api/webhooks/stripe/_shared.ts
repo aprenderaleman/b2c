@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getStripeClient } from "@/lib/stripe";
 import { getExchangeRate, convertToEur } from "@/lib/exchange-rates";
 
 export async function processStripeEvent(
@@ -27,6 +28,8 @@ export async function processStripeEvent(
     await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session, account);
   } else if (event.type === "payment_intent.succeeded") {
     await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent, account);
+  } else if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
+    await handleInvoicePaid(event.data.object as Stripe.Invoice, account);
   }
 }
 
@@ -102,7 +105,19 @@ async function handlePaymentIntentSucceeded(
   if (dup) return;
 
   const currency = (pi.currency ?? "eur").toUpperCase();
-  const customerEmail = typeof pi.receipt_email === "string" ? pi.receipt_email : null;
+  let customerEmail = typeof pi.receipt_email === "string" ? pi.receipt_email : null;
+
+  // Resolve email from Stripe customer if receipt_email is null
+  if (!customerEmail && pi.customer) {
+    try {
+      const customerId = typeof pi.customer === "string" ? pi.customer : pi.customer.id;
+      const customer = await getStripeClient(account).customers.retrieve(customerId);
+      if (!customer.deleted && customer.email) {
+        customerEmail = customer.email;
+      }
+    } catch { /* ignore */ }
+  }
+
   if (!customerEmail || pi.amount === 0) return;
 
   const { data: student } = await sb
@@ -134,6 +149,68 @@ async function handlePaymentIntentSucceeded(
     exchange_rate: rate,
     stripe_charge_id: chargeId,
     note: `Stripe ${account.toUpperCase()} payment_intent`,
+  });
+}
+
+async function handleInvoicePaid(
+  invoice: Stripe.Invoice,
+  account: "us" | "de",
+): Promise<void> {
+  const sb = supabaseAdmin();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const inv = invoice as any;
+  const piRaw = inv.payment_intent;
+  const piId: string | null = typeof piRaw === "string"
+    ? piRaw
+    : piRaw?.id ?? null;
+
+  // Skip if already handled by checkout or payment_intent events
+  if (piId) {
+    const { data: dup } = await sb
+      .from("payments")
+      .select("id")
+      .eq("stripe_payment_intent_id", piId)
+      .maybeSingle();
+    if (dup) return;
+  }
+
+  const amountPaid = invoice.amount_paid ?? 0;
+  if (amountPaid === 0) return;
+
+  const currency = (invoice.currency ?? "eur").toUpperCase();
+  const customerEmail = invoice.customer_email;
+  if (!customerEmail) return;
+
+  const { data: student } = await sb
+    .from("students")
+    .select("id, users!inner(email)")
+    .eq("users.email", customerEmail)
+    .maybeSingle();
+  if (!student) return;
+
+  const rate = await getExchangeRate(currency, "EUR");
+  const eurCents = convertToEur(amountPaid, currency, rate);
+
+  const isSubscription = invoice.lines?.data?.some(
+    (line) => (line as unknown as { type?: string }).type === "subscription" || line.description?.includes("×"),
+  );
+
+  await sb.from("payments").insert({
+    student_id: (student as { id: string }).id,
+    amount_cents: eurCents,
+    currency: "EUR",
+    type: isSubscription ? "subscription_payment" : "package",
+    status: "paid",
+    paid_at: invoice.status_transitions?.paid_at
+      ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
+      : new Date().toISOString(),
+    stripe_payment_intent_id: piId,
+    stripe_account: account,
+    original_currency: currency,
+    original_amount_cents: amountPaid,
+    exchange_rate: rate,
+    stripe_charge_id: null,
   });
 }
 

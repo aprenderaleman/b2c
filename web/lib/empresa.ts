@@ -15,6 +15,7 @@ export type EmpresaAlert = {
 
 export type FunnelMetrics = {
   leads_total: number;
+  ads_conversions: number;
   trials_scheduled: number;
   trials_attended: number;
   conversions: number;
@@ -177,6 +178,7 @@ export async function getEmpresaMetrics(
     ltv,
     adsSpend,
     googleAdsSpend,
+    googleAdsConversions,
   ] = await Promise.all([
     getTotalRevenue(from, to),
     getTotalRevenue(prevFrom, prevTo),
@@ -192,7 +194,14 @@ export async function getEmpresaMetrics(
     getAverageLTV(sb),
     getAdsSpendFromExpenses(sb, from, to),
     getGoogleAdsSpend(sb, from, to),
+    getGoogleAdsConversions(sb, from, to),
   ]);
+
+  // Inject Google Ads conversions into funnel for real conversion rate
+  if (googleAdsConversions > 0) {
+    funnel.ads_conversions = googleAdsConversions;
+    funnel.rate_real = (funnel.conversions_real / googleAdsConversions) * 100;
+  }
 
   const teacherPayrollCents = earnings;
   const fixedCostsCents = fixedCosts;
@@ -210,11 +219,11 @@ export async function getEmpresaMetrics(
     ? (beneficioNetoCents / revenue.revenue_cents) * 100
     : 0;
 
-  const cplRealCents = funnel.leads_total > 0
-    ? Math.round(adsSpendCents / funnel.leads_total)
-    : 0;
-  const cacCents = funnel.conversions > 0
-    ? Math.round((adsSpendCents + fixedCostsCents + variableExpensesCents) / funnel.conversions)
+  const cplRealCents = googleAdsConversions > 0
+    ? Math.round(adsSpendCents / googleAdsConversions)
+    : (funnel.leads_total > 0 ? Math.round(adsSpendCents / funnel.leads_total) : 0);
+  const cacCents = funnel.conversions_real > 0
+    ? Math.round((adsSpendCents + fixedCostsCents + variableExpensesCents) / funnel.conversions_real)
     : 0;
   const ltvCacRatio = cacCents > 0 ? ltv / cacCents : 0;
   const roas = adsSpendCents > 0 ? revenue.revenue_cents / adsSpendCents : 0;
@@ -338,6 +347,7 @@ async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMet
 
   return {
     leads_total: leadsTotal,
+    ads_conversions: 0,
     trials_scheduled: trialsScheduled,
     trials_attended: trialsAttended,
     conversions,
@@ -730,6 +740,23 @@ async function getGoogleAdsSpend(sb: SB, from: Date, to: Date): Promise<number> 
   );
   // Convert micros (1/1,000,000) to cents (1/100)
   return Math.round(totalMicros / 10000);
+}
+
+async function getGoogleAdsConversions(sb: SB, from: Date, to: Date): Promise<number> {
+  const fromDate = from.toISOString().slice(0, 10);
+  const toDate = to.toISOString().slice(0, 10);
+
+  const { data } = await sb
+    .from("google_ads_daily")
+    .select("conversions")
+    .gte("date", fromDate)
+    .lte("date", toDate);
+
+  if (!data || data.length === 0) return 0;
+
+  return Math.round(
+    (data as Array<{ conversions: number }>).reduce((s, r) => s + Number(r.conversions), 0),
+  );
 }
 
 // =============================================================================

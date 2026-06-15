@@ -361,14 +361,16 @@ function CostLine({ label, cents }: { label: string; cents: number }) {
 }
 
 function FunnelSection({ funnel }: { funnel: FunnelMetrics }) {
+  const hasAdsData = funnel.ads_conversions > 0;
+  const topOfFunnel = hasAdsData ? funnel.ads_conversions : funnel.leads_total;
   const steps = [
-    { label: "Leads", value: funnel.leads_total, rate: null },
+    { label: hasAdsData ? "Contactos Ads (Google)" : "Leads CRM", value: topOfFunnel, rate: null },
+    { label: "Leads CRM", value: funnel.leads_total, rate: null, hidden: !hasAdsData },
     { label: "Prueba agendada", value: funnel.trials_scheduled, rate: funnel.rate_lead_to_trial },
     { label: "Asistio", value: funnel.trials_attended, rate: funnel.rate_trial_attendance },
-    { label: "Compro (CRM)", value: funnel.conversions, rate: funnel.conversions > 0 && funnel.trials_attended > 0 ? (funnel.conversions / funnel.trials_attended) * 100 : 0 },
-    { label: "Compro (real - pagos)", value: funnel.conversions_real, rate: funnel.conversions_real > 0 && funnel.trials_attended > 0 ? (funnel.conversions_real / funnel.trials_attended) * 100 : 0 },
-  ];
-  const max = Math.max(funnel.leads_total, 1);
+    { label: "Pagaron", value: funnel.conversions_real, rate: null },
+  ].filter(s => !s.hidden);
+  const max = Math.max(topOfFunnel, 1);
 
   return (
     <div className="mt-4 space-y-3">
@@ -386,22 +388,28 @@ function FunnelSection({ funnel }: { funnel: FunnelMetrics }) {
           <div className="h-5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${
-                s.label.includes("real") ? "bg-emerald-500 dark:bg-emerald-400" : "bg-brand-500 dark:bg-brand-400"
+                s.label === "Pagaron" ? "bg-emerald-500 dark:bg-emerald-400" : "bg-brand-500 dark:bg-brand-400"
               }`}
               style={{ width: `${Math.max((s.value / max) * 100, 2)}%` }}
             />
           </div>
         </div>
       ))}
-      <div className="pt-3 mt-1 border-t border-slate-200 dark:border-slate-700 grid gap-2 sm:grid-cols-2 text-xs">
-        <div className="text-slate-500">
-          Conversion CRM (lead → converted): <span className="font-semibold text-slate-700 dark:text-slate-200">{funnel.leads_total > 0 ? ((funnel.conversions / funnel.leads_total) * 100).toFixed(1) : "0"}%</span>
-          <span className="ml-1 text-slate-400">(solo {funnel.conversions} marcados)</span>
+      <div className="pt-3 mt-1 border-t border-slate-200 dark:border-slate-700 text-xs">
+        <div className="flex items-center gap-4">
+          <div className="text-slate-500">
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-sm">{funnel.rate_real.toFixed(1)}%</span>
+            {" "}tasa de conversión real
+            <span className="ml-1 text-slate-400">
+              ({funnel.conversions_real} ventas / {hasAdsData ? `${funnel.ads_conversions} contactos ads` : `${funnel.leads_total} leads`})
+            </span>
+          </div>
         </div>
-        <div className="text-slate-500">
-          Conversion real (lead → pago): <span className="font-semibold text-emerald-600 dark:text-emerald-400">{funnel.rate_real.toFixed(1)}%</span>
-          <span className="ml-1 text-slate-400">({funnel.conversions_real} pagaron)</span>
-        </div>
+        {hasAdsData && funnel.leads_total < funnel.ads_conversions && (
+          <div className="mt-1 text-slate-400">
+            CRM captura {((funnel.leads_total / funnel.ads_conversions) * 100).toFixed(0)}% de los contactos de ads ({funnel.leads_total}/{funnel.ads_conversions})
+          </div>
+        )}
       </div>
     </div>
   );
