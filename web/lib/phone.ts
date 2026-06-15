@@ -278,3 +278,36 @@ export const COUNTRY_CODES: Array<{ code: string; label: string; flag: string }>
   { code: "+595", label: "Paraguay",    flag: "🇵🇾" },
   { code: "+598", label: "Uruguay",     flag: "🇺🇾" },
 ];
+
+/**
+ * Combina el prefijo del dropdown + el número tecleado en un E.164
+ * limpio. Resuelve los casos más frecuentes de "lead se equivoca al
+ * escribir":
+ *
+ *   - "00..." al principio (notación internacional alternativa) → quita
+ *   - CC duplicado al principio ("+49 491607...") → quita hasta 4 veces
+ *   - "0" troncal al principio del número local (común en DE) → quita
+ *
+ * NO valida — devuelve siempre algo, válido o no. Para validación usar
+ * `resolvePhone()`. Útil cuando ya pasaste la validación y solo quieres
+ * el string E.164 final.
+ *
+ * Movida desde DiagnosticoFunnel.tsx (Gelfis 2026-06-15) para que
+ * cualquier componente pueda importarla sin acarrear toda la lógica del
+ * funnel viejo.
+ */
+export function combineE164(countryCode: string, localInput: string): string {
+  const ccDigits = countryCode.replace(/\D/g, "");
+  let digits = (localInput ?? "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (ccDigits) {
+    let guard = 4;
+    while (guard-- > 0
+           && digits.startsWith(ccDigits)
+           && digits.length - ccDigits.length >= 6) {
+      digits = digits.slice(ccDigits.length);
+    }
+  }
+  if (digits.startsWith("0")) digits = digits.slice(1);
+  return `+${ccDigits}${digits}`;
+}

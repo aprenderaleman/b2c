@@ -1,27 +1,18 @@
 /**
- * Home page — el funnel "Diagnostico".
+ * Home page — el funnel "Diagnostico" simplificado.
  *
- * Decisión Gelfis 2026-05-02: la ruta `/` deja de ser landing
- * marketing y pasa a ser el quiz de diagnóstico directamente.
- * Cuando el usuario llega a aprender-aleman.de inmediatamente está
- * en el paso 1 del quiz.
- *
- * La landing anterior queda guardada en `/landing-anterior` para
- * rollback y comparativa.
+ * Decisión Gelfis 2026-06-15: el quiz de 4 preguntas se reemplaza por
+ * un flujo de 2 pasos (nivel → calendario+datos). SimpleTrialFlow
+ * unifica el flujo en home, landings y /agendar/cuando.
  */
 
-import { DiagnosticoFunnel } from "@/components/diagnostico/DiagnosticoFunnel";
+import { SimpleTrialFlow } from "@/components/funnel/SimpleTrialFlow";
 import { SiteFooter } from "@/components/landings/SiteFooter";
 
 export default function HomePage() {
   return (
     <>
-      {/* La home es el funnel completo (100dvh). landingIntent='home'
-          se setea implícitamente por el default del componente. */}
-      <DiagnosticoFunnel />
-      {/* Footer con links a las 6 landings dedicadas. Vive BAJO el
-          funnel (fuera del primer scroll del usuario) pero el crawler
-          lo ve para distribuir la autoridad SEO. */}
+      <SimpleTrialFlow landingIntent="home" />
       <SiteFooter />
     </>
   );
