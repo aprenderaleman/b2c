@@ -15,9 +15,9 @@
  * de "click → funnel" sea cliente.
  */
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
-import { SimpleTrialFlow } from "@/components/funnel/SimpleTrialFlow";
-import type { MotivoId } from "@/components/diagnostico/DiagnosticoFunnel";
+import { DiagnosticoFunnel, type MotivoId } from "@/components/diagnostico/DiagnosticoFunnel";
 
 /** Bullet de ventaja con icono propio (Gelfis 2026-06-14: TODAS las
  *  features tienen que tener icono, no solo "desde casa"). */
@@ -47,11 +47,10 @@ export function LandingStep0({
 }: LandingStep0Props) {
   const [started, setStarted] = useState(false);
 
-  // Una vez pulsado el CTA, montamos el funnel simple (2 pasos:
-  // nivel → calendario+datos). presetMotivo + landingIntent se
-  // propagan al register para que /admin/ads pueda hacer breakdown.
+  // Una vez pulsado el CTA, montamos el funnel real. Le pasamos el
+  // motivo preset (si lo hay) y el landingIntent para tracking.
   if (started) {
-    return <SimpleTrialFlow presetMotivo={presetMotivo} landingIntent={landingIntent} />;
+    return <DiagnosticoFunnel presetMotivo={presetMotivo} landingIntent={landingIntent} />;
   }
 
   return (
@@ -153,9 +152,8 @@ export function LandingStep0({
               con un profesor nativo, una conversación honesta sobre tu
               nivel y un plan diseñado para ti.
             </p>
-            <button
-              type="button"
-              onClick={() => setStarted(true)}
+            <Link
+              href="/agendar/cuando"
               className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-full
                          bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5
                          text-[14px] md:text-[15px] font-bold
@@ -164,7 +162,7 @@ export function LandingStep0({
             >
               <span aria-hidden>🎁</span>
               <span>Reservar mi Clase Gratis</span>
-            </button>
+            </Link>
           </div>
 
           {/* Rating con 5 estrellas + +500 alumnos + verificado */}

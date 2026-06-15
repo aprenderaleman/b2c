@@ -21,14 +21,6 @@ type Window_ = Window & {
 // (AW-17724667323) ya se carga en app/layout.tsx.
 const GADS_LEAD_CONVERSION = "AW-17724667323/5fU7CKWqmLUcELvr44NC";
 
-// Conversión de Google Ads "Clase de prueba reservada". Se dispara al
-// llegar a /confirmacion (transaction_id = classId, dedup garantizada).
-// El label viene de la env NEXT_PUBLIC_GADS_SCHEDULE_LABEL; si no está
-// configurada, cae al mismo label del lead (mejor double-count que perder
-// la señal). Gelfis crea el label nuevo en Google Ads y lo setea en Vercel.
-const GADS_SCHEDULE_CONVERSION = process.env.NEXT_PUBLIC_GADS_SCHEDULE_CONVERSION
-  ?? GADS_LEAD_CONVERSION;
-
 /** Disparado al completar paso 5 (registro = click "Crear mi plan").
  *
  *  El `value` de la conversión Google Ads señaliza la calidad del lead:
@@ -77,11 +69,7 @@ export function firePixelLead(args: {
   } catch (e) { console.warn("[pixel] ttq CompleteRegistration failed:", e); }
 }
 
-/** Disparado al agendar la clase de prueba (post-submit en SimpleTrialFlow).
- *
- *  Meta + TikTok aquí; Google Ads va en `firePixelScheduleGoogle` que
- *  se dispara desde /confirmacion para deduplicación robusta por classId.
- */
+/** Disparado al agendar la clase de prueba (paso 6 → /agendar/objetivo). */
 export function firePixelSchedule(args: { leadId: string }) {
   if (typeof window === "undefined") return;
   const w = window as Window_;
@@ -91,25 +79,4 @@ export function firePixelSchedule(args: { leadId: string }) {
   try {
     w.ttq?.track("Subscribe", { content_id: args.leadId });
   } catch (e) { console.warn("[pixel] ttq Subscribe failed:", e); }
-}
-
-/** Conversion de Google Ads "Clase de prueba reservada". Dispárala
- *  desde /confirmacion (page-load). transaction_id=classId previene
- *  doble-conteo si el lead refresca o vuelve a la página.
- *
- *  value = 5 EUR (vs 2 EUR del lead) — señaliza a Smart Bidding que
- *  los leads que llegan a este punto valen más que los simplemente
- *  registrados. Ajusta el valor con producto si tu CPL real difiere.
- */
-export function firePixelScheduleGoogle(args: { classId: string }) {
-  if (typeof window === "undefined") return;
-  const w = window as Window_;
-  try {
-    w.gtag?.("event", "conversion", {
-      send_to: GADS_SCHEDULE_CONVERSION,
-      value:    5,
-      currency: "EUR",
-      transaction_id: args.classId,
-    });
-  } catch (e) { console.warn("[pixel] gtag schedule conversion failed:", e); }
 }

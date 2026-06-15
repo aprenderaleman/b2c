@@ -4,7 +4,6 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { verifyTrialToken } from "@/lib/trial-token";
 import { IllustrationPanel } from "@/components/diagnostico/IllustrationPanel";
 import { BrandLogo } from "@/components/BrandLogo";
-import { ConfirmacionPixel } from "./ConfirmacionPixel";
 
 /**
  * GET /confirmacion?c={classId}&t={token}
@@ -86,9 +85,6 @@ export default async function ConfirmacionPage({
   return (
     <div className="min-h-[100dvh] bg-white text-slate-900"
          style={{ overscrollBehavior: "contain" }}>
-      {/* Google Ads conversion — se dispara client-side al montar.
-          Dedup por classId (transaction_id). */}
-      <ConfirmacionPixel classId={classId} />
       <IllustrationPanel step="success">
         <div className="flex flex-col min-h-[100dvh]">
           {/* Header sticky — sólo brand + back a inicio, sin progress bar. */}
