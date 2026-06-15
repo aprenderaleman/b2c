@@ -379,18 +379,21 @@ export default function StepCuando() {
           )}
           {selectedSlot && !isFromDiagnostico && slotLabel && (
             <div className="mt-2 rounded-2xl border-2 border-warm bg-warm/5 p-4 space-y-4">
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-warm-foreground">
-                  Tu horario
+              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-sky-50 border border-emerald-200 p-4 text-center">
+                <p className="text-[13px] font-semibold text-slate-600">
+                  🎓 Tu clase de alemán es el:
                 </p>
-                <p className="mt-1 text-[15px] font-bold text-slate-900 capitalize">
-                  {slotLabel.day} · {slotLabel.time}
-                  {showDualTz && (
-                    <span className="ml-2 text-[12px] font-normal text-slate-500">
-                      ({slotLabel.berlinTime} Berlín)
-                    </span>
-                  )}
+                <p className="mt-2 text-[18px] font-extrabold text-slate-900 capitalize">
+                  📅 {slotLabel.day}
                 </p>
+                <p className="mt-1 text-[22px] font-black text-emerald-700 tabular-nums">
+                  🕐 {slotLabel.time}
+                </p>
+                {showDualTz && (
+                  <p className="mt-1 text-[12px] text-slate-500">
+                    🇩🇪 {slotLabel.berlinTime} hora de Berlín
+                  </p>
+                )}
               </div>
 
               <div>
