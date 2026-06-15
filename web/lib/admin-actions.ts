@@ -337,13 +337,17 @@ export async function markTrialAttendedAwaitingConversion(
 
 export async function markTrialAbsent(leadId: string): Promise<void> {
   const sb = supabaseAdmin();
-  // Fire the first follow-up at the very next scheduler tick (the
-  // hourly tick_absent_followups job in the VPS). Setting the date
-  // to "now" makes it immediately eligible — the lead hears from us
-  // in < 1 h instead of waiting a full day. Sales practice: the
-  // first re-touch within an hour materially raises re-booking
-  // rates vs the previous +24 h policy.
-  const nextContact = new Date(Date.now() - 1_000).toISOString();
+  // Politica Gelfis 2026-06-15: primer follow-up 60 min después de
+  // marcar "no asistio" (en vez de inmediato). Da margen al lead que
+  // quizá tuvo un problema técnico de último minuto y aparece tarde,
+  // y evita parecer agobiantes mandando justo después de la hora a la
+  // que NO se presento.
+  //
+  // El cron tick_absent_followups corre cada hora; por eso el envio
+  // REAL puede caer entre +60 y +120 min. Si necesitamos precision
+  // exacta (~+60 min ±5), bajar el cron a cada 5 min — change pequeño
+  // en agents/scheduler.py.
+  const nextContact = new Date(Date.now() + 60 * 60_000).toISOString();
   await sb
     .from("leads")
     .update({ status: "trial_absent", next_contact_date: nextContact })
@@ -352,6 +356,6 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     lead_id: leadId,
     type: "status_change",
     author: "gelfis",
-    content: "Lead did not attend trial — immediate absent follow-up scheduled.",
+    content: "Lead did not attend trial — first absent follow-up scheduled for T+60min.",
   });
 }
