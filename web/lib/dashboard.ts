@@ -160,7 +160,12 @@ export async function getLeads(filter: LeadsFilter = {}): Promise<{ rows: LeadRo
     query = query.or(`name.ilike.${like},whatsapp_normalized.ilike.${like}`);
   }
 
-  query = query.order("created_at", { ascending: false });
+  // Orden por "última actividad" (Gelfis 2026-06-15). updated_at se
+  // bumpea cuando el lead agenda trial / cambia status / Stiv le escribe,
+  // así que los leads más relevantes salen arriba — aunque su created_at
+  // sea antiguo. Antes ordenábamos por created_at, lo que escondía los
+  // leads que regresaban a reservar trial tras días en frío.
+  query = query.order("updated_at", { ascending: false, nullsFirst: false });
   query = query.range(
     filter.offset ?? 0,
     (filter.offset ?? 0) + (filter.limit ?? 50) - 1,
