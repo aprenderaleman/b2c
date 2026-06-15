@@ -31,6 +31,7 @@ import { TimeList, type SlotItem }      from "@/components/agendar/TimeList";
 import { BrandLogo }                    from "@/components/BrandLogo";
 import { IllustrationPanel }            from "./IllustrationPanel";
 import { resolvePhone }                 from "@/lib/phone";
+import { detectCountryFromBrowser, detectBrowserTimezone } from "@/lib/timezone-country";
 
 // ── Opciones del quiz (sincronizadas 1-a-1 con el endpoint
 //    /api/public/diagnostico/register — si cambias texto aquí cámbialo
@@ -320,6 +321,21 @@ export function DiagnosticoFunnel({
   // emailOnly=true cuando el lead envía sin WA → step=7 muestra
   // EmailOnlyThanksScreen (book-trial requiere WA).
   const [emailOnly, setEmailOnly] = useState(false);
+
+  // Auto-detección del prefijo país desde la TZ del navegador
+  // (Gelfis 2026-06-15). Recibíamos muchos números inservibles porque el
+  // lead dejaba el +49 por defecto pensando que era opcional o no veía
+  // el desplegable. Ahora si el navegador reporta TZ LATAM/ES, precargamos
+  // el prefijo correspondiente. El lead sigue pudiendo cambiarlo manualmente.
+  useEffect(() => {
+    const detected = detectCountryFromBrowser();
+    if (!detected) return;
+    setForm(f => {
+      // No pisamos si el usuario ya tecleó algo distinto al default
+      if (f.countryCode !== "+49" || f.country !== "DE") return f;
+      return { ...f, countryCode: detected.countryCode, country: detected.country };
+    });
+  }, []);
 
   // Theme color para la barra de estado en móvil — cream/rose pastel
   // tras el redesign light-mode 2026-05-26 (estilo Preply).
@@ -1314,18 +1330,6 @@ function DataCaptureStep({
             estábamos recibiendo muchos números inservibles. */}
         {showWhatsappField && (
         <Field label={<span>WhatsApp <span className="text-warm">*</span></span>}>
-          {/* Instrucciones antes del input — para que el lead sepa cómo
-              escribir el número antes de equivocarse. */}
-          <div className="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <p className="text-[12px] font-semibold text-slate-700 leading-snug">
-              📌 Cómo escribir tu número correctamente:
-            </p>
-            <ul className="mt-1 text-[12px] text-slate-600 space-y-0.5 leading-snug">
-              <li>· Selecciona el <strong>código de tu país</strong> en el desplegable de la izquierda</li>
-              <li>· En el campo grande escribe SOLO los dígitos del número, <strong>sin el código del país</strong></li>
-              <li>· Ejemplo (España): <code className="bg-white px-1 rounded">+34</code> + <code className="bg-white px-1 rounded">612 345 678</code></li>
-            </ul>
-          </div>
           <div className="flex gap-2">
             <input
               type="tel"
@@ -1386,20 +1390,9 @@ function DataCaptureStep({
               </button>
             </div>
           )}
-          {/* Por qué pedimos el WhatsApp */}
-          <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-            <p className="text-[12px] sm:text-xs text-emerald-900 leading-snug">
-              💬 <strong>Lo necesitamos para tu clase de prueba:</strong>
-            </p>
-            <ul className="mt-1 text-[11.5px] sm:text-[12px] text-emerald-800 space-y-0.5 leading-snug">
-              <li>· Link de la clase 24 h y 30 min antes</li>
-              <li>· Resolver cualquier duda al instante</li>
-              <li>· Materiales adaptados a tu nivel</li>
-            </ul>
-            <p className="mt-1.5 text-[11px] text-emerald-700/80">
-              Cero spam · Cero promociones invasivas
-            </p>
-          </div>
+          <p className="mt-2 text-[12px] text-slate-500 leading-snug">
+            Te contactaremos solo con <strong>fines educativos</strong>.
+          </p>
         </Field>
         )}
 
@@ -1485,6 +1478,15 @@ function CalendarStep({
   // 2026-05-26: eliminado el checkbox "valor" — sólo queda el de
   // compromiso de asistencia para reducir fricción en el paso 6.
   const [commitAttend,   setCommitAttend]   = useState(false);
+  // Modal de confirmación dual-TZ (Gelfis 2026-06-15). Detectamos la TZ
+  // del lead; si difiere de Berlin, exigimos un paso extra antes de
+  // disparar book-trial — el lead ve "X tu hora · Y Berlín" y debe
+  // confirmar explícitamente. Cierra el bug de leads LATAM que se
+  // presentaban a su hora local.
+  const [leadTimezone, setLeadTimezone] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState(false);
+  useEffect(() => { setLeadTimezone(detectBrowserTimezone()); }, []);
+  const showDualTz = !!leadTimezone && leadTimezone !== "Europe/Berlin";
 
   useEffect(() => {
     let cancelled = false;
@@ -1495,28 +1497,32 @@ function CalendarStep({
     return () => { cancelled = true; };
   }, []);
 
+  // Agrupamos los slots por día en la TZ que el lead percibe. Sin esto,
+  // un slot Berlin Sáb 00:30 le aparecería al lead en LATAM bajo "Sábado"
+  // del strip cuando para él es viernes por la noche.
+  const displayTz = leadTimezone ?? "Europe/Berlin";
   const slotsByDay = useMemo(() => {
     const map = new Map<string, SlotItem[]>();
     for (const s of slots ?? []) {
       const key = new Intl.DateTimeFormat("en-CA", {
-        timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit",
+        timeZone: displayTz, year: "numeric", month: "2-digit", day: "2-digit",
       }).format(new Date(s.startIso));
       const list = map.get(key) ?? [];
       list.push(s);
       map.set(key, list);
     }
     return map;
-  }, [slots]);
+  }, [slots, displayTz]);
 
   const daysWithSlots = useMemo(() => new Set(slotsByDay.keys()), [slotsByDay]);
 
   useEffect(() => {
     if (!slots || slots.length === 0 || selectedDay) return;
     const firstKey = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit",
+      timeZone: displayTz, year: "numeric", month: "2-digit", day: "2-digit",
     }).format(new Date(slots[0].startIso));
     setDay(firstKey);
-  }, [slots, selectedDay]);
+  }, [slots, selectedDay, displayTz]);
 
   const fullDateLabel = (key: string): string => {
     const [y, m, d] = key.split("-").map(Number);
@@ -1647,22 +1653,44 @@ function CalendarStep({
   };
 
   // Label del botón "Confirmar [día · hora]" cuando hay slot
-  // seleccionado. Formato: "viernes 9 de mayo · 17:00".
+  // seleccionado. Formato: "viernes 9 de mayo · 17:00". Si el lead está
+  // en otra TZ, formateamos día en SU zona (no en Berlín) — coherente
+  // con lo que ve en el strip / TimeList.
   const confirmLabel = (() => {
     if (!selectedSlot) return null;
     const dt = new Date(selectedSlot.startIso);
     const dayPart = dt.toLocaleDateString("es-ES", {
-      timeZone: "Europe/Berlin",
+      timeZone: displayTz,
       weekday:  "long",
       day:      "numeric",
       month:    "long",
     });
     const timePart = dt.toLocaleTimeString("es-ES", {
-      timeZone: "Europe/Berlin",
+      timeZone: displayTz,
       hour:     "2-digit",
       minute:   "2-digit",
     });
     return `${dayPart} · ${timePart}`;
+  })();
+
+  // Texto del modal de confirmación dual-TZ. Muestra "tu hora" y "Berlín"
+  // en paralelo. Lo usamos solo si showDualTz=true.
+  const dualTzConfirmText = (() => {
+    if (!selectedSlot || !showDualTz) return null;
+    const dt = new Date(selectedSlot.startIso);
+    const localDay = dt.toLocaleDateString("es-ES", {
+      timeZone: displayTz, weekday: "long", day: "numeric", month: "long",
+    });
+    const localTime = dt.toLocaleTimeString("es-ES", {
+      timeZone: displayTz, hour: "2-digit", minute: "2-digit",
+    });
+    const berlinDay = dt.toLocaleDateString("es-ES", {
+      timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long",
+    });
+    const berlinTime = dt.toLocaleTimeString("es-ES", {
+      timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit",
+    });
+    return { localDay, localTime, berlinDay, berlinTime };
   })();
 
   return (
@@ -1738,11 +1766,19 @@ function CalendarStep({
 
         {slots && slots.length > 0 && (
           <div className="space-y-5">
+            {showDualTz && (
+              <div className="rounded-xl border border-sky-300 bg-sky-50 px-3.5 py-2.5">
+                <p className="text-[13px] text-sky-900 leading-snug">
+                  🌎 Detectamos que estás en <strong>{leadTimezone}</strong>. Te mostramos los horarios en <strong>tu zona</strong> y al lado la hora del profesor en <strong>Berlín</strong>.
+                </p>
+              </div>
+            )}
             <MobileDayStrip
               daysWithSlots={daysWithSlots}
               selectedDay={selectedDay}
               onSelect={setDay}
               lightMode
+              displayTimezone={displayTz}
             />
             {selectedDay && (
               <div>
@@ -1755,6 +1791,7 @@ function CalendarStep({
                   selectedTeacherId={selectedSlot?.teacherId ?? null}
                   onSelect={onPickSlot}
                   lightMode
+                  leadTimezone={leadTimezone}
                 />
               </div>
             )}
@@ -1811,7 +1848,14 @@ function CalendarStep({
           >
             <button
               type="button"
-              onClick={confirmBooking}
+              onClick={() => {
+                if (!canConfirm) return;
+                if (showDualTz) {
+                  setPendingConfirmation(true);
+                } else {
+                  confirmBooking();
+                }
+              }}
               disabled={!canConfirm}
               className="w-full h-14 md:h-13 lg:h-14 rounded-2xl bg-warm text-warm-foreground font-semibold
                          shadow-lg shadow-warm/20 active:scale-[0.98] transition
@@ -1834,6 +1878,91 @@ function CalendarStep({
                 </>
               )}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación dual-TZ (Gelfis 2026-06-15). Se abre
+          solo cuando la TZ del lead difiere de Berlín. Muestra ambas
+          horas explícitamente para que el lead confirme que entendió
+          la diferencia antes de reservar. */}
+      {pendingConfirmation && selectedSlot && dualTzConfirmText && (
+        <div
+          className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+          onClick={() => { if (!submitting) setPendingConfirmation(false); }}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-extrabold text-slate-900">
+              ✅ Confirma el horario
+            </h2>
+            <p className="mt-1 text-sm text-slate-600 leading-snug">
+              Tu clase es en hora de Berlín (donde está el profe). Revisa que coincida con tu agenda local.
+            </p>
+
+            <div className="mt-5 space-y-3">
+              <div className="rounded-2xl border-2 border-warm bg-warm/10 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-warm-foreground">
+                  🕐 En tu zona ({leadTimezone})
+                </p>
+                <p className="mt-1 text-[15px] font-bold text-slate-900 capitalize">
+                  {dualTzConfirmText.localDay}
+                </p>
+                <p className="text-2xl font-extrabold text-slate-900 tabular-nums leading-tight">
+                  {dualTzConfirmText.localTime}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  🇩🇪 En Berlín (zona del profesor)
+                </p>
+                <p className="mt-1 text-[14px] font-semibold text-slate-700 capitalize">
+                  {dualTzConfirmText.berlinDay}
+                </p>
+                <p className="text-xl font-bold text-slate-700 tabular-nums leading-tight">
+                  {dualTzConfirmText.berlinTime}
+                </p>
+              </div>
+            </div>
+
+            {submitErr && (
+              <div className="mt-4 rounded-xl border border-red-300 bg-red-50 px-3 py-2 text-[13px] text-red-800">
+                {submitErr}
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={confirmBooking}
+                disabled={submitting}
+                className="h-12 rounded-2xl bg-warm text-warm-foreground font-bold
+                           shadow-lg shadow-warm/20 active:scale-[0.98] transition
+                           disabled:opacity-50 disabled:cursor-not-allowed
+                           flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <>
+                    <span className="inline-block h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden />
+                    Confirmando…
+                  </>
+                ) : (
+                  "Sí, confirmar reserva"
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingConfirmation(false)}
+                disabled={submitting}
+                className="h-11 rounded-2xl border border-slate-200 text-slate-700 font-semibold text-sm
+                           hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cambiar horario
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -13,59 +13,63 @@ import { useEffect, useMemo, useRef } from "react";
  */
 
 type Props = {
-  daysWithSlots: Set<string>;            // Berlin "YYYY-MM-DD" keys
+  daysWithSlots: Set<string>;            // "YYYY-MM-DD" keys en displayTimezone
   selectedDay:   string | null;
   onSelect:      (key: string) => void;
   /** Tema claro (post-2026-05-26): usado por /diagnostico/funnel.
    * Default false → tema oscuro (usado por /agendar/cuando). */
   lightMode?:    boolean;
+  /** TZ usada para formatear las fechas. Default Europe/Berlin. Si el
+   * lead está en otra zona (LATAM), su día "Sáb" puede no coincidir con
+   * el Berlín cuando el slot cae cerca de medianoche — pasamos su TZ
+   * para alinear el strip con su percepción. */
+  displayTimezone?: string;
 };
 
 const DOW_ES = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
 
-function berlinDateKey(d: Date): string {
+function tzDateKey(d: Date, tz: string): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit",
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
   }).format(d);
 }
 
-function berlinDow(d: Date): string {
-  // 0..6 in Berlin TZ. We can't use d.getDay() directly because that
-  // honours the visitor's local TZ; instead, parse the en-CA key back.
-  const key = berlinDateKey(d);
+function tzDow(d: Date, tz: string): string {
+  // 0..6 en la TZ dada. No podemos usar d.getDay() porque devuelve TZ
+  // local del navegador; reparseamos el key en-CA.
+  const key = tzDateKey(d, tz);
   const [y, m, day] = key.split("-").map(Number);
-  // Construct a UTC date so getUTCDay() gives a stable answer.
   const utc = new Date(Date.UTC(y, m - 1, day));
   return DOW_ES[utc.getUTCDay()];
 }
 
-function berlinDayOfMonth(d: Date): number {
-  const key = berlinDateKey(d);
+function tzDayOfMonth(d: Date, tz: string): number {
+  const key = tzDateKey(d, tz);
   return Number(key.split("-")[2]);
 }
 
-export function MobileDayStrip({ daysWithSlots, selectedDay, onSelect, lightMode = false }: Props) {
+export function MobileDayStrip({ daysWithSlots, selectedDay, onSelect, lightMode = false, displayTimezone = "Europe/Berlin" }: Props) {
   const stripRef = useRef<HTMLDivElement>(null);
   const selectedRef = useRef<HTMLButtonElement>(null);
 
   const days = useMemo(() => {
     const list: { key: string; dow: string; dayOfMonth: number; isToday: boolean; isTomorrow: boolean }[] = [];
     const now = new Date();
-    const todayKey = berlinDateKey(now);
+    const todayKey = tzDateKey(now, displayTimezone);
     for (let i = 0; i < 14; i++) {
       const d = new Date(now);
       d.setDate(now.getDate() + i);
-      const key = berlinDateKey(d);
+      const key = tzDateKey(d, displayTimezone);
       list.push({
         key,
-        dow:        berlinDow(d),
-        dayOfMonth: berlinDayOfMonth(d),
+        dow:        tzDow(d, displayTimezone),
+        dayOfMonth: tzDayOfMonth(d, displayTimezone),
         isToday:    key === todayKey,
         isTomorrow: i === 1,
       });
     }
     return list;
-  }, []);
+  }, [displayTimezone]);
 
   // When the selected day changes (e.g. auto-pick on load), make sure
   // it's visible inside the horizontal scroll viewport.
