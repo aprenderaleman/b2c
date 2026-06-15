@@ -8,26 +8,32 @@ import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
 import { useBookingState } from "@/lib/booking-state";
 import { useLang } from "@/lib/lang-context";
-import { normalizePhone } from "@/lib/phone";
-import { firePixelSchedule } from "@/lib/pixels";
+import { normalizePhone, resolvePhone } from "@/lib/phone";
+import { combineE164 } from "@/components/diagnostico/DiagnosticoFunnel";
+import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
+import { detectBrowserTimezone, detectCountryFromBrowser } from "@/lib/timezone-country";
 
 /**
  * Step 1 — slot picker. Mobile pattern: horizontal day strip + vertical
- * time list. Tapping a time selects + auto-advances to step 2 (no
- * "Continue" button on this step — the tap is the decision).
+ * time list. Tras seleccionar un slot el flujo varía según el origen:
+ *
+ *   1. Lead vino del quiz `/diagnostico` (state.from_diagnostico=true)
+ *      → tenemos sus datos → auto-submit a book-trial.
+ *   2. Lead vino DIRECTO (atajo "Primera clase de prueba GRATIS" en
+ *      una landing): mostramos form inline (nombre + email + WhatsApp)
+ *      y al confirmar reservamos. Sin pasos /agendar/tu /nivel /objetivo.
  *
  * Reuses the same `/api/public/trial-slots` endpoint as the legacy
  * desktop funnel, so the LMS scheduling logic is unchanged.
  */
-function berlinDateKey(d: Date): string {
+
+function tzDateKey(d: Date, tz: string): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit",
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
   }).format(d);
 }
 
 function fullDateLabel(key: string): string {
-  // key is "YYYY-MM-DD" in Berlin TZ. Reconstruct as a Date at noon
-  // UTC to dodge any DST surprises before formatting.
   const [y, m, d] = key.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d, 12));
   return dt.toLocaleDateString("es-ES", {
@@ -43,8 +49,25 @@ export default function StepCuando() {
   const [slots,    setSlots]    = useState<SlotItem[] | null>(null);
   const [loadErr,  setLoadErr]  = useState<string | null>(null);
   const [selectedDay, setDay]   = useState<string | null>(null);
+  const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
+
+  // TZ del lead — para mostrar dual-TZ en slots y agrupar días.
+  const [leadTimezone, setLeadTimezone] = useState<string | null>(null);
+  useEffect(() => { setLeadTimezone(detectBrowserTimezone()); }, []);
+  const displayTz = leadTimezone ?? "Europe/Berlin";
+  const showDualTz = !!leadTimezone && leadTimezone !== "Europe/Berlin";
+
+  // Form inline (atajo desde landing). Se inicializa con auto-detect.
+  const [form, setForm] = useState({
+    name: "", email: "", whatsapp: "", countryCode: "+49",
+  });
+  useEffect(() => {
+    const det = detectCountryFromBrowser();
+    if (!det) return;
+    setForm(f => (f.countryCode === "+49" ? { ...f, countryCode: det.countryCode } : f));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,33 +78,37 @@ export default function StepCuando() {
     return () => { cancelled = true; };
   }, []);
 
-  // Build (day → slots) map once we have data.
   const slotsByDay = useMemo(() => {
     const map = new Map<string, SlotItem[]>();
     for (const s of slots ?? []) {
-      const key  = berlinDateKey(new Date(s.startIso));
+      const key  = tzDateKey(new Date(s.startIso), displayTz);
       const list = map.get(key) ?? [];
       list.push(s);
       map.set(key, list);
     }
     return map;
-  }, [slots]);
+  }, [slots, displayTz]);
 
   const daysWithSlots = useMemo(() => new Set(slotsByDay.keys()), [slotsByDay]);
 
-  // Auto-pick: prefer the day already selected (return-from-step-2),
-  // else the first day with availability.
   useEffect(() => {
     if (!hydrated || !slots || slots.length === 0 || selectedDay) return;
-    const fromState = state.slot_iso ? berlinDateKey(new Date(state.slot_iso)) : null;
+    const fromState = state.slot_iso ? tzDateKey(new Date(state.slot_iso), displayTz) : null;
     if (fromState && daysWithSlots.has(fromState)) {
       setDay(fromState);
     } else {
-      setDay(berlinDateKey(new Date(slots[0].startIso)));
+      setDay(tzDateKey(new Date(slots[0].startIso), displayTz));
     }
-  }, [hydrated, slots, selectedDay, state.slot_iso, daysWithSlots]);
+  }, [hydrated, slots, selectedDay, state.slot_iso, daysWithSlots, displayTz]);
 
   const slotsToday: SlotItem[] = selectedDay ? (slotsByDay.get(selectedDay) ?? []) : [];
+
+  const isFromDiagnostico = !!(
+    state.from_diagnostico
+    && state.name && state.email
+    && state.phone_local && state.country_code
+    && state.german_level && state.goal
+  );
 
   const onPickSlot = async (s: SlotItem) => {
     update({
@@ -89,33 +116,27 @@ export default function StepCuando() {
       teacher_id:   s.teacherId,
       teacher_name: s.teacherName,
     });
+    setSelectedSlot(s);
     if (typeof navigator !== "undefined" && "vibrate" in navigator) {
       try { navigator.vibrate?.(8); } catch { /* iOS no-op */ }
     }
 
-    // Hand-off desde el funnel `/diagnostico`: el lead ya nos dio
-    // nombre, email, teléfono, nivel y objetivo en el quiz. No tiene
-    // sentido pedirle que rellene los pasos /tu /nivel /objetivo
-    // otra vez. Submeteamos directo a book-trial con todos los
-    // datos y redirigimos a /confirmacion.
-    if (state.from_diagnostico
-        && state.name && state.email
-        && state.phone_local && state.country_code
-        && state.german_level && state.goal) {
+    // Lead que vino del quiz `/diagnostico` — auto-submit directo.
+    if (isFromDiagnostico) {
       if (submitting) return;
       setSubmitting(true);
       setSubmitErr(null);
       try {
         const whatsapp_e164 = normalizePhone(
           `${state.country_code} ${state.phone_local}`,
-          state.country_code.replace("+", ""),
+          (state.country_code ?? "+49").replace("+", ""),
         );
         const res = await fetch("/api/public/book-trial", {
           method:  "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name:          state.name.trim(),
-            email:         state.email.trim().toLowerCase(),
+            name:          state.name!.trim(),
+            email:         state.email!.trim().toLowerCase(),
             whatsapp_e164,
             whatsapp_raw:  `${state.country_code} ${state.phone_local}`,
             german_level:  state.german_level,
@@ -123,7 +144,6 @@ export default function StepCuando() {
             language:      lang,
             slot_iso:      s.startIso,
             teacher_id:    s.teacherId,
-            gdpr_accepted: true,
           }),
         });
         const json = await res.json();
@@ -132,19 +152,13 @@ export default function StepCuando() {
           setSubmitting(false);
           return;
         }
-        // /confirmacion EXIGE ?c=<classId>&t=<token> o redirige a `/`
-        // (ver app/confirmacion/page.tsx). Sin esos params el lead
-        // termina otra vez en el inicio del funnel.
         if (!json.classId || !json.token) {
           setSubmitErr("Tu clase se guardó pero no pudimos cargar la confirmación. Mira tu email — te llegará el enlace ahí.");
           setSubmitting(false);
           return;
         }
         if (state.lead_id) firePixelSchedule({ leadId: state.lead_id });
-        // Limpiar booking-state — la sesión se cierra aquí.
         try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
-        // Hard nav para que `/confirmacion` cargue limpio sin que el
-        // guard de /agendar/* haga ping-pong.
         if (typeof window !== "undefined") {
           const params = new URLSearchParams({ c: json.classId, t: json.token });
           window.location.href = `/confirmacion?${params.toString()}`;
@@ -157,17 +171,117 @@ export default function StepCuando() {
       return;
     }
 
-    // Flujo normal — usuario que entró directo a `/agendar/cuando`
-    // sin pasar por el quiz. Sigue la ruta de 4 pasos.
-    router.push("/agendar/tu");
+    // Atajo desde landing — el form inline se renderiza al detectar
+    // selectedSlot. NO navegamos a /agendar/tu.
   };
+
+  // Validación form inline.
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const nameValid  = form.name.trim().length >= 2;
+  const phoneInfo  = useMemo(() => {
+    const digits = form.whatsapp.replace(/\D/g, "");
+    if (digits.length === 0) return { state: "empty" as const };
+    if (digits.length < 6)   return { state: "short" as const };
+    const res = resolvePhone(form.countryCode, form.whatsapp);
+    if (res.ccMismatch && res.detectedCc) {
+      return { state: "mismatch" as const, detectedCc: res.detectedCc, e164: res.e164 };
+    }
+    if (!res.valid) return { state: "invalid" as const };
+    return { state: "ok" as const, e164: res.e164 };
+  }, [form.countryCode, form.whatsapp]);
+  const phoneError =
+    phoneInfo.state === "short"   ? "El número parece muy corto."
+    : phoneInfo.state === "invalid" ? "Número no válido. Revisa el prefijo y los dígitos."
+    : null;
+  const phoneOk    = phoneInfo.state === "ok" || phoneInfo.state === "mismatch";
+  const canSubmitForm = nameValid && emailValid && phoneOk && !!selectedSlot && !submitting;
+
+  const submitInlineForm = async () => {
+    if (!selectedSlot || !canSubmitForm) return;
+    setSubmitting(true);
+    setSubmitErr(null);
+    try {
+      const cc = form.countryCode.startsWith("+") ? form.countryCode : `+${form.countryCode}`;
+      const whatsapp_e164 = combineE164(form.countryCode, form.whatsapp);
+      const whatsapp_raw  = `${cc} ${form.whatsapp}`;
+      const res = await fetch("/api/public/book-trial", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name:          form.name.trim(),
+          email:         form.email.trim().toLowerCase(),
+          whatsapp_e164,
+          whatsapp_raw,
+          german_level:  "A0",
+          goal:          "work",
+          language:      lang,
+          slot_iso:      selectedSlot.startIso,
+          teacher_id:    selectedSlot.teacherId,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        if (res.status === 409 && json.error === "slot_taken") {
+          setSubmitErr("Ese horario se acaba de ocupar. Elige otro.");
+          setSelectedSlot(null);
+          fetch("/api/public/trial-slots", { cache: "no-store" })
+            .then(r => r.json())
+            .then(d => setSlots(d.slots ?? []))
+            .catch(() => { /* ignore */ });
+        } else {
+          setSubmitErr(json.error ?? json.message ?? "No pudimos confirmar tu clase. Inténtalo de nuevo.");
+        }
+        setSubmitting(false);
+        return;
+      }
+      if (!json.classId || !json.token) {
+        setSubmitErr("Tu clase se guardó pero no pudimos cargar la confirmación. Mira tu email — te llegará el enlace ahí.");
+        setSubmitting(false);
+        return;
+      }
+      if (json.leadId) {
+        firePixelLead({
+          leadId:      json.leadId,
+          email:       form.email.trim().toLowerCase(),
+          budget:      null,
+          hasWhatsapp: true,
+        });
+        firePixelSchedule({ leadId: json.leadId });
+      }
+      try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams({ c: json.classId, t: json.token });
+        window.location.href = `/confirmacion?${params.toString()}`;
+      }
+    } catch (e) {
+      console.error("[agendar/cuando] inline submit failed:", e);
+      setSubmitErr("Error de conexión. Inténtalo de nuevo.");
+      setSubmitting(false);
+    }
+  };
+
+  // Label del slot seleccionado en la TZ del lead.
+  const slotLabel = (() => {
+    if (!selectedSlot) return null;
+    const dt = new Date(selectedSlot.startIso);
+    const day = dt.toLocaleDateString("es-ES", {
+      timeZone: displayTz, weekday: "long", day: "numeric", month: "long",
+    });
+    const time = dt.toLocaleTimeString("es-ES", {
+      timeZone: displayTz, hour: "2-digit", minute: "2-digit",
+    });
+    const berlinTime = dt.toLocaleTimeString("es-ES", {
+      timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit",
+    });
+    return { day, time, berlinTime };
+  })();
 
   return (
     <StepFrame
       title="Tu clase de alemán de prueba"
       subtitle="100% gratis · 45 min con profesor nativo · online · sin compromiso"
     >
-      {/* Loading skeleton — keeps the layout stable while slots load */}
+      {/* Loading skeleton */}
       {slots === null && !loadErr && (
         <div className="space-y-4">
           <div className="flex gap-2 overflow-hidden">
@@ -187,13 +301,13 @@ export default function StepCuando() {
 
       {submitting && (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3
-                        text-sm text-slate-700 flex items-center gap-3">
+                        text-sm text-slate-700 flex items-center gap-3 mb-4">
           <span className="inline-block h-4 w-4 rounded-full border-2 border-warm border-t-transparent animate-spin" aria-hidden />
           Confirmando tu clase…
         </div>
       )}
       {submitErr && (
-        <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 mb-4">
           {submitErr}
         </div>
       )}
@@ -207,11 +321,20 @@ export default function StepCuando() {
 
       {slots && slots.length > 0 && (
         <div className="space-y-5">
+          {showDualTz && (
+            <div className="rounded-xl border border-sky-300 bg-sky-50 px-3.5 py-2.5">
+              <p className="text-[13px] text-sky-900 leading-snug">
+                🌎 Detectamos que estás en <strong>{leadTimezone}</strong>. Te mostramos los horarios en <strong>tu zona</strong> y al lado la hora del profesor en <strong>Berlín</strong>.
+              </p>
+            </div>
+          )}
+
           <MobileDayStrip
             daysWithSlots={daysWithSlots}
             selectedDay={selectedDay}
             onSelect={setDay}
             lightMode
+            displayTimezone={displayTz}
           />
 
           {selectedDay && (
@@ -221,11 +344,118 @@ export default function StepCuando() {
               </p>
               <TimeList
                 slots={slotsToday}
-                selectedIso={state.slot_iso}
-                selectedTeacherId={state.teacher_id}
+                selectedIso={selectedSlot?.startIso ?? state.slot_iso ?? null}
+                selectedTeacherId={selectedSlot?.teacherId ?? state.teacher_id ?? null}
                 onSelect={onPickSlot}
                 lightMode
+                leadTimezone={leadTimezone}
               />
+            </div>
+          )}
+
+          {/* Form inline — solo si el lead vino DIRECTO (no del quiz)
+              y ya seleccionó slot. Pide los 3 datos mínimos y reserva. */}
+          {selectedSlot && !isFromDiagnostico && slotLabel && (
+            <div className="mt-2 rounded-2xl border-2 border-warm bg-warm/5 p-4 space-y-4">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-warm-foreground">
+                  Tu horario
+                </p>
+                <p className="mt-1 text-[15px] font-bold text-slate-900 capitalize">
+                  {slotLabel.day} · {slotLabel.time}
+                  {showDualTz && (
+                    <span className="ml-2 text-[12px] font-normal text-slate-500">
+                      ({slotLabel.berlinTime} Berlín)
+                    </span>
+                  )}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1">
+                  Tu nombre <span className="text-warm">*</span>
+                </label>
+                <input
+                  type="text"
+                  autoComplete="given-name"
+                  value={form.name}
+                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full h-11 px-3.5 rounded-xl bg-white border border-slate-200
+                             text-slate-900 placeholder:text-slate-400
+                             focus:outline-none focus:border-warm"
+                  placeholder="Maria"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1">
+                  Email <span className="text-warm">*</span>
+                </label>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  value={form.email}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  className={`w-full h-11 px-3.5 rounded-xl bg-white border
+                             text-slate-900 placeholder:text-slate-400
+                             focus:outline-none ${
+                               form.email.length > 0 && !emailValid
+                                 ? "border-red-400 focus:border-red-500"
+                                 : "border-slate-200 focus:border-warm"
+                             }`}
+                  placeholder="tu@email.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1">
+                  WhatsApp <span className="text-warm">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    value={form.countryCode}
+                    onChange={e => setForm(f => ({ ...f, countryCode: e.target.value.replace(/[^0-9+]/g, "") }))}
+                    className="w-20 h-11 px-2.5 rounded-xl bg-white border border-slate-200
+                               text-slate-900 text-center
+                               focus:outline-none focus:border-warm"
+                    placeholder="+49"
+                  />
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    value={form.whatsapp}
+                    onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
+                    className={`flex-1 h-11 px-3.5 rounded-xl bg-white border
+                               text-slate-900 placeholder:text-slate-400
+                               focus:outline-none ${
+                                 phoneError
+                                   ? "border-red-400 focus:border-red-500"
+                                   : "border-slate-200 focus:border-warm"
+                               }`}
+                    placeholder="612 345 678"
+                  />
+                </div>
+                {phoneError && (
+                  <p className="mt-1 text-[12px] text-red-600">{phoneError}</p>
+                )}
+                <p className="mt-1.5 text-[11.5px] text-slate-500">
+                  Te contactaremos solo con <strong>fines educativos</strong>.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={submitInlineForm}
+                disabled={!canSubmitForm}
+                className="w-full h-12 rounded-2xl bg-warm text-warm-foreground font-bold
+                           shadow-lg shadow-warm/20 active:scale-[0.98] transition
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? "Confirmando…" : "Confirmar mi clase gratis →"}
+              </button>
             </div>
           )}
         </div>

@@ -15,6 +15,7 @@
  * de "click → funnel" sea cliente.
  */
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
 import { DiagnosticoFunnel, type MotivoId } from "@/components/diagnostico/DiagnosticoFunnel";
 
@@ -149,15 +150,21 @@ export function LandingStep0({
               Sesiones desde <strong className="text-slate-900">18 €/hora</strong>
               {" "}y packs flexibles desde <strong className="text-slate-900">280 €</strong>.
             </p>
-            {/* Badge GRATIS — verde esmeralda en vez de warm para no
-                competir con el color de marca del CTA "Empezar ahora"
-                (Gelfis 2026-06-14). */}
-            <p className="mt-2.5 inline-flex items-center gap-1.5 rounded-full
-                          bg-emerald-600 text-white px-3 py-1.5
-                          text-[12.5px] md:text-[13px] font-bold">
+            {/* CTA atajo — bypass del quiz: link directo al calendario.
+                Decisión Gelfis 2026-06-15: el lead que ya sabe lo que
+                quiere no debe pasar por las 4 preguntas. */}
+            <Link
+              href="/agendar/cuando"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-full
+                         bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2
+                         text-[13px] md:text-[14px] font-bold
+                         shadow-md shadow-emerald-600/25
+                         active:scale-[0.98] transition"
+            >
               <span aria-hidden>🎁</span>
               <span>Primera clase de prueba GRATIS</span>
-            </p>
+              <span aria-hidden>→</span>
+            </Link>
           </div>
 
           {/* Rating con 5 estrellas + +500 alumnos + verificado */}
