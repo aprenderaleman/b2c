@@ -14,10 +14,10 @@
  * que Google sí indexa el H1 + subtítulo + bullets aunque la lógica
  * de "click → funnel" sea cliente.
  */
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
-import { DiagnosticoFunnel, type MotivoId } from "@/components/diagnostico/DiagnosticoFunnel";
+import type { MotivoId } from "@/components/diagnostico/DiagnosticoFunnel";
 
 /** Bullet de ventaja con icono propio (Gelfis 2026-06-14: TODAS las
  *  features tienen que tener icono, no solo "desde casa"). */
@@ -43,15 +43,13 @@ function isBullet(b: unknown): b is LandingBullet {
 }
 
 export function LandingStep0({
-  h1, subtitle, bullets, presetMotivo = null, landingIntent,
+  h1, subtitle, bullets, presetMotivo: _presetMotivo = null, landingIntent: _landingIntent,
 }: LandingStep0Props) {
-  const [started, setStarted] = useState(false);
-
-  // Una vez pulsado el CTA, montamos el funnel real. Le pasamos el
-  // motivo preset (si lo hay) y el landingIntent para tracking.
-  if (started) {
-    return <DiagnosticoFunnel presetMotivo={presetMotivo} landingIntent={landingIntent} />;
-  }
+  // presetMotivo / landingIntent quedan para compat con las 6 landings
+  // pero ya no se usan dentro de este componente: el único CTA dirige
+  // a /agendar/cuando (Gelfis 2026-06-15). Si en el futuro se quiere
+  // reintroducir el quiz inline, mountar SimpleTrialFlow aquí.
+  void _presetMotivo; void _landingIntent;
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-white"
@@ -143,9 +141,9 @@ export function LandingStep0({
             })}
           </ul>
 
-          {/* CTA principal — propuesta de valor + atajo directo al
-              calendario. Decisión Gelfis 2026-06-15: el lead que ya
-              sabe lo que quiere no debe pasar por el quiz. */}
+          {/* CTA principal — único botón de la landing tras eliminar
+              el "Empezar ahora" sticky (Gelfis 2026-06-15). Lleva
+              directo a /agendar/cuando con propuesta de valor encima. */}
           <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 md:p-5">
             <p className="text-[14px] md:text-[15px] text-slate-700 leading-relaxed">
               Antes de invertir en cualquier curso, vívelo. Una clase real
@@ -154,15 +152,19 @@ export function LandingStep0({
             </p>
             <Link
               href="/agendar/cuando"
-              className="mt-4 inline-flex items-center justify-center gap-1.5 rounded-full
-                         bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5
-                         text-[14px] md:text-[15px] font-bold
-                         shadow-md shadow-emerald-600/25
+              className="mt-4 inline-flex items-center justify-center gap-2 w-full
+                         h-12 md:h-13 lg:h-14 rounded-2xl
+                         bg-emerald-600 hover:bg-emerald-700 text-white
+                         text-[15px] md:text-[16px] lg:text-[17px] font-bold
+                         shadow-lg shadow-emerald-600/30
                          active:scale-[0.98] transition"
             >
               <span aria-hidden>🎁</span>
               <span>Reservar mi Clase Gratis</span>
             </Link>
+            <p className="mt-2 text-center text-[11.5px] text-slate-600 leading-snug">
+              ⏱️ Toma 60 segundos · 💳 Sin tarjeta · 🤝 Sin compromiso
+            </p>
           </div>
 
           {/* Rating con 5 estrellas + +500 alumnos + verificado */}
@@ -177,27 +179,8 @@ export function LandingStep0({
           </div>
         </main>
 
-        {/* CTA fijo abajo — la única forma de avanzar. */}
-        <div className="sticky bottom-0 z-30 bg-gradient-to-t from-white via-white/95 to-white/0 pt-6 pb-4
-                        px-5 md:px-8"
-             style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 1rem)" }}>
-          <div className="mx-auto max-w-xl">
-            <button
-              type="button"
-              onClick={() => setStarted(true)}
-              className="w-full h-12 md:h-13 lg:h-14 rounded-2xl bg-warm text-warm-foreground
-                         font-semibold text-base md:text-[16px] lg:text-[17px]
-                         shadow-lg shadow-warm/25 active:scale-[0.98] transition
-                         inline-flex items-center justify-center gap-1.5"
-            >
-              <span>Empezar ahora</span>
-              <span aria-hidden>→</span>
-            </button>
-            <p className="mt-2 text-center text-[11.5px] text-slate-500 leading-snug">
-              ⏱️ Toma 60 segundos · 💳 Sin tarjeta · 🤝 Sin compromiso
-            </p>
-          </div>
-        </div>
+        {/* Sticky bottom CTA eliminado (Gelfis 2026-06-15). El CTA verde
+            inline arriba es el único punto de entrada al funnel. */}
       </section>
       </div>
     </div>
