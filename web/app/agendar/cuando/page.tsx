@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { StepFrame } from "@/components/agendar/FunnelShell";
 import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
@@ -45,6 +45,19 @@ export default function StepCuando() {
   const router = useRouter();
   const { lang } = useLang();
   const { state, update, hydrated } = useBookingState();
+
+  // Atribución desde URL (Gelfis 2026-06-15). La home `/` redirige aquí
+  // tras paso 2 (nivel) con `?landing=socialmedia&motivo=X&level=Y`.
+  // El CTA de las landings dedicadas no añade params (default a
+  // 'agendar-directo'). Cualquier valor adicional simplemente se pasa
+  // al body de book-trial y se persiste en leads.landing_intent.
+  const searchParams = useSearchParams();
+  const landingFromUrl = searchParams?.get("landing") ?? null;
+  const motivoFromUrl  = searchParams?.get("motivo")  ?? null;
+  const levelFromUrl   = searchParams?.get("level")   ?? null;
+  // Si el lead viene del flujo /home con socialmedia, ya nos dieron
+  // motivo + nivel. Si no, asumimos atajo desde landing.
+  const effectiveLanding = landingFromUrl ?? "agendar-directo";
 
   const [slots,    setSlots]    = useState<SlotItem[] | null>(null);
   const [loadErr,  setLoadErr]  = useState<string | null>(null);
@@ -228,16 +241,17 @@ export default function StepCuando() {
           email:         form.email.trim().toLowerCase(),
           whatsapp_e164,
           whatsapp_raw,
-          german_level:  "A0",
+          german_level:  levelFromUrl ?? "A0",
           goal:          "work",
           language:      lang,
           slot_iso:      selectedSlot.startIso,
           teacher_id:    selectedSlot.teacherId,
-          // Atribución a /admin/ads: marca este lead como atajo desde
-          // landing (no pasó por el quiz). Sin esto el dashboard lo
-          // contaba en "Trial agendada" pero no en "Form completado",
-          // rompiendo la ratio trial/form.
-          landing_intent: "agendar-directo",
+          // Atribución a /admin/ads. Si la URL trae ?landing=socialmedia
+          // (home redirige aquí tras paso 2), usamos eso y el motivo
+          // real elegido en home. Si no, atajo desde landing dedicada
+          // ('agendar-directo') y book-trial marcará motivo='direct'.
+          landing_intent: effectiveLanding,
+          ...(motivoFromUrl ? { motivo_inicial: motivoFromUrl } : {}),
         }),
       });
       const json = await res.json();

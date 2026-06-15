@@ -453,10 +453,29 @@ export function DiagnosticoFunnel({
   }
   function pickLevel(id: typeof LEVEL_OPTIONS[number]["id"]) {
     setAnswers(a => ({ ...a, level: id }));
+    trackStep(2, id);
+    // Tráfico orgánico/social (landingIntent='socialmedia') → tras el
+    // nivel redirigimos a /agendar/cuando con los datos en la URL.
+    // Allí completa nombre/email/WhatsApp + calendario. Decisión Gelfis
+    // 2026-06-15: cortar el quiz en 2 pasos para los leads de redes
+    // sociales (calidad menor, conviene minimizar fricción). Los leads
+    // de Google Ads (landings dedicadas) usan otro flujo.
+    if (landingIntent === "socialmedia" && typeof window !== "undefined") {
+      // Convertimos el id largo ("A1 — Conozco lo básico...") al código
+      // corto que espera book-trial (enum A0/A1/.../C1). Match por prefix.
+      const shortLevel = id.match(/^[A-C][0-9]/)?.[0] ?? "A0";
+      const params = new URLSearchParams({
+        landing: "socialmedia",
+        level:   shortLevel,
+      });
+      const motivo = answers.motivo;
+      if (motivo) params.set("motivo", motivo);
+      window.location.href = `/agendar/cuando?${params.toString()}`;
+      return;
+    }
     // Quiz simplificado 2026-05-26: tras el nivel saltamos directo a
     // paso 6 (captura). Goal/urgencia/budget se preguntan por WhatsApp.
     setStep(6);
-    trackStep(2, id);
   }
   // Handlers heredados — ya no enganchados al UI, pero los conservamos
   // por si en el futuro re-introducimos alguna pregunta del quiz.

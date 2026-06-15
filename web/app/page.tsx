@@ -16,9 +16,13 @@ import { SiteFooter } from "@/components/landings/SiteFooter";
 export default function HomePage() {
   return (
     <>
-      {/* La home es el funnel completo (100dvh). landingIntent='home'
-          se setea implícitamente por el default del componente. */}
-      <DiagnosticoFunnel />
+      {/* La home recibe tráfico de redes sociales (no Google Ads — esas
+          aterrizan en /clases-aleman-online, /aleman-b2-trabajar, etc).
+          Tag explícito 'socialmedia' para que /admin/ads lo distinga
+          en el desglose por landing. Decisión Gelfis 2026-06-15.
+          Adicionalmente, este landingIntent activa el redirect a
+          /agendar/cuando tras el paso 2 (nivel) en DiagnosticoFunnel. */}
+      <DiagnosticoFunnel landingIntent="socialmedia" />
       {/* Footer con links a las 6 landings dedicadas. Vive BAJO el
           funnel (fuera del primer scroll del usuario) pero el crawler
           lo ve para distribuir la autoridad SEO. */}

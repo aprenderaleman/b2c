@@ -70,12 +70,17 @@ const Body = z.object({
   language:       z.enum(["es", "de"]).default("es"),
   slot_iso:       z.string().datetime(),
   teacher_id:     z.string().uuid(),
-  // Atribución a landing (Gelfis 2026-06-15). Solo lo manda el atajo
-  // /agendar/cuando — el flujo del quiz ya lo persiste por register.
-  // Cuando viene, el lead se marca como motivo_inicial='direct' y se
-  // inserta una fila en lead_motivo_inicial con session sintético para
-  // que la cadena del funnel en /admin/ads cuadre.
+  // Atribución a landing (Gelfis 2026-06-15). Lo manda /agendar/cuando
+  // — el flujo del quiz ya lo persiste por register. Cuando viene:
+  //   - Si body trae motivo_inicial → lo usamos tal cual.
+  //   - Si no → marcamos 'direct' (atajo puro desde landing dedicada).
+  // En ambos casos se inserta una fila sintética en lead_motivo_inicial
+  // con session_id='direct_{leadId}' para que /admin/ads cuente la
+  // entrada en el funnel.
   landing_intent: z.string().trim().max(40).nullable().optional(),
+  motivo_inicial: z.enum([
+    "particulares", "intensivo", "certificado", "profesional", "otro", "direct",
+  ]).nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -205,12 +210,14 @@ export async function POST(req: Request) {
     // trial_zoom_link is filled in below right after we know the
     // class id + short code so old agent_5 reminder code (running
     // on a not-yet-redeployed VPS) doesn't ship an empty "Enlace:".
-    // Marcador shortcut (Gelfis 2026-06-15): si viene landing_intent
-    // ('agendar-directo' del atajo) y el lead aún no tiene motivo_inicial,
-    // lo etiquetamos como 'direct' para que aparezca en /admin/ads sin
-    // romper la ratio trial/form. No pisamos un motivo existente del quiz.
+    // Atribución (Gelfis 2026-06-15): preferimos lo que ya tenía el lead
+    // (no pisar motivo del quiz si llegó por register). Si nada, usamos
+    // lo del body — motivo_inicial real si lo trae (socialmedia), o
+    // 'direct' si solo viene landing_intent (atajo de landing dedicada).
     const updateLanding   = b.landing_intent ?? existing.landing_intent ?? null;
-    const updateMotivoIni = existing.motivo_inicial ?? (b.landing_intent ? "direct" : null);
+    const updateMotivoIni = existing.motivo_inicial
+      ?? b.motivo_inicial
+      ?? (b.landing_intent ? "direct" : null);
     await sb.from("leads").update({
       name:                 b.name,
       email:                existing.email ?? b.email,
@@ -230,7 +237,8 @@ export async function POST(req: Request) {
     }).eq("id", leadId);
   } else {
     const insertLanding   = b.landing_intent ?? null;
-    const insertMotivoIni = b.landing_intent ? "direct" : null;
+    const insertMotivoIni = b.motivo_inicial
+      ?? (b.landing_intent ? "direct" : null);
     const { data: newLead, error: insErr } = await sb.from("leads").insert({
       name:                 b.name,
       email:                b.email,
@@ -260,6 +268,10 @@ export async function POST(req: Request) {
     // descuadrada. session_id = 'direct_{leadId}' garantiza unicidad
     // (índice único) y deja claro el origen al auditar la tabla.
     leadId = (newLead as { id: string }).id;
+    // Cuenta el lead en "Entradas paso 1" del dashboard. Solo cuando es
+    // un atajo puro (motivo='direct') — si viene del quiz (socialmedia,
+    // particulares, etc.) la fila ya existe en lead_motivo_inicial creada
+    // por /api/public/motivo cuando el lead respondió step 1.
     if (b.landing_intent && insertMotivoIni === "direct") {
       await sb.from("lead_motivo_inicial").insert({
         lead_id:        leadId,
