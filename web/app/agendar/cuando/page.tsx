@@ -355,8 +355,8 @@ export default function StepCuando() {
                   </p>
                   <TimeList
                     slots={slotsToday}
-                    selectedIso={selectedSlot?.startIso ?? state.slot_iso ?? null}
-                    selectedTeacherId={selectedSlot?.teacherId ?? state.teacher_id ?? null}
+                    selectedIso={state.slot_iso ?? null}
+                    selectedTeacherId={state.teacher_id ?? null}
                     onSelect={onPickSlot}
                     lightMode
                     leadTimezone={leadTimezone}
