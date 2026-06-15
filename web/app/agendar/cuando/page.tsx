@@ -50,6 +50,8 @@ export default function StepCuando() {
   const [loadErr,  setLoadErr]  = useState<string | null>(null);
   const [selectedDay, setDay]   = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
   // Modal de doble confirmación dual-TZ. Igual que el CalendarStep
@@ -125,6 +127,8 @@ export default function StepCuando() {
       teacher_name: s.teacherName,
     });
     setSelectedSlot(s);
+    setShowForm(false);
+    setCheckingAvailability(true);
     if (typeof navigator !== "undefined" && "vibrate" in navigator) {
       try { navigator.vibrate?.(8); } catch { /* iOS no-op */ }
     }
@@ -179,8 +183,12 @@ export default function StepCuando() {
       return;
     }
 
-    // Atajo desde landing — el form inline se renderiza al detectar
-    // selectedSlot. NO navegamos a /agendar/tu.
+    // Atajo desde landing — animación de "comprobando disponibilidad"
+    // antes de mostrar el form inline.
+    setTimeout(() => {
+      setCheckingAvailability(false);
+      setShowForm(true);
+    }, 2200);
   };
 
   // Validación form inline.
@@ -366,24 +374,44 @@ export default function StepCuando() {
             </>
           )}
 
+          {/* Animación de "comprobando disponibilidad" */}
+          {selectedSlot && checkingAvailability && (
+            <div className="flex flex-col items-center justify-center py-12 space-y-4 animate-fade-in">
+              <div className="relative h-14 w-14">
+                <span className="absolute inset-0 rounded-full border-4 border-emerald-200" />
+                <span className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
+                <span className="absolute inset-0 flex items-center justify-center text-2xl">🔍</span>
+              </div>
+              <p className="text-[15px] font-semibold text-slate-700 text-center">
+                Comprobando disponibilidad de los profesores…
+              </p>
+            </div>
+          )}
+
           {/* Form inline — solo si el lead vino DIRECTO (no del quiz)
               y ya seleccionó slot. Pide los 3 datos mínimos y reserva. */}
-          {selectedSlot && !isFromDiagnostico && slotLabel && !submitting && (
+          {selectedSlot && showForm && !isFromDiagnostico && slotLabel && !submitting && (
             <button
               type="button"
-              onClick={() => setSelectedSlot(null)}
+              onClick={() => { setSelectedSlot(null); setShowForm(false); setCheckingAvailability(false); }}
               className="text-[13px] text-warm font-semibold hover:underline"
             >
               ← Cambiar horario
             </button>
           )}
-          {selectedSlot && !isFromDiagnostico && slotLabel && (
-            <div className="mt-2 rounded-2xl border-2 border-warm bg-warm/5 p-4 space-y-4">
-              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-sky-50 border border-emerald-200 p-4 text-center">
-                <p className="text-[13px] font-semibold text-slate-600">
-                  🎓 Tu clase de alemán es el:
+          {selectedSlot && showForm && !isFromDiagnostico && slotLabel && (
+            <div className="mt-2 rounded-2xl border-2 border-warm bg-warm/5 p-4 space-y-4 animate-fade-in">
+              <div className="text-center space-y-1">
+                <p className="text-[20px] font-extrabold text-slate-900">
+                  🎉 <em>Sehr gut!</em>
                 </p>
-                <p className="mt-2 text-[18px] font-extrabold text-slate-900 capitalize">
+                <p className="text-[15px] text-slate-600">
+                  Tenemos todo listo para tu <strong className="text-emerald-700">Clase de Alemán</strong>
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-sky-50 border border-emerald-200 p-4 text-center">
+                <p className="mt-1 text-[18px] font-extrabold text-slate-900 capitalize">
                   📅 {slotLabel.day}
                 </p>
                 <p className="mt-1 text-[22px] font-black text-emerald-700 tabular-nums">
