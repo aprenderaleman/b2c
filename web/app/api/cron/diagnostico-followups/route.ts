@@ -406,7 +406,14 @@ async function runCron(req: Request) {
 
     const firstName = lead.name.split(/\s+/)[0] || lead.name;
     let ok = false;
-    let kind: "wa" | "email" | "wa+email" = "wa";
+    // intendedChannel: lo que el msg pretende mandar (lo que el copy supone).
+    // actualWa/actualEmail: si realmente salio cada canal. Se calcula con
+    // lo retornado por send*. El channel registrado en metadata debe ser
+    // el REAL para no mentir (bug Tomas/Priscila/etc. 2026-06-16: WA
+    // fallaba durante pausa global pero metadata decia channel="wa+email").
+    let intendedChannel: "wa" | "email" | "wa+email" = "wa";
+    let actualWa    = false;
+    let actualEmail = false;
     // Body real del mensaje enviado — lo guardamos en lead_timeline.content
     // para que /admin/mensajes muestre el texto real, no un resumen.
     // Si se mandan ambos canales, priorizamos el WA (el lead lo ve igual).
@@ -434,7 +441,7 @@ async function runCron(req: Request) {
         // T+5min — Pregunta abierta de motivación. Copy nuevo Gelfis
         // 2026-06-14: pide responder con 1/2/3/4 para crear engagement
         // bajo esfuerzo. No vende todavía — construye relación.
-        kind = "wa+email";
+        intendedChannel = "wa+email";
         const welcomeTpl = await getActiveTemplate("diagnostico_followup", "whatsapp", 1);
         const waText = welcomeTpl
           ? renderTemplate(welcomeTpl.body, { firstName, bookUrl, level: levelLabel })
@@ -467,18 +474,18 @@ async function runCron(req: Request) {
           sendWA(lead.whatsapp_normalized, waText),
           sendEmail,
         ]);
-        const waOk = waRes.status === "fulfilled" && waRes.value.ok;
-        const emailOk = emailRes.status === "fulfilled" &&
+        actualWa    = waRes.status === "fulfilled" && waRes.value.ok;
+        actualEmail = emailRes.status === "fulfilled" &&
           (emailRes.value as { ok: boolean }).ok;
-        ok = waOk || emailOk;
+        ok = actualWa || actualEmail;
 
-        if (!waOk) {
+        if (!actualWa) {
           const err = waRes.status === "rejected"
             ? (waRes.reason instanceof Error ? waRes.reason.message : String(waRes.reason))
             : "send_failed";
           console.error(`[diagnostico-followups] welcome WA failed lead=${lead.id}:`, err);
         }
-        if (!emailOk) {
+        if (!actualEmail) {
           const err = emailRes.status === "rejected"
             ? (emailRes.reason instanceof Error ? emailRes.reason.message : String(emailRes.reason))
             : (emailRes.value as { ok: false; error: string }).error;
@@ -488,7 +495,7 @@ async function runCron(req: Request) {
         // T+4h — Nudge bajo esfuerzo (solo si NO respondió al msg 1).
         // Si ya está en conversación con Stiv, saltamos para no parecer
         // un bot. Si no respondió, repetimos con menos fricción.
-        kind = "wa";
+        intendedChannel = "wa";
         if (await leadResponded()) {
           // Marcamos progreso pero NO enviamos. Avanza last_drip_msg_n
           // para que el cron pueda llegar al msg 3 en su gate.
@@ -534,12 +541,12 @@ async function runCron(req: Request) {
         ].join("\n");
         sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
-        ok = r.ok;
+        ok = r.ok; actualWa = r.ok;
       } else if (nextN === 3) {
         // T+24h — Regalo: PDF adaptado al nivel + curiosity gap del #7.
         // Doble canal. WA = PDF adjunto con caption "te va a sorprender
         // el #7". Email = botón descargar + CTA secundario agendar.
-        kind = "wa+email";
+        intendedChannel = "wa+email";
 
         const pdf = pdfForLead(lead.german_level);
         const captionWa = [
@@ -578,16 +585,16 @@ async function runCron(req: Request) {
           sendWaTextThenDoc(),
           sendEmailWithPdf(),
         ]);
-        const waOk = waRes.status === "fulfilled" && waRes.value.ok;
-        const emailOk = emailRes.status === "fulfilled" &&
+        actualWa    = waRes.status === "fulfilled" && waRes.value.ok;
+        actualEmail = emailRes.status === "fulfilled" &&
           (emailRes.value as { ok: boolean }).ok;
-        ok = waOk || emailOk;
+        ok = actualWa || actualEmail;
 
-        if (!waOk)    console.error(`[diagnostico-followups] msg3 WA failed lead=${lead.id} pdf=${pdf.slug}`);
-        if (!emailOk) console.error(`[diagnostico-followups] msg3 email failed lead=${lead.id} pdf=${pdf.slug}`);
+        if (!actualWa)    console.error(`[diagnostico-followups] msg3 WA failed lead=${lead.id} pdf=${pdf.slug}`);
+        if (!actualEmail) console.error(`[diagnostico-followups] msg3 email failed lead=${lead.id} pdf=${pdf.slug}`);
       } else if (nextN === 4) {
         // T+3d — WhatsApp invita al test de nivel.
-        kind = "wa";
+        intendedChannel = "wa";
         const text = [
           `Hola ${firstName}, te dejo algo más:`,
           ``,
@@ -597,10 +604,10 @@ async function runCron(req: Request) {
         ].join("\n");
         sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
-        ok = r.ok;
+        ok = r.ok; actualWa = r.ok;
       } else if (nextN === 5) {
         // T+5d — WhatsApp pregunta de objeciones (A/B/C/D).
-        kind = "wa";
+        intendedChannel = "wa";
         const text = [
           `${firstName}, una pregunta:`,
           ``,
@@ -615,10 +622,10 @@ async function runCron(req: Request) {
         ].join("\n");
         sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
-        ok = r.ok;
+        ok = r.ok; actualWa = r.ok;
       } else if (nextN === 6) {
         // T+8d — WhatsApp mensaje motivacional honesto.
-        kind = "wa";
+        intendedChannel = "wa";
         const text = [
           `Hola ${firstName} 👋`,
           ``,
@@ -637,10 +644,10 @@ async function runCron(req: Request) {
         ].join("\n");
         sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
-        ok = r.ok;
+        ok = r.ok; actualWa = r.ok;
       } else if (nextN === 7) {
         // T+11d — Email pregunta binaria sí/no.
-        kind = "email";
+        intendedChannel = "email";
         if (!lead.email) { skipped++; continue; }
         const r = await sendDiagnosticoFollowupEmail(lead.email, {
           leadName: firstName,
@@ -648,10 +655,10 @@ async function runCron(req: Request) {
           language: lead.language,
           variant:  "binary_question",
         });
-        ok = r.ok;
+        ok = r.ok; actualEmail = r.ok;
       } else if (nextN === 8) {
         // T+14d — Despedida WA + Email. Lead pasa a 'lost'.
-        kind = "wa+email";
+        intendedChannel = "wa+email";
         const waText = [
           `${firstName}, último mensaje:`,
           ``,
@@ -677,12 +684,12 @@ async function runCron(req: Request) {
           sendWA(lead.whatsapp_normalized, waText),
           sendEmail,
         ]);
-        const waOk = waRes.status === "fulfilled" && waRes.value.ok;
-        const emailOk = emailRes.status === "fulfilled" &&
+        actualWa    = waRes.status === "fulfilled" && waRes.value.ok;
+        actualEmail = emailRes.status === "fulfilled" &&
           (emailRes.value as { ok: boolean }).ok;
-        ok = waOk || emailOk;
-        if (!waOk)    console.error(`[diagnostico-followups] msg8 WA failed lead=${lead.id}`);
-        if (!emailOk) console.error(`[diagnostico-followups] msg8 email failed lead=${lead.id}`);
+        ok = actualWa || actualEmail;
+        if (!actualWa)    console.error(`[diagnostico-followups] msg8 WA failed lead=${lead.id}`);
+        if (!actualEmail) console.error(`[diagnostico-followups] msg8 email failed lead=${lead.id}`);
       }
     } catch (e) {
       console.error(`[diagnostico-followups] send failed lead=${lead.id} msg=${nextN}:`,
@@ -709,6 +716,18 @@ async function runCron(req: Request) {
       console.error(`[diagnostico-followups] mark progress failed lead=${lead.id}:`, updErr.message);
     }
 
+    // Calcula channel REAL en base a lo que salio. NUNCA confiar en
+    // intendedChannel — si el WA fallo durante una pausa global pero el
+    // email paso, channel real es "email", no "wa+email" (mentir aqui
+    // hace que /admin/mensajes y los stats sean ciegos al canal perdido).
+    const actualChannel: "wa" | "email" | "wa+email" | "none" =
+      actualWa && actualEmail ? "wa+email"
+        : actualWa ? "wa"
+          : actualEmail ? "email"
+            : "none";
+
+    const waPending = intendedChannel.includes("wa") && !actualWa;
+
     await sb.from("lead_timeline").insert({
       lead_id: lead.id,
       type:    "system_message_sent",
@@ -717,9 +736,29 @@ async function runCron(req: Request) {
       // debería tras los assignments de cada nextN), caemos al summary
       // viejo para no romper la fila — pero las stats lo marcarán como
       // "resumen" en /admin/mensajes.
-      content: sentBody || `📨 Followup #${nextN} (${kind}) enviado`,
-      metadata: { kind: "diagnostico_followup", message_n: nextN, channel: kind },
+      content: sentBody || `📨 Followup #${nextN} (${actualChannel}) enviado`,
+      metadata: {
+        kind:             "diagnostico_followup",
+        message_n:        nextN,
+        channel:          actualChannel,
+        intended_channel: intendedChannel,
+        wa_pending:       waPending || undefined,
+      },
     });
+
+    // Si el WA fallo pero email paso, registramos un agent_note para que
+    // /admin/leads/[id] muestre claramente "⚠ WA pendiente" y el operador
+    // pueda usar el endpoint admin/leads/[id]/resend-drip-welcome-wa para
+    // reintentar manualmente (caso Tomas/Priscila/Michelle/Angela 2026-06-16).
+    if (waPending) {
+      await sb.from("lead_timeline").insert({
+        lead_id: lead.id,
+        type:    "agent_note",
+        author:  "system",
+        content: `⚠ WA del followup #${nextN} no salió (canal real: ${actualChannel}). Reintento manual disponible.`,
+        metadata: { kind: "drip_wa_pending", message_n: nextN, intended_channel: intendedChannel, actual_channel: actualChannel },
+      });
+    }
 
     sent++;
   }
