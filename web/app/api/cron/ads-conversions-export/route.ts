@@ -10,30 +10,45 @@ import {
 /**
  * GET/POST /api/cron/ads-conversions-export
  *
- * Exporta a una Google Sheet las conversiones offline (lead → cliente)
- * para que Google Ads las importe y atribuya al anuncio que trajo al
- * lead. Sólo exporta leads que:
- *   - status = 'converted'
- *   - tienen gclid (vinieron de un clic en anuncio de Google)
- *   - aún no se han subido (ads_conversion_uploaded_at IS NULL)
+ * Exporta a una Google Sheet TODAS las conversiones offline para que
+ * Google Ads las importe y Smart Bidding optimice contra señales reales
+ * de calidad (no solo "reservó").
  *
- * Tras subirlos, marca ads_conversion_uploaded_at para no duplicar.
+ * 2 tipos de conversion (Gelfis 2026-06-16) — Smart Bidding en cascada:
  *
- * Vercel Cron lo dispara cada hora. Idempotente.
+ *   1. "Asistió a clase de prueba"  → leads.trial_attended_at IS NOT NULL
+ *      value default: 15 EUR (calidad media — confirmó interés)
+ *      tracking: ads_attended_uploaded_at
  *
- * Setup (una vez): ver lib/google-sheets.ts — crear hoja, compartirla
- * con el service account, poner GADS_CONVERSIONS_SHEET_ID.
+ *   2. "Cliente convertido (offline)" → leads.status = 'converted'
+ *      value: leads.conversion_value (real) o default 300 EUR
+ *      tracking: ads_conversion_uploaded_at  (columna histórica)
+ *
+ * Filtro común: gclid IS NOT NULL (sin clic de Google no hay
+ * atribución posible — leads orgánicos no se suben).
+ *
+ * Vercel Cron lo dispara cada hora. Idempotente — cada tipo tiene su
+ * propio timestamp anti-duplicado.
+ *
+ * Setup (una vez): ver lib/google-sheets.ts + crear las 2 conversion
+ * actions en Google Ads UI con los nombres que matchean
+ * GADS_*_CONVERSION_NAME.
  *
  * Auth: Bearer CRON_SECRET o X-Cron-Secret.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Nombre EXACTO de la acción de conversión en Google Ads. Debe coincidir
-// con el nombre configurado allí o Google rechaza las filas.
-const CONVERSION_NAME = process.env.GADS_CONVERSION_NAME ?? "Cliente convertido (offline)";
-// Valor por defecto de una conversión si el lead no tiene conversion_value.
-const DEFAULT_VALUE = Number(process.env.GADS_CONVERSION_DEFAULT_VALUE ?? "300");
+// Nombres EXACTOS de las conversion actions en Google Ads. Deben
+// coincidir o Google rechaza las filas (silently — solo verás "0
+// imported" en el reporte).
+const CONVERSION_NAME_PAID     = process.env.GADS_CONVERSION_NAME          ?? "Cliente convertido (offline)";
+const CONVERSION_NAME_ATTENDED = process.env.GADS_ATTENDED_CONVERSION_NAME ?? "Asistió a clase de prueba";
+
+// Valores por defecto si el lead no tiene conversion_value. Smart
+// Bidding los usa para priorizar bids — paid > attended.
+const DEFAULT_VALUE_PAID     = Number(process.env.GADS_CONVERSION_DEFAULT_VALUE          ?? "300");
+const DEFAULT_VALUE_ATTENDED = Number(process.env.GADS_ATTENDED_DEFAULT_VALUE            ?? "15");
 
 function authorised(req: Request): boolean {
   const expected = process.env.CRON_SECRET;
@@ -57,17 +72,12 @@ function formatBerlin(iso: string): string {
     hour12: false,
   }).formatToParts(d);
   const get = (t: string) => parts.find(p => p.type === t)?.value ?? "00";
-  // Offset de Berlín (CET +01:00 / CEST +02:00) — lo calculamos.
-  const offMin = -new Date(d.toLocaleString("en-US", { timeZone: "Europe/Berlin" })).getTimezoneOffset();
-  // Nota: cálculo simple; Google tolera el offset estándar. Usamos +02:00
-  // en verano, +01:00 en invierno via Intl.
   const tzName = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Berlin", timeZoneName: "shortOffset" })
     .formatToParts(d).find(p => p.type === "timeZoneName")?.value ?? "GMT+1";
   const m = tzName.match(/GMT([+-]\d+)/);
   const offHours = m ? parseInt(m[1], 10) : 1;
   const sign = offHours >= 0 ? "+" : "-";
   const offStr = `${sign}${String(Math.abs(offHours)).padStart(2, "0")}:00`;
-  void offMin;
   return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}${offStr}`;
 }
 
@@ -84,28 +94,61 @@ async function run(req: Request) {
 
   const sb = supabaseAdmin();
 
-  // Conversiones pendientes: convertidas, con gclid, sin subir.
-  const { data: leads, error } = await sb
+  // ── Pendientes: "Attended" ──────────────────────────────────────
+  // Lead asistió al trial y tiene gclid, pero aún no se subió.
+  const { data: attendedLeads, error: attendedErr } = await sb
     .from("leads")
-    .select("id, name, gclid, converted_at, conversion_value, updated_at")
+    .select("id, gclid, trial_attended_at")
+    .not("gclid", "is", null)
+    .not("trial_attended_at", "is", null)
+    .is("ads_attended_uploaded_at", null)
+    .limit(200);
+  if (attendedErr) {
+    console.error("[ads-conversions-export] attended query failed:", attendedErr.message);
+    return NextResponse.json({ ok: false, error: "db_error_attended" }, { status: 500 });
+  }
+
+  // ── Pendientes: "Paid" ──────────────────────────────────────────
+  // Lead pagó (status='converted') y tiene gclid, pero aún no se subió.
+  const { data: paidLeads, error: paidErr } = await sb
+    .from("leads")
+    .select("id, gclid, converted_at, conversion_value, updated_at")
     .eq("status", "converted")
     .not("gclid", "is", null)
     .is("ads_conversion_uploaded_at", null)
     .limit(200);
-
-  if (error) {
-    console.error("[ads-conversions-export] query failed:", error.message);
-    return NextResponse.json({ ok: false, error: "db_error" }, { status: 500 });
+  if (paidErr) {
+    console.error("[ads-conversions-export] paid query failed:", paidErr.message);
+    return NextResponse.json({ ok: false, error: "db_error_paid" }, { status: 500 });
   }
-  if (!leads || leads.length === 0) {
-    return NextResponse.json({ ok: true, exported: 0 });
+
+  const totalPending = (attendedLeads?.length ?? 0) + (paidLeads?.length ?? 0);
+  if (totalPending === 0) {
+    return NextResponse.json({ ok: true, exported: 0, attended: 0, paid: 0 });
   }
 
   await ensureConversionHeader();
 
+  // ── Construir filas: una entrada por (lead, tipo de conversion) ──
   const rows: ConversionRow[] = [];
-  const ids: string[] = [];
-  for (const l of leads as Array<{
+  const attendedIds: string[] = [];
+  const paidIds:     string[] = [];
+
+  for (const l of (attendedLeads ?? []) as Array<{
+    id: string; gclid: string | null; trial_attended_at: string | null;
+  }>) {
+    if (!l.gclid || !l.trial_attended_at) continue;
+    rows.push({
+      gclid:          l.gclid,
+      conversionName: CONVERSION_NAME_ATTENDED,
+      conversionTime: formatBerlin(l.trial_attended_at),
+      value:          DEFAULT_VALUE_ATTENDED,
+      currency:       "EUR",
+    });
+    attendedIds.push(l.id);
+  }
+
+  for (const l of (paidLeads ?? []) as Array<{
     id: string; gclid: string | null;
     converted_at: string | null; conversion_value: number | null;
     updated_at: string | null;
@@ -114,12 +157,12 @@ async function run(req: Request) {
     const when = l.converted_at ?? l.updated_at ?? new Date().toISOString();
     rows.push({
       gclid:          l.gclid,
-      conversionName: CONVERSION_NAME,
+      conversionName: CONVERSION_NAME_PAID,
       conversionTime: formatBerlin(when),
-      value:          l.conversion_value ?? DEFAULT_VALUE,
+      value:          l.conversion_value ?? DEFAULT_VALUE_PAID,
       currency:       "EUR",
     });
-    ids.push(l.id);
+    paidIds.push(l.id);
   }
 
   const written = await appendConversions(rows);
@@ -127,12 +170,23 @@ async function run(req: Request) {
     return NextResponse.json({ ok: false, error: "sheet_append_failed" }, { status: 502 });
   }
 
-  // Marcar como subidas para no duplicar.
-  if (ids.length > 0) {
+  // ── Marcar como subidas (cada tipo en su columna) ────────────────
+  const now = new Date().toISOString();
+  if (attendedIds.length > 0) {
     await sb.from("leads")
-      .update({ ads_conversion_uploaded_at: new Date().toISOString() })
-      .in("id", ids);
+      .update({ ads_attended_uploaded_at: now })
+      .in("id", attendedIds);
+  }
+  if (paidIds.length > 0) {
+    await sb.from("leads")
+      .update({ ads_conversion_uploaded_at: now })
+      .in("id", paidIds);
   }
 
-  return NextResponse.json({ ok: true, exported: written });
+  return NextResponse.json({
+    ok:       true,
+    exported: written,
+    attended: attendedIds.length,
+    paid:     paidIds.length,
+  });
 }
