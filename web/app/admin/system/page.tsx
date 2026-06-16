@@ -183,7 +183,7 @@ export default function SystemPage() {
                   )}
                 </>
               )}
-              <Link href="/admin/leads" className="block mt-2 text-xs text-brand-600 hover:underline">Ver lista de leads →</Link>
+              <Link href="/admin/funnel" className="block mt-2 text-xs text-brand-600 hover:underline">Ver lista de leads →</Link>
             </>
           ) : <Skel />}
         </Card>

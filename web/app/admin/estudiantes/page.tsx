@@ -107,8 +107,8 @@ export default async function StudentsListPage({
                   <br />
                   <span className="text-xs">
                     Convierte un lead desde{" "}
-                    <Link href="/admin/leads" className="text-brand-600 dark:text-brand-400 hover:underline">
-                      Todos los leads
+                    <Link href="/admin/funnel" className="text-brand-600 dark:text-brand-400 hover:underline">
+                      el Funnel
                     </Link>
                     .
                   </span>

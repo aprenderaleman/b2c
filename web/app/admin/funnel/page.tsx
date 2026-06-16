@@ -237,10 +237,8 @@ export default async function FunnelControlPage({
         <div>
           <h1 className="text-xl md:text-3xl font-bold text-white">🎯 Funnel</h1>
           <p className="mt-1 text-xs md:text-sm text-white/60">
-            Centro de control. Métricas + leads recién agendados.{" "}
-            <Link href="/admin/ads" className="text-warm/80 hover:text-warm underline">Ver dashboard completo</Link>
-            {" · "}
-            <Link href="/admin/leads" className="text-warm/80 hover:text-warm underline">Ver todos los leads</Link>
+            Centro de control — métricas, atribución y leads.{" "}
+            <Link href="/admin/leads/nuevo" className="text-warm/80 hover:text-warm underline">+ Nuevo lead</Link>
           </p>
         </div>
         <RefreshButton at={new Date().toLocaleTimeString("es-ES", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" })} />
@@ -463,12 +461,6 @@ export default async function FunnelControlPage({
                 : `${leadsResult.total} en este rango · orden de llegada`}
             </span>
           </h2>
-          <Link
-            href="/admin/leads"
-            className="text-[12px] text-warm/80 hover:text-warm underline whitespace-nowrap"
-          >
-            Ver todos →
-          </Link>
         </div>
 
         {/* Buscador — nombre, email o WhatsApp. Preserva los demás

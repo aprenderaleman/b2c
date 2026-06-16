@@ -76,10 +76,12 @@ function adminItems(): NavItem[] {
     { label: "Empresa",    href: "/admin/empresa",     icon: "trendingUp",    priority: 3.5 },
     { label: "Finanzas",    href: "/admin/finanzas",    icon: "wallet",        priority: 4 },
     { label: "Grupos",      href: "/admin/grupos",      icon: "folder",        priority: 5 },
-    { label: "Leads",       href: "/admin/leads",       icon: "users",         priority: 6 },
+    // "Funnel" unifica los antiguos /admin/leads + /admin/ads en una
+    // sola página (KPIs + lista de leads + atribución por landing). Las
+    // rutas viejas siguen redirigiendo aquí, pero el menú apunta directo.
+    { label: "Funnel",      href: "/admin/funnel",      icon: "users",         priority: 6 },
     { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 7 },
     { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
-    { label: "Funnel Ads",  href: "/admin/ads",         icon: "trendingUp",    priority: 8.2 },
     { label: "Mensajes",    href: "/admin/mensajes",    icon: "messageCircle", priority: 8.3 },
     { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
