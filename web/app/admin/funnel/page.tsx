@@ -365,33 +365,50 @@ export default async function FunnelControlPage({
         />
       </section>
 
-      {/* ── Alertas automáticas ────────────────────────────────── */}
-      {data.alerts.length > 0 && (
-        <section className="mt-5 space-y-2">
-          {data.alerts.map((a, i) => (
-            <div
-              key={i}
-              className={`rounded-xl border p-3 text-sm ${
-                a.severity === "high"
-                  ? "border-red-500/40 bg-red-500/10 text-red-100"
-                  : a.severity === "medium"
-                    ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
-                    : "border-blue-500/40 bg-blue-500/10 text-blue-100"
-              }`}
-            >
-              <div className="font-semibold">
-                {a.severity === "high" ? "🔴" : a.severity === "medium" ? "🟡" : "🔵"} {a.title}
+      {/* ── Alertas automáticas (colapsable) ───────────────────── */}
+      {data.alerts.length > 0 && (() => {
+        const hi   = data.alerts.filter(a => a.severity === "high").length;
+        const med  = data.alerts.filter(a => a.severity === "medium").length;
+        const summary = [hi && `${hi} 🔴`, med && `${med} 🟡`].filter(Boolean).join(" · ");
+        return (
+          <section className="mt-5">
+            <details className="rounded-xl border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+              <summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold text-amber-200 hover:bg-amber-500/10 select-none flex items-center justify-between gap-2">
+                <span>⚠️ Alertas del funnel <span className="ml-1 text-[11px] font-normal text-white/55">({data.alerts.length} · {summary})</span></span>
+                <span className="text-[11px] text-white/45">click para ver</span>
+              </summary>
+              <div className="space-y-2 p-3 border-t border-amber-500/20">
+                {data.alerts.map((a, i) => (
+                  <div
+                    key={i}
+                    className={`rounded-xl border p-3 text-sm ${
+                      a.severity === "high"
+                        ? "border-red-500/40 bg-red-500/10 text-red-100"
+                        : a.severity === "medium"
+                          ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
+                          : "border-blue-500/40 bg-blue-500/10 text-blue-100"
+                    }`}
+                  >
+                    <div className="font-semibold">
+                      {a.severity === "high" ? "🔴" : a.severity === "medium" ? "🟡" : "🔵"} {a.title}
+                    </div>
+                    <div className="mt-1 opacity-90 text-[13px]">{a.detail}</div>
+                  </div>
+                ))}
               </div>
-              <div className="mt-1 opacity-90 text-[13px]">{a.detail}</div>
-            </div>
-          ))}
-        </section>
-      )}
+            </details>
+          </section>
+        );
+      })()}
 
-      {/* ── Por landing / fuente ───────────────────────────────── */}
+      {/* ── Por landing / fuente (colapsable) ──────────────────── */}
       <section className="mt-6">
-        <h2 className="text-base md:text-lg font-semibold text-white mb-2">📊 Por landing / fuente</h2>
-        <div className="overflow-x-auto rounded-xl border border-white/10">
+        <details className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+          <summary className="cursor-pointer px-4 py-2.5 text-sm font-semibold text-white/85 hover:bg-white/[0.05] select-none flex items-center justify-between gap-2">
+            <span>📊 Por landing / fuente <span className="ml-1 text-[11px] font-normal text-white/45">({data.landingBreakdown.length} buckets)</span></span>
+            <span className="text-[11px] text-white/45">click para ver</span>
+          </summary>
+          <div className="overflow-x-auto border-t border-white/10">
           <table className="w-full text-sm">
             <thead className="text-[11px] uppercase text-white/50 bg-white/5">
               <tr>
@@ -447,7 +464,8 @@ export default async function FunnelControlPage({
               )}
             </tbody>
           </table>
-        </div>
+          </div>
+        </details>
       </section>
 
       {/* ── SECCIÓN 2: Leads recientes ────────────────────────── */}
@@ -602,12 +620,11 @@ export default async function FunnelControlPage({
                 <th className="text-left py-2 px-3">Próximo</th>
                 <th className="text-left py-2 px-3">Estado</th>
                 <th className="text-left py-2 px-3">📞</th>
-                <th className="text-right py-2 pr-3">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {leads.length === 0 && (
-                <tr><td colSpan={9} className="py-6 text-center text-white/40 italic">
+                <tr><td colSpan={8} className="py-6 text-center text-white/40 italic">
                   Sin leads que coincidan con los filtros activos
                 </td></tr>
               )}
@@ -619,15 +636,40 @@ export default async function FunnelControlPage({
                 const nextContactOverdue = l.next_contact_date
                   ? new Date(l.next_contact_date).getTime() < Date.now()
                   : false;
+                const waDigits = l.whatsapp_normalized?.replace(/\D/g, "") ?? null;
                 return (
                   <tr key={l.id} className="hover:bg-white/[0.03]">
                     <td className="py-2 px-3">
-                      <div className="text-white font-semibold">{l.name ?? "(sin nombre)"}</div>
+                      {/* Nombre → abre detalle en NUEVA pestaña. Esto
+                          deja al operador ver datos sin perder el filtro
+                          actual del funnel. */}
+                      <a
+                        href={`/admin/leads/${l.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-white font-semibold hover:text-warm hover:underline underline-offset-2 decoration-warm/50"
+                      >
+                        {l.name ?? "(sin nombre)"}
+                      </a>
                       <div className="text-[10.5px] text-white/40">{fmtRelative(l.created_at)}</div>
                     </td>
                     <td className="py-2 px-3">
                       <div className="text-[12px] text-white/70 truncate max-w-[180px]">{l.email ?? "—"}</div>
-                      <div className="text-[11px] text-white/50 font-mono">{l.whatsapp_normalized ?? "—"}</div>
+                      {/* WhatsApp clickable → abre wa.me en nueva pestaña.
+                          Stiv escribe al lead sin abrir el detalle. */}
+                      {waDigits ? (
+                        <a
+                          href={`https://wa.me/${waDigits}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-emerald-400 hover:text-emerald-300 hover:underline font-mono inline-flex items-center gap-1"
+                          title="Abrir conversación en WhatsApp"
+                        >
+                          💬 {l.whatsapp_normalized}
+                        </a>
+                      ) : (
+                        <div className="text-[11px] text-white/30 font-mono">—</div>
+                      )}
                     </td>
                     <td className="py-2 px-3">
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold border ${meta.sourceCls}`}>
@@ -664,14 +706,6 @@ export default async function FunnelControlPage({
                         ? <span className="text-emerald-400" title="Llamada hecha">✓</span>
                         : <span className="text-amber-400" title="Llamada pendiente">⏰</span>}
                     </td>
-                    <td className="py-2 pr-3 text-right">
-                      <Link
-                        href={`/admin/leads/${l.id}`}
-                        className="text-warm/80 hover:text-warm text-[12px] font-semibold whitespace-nowrap"
-                      >
-                        Abrir →
-                      </Link>
-                    </td>
                   </tr>
                 );
               })}
@@ -691,23 +725,43 @@ export default async function FunnelControlPage({
             const attState = l.trial_attended_at ? "attended"
               : l.trial_absent_at ? "absent"
               : l.trial_scheduled_at ? "scheduled" : null;
+            const waDigits = l.whatsapp_normalized?.replace(/\D/g, "") ?? null;
             return (
-              <Link
+              <div
                 key={l.id}
-                href={`/admin/leads/${l.id}`}
-                className="block rounded-xl border border-white/10 bg-white/[0.03] hover:bg-white/[0.06] p-3 transition"
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <div className="text-white font-semibold text-[14px]">{l.name ?? "(sin nombre)"}</div>
-                    <div className="text-[11px] text-white/40">{fmtRelative(l.updated_at ?? l.created_at)}</div>
+                    {/* Nombre → detalle en nueva pestaña. */}
+                    <a
+                      href={`/admin/leads/${l.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-white font-semibold text-[14px] hover:text-warm hover:underline underline-offset-2 decoration-warm/50"
+                    >
+                      {l.name ?? "(sin nombre)"}
+                    </a>
+                    <div className="text-[11px] text-white/40">{fmtRelative(l.created_at)}</div>
                   </div>
                   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${meta.sourceCls} shrink-0`}>
                     {meta.sourceIcon} {meta.sourceLabel}
                   </span>
                 </div>
                 <div className="mt-1.5 text-[11.5px] text-white/55 truncate">{l.email ?? "—"}</div>
-                <div className="text-[11px] text-white/45 font-mono">{l.whatsapp_normalized ?? "—"}</div>
+                {/* WhatsApp directo a wa.me — separado del card-link. */}
+                {waDigits ? (
+                  <a
+                    href={`https://wa.me/${waDigits}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] text-emerald-400 hover:text-emerald-300 hover:underline font-mono"
+                  >
+                    💬 {l.whatsapp_normalized}
+                  </a>
+                ) : (
+                  <div className="text-[11px] text-white/30 font-mono">—</div>
+                )}
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className="text-[11px]">
                     {l.trial_scheduled_at ? (
@@ -721,7 +775,7 @@ export default async function FunnelControlPage({
                   </div>
                   <StatusBadge status={l.status} />
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>
