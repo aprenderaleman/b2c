@@ -128,10 +128,11 @@ function qs(params: Record<string, string | number | undefined>): string {
 export default async function FunnelControlPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; country?: string; period?: string }>;
+  searchParams: Promise<{ days?: string; country?: string; period?: string; q?: string }>;
 }) {
   await requireRole(["superadmin", "admin"]);
   const sp = await searchParams;
+  const searchQuery = typeof sp.q === "string" ? sp.q.trim().slice(0, 80) : "";
 
   const periodRaw = (sp.period ?? "").trim().toLowerCase();
   const activePeriod: PeriodKey | "" =
@@ -151,12 +152,20 @@ export default async function FunnelControlPage({
   const activeCountry = countryRaw.length === 2 ? countryRaw : "";
 
   // Datos en paralelo: KPIs + lista de leads.
-  // getLeads sin filtro = top 50 por updated_at DESC (los recientes
-  // arriba, criterio Gelfis 2026-06-15).
+  // La lista respeta el MISMO rango temporal que los KPIs y la búsqueda
+  // libre (?q=), ordenada por created_at DESC (orden de llegada — los
+  // nuevos arriba). País NO se aplica a la lista todavía: el campo
+  // existe pero pasos 1-2 no lo tienen; agregarlo introduciría ruido.
+  const createdSinceIso = new Date(Date.now() - activeDays * 86_400_000).toISOString();
   const [data, availableCountries, leadsResult] = await Promise.all([
     getFunnelAdsData(activeDays, activeCountry || undefined),
     getAvailableCountries(activeDays),
-    getLeads({ limit: 50 }),
+    getLeads({
+      limit:        50,
+      createdSince: createdSinceIso,
+      sortBy:       "created",
+      q:            searchQuery || undefined,
+    }),
   ]);
   const leads = leadsResult.rows;
 
@@ -195,7 +204,7 @@ export default async function FunnelControlPage({
             {RANGES.map(r => (
               <Link
                 key={r.days}
-                href={`/admin/funnel${qs({ days: r.days, country: activeCountry || undefined })}`}
+                href={`/admin/funnel${qs({ days: r.days, country: activeCountry || undefined, q: searchQuery || undefined })}`}
                 className={`px-2.5 py-1.5 rounded-md text-[12.5px] md:text-sm transition ${
                   !activePeriod && r.days === activeDays
                     ? "bg-warm text-warm-foreground font-semibold"
@@ -209,7 +218,7 @@ export default async function FunnelControlPage({
             {PERIODS.map(p => (
               <Link
                 key={p.key}
-                href={`/admin/funnel${qs({ period: p.key, country: activeCountry || undefined })}`}
+                href={`/admin/funnel${qs({ period: p.key, country: activeCountry || undefined, q: searchQuery || undefined })}`}
                 className={`px-2.5 py-1.5 rounded-md text-[12.5px] md:text-sm transition ${
                   activePeriod === p.key
                     ? "bg-warm text-warm-foreground font-semibold"
@@ -229,6 +238,7 @@ export default async function FunnelControlPage({
               ? <input type="hidden" name="period" value={activePeriod} />
               : <input type="hidden" name="days"   value={activeDays} />
             }
+            {searchQuery && <input type="hidden" name="q" value={searchQuery} />}
             <select
               name="country"
               defaultValue={activeCountry}
@@ -255,7 +265,10 @@ export default async function FunnelControlPage({
             Filtrando: <strong>{countryName(activeCountry)}</strong>. Pasos 1-2 no se filtran por país.
           </span>
           <Link
-            href={`/admin/funnel${qs(activePeriod ? { period: activePeriod } : { days: activeDays })}`}
+            href={`/admin/funnel${qs({
+              ...(activePeriod ? { period: activePeriod } : { days: activeDays }),
+              q: searchQuery || undefined,
+            })}`}
             className="text-amber-200 hover:text-white underline text-xs whitespace-nowrap"
           >
             Limpiar
@@ -306,9 +319,14 @@ export default async function FunnelControlPage({
 
       {/* ── SECCIÓN 2: Leads recientes ────────────────────────── */}
       <section className="mt-8">
-        <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
           <h2 className="text-base md:text-lg font-semibold text-white">
-            Leads recientes <span className="text-xs text-white/40 font-normal">· {leadsResult.total} totales</span>
+            Leads recientes
+            <span className="ml-2 text-xs text-white/40 font-normal">
+              {searchQuery
+                ? `${leadsResult.total} con "${searchQuery}"`
+                : `${leadsResult.total} en este rango · orden de llegada`}
+            </span>
           </h2>
           <Link
             href="/admin/leads"
@@ -317,6 +335,40 @@ export default async function FunnelControlPage({
             Ver todos →
           </Link>
         </div>
+
+        {/* Buscador — nombre, email o WhatsApp. Preserva los demás
+            filtros (rango, periodo, país) vía inputs ocultos. */}
+        <form action="/admin/funnel" method="get" className="mb-3 flex gap-2">
+          {activePeriod
+            ? <input type="hidden" name="period" value={activePeriod} />
+            : <input type="hidden" name="days"   value={activeDays} />}
+          {activeCountry && <input type="hidden" name="country" value={activeCountry} />}
+          <input
+            type="text"
+            name="q"
+            defaultValue={searchQuery}
+            placeholder="Buscar por nombre, email o WhatsApp…"
+            className="flex-1 h-9 px-3 rounded-md border border-white/10 bg-white/5 text-sm text-white placeholder:text-white/35
+                       focus:outline-none focus:border-warm/60"
+          />
+          <button
+            type="submit"
+            className="px-3 py-1.5 rounded-md text-sm bg-warm text-warm-foreground font-semibold hover:opacity-90"
+          >
+            Buscar
+          </button>
+          {searchQuery && (
+            <Link
+              href={`/admin/funnel${qs({
+                ...(activePeriod ? { period: activePeriod } : { days: activeDays }),
+                country: activeCountry || undefined,
+              })}`}
+              className="px-3 py-1.5 rounded-md text-sm border border-white/10 bg-white/5 text-white/70 hover:text-white hover:bg-white/10"
+            >
+              Limpiar
+            </Link>
+          )}
+        </form>
 
         {/* Desktop: tabla compacta */}
         <div className="hidden md:block overflow-x-auto rounded-xl border border-white/10">

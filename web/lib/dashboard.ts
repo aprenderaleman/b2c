@@ -149,7 +149,14 @@ export type LeadsFilter = {
   // Motivo inicial (paso 0 del funnel diagnóstico). Si se filtra,
   // solo devuelve leads cuyo motivo_inicial está en el set.
   motivo?: string[];
-  q?: string;   // free text on name / phone
+  q?: string;   // free text on name / phone / email
+  /** Filtra leads con created_at >= ISO. Usado por /admin/funnel para
+   *  alinear la lista con el rango temporal de los KPIs. */
+  createdSince?: string;
+  /** Cómo ordenar:
+   *  - 'updated' (default) → updated_at DESC, ideal para "actividad reciente"
+   *  - 'created'           → created_at DESC, ideal para "orden de llegada" */
+  sortBy?: "updated" | "created";
   limit?: number;
   offset?: number;
 };
@@ -168,17 +175,22 @@ export async function getLeads(filter: LeadsFilter = {}): Promise<{ rows: LeadRo
   if (filter.cold_call === "pending") query = query.is("cold_call_done_at", null);
   if (filter.cold_call === "done")    query = query.not("cold_call_done_at", "is", null);
   if (filter.motivo?.length)       query = query.in("motivo_inicial", filter.motivo);
+  if (filter.createdSince)         query = query.gte("created_at", filter.createdSince);
   if (filter.q) {
+    // Búsqueda libre — nombre, WhatsApp y email. Escapamos `%` y `_`
+    // del input para evitar wildcards inyectados.
     const like = `%${filter.q.replace(/[%_]/g, "")}%`;
-    query = query.or(`name.ilike.${like},whatsapp_normalized.ilike.${like}`);
+    query = query.or(`name.ilike.${like},whatsapp_normalized.ilike.${like},email.ilike.${like}`);
   }
 
-  // Orden por "última actividad" (Gelfis 2026-06-15). updated_at se
-  // bumpea cuando el lead agenda trial / cambia status / Stiv le escribe,
-  // así que los leads más relevantes salen arriba — aunque su created_at
-  // sea antiguo. Antes ordenábamos por created_at, lo que escondía los
-  // leads que regresaban a reservar trial tras días en frío.
-  query = query.order("updated_at", { ascending: false, nullsFirst: false });
+  // Orden: por defecto "última actividad" (updated_at DESC) para /admin/leads,
+  // útil cuando un lead viejo regresa a agendar y queremos verlo arriba.
+  // /admin/funnel pide sortBy='created' para mostrar "orden de llegada".
+  if (filter.sortBy === "created") {
+    query = query.order("created_at", { ascending: false });
+  } else {
+    query = query.order("updated_at", { ascending: false, nullsFirst: false });
+  }
   query = query.range(
     filter.offset ?? 0,
     (filter.offset ?? 0) + (filter.limit ?? 50) - 1,
