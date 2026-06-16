@@ -436,13 +436,16 @@ export async function POST(req: Request) {
   const leadFirst = b.name.split(/\s+/)[0] || b.name;
   // Política Gelfis 2026-04-30: NO mencionar nombre del profesor en
   // mensajes salientes al lead (información interna, no relevante).
-  // Copy nuevo 2026-06-14 (Gelfis): confirmación ACTIVA con prompt
-  // CONFIRMO / CAMBIAR / CANCELAR + ventana 12h. La consecuencia clara
-  // (slot se libera) reduce los no-shows drásticamente.
+  // Copy 2026-06-16: alineado al email (commit db1aa28) — sin amenaza
+  // de "tu slot se libera" porque no existia handler real para CONFIRMO
+  // ni cron que liberara slots (la promesa era falsa). Tono calido,
+  // abre conversacion sin fricción. Si el lead quiere cancelar/mover
+  // ya tenemos handler propio (reschedule_flow.py) que detecta esas
+  // palabras en cualquier mensaje libre.
   const waText = b.whatsapp_e164
     ? (b.language === "de"
-        ? `Hallo ${leadFirst}! Ich bin Stiv von Aprender-Aleman.de.\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\n⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.\n\nAntworte mit:\n👉 "CONFIRMO" wenn du dabei bist\n👉 "CAMBIAR" wenn du einen anderen Termin brauchst\n👉 "CANCELAR" wenn du nicht mehr interessiert bist\n\nOhne deine Antwort innerhalb von 12 Stunden wird dein Slot für einen anderen Schüler auf der Warteliste freigegeben.\n\n— Stiv · Aprender-Aleman.de`
-        : `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de.\n\nTu clase de alemán está agendada para\n${startDate}.\n\n⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.\n\nResponde con:\n👉 "CONFIRMO" si vas a asistir\n👉 "CAMBIAR" si necesitas otra fecha\n👉 "CANCELAR" si ya no te interesa\n\nSin tu respuesta en 12h, tu slot se libera para otro estudiante en lista de espera.\n\n— Stiv · Aprender-Aleman.de`)
+        ? `Hallo ${leadFirst}! Ich bin Stiv von Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\nFalls du Fragen hast oder den Termin verschieben/absagen musst, antworte einfach hier — ich helfe dir.\n\nBis bald!\n\n— Stiv · Aprender-Aleman.de`
+        : `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\nSi tienes alguna duda o necesitas mover/cancelar la clase, respóndeme por aquí mismo y lo resolvemos.\n\n¡Nos vemos!\n\n— Stiv · Aprender-Aleman.de`)
     : null;
 
   // Build the .ics inline so we attach it to the email AND can later
