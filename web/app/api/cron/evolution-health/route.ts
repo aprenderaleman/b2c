@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { pauseSystem, getSystemPauseStatus } from "@/lib/system-pause";
+import { pauseSystem, resumeSystem, getSystemPauseStatus } from "@/lib/system-pause";
 import { createAdminNotification } from "@/lib/admin-notifications";
 
 /**
@@ -42,11 +42,13 @@ async function run(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  // Si ya hay pausa global activa, no escalar más — Gelfis está al tanto.
+  // Si ya hay pausa global activa, NO hacemos early-return ciego — antes
+  // de irnos, sondeamos Evolution. Si vuelve a estar 'open' y la pausa
+  // fue puesta por este mismo health-monitor, la levantamos automaticamente.
+  // Asi evitamos quedar pausados 6h por un hiccup de 30s del VPS (caso
+  // Diana 2026-06-16: pausa 04:41 UTC, Evolution sano <1h despues, pero
+  // sistema bloqueado hasta 10:41 → lead perdio confirmacion WA).
   const pauseStatus = await getSystemPauseStatus();
-  if (pauseStatus.paused) {
-    return NextResponse.json({ ok: true, skipped_reason: "already_paused", until: pauseStatus.until });
-  }
 
   // Consultamos el state vía el agents server (mismo endpoint que usa /admin/system).
   // Si Evolution responde 'open' → todo bien. Si no o timeout → contar fallo.
@@ -87,7 +89,33 @@ async function run(req: Request) {
     if (failCount !== 0) {
       await sb.from("system_config").upsert({ key: HEALTH_FAIL_KEY, value: "0" });
     }
+    // Auto-resume: si seguia pausado por este monitor (reason empieza
+    // con 'health-monitor:'), lo levantamos y notificamos a Gelfis.
+    if (pauseStatus.paused) {
+      const wasHealthPause = (pauseStatus.reason ?? "").startsWith("health-monitor:");
+      if (wasHealthPause) {
+        await resumeSystem();
+        await createAdminNotification({
+          type: "system_resumed_auto",
+          severity: "info",
+          title: "Evolution recuperado — pausa global levantada",
+          body: `El monitor detecto state='open'. Se reanudan envios automaticamente (antes la pausa esperaba al timestamp).`,
+          action_url: "/admin/system",
+          metadata: { previous_until: pauseStatus.until, previous_reason: pauseStatus.reason },
+          dedupeHours: 1,
+        });
+        console.log(`[health-monitor] AUTO-RESUME — Evolution sano, levantada pausa que iba hasta ${pauseStatus.until}`);
+        return NextResponse.json({ ok: true, state, fail_count: 0, action: "AUTO_RESUMED" });
+      }
+      // Pausa puesta manualmente o por otro origen → no la tocamos.
+      return NextResponse.json({ ok: true, state, fail_count: 0, skipped_reason: "manual_pause_active", until: pauseStatus.until });
+    }
     return NextResponse.json({ ok: true, state, fail_count: 0 });
+  }
+
+  // No-OK y ya hay pausa activa → no acumular contador ni notificar de nuevo.
+  if (pauseStatus.paused) {
+    return NextResponse.json({ ok: true, state, fail_count: failCount, skipped_reason: "already_paused", until: pauseStatus.until });
   }
 
   // No-OK → incrementar contador.
