@@ -288,7 +288,43 @@ def _handle_whatsapp_message(payload: dict[str, Any]) -> None:
             log.warning("Un-normalizable phone: %r", raw_phone)
             return
     else:
+        # JID @lid: WhatsApp asigna esto a usuarios fuera de la libreta de
+        # contactos del business. Tres estrategias en orden:
+        #   1. Match por whatsapp_lid ya guardado.
+        #   2. Match por pushName (case-insensitive, fuzzy).
+        #   3. Fallback NUEVO 2026-06-16: Evolution v2 a veces entrega el
+        #      telefono real en data.sender / key.senderPn aunque el JID
+        #      sea @lid. Si lo tenemos, normalizamos y buscamos por
+        #      telefono. Si matchea, ademas persistimos el LID en
+        #      leads.whatsapp_lid para que los futuros mensajes vayan
+        #      por la ruta 1 (O(1)).
+        #
+        # Bug Tomas/Barbara 2026-06-16: respondieron "CONFIRMO" desde @lid,
+        # su pushName no coincidia exactamente con leads.name, y como no
+        # habia fallback por telefono el handler descartaba en silencio
+        # bajo la politica de "ignorar unmatched".
         lead = _resolve_lead_for_lid(remote_jid, push_name)
+        if not lead and sender_pn:
+            raw_phone = sender_pn.split("@", 1)[0]
+            if raw_phone and not raw_phone.startswith("+"):
+                raw_phone = "+" + raw_phone
+            try:
+                normalized = normalize_phone(raw_phone)
+                lead = get_lead_by_phone(normalized)
+                if lead:
+                    log.info("LID inbound matched via senderPn fallback — "
+                             "persisting lid=%r on lead=%s", remote_jid, lead["id"])
+                    try:
+                        with get_conn() as conn, conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE leads SET whatsapp_lid=%s "
+                                "WHERE id=%s AND (whatsapp_lid IS NULL OR whatsapp_lid='')",
+                                (remote_jid, lead["id"]),
+                            )
+                    except Exception:                          # noqa: BLE001
+                        log.exception("failed to persist whatsapp_lid")
+            except ValueError:
+                log.warning("LID senderPn un-normalizable: %r", raw_phone)
 
     # Extract text body (Evolution nests it in message.conversation or extendedTextMessage.text)
     msg = data.get("message") or {}
