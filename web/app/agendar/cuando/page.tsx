@@ -12,6 +12,7 @@ import { normalizePhone, resolvePhone } from "@/lib/phone";
 import { combineE164 } from "@/components/diagnostico/DiagnosticoFunnel";
 import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
 import { detectBrowserTimezone, detectCountryFromBrowser } from "@/lib/timezone-country";
+import { captureAttributionFromUrl, readAttribution, clearAttribution } from "@/lib/ads-attribution";
 
 /**
  * Step 1 — slot picker. Mobile pattern: horizontal day strip + vertical
@@ -72,6 +73,12 @@ function StepCuandoInner() {
   // Si el lead viene del flujo /home con socialmedia, ya nos dieron
   // motivo + nivel. Si no, asumimos atajo desde landing.
   const effectiveLanding = landingFromUrl ?? "agendar-directo";
+
+  // Captura gclid/utm de URL al montar. Si el lead vino directo aquí
+  // con ?gclid=... (Google Ads), lo persistimos para spread en book-trial.
+  // Si vino redirigido desde /diagnostico o landing, ya está en sessionStorage
+  // y captureAttributionFromUrl es idempotente (no pisa).
+  useEffect(() => { captureAttributionFromUrl(); }, []);
 
   const [slots,    setSlots]    = useState<SlotItem[] | null>(null);
   const [loadErr,  setLoadErr]  = useState<string | null>(null);
@@ -183,6 +190,7 @@ function StepCuandoInner() {
             language:      lang,
             slot_iso:      s.startIso,
             teacher_id:    s.teacherId,
+            ...readAttribution(),
           }),
         });
         const json = await res.json();
@@ -266,6 +274,7 @@ function StepCuandoInner() {
           // ('agendar-directo') y book-trial marcará motivo='direct'.
           landing_intent: effectiveLanding,
           ...(motivoFromUrl ? { motivo_inicial: motivoFromUrl } : {}),
+          ...readAttribution(),
         }),
       });
       const json = await res.json();
@@ -298,6 +307,10 @@ function StepCuandoInner() {
         firePixelSchedule({ leadId: json.leadId });
       }
       try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
+      // Atribución consumida → limpiar para que el próximo visitante
+      // no herede el gclid de este lead. /confirmacion dispara su
+      // propio gtag schedule conversion, no necesita la atribución.
+      clearAttribution();
       if (typeof window !== "undefined") {
         const params = new URLSearchParams({ c: json.classId, t: json.token });
         window.location.href = `/confirmacion?${params.toString()}`;

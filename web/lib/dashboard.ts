@@ -26,10 +26,23 @@ export type LeadRow = {
   converted_to_user_id: string | null;
   // Respuesta del nuevo paso 1 del funnel (Q.Score). NULL para leads
   // previos al cambio.
-  motivo_inicial: "particulares" | "intensivo" | "certificado" | "profesional" | "otro" | null;
+  motivo_inicial: "particulares" | "intensivo" | "certificado" | "profesional" | "otro" | "direct" | null;
   // Timestamp de la última llamada fría hecha al lead. NULL = pendiente.
   // Lo togglea el botón de /admin/leads/[id].
   cold_call_done_at: string | null;
+  // Slug de la landing/fuente origen (migration 058). Persistido por
+  // /api/public/diagnostico/register y /api/public/book-trial.
+  // Valores típicos: 'socialmedia', 'curso-online', 'particulares',
+  // 'intensivo', 'certificado', 'b2-trabajar', 'clases-aleman-ciudades',
+  // 'agendar-directo'. NULL para leads pre-058.
+  landing_intent: string | null;
+  // Última actividad — base del ordenamiento en /admin/leads y
+  // /admin/funnel. NULL para leads legacy pre-trigger updated_at.
+  updated_at: string | null;
+  // Timestamps de asistencia a clase de prueba (migration 063).
+  // Source de verdad para la tasa de asistencia en /admin/ads.
+  trial_attended_at: string | null;
+  trial_absent_at:   string | null;
 };
 
 export type TimelineRow = {

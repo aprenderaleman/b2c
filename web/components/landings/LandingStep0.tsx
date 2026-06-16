@@ -14,9 +14,10 @@
  * que Google sí indexa el H1 + subtítulo + bullets aunque la lógica
  * de "click → funnel" sea cliente.
  */
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
+import { captureAttributionFromUrl } from "@/lib/ads-attribution";
 import type { MotivoId } from "@/components/diagnostico/DiagnosticoFunnel";
 
 /** Bullet de ventaja con icono propio (Gelfis 2026-06-14: TODAS las
@@ -43,13 +44,16 @@ function isBullet(b: unknown): b is LandingBullet {
 }
 
 export function LandingStep0({
-  h1, subtitle, bullets, presetMotivo: _presetMotivo = null, landingIntent: _landingIntent,
+  h1, subtitle, bullets, presetMotivo = null, landingIntent,
 }: LandingStep0Props) {
-  // presetMotivo / landingIntent quedan para compat con las 6 landings
-  // pero ya no se usan dentro de este componente: el único CTA dirige
-  // a /agendar/cuando (Gelfis 2026-06-15). Si en el futuro se quiere
-  // reintroducir el quiz inline, mountar SimpleTrialFlow aquí.
-  void _presetMotivo; void _landingIntent;
+  // El CTA verde dirige a /agendar/cuando?landing={slug}&motivo={x}
+  // para preservar atribución (Gelfis 2026-06-15). /agendar/cuando
+  // pasa esos params al body de book-trial, que setea
+  // leads.landing_intent + leads.motivo_inicial directos.
+
+  // Captura de gclid/utm al aterrizar en la landing. Sobrevive en
+  // sessionStorage para que /agendar/cuando lo recupere al confirmar.
+  useEffect(() => { captureAttributionFromUrl(); }, []);
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-white"
@@ -151,7 +155,7 @@ export function LandingStep0({
               nivel y un plan diseñado para ti.
             </p>
             <Link
-              href="/agendar/cuando"
+              href={`/agendar/cuando?landing=${encodeURIComponent(landingIntent)}${presetMotivo ? `&motivo=${encodeURIComponent(presetMotivo)}` : ""}`}
               className="mt-4 inline-flex items-center justify-center gap-2 w-full
                          h-12 md:h-13 lg:h-14 rounded-2xl
                          bg-emerald-600 hover:bg-emerald-700 text-white

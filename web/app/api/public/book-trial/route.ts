@@ -81,6 +81,18 @@ const Body = z.object({
   motivo_inicial: z.enum([
     "particulares", "intensivo", "certificado", "profesional", "otro", "direct",
   ]).nullable().optional(),
+  // Atribución publicitaria — opcional, lo manda /agendar/cuando vía
+  // sessionStorage (helper lib/ads-attribution). Sin esto Google Ads
+  // pierde la conversión offline en el cron ads-conversions-export
+  // (filtra WHERE gclid IS NOT NULL).
+  gclid:         z.string().trim().max(200).nullable().optional(),
+  gbraid:        z.string().trim().max(200).nullable().optional(),
+  wbraid:        z.string().trim().max(200).nullable().optional(),
+  utm_source:    z.string().trim().max(120).nullable().optional(),
+  utm_medium:    z.string().trim().max(120).nullable().optional(),
+  utm_campaign:  z.string().trim().max(200).nullable().optional(),
+  utm_term:      z.string().trim().max(200).nullable().optional(),
+  utm_content:   z.string().trim().max(200).nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -181,7 +193,7 @@ export async function POST(req: Request) {
   }
   const { data: existingLead } = await sb
     .from("leads")
-    .select("id, email, whatsapp_normalized, motivo_inicial, landing_intent")
+    .select("id, email, whatsapp_normalized, motivo_inicial, landing_intent, gclid, gbraid, wbraid, utm_source, utm_medium, utm_campaign, utm_term, utm_content")
     .or(orFilters.join(","))
     .order("created_at", { ascending: false })
     .limit(1)
@@ -202,6 +214,14 @@ export async function POST(req: Request) {
       whatsapp_normalized: string | null;
       motivo_inicial: string | null;
       landing_intent: string | null;
+      gclid:        string | null;
+      gbraid:       string | null;
+      wbraid:       string | null;
+      utm_source:   string | null;
+      utm_medium:   string | null;
+      utm_campaign: string | null;
+      utm_term:     string | null;
+      utm_content:  string | null;
     };
     leadId = existing.id;
     // Preserve any contact info we already had — only fill blanks.
@@ -218,6 +238,18 @@ export async function POST(req: Request) {
     const updateMotivoIni = existing.motivo_inicial
       ?? b.motivo_inicial
       ?? (b.landing_intent ? "direct" : null);
+    // Atribución publicitaria — preferimos lo que ya tenía (primera
+    // visita es la que cuenta para Smart Bidding); solo llenamos blanks.
+    const adAttribution = {
+      gclid:        existing.gclid        ?? b.gclid        ?? null,
+      gbraid:       existing.gbraid       ?? b.gbraid       ?? null,
+      wbraid:       existing.wbraid       ?? b.wbraid       ?? null,
+      utm_source:   existing.utm_source   ?? b.utm_source   ?? null,
+      utm_medium:   existing.utm_medium   ?? b.utm_medium   ?? null,
+      utm_campaign: existing.utm_campaign ?? b.utm_campaign ?? null,
+      utm_term:     existing.utm_term     ?? b.utm_term     ?? null,
+      utm_content:  existing.utm_content  ?? b.utm_content  ?? null,
+    };
     await sb.from("leads").update({
       name:                 b.name,
       email:                existing.email ?? b.email,
@@ -231,6 +263,7 @@ export async function POST(req: Request) {
       trial_scheduled_at:   b.slot_iso,
       landing_intent:       updateLanding,
       motivo_inicial:       updateMotivoIni,
+      ...adAttribution,
       gdpr_accepted:        true,
       gdpr_accepted_at:     new Date().toISOString(),
       source:               "funnel_trial_self_book",
@@ -252,6 +285,14 @@ export async function POST(req: Request) {
       trial_scheduled_at:   b.slot_iso,
       landing_intent:       insertLanding,
       motivo_inicial:       insertMotivoIni,
+      gclid:                b.gclid        ?? null,
+      gbraid:               b.gbraid       ?? null,
+      wbraid:               b.wbraid       ?? null,
+      utm_source:           b.utm_source   ?? null,
+      utm_medium:           b.utm_medium   ?? null,
+      utm_campaign:         b.utm_campaign ?? null,
+      utm_term:             b.utm_term     ?? null,
+      utm_content:          b.utm_content  ?? null,
       gdpr_accepted:        true,
       gdpr_accepted_at:     new Date().toISOString(),
       source:               "funnel_trial_self_book",
@@ -563,6 +604,10 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok:        true,
     classId,
+    // leadId expuesto para que el frontend pueda disparar firePixelLead
+    // y firePixelSchedule con transaction_id estable (dedup). Sin esto
+    // el atajo /agendar/cuando perdía la conversión a Smart Bidding.
+    leadId,
     // Token returned separately so the funnel can redirect to a
     // standalone /confirmacion?c=...&t=... page instead of rendering
     // the success screen inline.
