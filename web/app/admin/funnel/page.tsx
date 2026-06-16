@@ -33,7 +33,21 @@ import {
 } from "@/lib/funnel-ads";
 import { getLeads } from "@/lib/dashboard";
 import { StatusBadge } from "@/components/admin/StatusBadge";
+import { ColdCallToggle } from "@/components/admin/ColdCallToggle";
 import { RefreshButton } from "../ads/RefreshButton";
+
+// Tamaño de página en el listado de leads.
+const PAGE_SIZE = 50;
+
+// Filtros operativos disponibles como chips encima de la lista.
+// Cada uno mapea ?status=trial_scheduled,trial_attended,... → query.
+const STATUS_QUICKFILTERS: Array<{ key: string; label: string; statuses: string[] }> = [
+  { key: "trial_pending",  label: "📅 Trial pendiente",   statuses: ["trial_scheduled", "trial_reminded", "link_sent"] },
+  { key: "trial_attended", label: "✅ Asistieron",        statuses: ["trial_attended"] },
+  { key: "trial_absent",   label: "❌ No asistieron",     statuses: ["trial_absent"] },
+  { key: "converted",      label: "💸 Pagaron",           statuses: ["converted"] },
+  { key: "lost",           label: "🗑️ Perdidos",          statuses: ["lost"] },
+];
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Funnel · Admin" };
@@ -124,15 +138,53 @@ function qs(params: Record<string, string | number | undefined>): string {
   return s ? `?${s}` : "";
 }
 
+/** Construye una URL de /admin/funnel preservando todos los filtros
+ *  activos. Para construir chips toggleables, llamar con el filtro a
+ *  cambiar (con "" o undefined para desactivarlo). Resetea page=1 porque
+ *  cambiar filtros desplaza la paginación. */
+function buildFilterUrl(args: {
+  period?:    PeriodKey | "";
+  days?:      number;
+  country?:   string;
+  q?:         string;
+  status?:    string;
+  has_trial?: "yes" | "no";
+  cold_call?: "pending" | "done";
+}): string {
+  return `/admin/funnel${qs({
+    ...(args.period ? { period: args.period } : { days: args.days }),
+    country:   args.country   || undefined,
+    q:         args.q         || undefined,
+    status:    args.status    || undefined,
+    has_trial: args.has_trial,
+    cold_call: args.cold_call,
+    // page intencionalmente omitido — cambia de filtro = vuelve a página 1
+  })}`;
+}
+
 // ── Página ─────────────────────────────────────────────────────────
 export default async function FunnelControlPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string; country?: string; period?: string; q?: string }>;
+  searchParams: Promise<{
+    days?: string; country?: string; period?: string; q?: string;
+    status?: string; has_trial?: string; cold_call?: string; page?: string;
+  }>;
 }) {
   await requireRole(["superadmin", "admin"]);
   const sp = await searchParams;
   const searchQuery = typeof sp.q === "string" ? sp.q.trim().slice(0, 80) : "";
+
+  // Filtros operativos de la lista.
+  const statusFilterKey = typeof sp.status === "string" ? sp.status.trim() : "";
+  const statusFilterCfg = STATUS_QUICKFILTERS.find(f => f.key === statusFilterKey);
+  const hasTrialFilter: "yes" | "no" | undefined =
+    sp.has_trial === "yes" || sp.has_trial === "no" ? sp.has_trial : undefined;
+  const coldCallFilter: "pending" | "done" | undefined =
+    sp.cold_call === "pending" || sp.cold_call === "done" ? sp.cold_call : undefined;
+
+  // Página actual (1-based) para paginación. Clamp 1..N.
+  const pageNum = Math.max(1, Math.min(999, Number(sp.page ?? 1) || 1));
 
   const periodRaw = (sp.period ?? "").trim().toLowerCase();
   const activePeriod: PeriodKey | "" =
@@ -161,13 +213,18 @@ export default async function FunnelControlPage({
     getFunnelAdsData(activeDays, activeCountry || undefined),
     getAvailableCountries(activeDays),
     getLeads({
-      limit:        50,
+      limit:        PAGE_SIZE,
+      offset:       (pageNum - 1) * PAGE_SIZE,
       createdSince: createdSinceIso,
       sortBy:       "created",
       q:            searchQuery || undefined,
+      status:       statusFilterCfg?.statuses,
+      has_trial:    hasTrialFilter,
+      cold_call:    coldCallFilter,
     }),
   ]);
   const leads = leadsResult.rows;
+  const totalPages = Math.max(1, Math.ceil(leadsResult.total / PAGE_SIZE));
 
   // KPIs derivados (mismos cálculos que /admin/ads — fuente única).
   const entry          = data.steps[0]?.reached ?? 0;
@@ -317,6 +374,95 @@ export default async function FunnelControlPage({
         />
       </section>
 
+      {/* ── Alertas automáticas ────────────────────────────────── */}
+      {data.alerts.length > 0 && (
+        <section className="mt-5 space-y-2">
+          {data.alerts.map((a, i) => (
+            <div
+              key={i}
+              className={`rounded-xl border p-3 text-sm ${
+                a.severity === "high"
+                  ? "border-red-500/40 bg-red-500/10 text-red-100"
+                  : a.severity === "medium"
+                    ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
+                    : "border-blue-500/40 bg-blue-500/10 text-blue-100"
+              }`}
+            >
+              <div className="font-semibold">
+                {a.severity === "high" ? "🔴" : a.severity === "medium" ? "🟡" : "🔵"} {a.title}
+              </div>
+              <div className="mt-1 opacity-90 text-[13px]">{a.detail}</div>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {/* ── Desglose "Por landing / fuente" ────────────────────── */}
+      <section className="mt-6">
+        <details className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-white/85 hover:bg-white/[0.05] select-none">
+            📊 Por landing / fuente <span className="ml-2 text-[11px] font-normal text-white/45">{data.landingBreakdown.length} buckets · click para abrir</span>
+          </summary>
+          <div className="overflow-x-auto border-t border-white/10">
+            <table className="w-full text-sm">
+              <thead className="text-[11px] uppercase text-white/50 bg-white/5">
+                <tr>
+                  <th className="text-left py-2 pl-4 pr-3">Landing</th>
+                  <th className="text-left py-2 px-3">Fuente</th>
+                  <th className="text-right py-2 px-3">Sesiones</th>
+                  <th className="text-right py-2 px-3">Form</th>
+                  <th className="text-right py-2 px-3">Trial</th>
+                  <th className="text-right py-2 px-3">Asistencia</th>
+                  <th className="text-right py-2 pr-4 pl-3">Pagaron</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {data.landingBreakdown.map(l => {
+                  const meta = LANDING_META[l.landing] ?? LANDING_META["(sin landing)"];
+                  const attRate = l.attendance_rate;
+                  return (
+                    <tr key={l.landing} className="hover:bg-white/[0.03]">
+                      <td className="py-2 pl-4 pr-3">
+                        <div className="text-white font-semibold text-[13px]">{meta.label}</div>
+                        <div className="text-[10px] text-white/40 font-mono">{l.landing}</div>
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold border ${meta.sourceCls}`}>
+                          {meta.sourceIcon} {meta.sourceLabel}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-right text-white/80 tabular-nums">{l.sessions}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">
+                        <span className={l.pct_form < 5 ? "text-red-300" : l.pct_form < 10 ? "text-amber-300" : "text-emerald-300"}>
+                          {l.form_completed}<span className="ml-1 text-[10px] text-white/40">({l.pct_form.toFixed(1)}%)</span>
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums">
+                        <span className={l.pct_trial < 2 ? "text-red-300" : l.pct_trial < 5 ? "text-amber-300" : "text-emerald-300"}>
+                          {l.trial_booked}<span className="ml-1 text-[10px] text-white/40">({l.pct_trial.toFixed(1)}%)</span>
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums">
+                        {attRate === null
+                          ? <span className="text-white/30">—</span>
+                          : <span className={attRate >= 0.7 ? "text-emerald-300" : attRate >= 0.5 ? "text-amber-300" : "text-red-300"}>
+                              {(100 * attRate).toFixed(0)}%
+                              <span className="ml-1 text-[10px] text-white/40">({l.trial_attended}/{l.trial_attended + l.trial_absent})</span>
+                            </span>}
+                      </td>
+                      <td className="py-2 pr-4 pl-3 text-right text-white/80 tabular-nums">{l.converted}</td>
+                    </tr>
+                  );
+                })}
+                {data.landingBreakdown.length === 0 && (
+                  <tr><td colSpan={7} className="py-4 text-center text-white/40 italic">Sin datos por landing en este rango.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
       {/* ── SECCIÓN 2: Leads recientes ────────────────────────── */}
       <section className="mt-8">
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
@@ -362,6 +508,9 @@ export default async function FunnelControlPage({
               href={`/admin/funnel${qs({
                 ...(activePeriod ? { period: activePeriod } : { days: activeDays }),
                 country: activeCountry || undefined,
+                status: statusFilterKey || undefined,
+                has_trial: hasTrialFilter,
+                cold_call: coldCallFilter,
               })}`}
               className="px-3 py-1.5 rounded-md text-sm border border-white/10 bg-white/5 text-white/70 hover:text-white hover:bg-white/10"
             >
@@ -370,7 +519,87 @@ export default async function FunnelControlPage({
           )}
         </form>
 
-        {/* Desktop: tabla compacta */}
+        {/* Filtros operativos rápidos — chips de status + has_trial +
+            cold_call. Cada chip preserva los demás filtros activos
+            (rango, país, búsqueda) vía helper buildFilterUrl. */}
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {/* Status quick filters */}
+          {STATUS_QUICKFILTERS.map(f => {
+            const active = statusFilterKey === f.key;
+            return (
+              <Link
+                key={f.key}
+                href={buildFilterUrl({
+                  period: activePeriod, days: activeDays, country: activeCountry,
+                  q: searchQuery, status: active ? "" : f.key,
+                  has_trial: hasTrialFilter, cold_call: coldCallFilter,
+                })}
+                className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+                  active
+                    ? "bg-warm text-warm-foreground border-warm"
+                    : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {f.label}
+              </Link>
+            );
+          })}
+          {/* Has trial yes/no */}
+          <span className="w-px bg-white/10 mx-1" aria-hidden />
+          {([
+            { v: "yes" as const, label: "🗓 con trial" },
+            { v: "no"  as const, label: "∅ sin trial"  },
+          ]).map(o => {
+            const active = hasTrialFilter === o.v;
+            return (
+              <Link
+                key={o.v}
+                href={buildFilterUrl({
+                  period: activePeriod, days: activeDays, country: activeCountry,
+                  q: searchQuery, status: statusFilterKey,
+                  has_trial: active ? undefined : o.v,
+                  cold_call: coldCallFilter,
+                })}
+                className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+                  active
+                    ? "bg-sky-500/30 text-sky-100 border-sky-500/40"
+                    : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {o.label}
+              </Link>
+            );
+          })}
+          {/* Cold call */}
+          <span className="w-px bg-white/10 mx-1" aria-hidden />
+          {([
+            { v: "pending" as const, label: "📞 cold-call pendiente" },
+            { v: "done"    as const, label: "✓ cold-call hecha" },
+          ]).map(o => {
+            const active = coldCallFilter === o.v;
+            return (
+              <Link
+                key={o.v}
+                href={buildFilterUrl({
+                  period: activePeriod, days: activeDays, country: activeCountry,
+                  q: searchQuery, status: statusFilterKey,
+                  has_trial: hasTrialFilter,
+                  cold_call: active ? undefined : o.v,
+                })}
+                className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+                  active
+                    ? "bg-purple-500/30 text-purple-100 border-purple-500/40"
+                    : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {o.label}
+              </Link>
+            );
+          })}
+        </div>
+
+        {/* Desktop: tabla con columnas operativas (nivel, próximo
+            contacto, # seguimientos, cold-call toggle inline). */}
         <div className="hidden md:block overflow-x-auto rounded-xl border border-white/10">
           <table className="w-full text-sm">
             <thead className="text-[11px] uppercase text-white/50 bg-white/5">
@@ -378,14 +607,19 @@ export default async function FunnelControlPage({
                 <th className="text-left py-2 px-3">Lead</th>
                 <th className="text-left py-2 px-3">Contacto</th>
                 <th className="text-left py-2 px-3">Origen</th>
+                <th className="text-left py-2 px-3">Nivel</th>
                 <th className="text-left py-2 px-3">Trial</th>
+                <th className="text-left py-2 px-3">Próximo</th>
                 <th className="text-left py-2 px-3">Estado</th>
+                <th className="text-left py-2 px-3">📞</th>
                 <th className="text-right py-2 pr-3">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {leads.length === 0 && (
-                <tr><td colSpan={6} className="py-6 text-center text-white/40 italic">Sin leads en el sistema</td></tr>
+                <tr><td colSpan={9} className="py-6 text-center text-white/40 italic">
+                  Sin leads que coincidan con los filtros activos
+                </td></tr>
               )}
               {leads.map(l => {
                 const meta = LANDING_META[l.landing_intent ?? "(sin landing)"] ?? LANDING_META["(sin landing)"];
@@ -397,7 +631,7 @@ export default async function FunnelControlPage({
                     <td className="py-2 px-3">
                       <div className="text-white font-semibold">{l.name ?? "(sin nombre)"}</div>
                       <div className="text-[10.5px] text-white/40">
-                        {fmtRelative(l.updated_at ?? l.created_at)}
+                        {fmtRelative(l.created_at)}
                       </div>
                     </td>
                     <td className="py-2 px-3">
@@ -408,19 +642,35 @@ export default async function FunnelControlPage({
                       <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold border ${meta.sourceCls}`}>
                         {meta.sourceIcon} {meta.sourceLabel}
                       </span>
-                      <div className="text-[10.5px] text-white/45 mt-0.5">{meta.label}</div>
+                      <div className="text-[10.5px] text-white/45 mt-0.5 truncate max-w-[160px]" title={meta.label}>{meta.label}</div>
                     </td>
+                    <td className="py-2 px-3 text-[12px] text-white/70 font-mono">{l.german_level ?? "—"}</td>
                     <td className="py-2 px-3 text-[12px]">
                       {l.trial_scheduled_at ? (
                         <>
-                          <div className="text-white/80 tabular-nums">{fmtTrialDate(l.trial_scheduled_at)}</div>
+                          <div className="text-white/80 tabular-nums whitespace-nowrap">{fmtTrialDate(l.trial_scheduled_at)}</div>
                           {attState === "attended" && <span className="text-[10px] text-emerald-300">✓ asistió</span>}
                           {attState === "absent" && <span className="text-[10px] text-red-300">✗ no asistió</span>}
                           {attState === "scheduled" && <span className="text-[10px] text-white/40">pendiente</span>}
                         </>
                       ) : <span className="text-white/30">—</span>}
                     </td>
+                    <td className="py-2 px-3 text-[12px]">
+                      {l.next_contact_date ? (
+                        <div className={`tabular-nums whitespace-nowrap ${
+                          new Date(l.next_contact_date).getTime() < Date.now() ? "text-amber-300" : "text-white/65"
+                        }`}>
+                          {fmtNextContact(l.next_contact_date)}
+                        </div>
+                      ) : <span className="text-white/30">—</span>}
+                      {l.current_followup_number > 0 && (
+                        <div className="text-[10px] text-white/40">{l.current_followup_number} seg.</div>
+                      )}
+                    </td>
                     <td className="py-2 px-3"><StatusBadge status={l.status} /></td>
+                    <td className="py-2 px-3">
+                      <ColdCallToggle leadId={l.id} coldCallDoneAt={l.cold_call_done_at} />
+                    </td>
                     <td className="py-2 pr-3 text-right">
                       <Link
                         href={`/admin/leads/${l.id}`}
@@ -482,6 +732,49 @@ export default async function FunnelControlPage({
             );
           })}
         </div>
+
+        {/* Paginación — solo aparece si hay más de 1 página de resultados. */}
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between gap-3 text-sm">
+            <div className="text-white/45 text-[11.5px]">
+              Página {pageNum} de {totalPages} · {leadsResult.total} leads totales
+            </div>
+            <div className="flex gap-2">
+              {pageNum > 1 && (
+                <Link
+                  href={`/admin/funnel${qs({
+                    ...(activePeriod ? { period: activePeriod } : { days: activeDays }),
+                    country: activeCountry || undefined,
+                    q: searchQuery || undefined,
+                    status: statusFilterKey || undefined,
+                    has_trial: hasTrialFilter,
+                    cold_call: coldCallFilter,
+                    page: pageNum - 1,
+                  })}`}
+                  className="px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[12px]"
+                >
+                  ← Anterior
+                </Link>
+              )}
+              {pageNum < totalPages && (
+                <Link
+                  href={`/admin/funnel${qs({
+                    ...(activePeriod ? { period: activePeriod } : { days: activeDays }),
+                    country: activeCountry || undefined,
+                    q: searchQuery || undefined,
+                    status: statusFilterKey || undefined,
+                    has_trial: hasTrialFilter,
+                    cold_call: coldCallFilter,
+                    page: pageNum + 1,
+                  })}`}
+                  className="px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[12px]"
+                >
+                  Siguiente →
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       <div className="mt-8 text-center text-[10.5px] text-white/30">
@@ -529,4 +822,24 @@ function fmtTrialDate(iso: string): string {
     day: "2-digit", month: "short",
     hour: "2-digit", minute: "2-digit",
   });
+}
+
+/** "hoy 14:30", "mañana 09:00", "vie 21 12:00" o "vencido hace 2h". */
+function fmtNextContact(iso: string): string {
+  const dt = new Date(iso);
+  const now = Date.now();
+  const diffMs = dt.getTime() - now;
+  if (diffMs < 0) {
+    const h = Math.round(-diffMs / 3_600_000);
+    return h < 1 ? "vencido" : h < 48 ? `vencido ${h}h` : "vencido";
+  }
+  const hours = dt.toLocaleTimeString("es-ES", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" });
+  const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const targetKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(dt);
+  if (targetKey === todayKey) return `hoy ${hours}`;
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(tomorrow);
+  if (targetKey === tomKey) return `mañana ${hours}`;
+  return dt.toLocaleDateString("es-ES", { timeZone: "Europe/Berlin", weekday: "short", day: "numeric" }) + ` ${hours}`;
 }
