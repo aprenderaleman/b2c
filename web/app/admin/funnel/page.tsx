@@ -33,6 +33,7 @@ import {
 } from "@/lib/funnel-ads";
 import { getLeads } from "@/lib/dashboard";
 import { StatusBadge } from "@/components/admin/StatusBadge";
+import { ColdCallPill } from "@/components/admin/ColdCallPill";
 import { RefreshButton } from "../ads/RefreshButton";
 
 const PAGE_SIZE = 50;
@@ -701,10 +702,8 @@ export default async function FunnelControlPage({
                       ) : <span className="text-white/30">—</span>}
                     </td>
                     <td className="py-2 px-3"><StatusBadge status={l.status} /></td>
-                    <td className="py-2 px-3 text-[14px]">
-                      {l.cold_call_done_at
-                        ? <span className="text-emerald-400" title="Llamada hecha">✓</span>
-                        : <span className="text-amber-400" title="Llamada pendiente">⏰</span>}
+                    <td className="py-2 px-3">
+                      <ColdCallPill leadId={l.id} coldCallDoneAt={l.cold_call_done_at} />
                     </td>
                   </tr>
                 );
@@ -773,7 +772,10 @@ export default async function FunnelControlPage({
                       </span>
                     ) : <span className="text-white/30">sin trial</span>}
                   </div>
-                  <StatusBadge status={l.status} />
+                  <div className="flex items-center gap-2">
+                    <ColdCallPill leadId={l.id} coldCallDoneAt={l.cold_call_done_at} />
+                    <StatusBadge status={l.status} />
+                  </div>
                 </div>
               </div>
             );
