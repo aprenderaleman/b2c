@@ -1,13 +1,30 @@
 /**
  * Wrappers no-op de los pixels publicitarios.
  *
- * Las llamadas (`firePixelLead`, `firePixelSchedule`) son seguras de
- * invocar siempre — si las envs `NEXT_PUBLIC_META_PIXEL_ID` o
- * `NEXT_PUBLIC_TIKTOK_PIXEL_ID` no están configuradas, no hacen nada.
+ * Política de conversiones (Gelfis 2026-06-16) — UNA SOLA conversión a
+ * Google Ads por funnel, disparada al llegar a /confirmacion:
  *
- * Los scripts globales se inyectan en `app/layout.tsx` vía el
- * componente `<PixelTags />`. Cuando Gelfis pase los IDs, se setean
- * las envs en Vercel y todo arranca a trackear sin más cambios.
+ *   - Google Ads conversion → SOLO en /confirmacion vía
+ *     firePixelScheduleGoogle() con transaction_id=classId. Dedup
+ *     garantizada por classId — si el lead refresca o vuelve, no
+ *     doble-cuenta. Smart Bidding aprende del evento más fuerte
+ *     (reserva confirmada de trial).
+ *
+ *   - Meta y TikTok mantienen DOS eventos por embudo (Lead +
+ *     Schedule) porque sus modelos de atribución se benefician de
+ *     ver ambos pasos. firePixelLead emite Lead a Meta + TikTok
+ *     (sin Google Ads). firePixelSchedule emite Schedule a Meta +
+ *     TikTok.
+ *
+ * Antes (pre-2026-06-16) firePixelLead disparaba Google Ads en submit
+ * Y firePixelScheduleGoogle volvía a disparar en /confirmacion con el
+ * mismo label → doble-conteo (cada lead contaba 2×) → Google Ads veía
+ * un CPA artificialmente bajo y Smart Bidding sobre-pujaba. Fix limpio:
+ * solo /confirmacion dispara Google Ads.
+ *
+ * Las llamadas son seguras de invocar siempre — si los pixels no están
+ * configurados (env vacías), son no-ops gracias a los try/catch.
+ * Los scripts globales se inyectan en `app/layout.tsx` vía PixelTags.
  */
 
 type Window_ = Window & {
@@ -16,19 +33,23 @@ type Window_ = Window & {
   gtag?: (...args: unknown[]) => void;
 };
 
-// Conversión de Google Ads "Enviar formulario de clientes potenciales".
-// Se dispara al pulsar "Crear mi plan" (paso 5 completado). El gtag base
-// (AW-17724667323) ya se carga en app/layout.tsx.
-const GADS_LEAD_CONVERSION = "AW-17724667323/5fU7CKWqmLUcELvr44NC";
+// Conversion de Google Ads — usamos UN único label para todo el funnel
+// porque la conversión real que importa es "trial reservado". Si en el
+// futuro Gelfis quiere conversiones separadas (lead vs schedule vs
+// attended), creamos labels nuevos en Google Ads UI y los seteamos
+// como env vars.
+//
+// El gtag base (AW-17724667323) ya se carga en app/layout.tsx.
+const GADS_CONVERSION_LABEL = "AW-17724667323/5fU7CKWqmLUcELvr44NC";
 
-/** Disparado al completar paso 5 (registro = click "Crear mi plan").
+/** Disparado cuando el lead completa el form (registro o trial booking).
  *
- *  El `value` de la conversión Google Ads señaliza la calidad del lead:
- *    - hasWhatsapp=true  → 2 EUR (lead puede agendar trial, Stiv lo
- *      recupera por WA, alta tasa de conversión a cliente)
- *    - hasWhatsapp=false → 1 EUR (lead email-only, sólo drip por
- *      correo, baja tasa de conversión)
- *  Smart Bidding usa el ratio para optimizar hacia leads con WA.
+ *  IMPORTANTE: NO emite Google Ads — eso lo hace firePixelScheduleGoogle
+ *  desde /confirmacion para evitar doble-conteo. Aquí solo Meta + TikTok.
+ *
+ *  El `value` señaliza calidad del lead para Meta/TikTok bidding:
+ *    - hasWhatsapp=true  → 2 EUR (lead con WA, alta conversión)
+ *    - hasWhatsapp=false → 1 EUR (lead email-only, baja conversión)
  */
 export function firePixelLead(args: {
   leadId: string;
@@ -39,16 +60,6 @@ export function firePixelLead(args: {
   if (typeof window === "undefined") return;
   const w = window as Window_;
   const value = args.hasWhatsapp ? 2.0 : 1.0;
-  const transactionId = args.leadId; // dedup por lead_id
-  // ── Google Ads conversion ──
-  try {
-    w.gtag?.("event", "conversion", {
-      send_to: GADS_LEAD_CONVERSION,
-      value,
-      currency: "EUR",
-      transaction_id: transactionId,
-    });
-  } catch (e) { console.warn("[pixel] gtag conversion failed:", e); }
   // ── Meta ──
   try {
     w.fbq?.("track", "Lead", {
@@ -69,7 +80,11 @@ export function firePixelLead(args: {
   } catch (e) { console.warn("[pixel] ttq CompleteRegistration failed:", e); }
 }
 
-/** Disparado al agendar la clase de prueba (paso 6 → /agendar/objetivo). */
+/** Disparado al agendar la clase de prueba.
+ *
+ *  Meta + TikTok aquí; Google Ads va en firePixelScheduleGoogle desde
+ *  /confirmacion para deduplicación robusta por classId.
+ */
 export function firePixelSchedule(args: { leadId: string }) {
   if (typeof window === "undefined") return;
   const w = window as Window_;
@@ -79,4 +94,31 @@ export function firePixelSchedule(args: { leadId: string }) {
   try {
     w.ttq?.track("Subscribe", { content_id: args.leadId });
   } catch (e) { console.warn("[pixel] ttq Subscribe failed:", e); }
+}
+
+/** ÚNICA conversion de Google Ads en todo el funnel. Se dispara desde
+ *  <ConfirmacionPixel /> al cargar /confirmacion.
+ *
+ *  Por qué SOLO aquí:
+ *    - /confirmacion solo se alcanza tras book-trial exitoso → señal
+ *      fuerte para Smart Bidding (reserva confirmada).
+ *    - transaction_id=classId garantiza dedup nativa de Google Ads —
+ *      refresh, share del link, multi-tab, todo dedup.
+ *    - Un solo evento por funnel = CPA real, no inflado.
+ *
+ *  value = 5 EUR refleja el valor esperado de un lead que llega a este
+ *  punto (vs 2 EUR de un lead que solo registra). Ajusta cuando tengas
+ *  datos de tu CLV real.
+ */
+export function firePixelScheduleGoogle(args: { classId: string }) {
+  if (typeof window === "undefined") return;
+  const w = window as Window_;
+  try {
+    w.gtag?.("event", "conversion", {
+      send_to: GADS_CONVERSION_LABEL,
+      value:    5,
+      currency: "EUR",
+      transaction_id: args.classId,
+    });
+  } catch (e) { console.warn("[pixel] gtag conversion failed:", e); }
 }
