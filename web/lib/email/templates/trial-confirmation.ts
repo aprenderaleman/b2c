@@ -21,7 +21,7 @@ export function renderTrialConfirmation(v: TrialConfirmationVars): RenderedEmail
 }
 
 function renderES(v: TrialConfirmationVars): RenderedEmail {
-  const subject = `${v.leadName}, confirma tu clase de prueba — ${v.startDate}`;
+  const subject = `${v.leadName}, tu clase de prueba está agendada — ${v.startDate}`;
   const body = `
     ${h2(`¡Hola ${escapeHtml(v.leadName)}! Soy Stiv de Aprender-Aleman.de 👋`)}
     ${p(`Tu <strong>clase de alemán</strong> está agendada para:`)}
@@ -29,18 +29,7 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
       ["📅 Fecha",     escapeHtml(v.startDate)],
       ["⏱ Duración",   `${v.durationMin} minutos`],
     ])}
-    <div style="margin:18px 0;padding:14px 16px;border-radius:12px;background:#FEE2E2;border:1px solid #FCA5A5;">
-      <p style="margin:0 0 10px 0;font-size:14px;color:#7F1D1D;line-height:1.5;">
-        <strong>⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.</strong>
-      </p>
-      <p style="margin:0;font-size:14px;color:#7F1D1D;line-height:1.6;">
-        Responde a este correo (o por WhatsApp) con:<br>
-        👉 <strong>"CONFIRMO"</strong> si vas a asistir<br>
-        👉 <strong>"CAMBIAR"</strong> si necesitas otra fecha<br>
-        👉 <strong>"CANCELAR"</strong> si ya no te interesa<br><br>
-        <strong>Sin tu respuesta en 12h, tu slot se libera</strong> para otro estudiante en lista de espera.
-      </p>
-    </div>
+    ${p(`En unos minutos te escribo por <strong>WhatsApp</strong> para confirmar que todo encaja. Si no recibes mi mensaje, escríbeme tú directamente y lo resolvemos.`)}
     <div style="text-align:center;margin:24px 0 8px 0;">
       ${button(v.joinUrl, "Entrar al aula el día de la clase →")}
     </div>
@@ -57,12 +46,8 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
     `Tu clase de alemán está agendada para:`,
     `📅 ${v.startDate}`,
     `⏱ ${v.durationMin} min`, ``,
-    `⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.`, ``,
-    `Responde con:`,
-    `👉 "CONFIRMO" si vas a asistir`,
-    `👉 "CAMBIAR" si necesitas otra fecha`,
-    `👉 "CANCELAR" si ya no te interesa`, ``,
-    `Sin tu respuesta en 12h, tu slot se libera para otro estudiante en lista de espera.`, ``,
+    `En unos minutos te escribo por WhatsApp para confirmar que todo encaja.`,
+    `Si no recibes mi mensaje, escríbeme tú directamente y lo resolvemos.`, ``,
     `Entrar al aula el día de la clase: ${v.joinUrl}`,
     `(este enlace es exclusivo para ti — no requiere contraseña)`, ``,
     `Cómo prepararte:`,
@@ -74,7 +59,7 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
 }
 
 function renderDE(v: TrialConfirmationVars): RenderedEmail {
-  const subject = `${v.leadName}, bestätige deine Probestunde — ${v.startDate}`;
+  const subject = `${v.leadName}, deine Probestunde ist gebucht — ${v.startDate}`;
   const body = `
     ${h2(`Hallo ${escapeHtml(v.leadName)}! Ich bin Stiv von Aprender-Aleman.de 👋`)}
     ${p(`Deine <strong>Deutsch-Probestunde</strong> ist gebucht für:`)}
@@ -82,18 +67,7 @@ function renderDE(v: TrialConfirmationVars): RenderedEmail {
       ["📅 Datum",     escapeHtml(v.startDate)],
       ["⏱ Dauer",      `${v.durationMin} Minuten`],
     ])}
-    <div style="margin:18px 0;padding:14px 16px;border-radius:12px;background:#FEE2E2;border:1px solid #FCA5A5;">
-      <p style="margin:0 0 10px 0;font-size:14px;color:#7F1D1D;line-height:1.5;">
-        <strong>⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.</strong>
-      </p>
-      <p style="margin:0;font-size:14px;color:#7F1D1D;line-height:1.6;">
-        Antworte auf diese E-Mail (oder per WhatsApp) mit:<br>
-        👉 <strong>"CONFIRMO"</strong> wenn du dabei bist<br>
-        👉 <strong>"CAMBIAR"</strong> wenn du einen anderen Termin brauchst<br>
-        👉 <strong>"CANCELAR"</strong> wenn du nicht mehr interessiert bist<br><br>
-        <strong>Ohne deine Antwort innerhalb von 12 Stunden wird dein Slot</strong> für einen anderen Schüler auf der Warteliste freigegeben.
-      </p>
-    </div>
+    ${p(`Ich schreibe dir gleich per <strong>WhatsApp</strong>, um zu bestätigen, dass alles passt. Falls du keine Nachricht von mir bekommst, melde dich einfach selbst — wir klären es zusammen.`)}
     <div style="text-align:center;margin:24px 0 8px 0;">
       ${button(v.joinUrl, "Zum Klassenzimmer am Tag der Stunde →")}
     </div>
@@ -110,12 +84,8 @@ function renderDE(v: TrialConfirmationVars): RenderedEmail {
     `Deine Deutsch-Probestunde ist gebucht für:`,
     `📅 ${v.startDate}`,
     `⏱ ${v.durationMin} Min`, ``,
-    `⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.`, ``,
-    `Antworte mit:`,
-    `👉 "CONFIRMO" wenn du dabei bist`,
-    `👉 "CAMBIAR" wenn du einen anderen Termin brauchst`,
-    `👉 "CANCELAR" wenn du nicht mehr interessiert bist`, ``,
-    `Ohne deine Antwort innerhalb von 12 Stunden wird dein Slot freigegeben.`, ``,
+    `Ich schreibe dir gleich per WhatsApp, um zu bestätigen, dass alles passt.`,
+    `Falls du keine Nachricht bekommst, melde dich einfach selbst.`, ``,
     `Zum Klassenzimmer am Tag der Stunde: ${v.joinUrl}`,
     `(dieser Link ist nur für dich — kein Passwort nötig)`, ``,
     `Vorbereitung:`,
