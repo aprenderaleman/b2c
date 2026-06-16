@@ -506,6 +506,25 @@ async function runCron(req: Request) {
           });
           continue;
         }
+        // forceEmailOnly + msg #2 es WA-only → saltar para no quedarnos
+        // pegados en deadlock (pausa global o cold-lead bloquean el WA
+        // y no hay version email del nudge). Avanza last_drip_msg_n y
+        // deja que msg #3 (T+24h, WA+email con PDF) tome el relevo.
+        if (forceEmailOnly) {
+          skipped++;
+          await sb.from("leads").update({
+            last_drip_msg_n: nextN,
+            last_drip_sent_at: new Date().toISOString(),
+          }).eq("id", lead.id);
+          await sb.from("lead_timeline").insert({
+            lead_id: lead.id,
+            type:    "agent_note",
+            author:  "system",
+            content: `📨 Followup #2 saltado — ${waPaused ? "WA pausado" : "cold-lead cap"} y msg #2 es WA-only`,
+            metadata: { kind: "diagnostico_followup_skip", message_n: 2, reason: waPaused ? "wa_paused" : "cold_cap" },
+          });
+          continue;
+        }
         const text = [
           `Hola de nuevo ${firstName} 😊`,
           ``,
