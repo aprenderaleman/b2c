@@ -180,6 +180,26 @@ export function TrialScriptWizard({
   floatingNotesRef.current = floatingNotes;
   const [notesSaved, setNotesSaved] = useState(true);
 
+  // Draggable position
+  const [notesPos, setNotesPos] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragOffset = useRef({ x: 0, y: 0 });
+  const notesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMove = (e: PointerEvent) => {
+      setNotesPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
+    };
+    const onUp = () => setIsDragging(false);
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [isDragging]);
+
   useEffect(() => {
     const i = setInterval(() => {
       if (typeof window !== "undefined") {
@@ -476,18 +496,31 @@ export function TrialScriptWizard({
 
       <ProgressBar step={step} total={TOTAL_SECTIONS} />
 
-      {/* Floating notes panel */}
-      <div className="fixed bottom-4 right-4 z-50">
-        {notesOpen ? (
-          <div className="w-72 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-lg p-3">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Notas</span>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400">{notesSaved ? "Guardado" : "..."}</span>
-                <button type="button" onClick={() => setNotesOpen(false)}
-                  className="text-xs text-slate-400 hover:text-slate-600">✕</button>
-              </div>
+      {/* Floating draggable notes panel */}
+      {notesOpen ? (
+        <div ref={notesRef}
+          className="fixed z-50 w-72 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-lg"
+          style={notesPos.x === 0 && notesPos.y === 0
+            ? { bottom: 16, right: 16 }
+            : { left: notesPos.x, top: notesPos.y }}>
+          <div
+            className="flex items-center justify-between px-3 py-2 cursor-grab active:cursor-grabbing select-none rounded-t-2xl bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700"
+            onPointerDown={e => {
+              const rect = notesRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              dragOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+              setNotesPos({ x: rect.left, y: rect.top });
+              setIsDragging(true);
+              e.preventDefault();
+            }}>
+            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Notas</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-400">{notesSaved ? "Guardado" : "..."}</span>
+              <button type="button" onClick={() => setNotesOpen(false)}
+                className="text-xs text-slate-400 hover:text-slate-600">✕</button>
             </div>
+          </div>
+          <div className="p-3">
             <textarea
               value={floatingNotes}
               onChange={e => { setFloatingNotes(e.target.value); setNotesSaved(false); }}
@@ -496,13 +529,13 @@ export function TrialScriptWizard({
               className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm p-2 resize-none focus:outline-none focus:ring-1 focus:ring-emerald-400 text-slate-700 dark:text-slate-200"
             />
           </div>
-        ) : (
-          <button type="button" onClick={() => setNotesOpen(true)}
-            className="rounded-full bg-emerald-500 text-white shadow-lg px-4 py-2.5 text-sm font-semibold hover:bg-emerald-600">
-            Notas
-          </button>
-        )}
-      </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => { setNotesOpen(true); setNotesPos({ x: 0, y: 0 }); }}
+          className="fixed bottom-4 right-4 z-50 rounded-full bg-emerald-500 text-white shadow-lg px-4 py-2.5 text-sm font-semibold hover:bg-emerald-600">
+          Notas
+        </button>
+      )}
     </div>
   );
 }
