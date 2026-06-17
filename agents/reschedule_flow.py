@@ -85,7 +85,7 @@ _CONFIRM_RE = re.compile(
     r"alli\s+estare|allí\s+estaré|ahi\s+estare|ahí\s+estaré|"
     r"ahi\s+te\s+veo|ahí\s+te\s+veo|"
     r"voy\s+a\s+(ir|asistir|estar)|"
-    r"si\s+(voy|asisto|estare|estaré)|"
+    r"s[ií]\s+(voy|asisto|estare|estaré)|"
     r"bestätigt|bestaetigt|bestätige|bestaetige)\b",
     re.IGNORECASE,
 )
@@ -233,19 +233,13 @@ def _msg_confirm_ack(language: str, name: str) -> str:
 
 
 def _persist_confirmation(lead_id: str) -> None:
-    """Guarda timestamp de confirmacion en leads.meta.trial_confirmed_at
-    para tracking interno. Reuso del patron de awaiting_payment_..."""
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute("SELECT meta FROM leads WHERE id = %s", (lead_id,))
-        row = cur.fetchone()
-    existing = (row[0] if row and row[0] else {}) or {}
-    if not isinstance(existing, dict):
-        existing = {}
-    existing["trial_confirmed_at"] = datetime.utcnow().isoformat() + "Z"
+    """Guarda timestamp de confirmacion en leads.trial_confirmed_at
+    (migration 066, 2026-06-17). Consistente con trial_attended_at /
+    trial_absent_at que ya existen para los otros estados post-trial."""
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
-            "UPDATE leads SET meta = %s WHERE id = %s",
-            (json.dumps(existing), lead_id),
+            "UPDATE leads SET trial_confirmed_at = NOW() WHERE id = %s",
+            (lead_id,),
         )
 
 
