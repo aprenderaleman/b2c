@@ -234,23 +234,28 @@ def _format_slot_line(iso: str, lang: str) -> str:
 
 
 def _is_awaiting_trial_decision(lead_id: str) -> bool:
-    """True si en últimos 14 días hubo un status_change que marca
-    "attended trial". El caller YA verifica que status == 'in_conversation',
-    así que sabemos que el lead no ha pasado a converted/lost (esos cambian
-    el status). Una nota residual con "lost" en el content (notas, no
-    status_changes reales) no nos confunde."""
+    """True si el lead ASISTIÓ a la trial en los últimos 14 días y aún
+    no se ha resuelto su conversión. Lee de leads.trial_attended_at
+    (migration 063) — fuente de verdad explícita.
+
+    Antes (bug 2026-06-17): chequeaba lead_timeline.content ILIKE
+    "%attended trial%" + requería status='in_conversation'. Pero el
+    código TS pone status='trial_attended' tras marcar asistió, NO
+    'in_conversation', así que el check nunca matcheaba y Stiv
+    respondía con flujo genérico a leads post-trial que escribían
+    "ya pagué" / "tuve un problema".
+    """
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             """
             SELECT 1
-              FROM lead_timeline
-             WHERE lead_id = %s
-               AND type = 'status_change'
-               AND content ILIKE %s
-               AND timestamp > NOW() - INTERVAL '14 days'
-             LIMIT 1
+              FROM leads
+             WHERE id = %s
+               AND trial_attended_at IS NOT NULL
+               AND trial_attended_at > NOW() - INTERVAL '14 days'
+               AND status::text NOT IN ('converted', 'lost')
             """,
-            (lead_id, "%attended trial%"),
+            (lead_id,),
         )
         return cur.fetchone() is not None
 
@@ -335,7 +340,12 @@ def handle_incoming_message(
     # Mientras esa decisión esté pendiente y no haya conversion ni lost,
     # el bot NO debe auto-mensajear. Caso Sara 2026-04-30 donde el bot
     # le ofreció horarios a alguien que iba a otra academia.
-    if status == "in_conversation" and _is_awaiting_trial_decision(lead["id"]):
+    # Acepta 'trial_attended' (status real tras marcar Asistió) y
+    # 'in_conversation' (transicion legacy). _is_awaiting_trial_decision
+    # YA exige que trial_attended_at esté seteado, así que es seguro
+    # ampliar el match de status sin re-disparar para leads que
+    # ya pasaron a converted/lost (el check los excluye).
+    if status in ("trial_attended", "in_conversation") and _is_awaiting_trial_decision(lead["id"]):
         log.info("Lead %s post-trial pendiente decisión — escalando a Gelfis (needs_human).", lead["id"])
         # Decisión Gelfis 2026-06-05: cualquier respuesta del lead tras
         # haber recibido el link de pago debe escalar a needs_human
