@@ -421,6 +421,13 @@ export async function POST(req: Request) {
     minute:   "2-digit",
   }) + (b.language === "de" ? " (Berlin)" : " (Berlín)");
 
+  // Hora local para leads fuera de zona europea — caso Alison 2026-06-16:
+  // agendo 12:00 Berlin sin darse cuenta que en Colombia son 05:00 AM.
+  // El prefijo telefonico nos dice tz aproximada. Si es zona europea, no
+  // anadimos nada (la hora Berlin ya es local). Para Americas, Asia, etc.,
+  // mostramos "(05:00 en tu hora local)" para que vean el desfase.
+  const localTimeInfo = computeLocalTimeInfo(b.whatsapp_e164, b.slot_iso, b.language);
+
   // Email + WhatsApp run AFTER the response is sent.
   //
   // We tried two earlier approaches that didn't work:
@@ -442,10 +449,14 @@ export async function POST(req: Request) {
   // abre conversacion sin fricción. Si el lead quiere cancelar/mover
   // ya tenemos handler propio (reschedule_flow.py) que detecta esas
   // palabras en cualquier mensaje libre.
+  // Copy 2026-06-16: incluye enlace al aula (antes solo iba en el email)
+  // + hora local si el lead esta fuera de zona europea. Cambios:
+  // - Caso Alison: agendo 12:00 Berlin sin notar que en Colombia son 5 AM.
+  // - Caso John: si el lead pierde el email, en WA quedaba sin link.
   const waText = b.whatsapp_e164
     ? (b.language === "de"
-        ? `Hallo ${leadFirst}! Ich bin Stiv von Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\nFalls du Fragen hast oder den Termin verschieben/absagen musst, antworte einfach hier — ich helfe dir.\n\nBis bald!\n\n— Stiv · Aprender-Aleman.de`
-        : `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\nSi tienes alguna duda o necesitas mover/cancelar la clase, respóndeme por aquí mismo y lo resolvemos.\n\n¡Nos vemos!\n\n— Stiv · Aprender-Aleman.de`)
+        ? `Hallo ${leadFirst}! Ich bin Stiv von Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}${localTimeInfo ? `\n${localTimeInfo}` : ""}.\n\n🔗 Hier kommst du am Tag der Stunde rein:\n${shortLinkUrl}\n\nFalls du Fragen hast oder den Termin verschieben/absagen musst, antworte einfach hier — ich helfe dir.\n\nBis bald!\n\n— Stiv · Aprender-Aleman.de`
+        : `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}${localTimeInfo ? `\n${localTimeInfo}` : ""}.\n\n🔗 Aquí entras el día de la clase:\n${shortLinkUrl}\n\nSi tienes alguna duda o necesitas mover/cancelar la clase, respóndeme por aquí mismo y lo resolvemos.\n\n¡Nos vemos!\n\n— Stiv · Aprender-Aleman.de`)
     : null;
 
   // Build the .ics inline so we attach it to the email AND can later
@@ -619,4 +630,66 @@ export async function POST(req: Request) {
     startDate,
     magicLinkUrl,
   });
+}
+
+/**
+ * Mapeo prefijo telefonico → zona horaria IANA. Solo cubre regiones donde
+ * mostrar la "hora local del lead" ayuda — leads europeos comparten TZ
+ * con Berlin (o muy cercano) y veríamos algo redundante. Para leads en
+ * Americas/Asia/Oceania mostramos el desfase para evitar el caso Alison
+ * (agendó 12:00 Berlín sin notar que en Colombia son 05:00 AM).
+ *
+ * Si el prefijo no esta mapeado, devolvemos null y el mensaje sale sin
+ * info de hora local (zona europea o desconocida).
+ */
+function computeLocalTimeInfo(
+  whatsappE164: string | null | undefined,
+  slotIso: string,
+  language: "es" | "de",
+): string | null {
+  if (!whatsappE164) return null;
+  const digits = whatsappE164.replace(/\D/g, "");
+  if (!digits) return null;
+
+  // Prefijos -> {tz, label}. Coverage: Americas + algunas zonas conflictivas.
+  // Para EU/Africa cercana usamos null (hora Berlin ya es local o muy similar).
+  const PREFIX_TO_TZ: Array<{ prefix: string; tz: string; label_es: string; label_de: string }> = [
+    { prefix: "57",  tz: "America/Bogota",       label_es: "Colombia",            label_de: "Kolumbien" },
+    { prefix: "58",  tz: "America/Caracas",      label_es: "Venezuela",           label_de: "Venezuela" },
+    { prefix: "52",  tz: "America/Mexico_City",  label_es: "México",              label_de: "Mexiko" },
+    { prefix: "54",  tz: "America/Argentina/Buenos_Aires", label_es: "Argentina", label_de: "Argentinien" },
+    { prefix: "56",  tz: "America/Santiago",     label_es: "Chile",               label_de: "Chile" },
+    { prefix: "51",  tz: "America/Lima",         label_es: "Perú",                label_de: "Peru" },
+    { prefix: "593", tz: "America/Guayaquil",    label_es: "Ecuador",             label_de: "Ecuador" },
+    { prefix: "591", tz: "America/La_Paz",       label_es: "Bolivia",             label_de: "Bolivien" },
+    { prefix: "595", tz: "America/Asuncion",     label_es: "Paraguay",            label_de: "Paraguay" },
+    { prefix: "598", tz: "America/Montevideo",   label_es: "Uruguay",             label_de: "Uruguay" },
+    { prefix: "506", tz: "America/Costa_Rica",   label_es: "Costa Rica",          label_de: "Costa Rica" },
+    { prefix: "507", tz: "America/Panama",       label_es: "Panamá",              label_de: "Panama" },
+    { prefix: "504", tz: "America/Tegucigalpa",  label_es: "Honduras",            label_de: "Honduras" },
+    { prefix: "503", tz: "America/El_Salvador",  label_es: "El Salvador",         label_de: "El Salvador" },
+    { prefix: "502", tz: "America/Guatemala",    label_es: "Guatemala",           label_de: "Guatemala" },
+    { prefix: "505", tz: "America/Managua",      label_es: "Nicaragua",           label_de: "Nicaragua" },
+    { prefix: "53",  tz: "America/Havana",       label_es: "Cuba",                label_de: "Kuba" },
+    { prefix: "1",   tz: "America/New_York",     label_es: "tu zona",             label_de: "deiner Zone" }, // genérico US/CA
+  ];
+
+  // Match por prefijo más largo primero.
+  const matched = PREFIX_TO_TZ.sort((a, b) => b.prefix.length - a.prefix.length)
+    .find(p => digits.startsWith(p.prefix));
+  if (!matched) return null;
+
+  try {
+    const localTime = new Date(slotIso).toLocaleString(language === "de" ? "de-DE" : "es-ES", {
+      timeZone: matched.tz,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const localLabel = language === "de" ? matched.label_de : matched.label_es;
+    return language === "de"
+      ? `(${localTime} in ${localLabel})`
+      : `(${localTime} en ${localLabel})`;
+  } catch {
+    return null;
+  }
 }
