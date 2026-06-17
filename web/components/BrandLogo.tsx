@@ -58,7 +58,7 @@ export function BrandLogo({
         style={{ width: s.img, height: s.img }}
       />
       {showWordmark && (
-        <span className={`font-extrabold tracking-tight text-slate-900 ${s.text}`}>
+        <span className={`font-extrabold tracking-tight text-slate-900 dark:text-white ${s.text}`}>
           Aprender-Aleman<span className="text-warm">.de</span>
         </span>
       )}
