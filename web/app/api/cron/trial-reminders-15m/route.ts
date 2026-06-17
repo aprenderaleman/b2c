@@ -112,11 +112,9 @@ async function run(req: Request) {
     if (lead.email) {
       const res = await sendTrialReminderEmail(lead.email, {
         audience:        "lead",
-        // El template no tiene tone específico "15m_before" — reutilizamos
-        // "morning_of" (copy genérica "hoy es tu clase"). Si conviene
-        // diferenciar copy más adelante, añadir "15m_before" al type
-        // TrialReminderVars en lib/email/templates/trial-reminder.ts.
-        tone:            "morning_of",
+        // Tono propio "imminent_15m" (Gelfis 2026-06-17): subject
+        // "⏰ En 15 min empieza tu clase" + opener urgente.
+        tone:            "imminent_15m",
         recipientName:   leadFirst,
         counterpartName: "tu profesor/a",
         startDate,
