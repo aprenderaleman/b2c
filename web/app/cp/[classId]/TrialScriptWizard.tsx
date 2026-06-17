@@ -140,6 +140,7 @@ export function TrialScriptWizard({
   // Section 2
   const [objetivo, setObjetivo] = useState(initial.objetivo ?? "");
   const [nivelReal, setNivelReal] = useState(initial.nivel_objetivo ?? "");
+  const [horarios, setHorarios] = useState(initial.deadline ?? "");
   const [dificultades, setDificultades] = useState(initial.motivacion ?? "");
   const [dificultadOtra, setDificultadOtra] = useState("");
 
@@ -300,6 +301,7 @@ export function TrialScriptWizard({
             firstName={firstName}
             objetivo={objetivo} setObjetivo={setObjetivo}
             nivelReal={nivelReal} setNivelReal={setNivelReal}
+            horarios={horarios} setHorarios={setHorarios}
             dificultades={dificultades} setDificultades={setDificultades}
             dificultadOtra={dificultadOtra} setDificultadOtra={setDificultadOtra}
           />
@@ -395,7 +397,7 @@ export function TrialScriptWizard({
               const difs = dificultadOtra.trim()
                 ? (dificultades ? dificultades + "||" + dificultadOtra.trim() : dificultadOtra.trim())
                 : dificultades;
-              advance(3, { objetivo, nivel_objetivo: nivelReal, motivacion: difs });
+              advance(3, { objetivo, nivel_objetivo: nivelReal, deadline: horarios, motivacion: difs });
             }}
               className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50">
               {pending ? "Guardando..." : "Siguiente →"}
@@ -652,18 +654,20 @@ function Section1Presentacion({
 
 function Section2Descubrimiento({
   firstName, objetivo, setObjetivo, nivelReal, setNivelReal,
+  horarios, setHorarios,
   dificultades, setDificultades, dificultadOtra, setDificultadOtra,
 }: {
   firstName: string;
   objetivo: string; setObjetivo: (v: string) => void;
   nivelReal: string; setNivelReal: (v: string) => void;
+  horarios: string; setHorarios: (v: string) => void;
   dificultades: string; setDificultades: (v: string) => void;
   dificultadOtra: string; setDificultadOtra: (v: string) => void;
 }) {
   return (
     <div>
       <StepTitle emoji="🎯" title="Descubrimiento (2-5 min)"
-        hint="3 preguntas clave. Escucha atentamente — estas respuestas personalizan el cierre." />
+        hint="4 preguntas clave. Escucha atentamente — estas respuestas personalizan el cierre." />
 
       <Field label="Pregunta 1: Objetivo" required>
         <SuggestedPhrase text={`${firstName}, antes de empezar quiero conocerte mejor. ¿Cuál es tu objetivo principal con el alemán?`} />
@@ -688,7 +692,14 @@ function Section2Descubrimiento({
         </div>
       </Field>
 
-      <Field label="Pregunta 3: Mayor dificultad">
+      <Field label="Pregunta 3: Horarios disponibles">
+        <SuggestedPhrase text="¿Cómo son tus horarios? ¿Cuándo tendrías tiempo para las clases de alemán?" />
+        <textarea value={horarios} onChange={e => setHorarios(e.target.value)} rows={2}
+          placeholder='Ej: "Tardes de lunes a jueves", "Solo fines de semana", "Horario flexible"'
+          className="input-text w-full mt-2" />
+      </Field>
+
+      <Field label="Pregunta 4: Mayor dificultad">
         <SuggestedPhrase text="¿Qué es lo que más te cuesta del alemán?" />
         <ChipSelect options={DIFICULTAD_OPTIONS} value={dificultades} onChange={setDificultades} multi />
         <input type="text" value={dificultadOtra} onChange={e => setDificultadOtra(e.target.value)}
@@ -1136,7 +1147,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
 
 function SuggestedPhrase({ text }: { text: string }) {
   return (
-    <div className="rounded-xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 px-4 py-3 text-sm text-sky-900 dark:text-sky-100 italic leading-relaxed">
+    <div className="rounded-xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 px-4 py-3 text-base md:text-lg text-sky-900 dark:text-sky-100 italic leading-relaxed">
       <span className="not-italic font-semibold text-sky-700 dark:text-sky-300 text-xs uppercase tracking-wider block mb-1">
         Di al lead:
       </span>
