@@ -46,8 +46,8 @@ export async function POST(
     inbound_text?: string; inbound_at?: string; reply_text?: string;
     note?: string; note_meta?: Record<string, unknown>;
   };
-  if (!body.inbound_text || !body.reply_text) {
-    return NextResponse.json({ error: "missing_fields", required: ["inbound_text", "reply_text"] }, { status: 400 });
+  if (!body.reply_text) {
+    return NextResponse.json({ error: "missing_fields", required: ["reply_text"] }, { status: 400 });
   }
 
   const sb = supabaseAdmin();
@@ -62,15 +62,18 @@ export async function POST(
 
   const inboundAt = body.inbound_at ?? new Date().toISOString();
 
-  // 1) Inbound del lead (timestamp original)
-  await sb.from("lead_timeline").insert({
-    lead_id:   l.id,
-    type:      "lead_message_received",
-    author:    "lead",
-    content:   body.inbound_text,
-    timestamp: inboundAt,
-    metadata:  { recovery: true, source: "manual_inject" },
-  });
+  // 1) Inbound del lead — solo si nos lo pasaron (algunos casos como
+  //    "reenvio confirmacion que se perdio" no tienen inbound real).
+  if (body.inbound_text) {
+    await sb.from("lead_timeline").insert({
+      lead_id:   l.id,
+      type:      "lead_message_received",
+      author:    "lead",
+      content:   body.inbound_text,
+      timestamp: inboundAt,
+      metadata:  { recovery: true, source: "manual_inject" },
+    });
+  }
 
   // 2) Agent note opcional
   if (body.note) {
