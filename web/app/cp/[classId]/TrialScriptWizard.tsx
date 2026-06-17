@@ -1,27 +1,113 @@
 "use client";
 
-import { useState, useTransition, useEffect, useMemo, useCallback } from "react";
+import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { saveStepAction, completeAttendedAction, completeAbsentAction } from "./actions";
-import { TRIAL_PACKS, recommendPacks, getPack, type PackId, type PaymentType } from "@/lib/trial-packs";
+import { TRIAL_PACKS, getPack, type PackId, type PaymentType } from "@/lib/trial-packs";
 import type { ScriptRow, ClassContext } from "@/lib/trial-script";
 
-/**
- * Wizard de 8 pasos para el profesor durante la clase de prueba.
- *
- * Estado:
- *   - El padre carga el script existente (initial) — el wizard arranca
- *     en initial.current_step.
- *   - Cada "Siguiente" persiste el patch del paso actual + el nuevo
- *     current_step. Si el profe cierra la pestaña a mitad, al volver
- *     a abrir /cp/[classId] retoma donde iba.
- *   - Los botones finales (Asistió/No asistió) llaman a acciones que
- *     atan con markTrialAttendedAwaitingConversion / markTrialAbsent
- *     en lib/admin-actions.ts.
- *
- * Plan de tiempos sugerido (Gelfis 2026-06-08):
- *   intro 5 min · clase 15 min · cierre 10 min · total 30 min.
- *   El temporizador del Paso 2 es solo guía, no bloquea avanzar.
- */
+// ─────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────
+
+const TOTAL_SECTIONS = 8; // 0-7
+
+type LevelBucket = "A0" | "A1" | "A2" | "B1" | "B2" | "C1";
+
+const LEVEL_PRESENTATION_URL: Record<LevelBucket, string> = {
+  A0: "https://gamma.app/docs/8p0c89sshy99997",
+  A1: "https://gamma.app/docs/v7w2wbdxd95n3sg",
+  A2: "https://gamma.app/docs/ptfb8toca4msdav",
+  B1: "https://gamma.app/docs/zooeusyqq9mrhw4",
+  B2: "https://gamma.app/docs/ki7poj0542swdl2",
+  C1: "https://gamma.app/docs/7kaqe967ge5a4ly",
+};
+
+const NIVEL_OPTIONS = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"];
+
+const DIFICULTAD_OPTIONS = [
+  "Pronunciación",
+  "Gramática (artículos, casos)",
+  "Vocabulario",
+  "Comprensión auditiva",
+  "Hablar con fluidez",
+  "Mantener constancia",
+  "Encontrar tiempo para estudiar",
+];
+
+const PRESENTACION_CHECKS = [
+  "Me presenté y generé rapport",
+  "Expliqué la dinámica de la clase",
+  "Pregunté si tiene preguntas antes de empezar",
+];
+
+const MINI_CLASE_CHECKS = [
+  "El lead participó activamente",
+  "Adapté el contenido a su nivel real",
+  "Cerré la mini clase con un resumen de lo aprendido",
+];
+
+const CIERRE_Q1_OPTIONS = [
+  "Sí, totalmente",
+  "Sí, pero con dudas",
+  "No mucho",
+  "No",
+];
+
+const CIERRE_Q2_OPTIONS = [
+  "Sí, totalmente",
+  "Sí, creo que sí",
+  "No estoy seguro",
+  "No",
+];
+
+const CIERRE_Q3_OPTIONS = [
+  "Sí, esta semana",
+  "Sí, pero en 2-3 semanas",
+  "Tengo que pensarlo",
+  "No estoy listo",
+];
+
+const RESULTADO_OPTIONS = [
+  "Pagó",
+  "Dijo \"pago mañana\" / pagará después",
+  "Dijo \"lo voy a pensar\"",
+  "Dijo no por dinero",
+  "Dijo no por tiempo",
+  "Dijo no, no le interesa",
+  "No respondió a la pregunta de cierre",
+];
+
+const RESULTADO_RAZONES_OPTIONS = [
+  "Precio percibido como alto",
+  "Necesita consultar con pareja/familia",
+  "Tiene otra opción que está evaluando",
+  "No tiene presupuesto ahora",
+  "No quiere comprometerse 6 meses",
+  "Horarios no encajan",
+  "Quiere empezar más adelante",
+  "No le convence el método",
+];
+
+function normalizeLevelBucket(level: string | null | undefined): LevelBucket | null {
+  if (!level) return null;
+  const l = level.toUpperCase();
+  if (l.startsWith("A0")) return "A0";
+  if (l.startsWith("A1")) return "A1";
+  if (l.startsWith("A2")) return "A2";
+  if (l.startsWith("B1")) return "B1";
+  if (l.startsWith("B2")) return "B2";
+  if (l.startsWith("C1")) return "C1";
+  return null;
+}
+
+function isPositive(answer: string): boolean {
+  return answer.startsWith("Sí");
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Main Wizard
+// ─────────────────────────────────────────────────────────────────
+
 export function TrialScriptWizard({
   scriptId, classCtx, initial,
 }: {
@@ -29,56 +115,82 @@ export function TrialScriptWizard({
   classCtx: ClassContext;
   initial:  ScriptRow;
 }) {
-  const [step, setStep] = useState<number>(initial.current_step || 1);
+  const [step, setStep] = useState<number>(initial.current_step ?? 0);
   const [pending, startTransition] = useTransition();
 
-  // Outcome global — si el profe marca "No asistio" desde el header
-  // (atajo disponible en TODOS los pasos), o si lo marca al final, el
-  // wizard pinta la pantalla de cierre en vez del paso actual. Esto
-  // evita que tenga que recorrer los 8 pasos si el lead nunca aparece.
-  const [outcome, setOutcome] = useState<"attended" | "absent" | null>(
-    (initial.final_outcome as "attended" | "absent" | null) ?? null,
+  const [outcome, setOutcome] = useState<"attended" | "absent" | "converted" | null>(
+    (initial.final_outcome as "attended" | "absent" | "converted" | null) ?? null,
   );
   const [absentPending, setAbsentPending] = useState(false);
   const [absentErr, setAbsentErr] = useState<string | null>(null);
 
-  // Campos del script — controlados localmente, persistidos al pulsar Siguiente.
-  const [objetivo,       setObjetivo]       = useState(initial.objetivo       ?? "");
-  const [nivelObjetivo,  setNivelObjetivo]  = useState(initial.nivel_objetivo ?? "");
-  const [deadline,       setDeadline]       = useState(initial.deadline       ?? "");
-  const [motivacion,     setMotivacion]     = useState(initial.motivacion     ?? "");
+  // Global timer — starts when teacher clicks "Comenzar clase" in section 0
+  const [timerRunning, setTimerRunning] = useState(step > 0);
+  const [globalSecs, setGlobalSecs] = useState(0);
+  useEffect(() => {
+    if (!timerRunning) return;
+    const i = setInterval(() => setGlobalSecs(s => s + 1), 1000);
+    return () => clearInterval(i);
+  }, [timerRunning]);
 
-  const [feedbackClase,  setFeedbackClase]  = useState(initial.feedback_clase ?? "");
-  const [feedbackGusto,  setFeedbackGusto]  = useState(initial.feedback_gusto ?? "");
-  const [enrollmentSense, setEnrollmentSense] = useState<boolean | null>(initial.enrollment_sense);
+  // ── Field state ──
+  // Section 1
+  const [presentacionChecks, setPresentacionChecks] = useState(initial.presentacion_checks ?? "");
 
-  const [objectionReason,  setObjectionReason]  = useState(initial.objection_reason  ?? "");
-  const [objectionUnblock, setObjectionUnblock] = useState(initial.objection_unblock ?? "");
+  // Section 2
+  const [objetivo, setObjetivo] = useState(initial.objetivo ?? "");
+  const [nivelReal, setNivelReal] = useState(initial.nivel_objetivo ?? "");
+  const [dificultades, setDificultades] = useState(initial.motivacion ?? "");
+  const [dificultadOtra, setDificultadOtra] = useState("");
 
-  const [scheduleType, setScheduleType] = useState<"fixed" | "changing" | "">(
-    initial.schedule_type ?? "",
-  );
-  const [learningGoal, setLearningGoal] = useState<"one_level" | "confidence" | "">(
-    initial.learning_goal ?? "",
-  );
+  // Section 3
+  const [miniClaseChecks, setMiniClaseChecks] = useState(initial.mini_clase_checks ?? "");
+  const [miniClaseObs, setMiniClaseObs] = useState(initial.mini_clase_obs ?? "");
 
-  const [chosenPack,  setChosenPack]  = useState<PackId | "">(initial.chosen_pack ?? "");
+  // Section 4
+  const [cierreQ1, setCierreQ1] = useState(initial.cierre_q1 ?? "");
+  const [cierreQ2, setCierreQ2] = useState(initial.cierre_q2 ?? "");
+  const [cierreQ3, setCierreQ3] = useState(initial.cierre_q3 ?? "");
+
+  // Section 6
+  const [chosenPack, setChosenPack] = useState<string>(initial.chosen_pack ?? "");
+  const [chosenPackOtro, setChosenPackOtro] = useState("");
   const [paymentType, setPaymentType] = useState<PaymentType | "">(initial.payment_type ?? "");
-  const [closingYes,  setClosingYes]  = useState<boolean | null>(initial.closing_yes);
+  const [wasSent, setWasSent] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState<boolean | null>(initial.payment_confirmed ?? null);
 
+  // Section 7
+  const [resultado, setResultado] = useState(initial.resultado ?? "");
+  const [resultadoOtro, setResultadoOtro] = useState("");
+  const [resultadoRazones, setResultadoRazones] = useState(initial.resultado_razones ?? "");
+  const [razonOtra, setRazonOtra] = useState("");
   const [teacherNotes, setTeacherNotes] = useState(initial.teacher_notes ?? "");
-  const [error,        setError]        = useState<string | null>(null);
 
-  // Packs recomendados según filtros del paso 4.
-  const recommendedPacks: PackId[] | null = useMemo(() => {
-    if (!scheduleType || !learningGoal) return null;
-    return recommendPacks(scheduleType, learningGoal);
-  }, [scheduleType, learningGoal]);
+  const [error, setError] = useState<string | null>(null);
 
-  // Si scheduleType cambia a 'changing', learningGoal NO bloquea la
-  // recomendación (los 2 packs individuales son siempre los mismos).
-  // Para mantener consistencia del filtro, exigimos ambos campos.
+  // ── Floating notes panel ──
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [floatingNotes, setFloatingNotes] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(`cp_notes_${scriptId}`) ?? "";
+    }
+    return "";
+  });
+  const floatingNotesRef = useRef(floatingNotes);
+  floatingNotesRef.current = floatingNotes;
+  const [notesSaved, setNotesSaved] = useState(true);
 
+  useEffect(() => {
+    const i = setInterval(() => {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`cp_notes_${scriptId}`, floatingNotesRef.current);
+        setNotesSaved(true);
+      }
+    }, 3000);
+    return () => clearInterval(i);
+  }, [scriptId]);
+
+  // ── Navigation helpers ──
   const advance = (to: number, patch: Record<string, unknown>) => {
     setError(null);
     startTransition(async () => {
@@ -92,45 +204,19 @@ export function TrialScriptWizard({
     });
   };
 
-  // Mapa de "atrás" por paso. step-1 simple no sirve porque hay
-  // ramas (paso 3 puede llevar a 3.5 si dijo NO, o a 4 si dijo SÍ;
-  // paso 8 puede venir de 3.5 o de 7). Lo definimos explícito.
-  const previousStep = (cur: number): number | null => {
-    if (cur === 8)   return enrollmentSense === false ? 3.5 : 7;
-    if (cur === 7)   return 6;
-    if (cur === 6)   return 5;
-    if (cur === 5)   return 4;
-    if (cur === 4)   return 3;
-    if (cur === 3.5) return 3;
-    if (cur === 3)   return 2;
-    if (cur === 2)   return 1;
-    return null;  // paso 1 no tiene anterior
-  };
-
   const goBack = () => {
-    const prev = previousStep(step);
-    if (prev !== null) setStep(prev);
+    if (step > 0) setStep(step - 1);
     setError(null);
   };
 
-  // Atajo global "No asistio" — visible en TODOS los pasos desde el
-  // header. Para que el profe no tenga que recorrer 8 pasos cuando el
-  // lead jamas aparecio en la clase. Pide confirmacion porque dispara
-  // la cadena de follow-ups y marca el script como cerrado.
+  // ── Quick absent ──
   const onQuickAbsent = useCallback(() => {
-    if (!confirm("¿Marcar al lead como NO ASISTIÓ?\n\n" +
-      "• El sistema activa la cadena de re-toques automáticos.\n" +
-      "• Esta pantalla del guion se cierra.\n\n" +
-      "¿Continuar?")) return;
+    if (!confirm("¿Marcar al lead como NO ASISTIÓ?\n\n• El sistema activa la cadena de re-toques automáticos.\n• Esta pantalla del guion se cierra.\n\n¿Continuar?")) return;
     setAbsentErr(null);
     setAbsentPending(true);
     (async () => {
       try {
-        await completeAbsentAction({
-          scriptId,
-          leadId:       classCtx.leadId,
-          teacherNotes: "",
-        });
+        await completeAbsentAction({ scriptId, leadId: classCtx.leadId, teacherNotes: "" });
         setOutcome("absent");
       } catch (e) {
         setAbsentErr(e instanceof Error ? e.message : "Error al marcar.");
@@ -140,532 +226,603 @@ export function TrialScriptWizard({
     })();
   }, [scriptId, classCtx.leadId]);
 
-  // Cronómetro del Paso 2 (visual, no bloquea).
-  const TimerBar = step === 2 ? <ClassTimer /> : null;
-
-  // Si ya hay outcome (marcado desde header o desde paso 8), pintamos
-  // la pantalla de cierre en vez del paso actual.
+  // ── Final screens ──
   if (outcome === "absent") {
     return (
       <div className="max-w-3xl mx-auto">
-        <FinalDone
-          title="❌ Marcado como no asistió"
-          body="La cadena de re-toques se activa automáticamente. Puedes cerrar esta pestaña."
-        />
+        <FinalDone title="Marcado como no asistió" body="La cadena de re-toques se activa automáticamente. Puedes cerrar esta pestaña." />
       </div>
     );
   }
-  if (outcome === "attended") {
+  if (outcome === "attended" || outcome === "converted") {
     return (
       <div className="max-w-3xl mx-auto">
         <FinalDone
-          title="✅ Asistió — todo registrado"
-          body="El lead ha recibido el WhatsApp con el enlace de pago. Stiv hace el seguimiento."
+          title={outcome === "converted" ? "Pago confirmado — estudiante registrado" : "Asistió — link de pago enviado"}
+          body={outcome === "converted"
+            ? "El lead ha sido convertido a estudiante. Onboarding activado."
+            : "El lead ha recibido el WhatsApp con el enlace de pago. Seguimiento automático activado."}
         />
       </div>
     );
   }
 
+  const firstName = (classCtx.lead.name || "").split(/\s+/)[0] || "Lead";
+
   return (
     <div className="max-w-3xl mx-auto">
-      <LeadHeader
-        ctx={classCtx} stepNum={step} totalSteps={8}
+      <WizardHeader
+        ctx={classCtx}
+        stepNum={step}
+        totalSteps={TOTAL_SECTIONS}
+        globalSecs={timerRunning ? globalSecs : null}
         onQuickAbsent={onQuickAbsent}
         absentPending={absentPending}
       />
-      {absentErr && (
-        <div className="mt-2 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
-          {absentErr}
-        </div>
-      )}
-      {TimerBar}
+      {absentErr && <ErrorBar message={absentErr} />}
 
       <div className="mt-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-sm p-6 md:p-8">
+
+        {step === 0 && (
+          <Section0Prep ctx={classCtx} />
+        )}
+
         {step === 1 && (
-          <Step1Discovery
-            objetivo={objetivo}      setObjetivo={setObjetivo}
-            nivelObjetivo={nivelObjetivo} setNivelObjetivo={setNivelObjetivo}
-            deadline={deadline}      setDeadline={setDeadline}
-            motivacion={motivacion}  setMotivacion={setMotivacion}
+          <Section1Presentacion
+            checks={presentacionChecks}
+            setChecks={setPresentacionChecks}
+            firstName={firstName}
           />
         )}
 
         {step === 2 && (
-          <Step2Demo />
-        )}
-
-        {step === 3 && (
-          <Step3PostDemo
-            objetivo={objetivo}
-            feedbackClase={feedbackClase}  setFeedbackClase={setFeedbackClase}
-            feedbackGusto={feedbackGusto}  setFeedbackGusto={setFeedbackGusto}
-            enrollmentSense={enrollmentSense} setEnrollmentSense={setEnrollmentSense}
+          <Section2Descubrimiento
+            firstName={firstName}
+            objetivo={objetivo} setObjetivo={setObjetivo}
+            nivelReal={nivelReal} setNivelReal={setNivelReal}
+            dificultades={dificultades} setDificultades={setDificultades}
+            dificultadOtra={dificultadOtra} setDificultadOtra={setDificultadOtra}
           />
         )}
 
-        {step === 3.5 && (
-          <Step3bObjection
-            objectionReason={objectionReason}   setObjectionReason={setObjectionReason}
-            objectionUnblock={objectionUnblock} setObjectionUnblock={setObjectionUnblock}
+        {step === 3 && (
+          <Section3MiniClase
+            nivelReal={nivelReal}
+            checks={miniClaseChecks} setChecks={setMiniClaseChecks}
+            obs={miniClaseObs} setObs={setMiniClaseObs}
+            globalSecs={globalSecs}
           />
         )}
 
         {step === 4 && (
-          <Step4Filters
-            scheduleType={scheduleType} setScheduleType={setScheduleType}
-            learningGoal={learningGoal} setLearningGoal={setLearningGoal}
+          <Section4Transicion
+            q1={cierreQ1} setQ1={setCierreQ1}
+            q2={cierreQ2} setQ2={setCierreQ2}
+            q3={cierreQ3} setQ3={setCierreQ3}
           />
         )}
 
-        {step === 5 && recommendedPacks && (
-          <Step5Packs
-            packs={recommendedPacks}
-            chosenPack={chosenPack}
-            setChosenPack={setChosenPack}
-          />
+        {step === 5 && (
+          <Section5Packs />
         )}
 
         {step === 6 && (
-          <Step6Payment
-            paymentType={paymentType}
-            setPaymentType={setPaymentType}
+          <Section6Cierre
+            ctx={classCtx}
+            scriptId={scriptId}
+            firstName={firstName}
+            objetivo={objetivo}
+            chosenPack={chosenPack} setChosenPack={setChosenPack}
+            chosenPackOtro={chosenPackOtro} setChosenPackOtro={setChosenPackOtro}
+            paymentType={paymentType} setPaymentType={setPaymentType}
+            wasSent={wasSent} setWasSent={setWasSent}
+            paymentConfirmed={paymentConfirmed} setPaymentConfirmed={setPaymentConfirmed}
+            onConverted={() => setOutcome("converted")}
+            onAttended={() => setOutcome("attended")}
           />
         )}
 
         {step === 7 && (
-          <Step7Closing
-            closingYes={closingYes}
-            setClosingYes={setClosingYes}
+          <Section7Resultado
+            resultado={resultado} setResultado={setResultado}
+            resultadoOtro={resultadoOtro} setResultadoOtro={setResultadoOtro}
+            resultadoRazones={resultadoRazones} setResultadoRazones={setResultadoRazones}
+            razonOtra={razonOtra} setRazonOtra={setRazonOtra}
+            teacherNotes={teacherNotes} setTeacherNotes={setTeacherNotes}
+            paymentConfirmed={paymentConfirmed}
           />
         )}
 
-        {step === 8 && (
-          <Step8Final
-            classCtx={classCtx}
-            scriptId={scriptId}
-            chosenPack={chosenPack as PackId}
-            paymentType={paymentType as PaymentType}
-            objetivo={objetivo}
-            teacherNotes={teacherNotes}
-            setTeacherNotes={setTeacherNotes}
-            pending={pending}
-            onBack={goBack}
-          />
-        )}
+        {error && <ErrorBar message={error} />}
 
-        {error && (
-          <div className="mt-4 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
-            {error}
-          </div>
-        )}
+        {/* Navigation */}
+        <div className="mt-6 flex items-center justify-between">
+          {step > 0 ? (
+            <button type="button" onClick={goBack} disabled={pending}
+              className="text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50">
+              ← Atrás
+            </button>
+          ) : (
+            <a href="/admin/clasedeprueba"
+              className="text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+              ← Salir
+            </a>
+          )}
 
-        {step !== 8 && (
-          <NavRow
-            step={step}
-            pending={pending}
-            onBack={previousStep(step) !== null ? goBack : "/admin/clasedeprueba"}
-            onNext={() => {
-              // Routing de pasos + payload por paso.
-              if (step === 1) {
-                if (!objetivo.trim()) { setError("El objetivo es obligatorio."); return; }
-                advance(2, { objetivo, nivel_objetivo: nivelObjetivo, deadline, motivacion });
-              } else if (step === 2) {
-                advance(3, {});
-              } else if (step === 3) {
-                if (enrollmentSense === null) { setError("Marca sí o no en la última pregunta."); return; }
-                if (enrollmentSense === false) {
-                  advance(3.5, { feedback_clase: feedbackClase, feedback_gusto: feedbackGusto, enrollment_sense: false });
-                } else {
-                  advance(4,   { feedback_clase: feedbackClase, feedback_gusto: feedbackGusto, enrollment_sense: true });
-                }
-              } else if (step === 3.5) {
-                // Tras manejar objeción, ofrecemos reintentar el cierre.
-                // Si el lead no cambió de opinión, el profe pulsa
-                // directamente "No asistió" en paso 8 — saltamos packs.
-                advance(8, { objection_reason: objectionReason, objection_unblock: objectionUnblock });
-              } else if (step === 4) {
-                if (!scheduleType || !learningGoal) { setError("Responde los 2 filtros."); return; }
-                advance(5, { schedule_type: scheduleType, learning_goal: learningGoal,
-                            presented_packs: recommendPacks(scheduleType, learningGoal) });
-              } else if (step === 5) {
-                if (!chosenPack) { setError("Selecciona el pack que el lead eligió."); return; }
-                advance(6, { chosen_pack: chosenPack });
-              } else if (step === 6) {
-                if (!paymentType) { setError("Selecciona tipo de pago."); return; }
-                advance(7, { payment_type: paymentType });
-              } else if (step === 7) {
-                if (closingYes === null) { setError("Marca sí o no."); return; }
-                advance(8, { closing_yes: closingYes });
-              }
+          {step === 0 && (
+            <button type="button" disabled={pending} onClick={() => {
+              setTimerRunning(true);
+              advance(1, {});
             }}
-          />
-        )}
+              className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50">
+              {pending ? "Guardando..." : "Comenzar clase →"}
+            </button>
+          )}
+
+          {step === 1 && (
+            <button type="button" disabled={pending} onClick={() => {
+              advance(2, { presentacion_checks: presentacionChecks });
+            }}
+              className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50">
+              {pending ? "Guardando..." : "Siguiente →"}
+            </button>
+          )}
+
+          {step === 2 && (
+            <button type="button" disabled={pending} onClick={() => {
+              if (!objetivo.trim()) { setError("El objetivo es obligatorio."); return; }
+              if (!nivelReal) { setError("Selecciona el nivel real."); return; }
+              const difs = dificultadOtra.trim()
+                ? (dificultades ? dificultades + "||" + dificultadOtra.trim() : dificultadOtra.trim())
+                : dificultades;
+              advance(3, { objetivo, nivel_objetivo: nivelReal, motivacion: difs });
+            }}
+              className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50">
+              {pending ? "Guardando..." : "Siguiente →"}
+            </button>
+          )}
+
+          {step === 3 && (
+            <button type="button" disabled={pending} onClick={() => {
+              advance(4, { mini_clase_checks: miniClaseChecks, mini_clase_obs: miniClaseObs });
+            }}
+              className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50">
+              {pending ? "Guardando..." : "Siguiente →"}
+            </button>
+          )}
+
+          {step === 4 && (
+            <button type="button" disabled={pending} onClick={() => {
+              if (!cierreQ1 || !cierreQ2 || !cierreQ3) { setError("Responde las 3 preguntas."); return; }
+              const allPositive = isPositive(cierreQ1) && isPositive(cierreQ2) && isPositive(cierreQ3);
+              advance(allPositive ? 5 : 7, { cierre_q1: cierreQ1, cierre_q2: cierreQ2, cierre_q3: cierreQ3 });
+            }}
+              className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50">
+              {pending ? "Guardando..." : "Siguiente →"}
+            </button>
+          )}
+
+          {step === 5 && (
+            <button type="button" disabled={pending} onClick={() => {
+              advance(6, {});
+            }}
+              className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50">
+              {pending ? "Guardando..." : "Siguiente →"}
+            </button>
+          )}
+
+          {step === 6 && !wasSent && (
+            <button type="button" disabled={pending} onClick={() => {
+              advance(7, {
+                chosen_pack: chosenPack || null,
+                payment_type: paymentType || null,
+                payment_confirmed: paymentConfirmed,
+              });
+            }}
+              className="text-sm font-semibold rounded-full bg-slate-400 text-white px-6 py-2 hover:bg-slate-500 disabled:opacity-50">
+              {pending ? "Guardando..." : "Saltar al resultado →"}
+            </button>
+          )}
+
+          {step === 6 && wasSent && paymentConfirmed === false && (
+            <button type="button" disabled={pending} onClick={() => {
+              advance(7, {
+                chosen_pack: chosenPack || null,
+                payment_type: paymentType || null,
+                payment_confirmed: false,
+              });
+            }}
+              className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50">
+              {pending ? "Guardando..." : "Continuar al resultado →"}
+            </button>
+          )}
+
+          {step === 7 && (
+            <button type="button" disabled={pending} onClick={() => {
+              if (!resultado && paymentConfirmed !== true) { setError("Selecciona el resultado."); return; }
+              const finalRes = resultadoOtro.trim() ? resultadoOtro.trim() : resultado;
+              const finalRaz = razonOtra.trim()
+                ? (resultadoRazones ? resultadoRazones + "||" + razonOtra.trim() : razonOtra.trim())
+                : resultadoRazones;
+              // Append floating notes to teacher_notes
+              const allNotes = [teacherNotes, floatingNotesRef.current].filter(Boolean).join("\n\n---\nNotas flotantes:\n");
+              startTransition(async () => {
+                try {
+                  const finalOutcome = paymentConfirmed === true ? "converted" : "attended";
+                  await saveStepAction(scriptId, {
+                    resultado: finalRes,
+                    resultado_razones: finalRaz || null,
+                    teacher_notes: allNotes || null,
+                    final_outcome: finalOutcome,
+                    completed_at: new Date().toISOString(),
+                    final_marked_at: new Date().toISOString(),
+                    current_step: 7,
+                  });
+                  if (typeof window !== "undefined") {
+                    localStorage.removeItem(`cp_notes_${scriptId}`);
+                  }
+                  setOutcome(finalOutcome);
+                } catch (e) {
+                  setError(e instanceof Error ? e.message : "Error al guardar.");
+                }
+              });
+            }}
+              className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50">
+              {pending ? "Guardando..." : "Finalizar y guardar"}
+            </button>
+          )}
+        </div>
       </div>
 
-      <ProgressDots step={step} />
+      <ProgressBar step={step} total={TOTAL_SECTIONS} />
+
+      {/* Floating notes panel */}
+      <div className="fixed bottom-4 right-4 z-50">
+        {notesOpen ? (
+          <div className="w-72 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Notas</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-slate-400">{notesSaved ? "Guardado" : "..."}</span>
+                <button type="button" onClick={() => setNotesOpen(false)}
+                  className="text-xs text-slate-400 hover:text-slate-600">✕</button>
+              </div>
+            </div>
+            <textarea
+              value={floatingNotes}
+              onChange={e => { setFloatingNotes(e.target.value); setNotesSaved(false); }}
+              rows={5}
+              placeholder="Notas rápidas durante la clase..."
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm p-2 resize-none focus:outline-none focus:ring-1 focus:ring-emerald-400 text-slate-700 dark:text-slate-200"
+            />
+          </div>
+        ) : (
+          <button type="button" onClick={() => setNotesOpen(true)}
+            className="rounded-full bg-emerald-500 text-white shadow-lg px-4 py-2.5 text-sm font-semibold hover:bg-emerald-600">
+            Notas
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Layout helpers
+// Header
 // ─────────────────────────────────────────────────────────────────
 
-/**
- * URLs de presentación Gamma por bucket de nivel. El profesor abre la
- * slide adecuada al nivel del lead durante la cp. Si en mitad de la
- * clase detecta que el nivel real es otro, puede cambiarlo desde el
- * selector del header (Gelfis 2026-06-14).
- */
-type LevelBucket = "A0" | "A1" | "A2" | "B1" | "B2" | "C1";
-
-const LEVEL_PRESENTATION_URL: Record<LevelBucket, string> = {
-  A0: "https://gamma.app/docs/8p0c89sshy99997",
-  A1: "https://gamma.app/docs/v7w2wbdxd95n3sg",
-  A2: "https://gamma.app/docs/ptfb8toca4msdav",
-  B1: "https://gamma.app/docs/zooeusyqq9mrhw4",
-  B2: "https://gamma.app/docs/ki7poj0542swdl2",
-  C1: "https://gamma.app/docs/7kaqe967ge5a4ly",
-};
-
-/**
- * Normaliza variantes del enum german_level a uno de los 6 buckets de
- * presentación. A1.1/A1.2/A1-A2 → A1; A2.1/A2.2 → A2; B2+ → B2.
- * Devuelve null si el nivel es 'unsure' / null — el caller decide
- * default (A1 funciona como entry-level más común).
- */
-function normalizeLevelBucket(level: string | null | undefined): LevelBucket | null {
-  if (!level) return null;
-  const l = level.toUpperCase();
-  if (l.startsWith("A0")) return "A0";
-  if (l.startsWith("A1")) return "A1";
-  if (l.startsWith("A2")) return "A2";
-  if (l.startsWith("B1")) return "B1";
-  if (l.startsWith("B2")) return "B2";
-  if (l.startsWith("C1")) return "C1";
-  return null;
-}
-
-function LeadHeader({
-  ctx, stepNum, totalSteps, onQuickAbsent, absentPending,
+function WizardHeader({
+  ctx, stepNum, totalSteps, globalSecs, onQuickAbsent, absentPending,
 }: {
   ctx: ClassContext; stepNum: number; totalSteps: number;
+  globalSecs: number | null;
   onQuickAbsent: () => void; absentPending: boolean;
 }) {
-  const stepLabel = stepNum === 3.5 ? "3b" : String(stepNum);
-  // Nivel para la presentación — arranca con el del lead, pero el profe
-  // puede cambiarlo si en la cp detecta que el lead está en otro nivel
-  // (Gelfis 2026-06-14). State ephemeral — no se persiste en BD.
   const defaultBucket = normalizeLevelBucket(ctx.lead.germanLevel) ?? "A1";
   const [selectedLevel, setSelectedLevel] = useState<LevelBucket>(defaultBucket);
   const presentationUrl = LEVEL_PRESENTATION_URL[selectedLevel];
+
+  const timerStr = globalSecs !== null
+    ? `${String(Math.floor(globalSecs / 60)).padStart(2, "0")}:${String(globalSecs % 60).padStart(2, "0")}`
+    : null;
+
   return (
     <header className="rounded-2xl bg-gradient-to-br from-emerald-500/10 to-amber-500/10 border border-emerald-300/30 px-4 py-3 flex items-start justify-between gap-3 flex-wrap">
       <div className="min-w-0">
-        <div className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
-          Clase de prueba · Paso {stepLabel} de {totalSteps}
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+            Clase de prueba · Sección {stepNum} de {totalSteps - 1}
+          </span>
+          {timerStr && (
+            <span className="text-xs font-mono font-bold text-amber-700 dark:text-amber-300 tabular-nums bg-amber-100 dark:bg-amber-500/15 px-2 py-0.5 rounded-full">
+              {timerStr}
+            </span>
+          )}
         </div>
         <div className="mt-0.5 text-base font-bold text-slate-900 dark:text-slate-50">
-          {ctx.lead.name ?? "(sin nombre)"} · nivel {ctx.lead.germanLevel ?? "?"} · {ctx.lead.language === "de" ? "🇩🇪 alemán" : "🇪🇸 español"}
+          {ctx.lead.name ?? "(sin nombre)"} · nivel {ctx.lead.germanLevel ?? "?"} · {ctx.lead.language === "de" ? "alemán" : "español"}
         </div>
         <div className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
-          Motivo inicial: {ctx.lead.motivo ?? "—"} · Profe: {ctx.teacherName ?? "—"}
+          Motivo: {ctx.lead.motivo ?? "—"} · Profe: {ctx.teacherName ?? "—"}
         </div>
       </div>
-      <div className="shrink-0 flex items-center gap-1.5">
+      <div className="shrink-0 flex items-center gap-1.5 flex-wrap">
         {ctx.lead.whatsapp && (
-          <a
-            href={`https://wa.me/${ctx.lead.whatsapp.replace(/[^\d]/g, "")}`}
+          <a href={`https://wa.me/${ctx.lead.whatsapp.replace(/[^\d]/g, "")}`}
             target="_blank" rel="noreferrer"
-            className="text-xs font-semibold rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1.5 text-emerald-800 hover:bg-emerald-200"
-            title="Abrir WhatsApp del lead"
-          >
-            💬 WhatsApp
+            className="text-xs font-semibold rounded-full border border-emerald-300 bg-emerald-100 px-3 py-1.5 text-emerald-800 hover:bg-emerald-200">
+            WhatsApp
           </a>
         )}
-        {/* Presentación Gamma + selector de nivel — el botón abre en
-            nueva pestaña la slide del nivel seleccionado. El selector
-            arranca con el nivel del lead pero el profe puede cambiarlo
-            si en la cp detecta que el lead está en otro nivel real
-            (caso típico: lead se autoasigna A1 pero hace todo en A2,
-            o viceversa). */}
         <div className="inline-flex items-center rounded-full border border-indigo-300 bg-indigo-100 dark:bg-indigo-500/15 overflow-hidden">
-          <a
-            href={presentationUrl}
-            target="_blank" rel="noreferrer"
-            className="text-xs font-semibold px-3 py-1.5 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-200 dark:hover:bg-indigo-500/25"
-            title={`Abrir presentación Gamma para nivel ${selectedLevel}`}
-          >
-            📊 Presentación
+          <a href={presentationUrl} target="_blank" rel="noreferrer"
+            className="text-xs font-semibold px-3 py-1.5 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-200 dark:hover:bg-indigo-500/25">
+            Presentación
           </a>
-          <select
-            value={selectedLevel}
-            onChange={(e) => setSelectedLevel(e.target.value as LevelBucket)}
+          <select value={selectedLevel} onChange={e => setSelectedLevel(e.target.value as LevelBucket)}
             className="text-xs font-semibold bg-transparent border-l border-indigo-300/60 dark:border-indigo-500/40 px-2 py-1.5 text-indigo-800 dark:text-indigo-200 hover:bg-indigo-200/60 dark:hover:bg-indigo-500/25 focus:outline-none"
-            title="Cambiar nivel de la presentación"
-            aria-label="Nivel de presentación"
-          >
+            aria-label="Nivel de presentación">
             {(["A0","A1","A2","B1","B2","C1"] as const).map(lvl => (
               <option key={lvl} value={lvl}>{lvl}</option>
             ))}
           </select>
         </div>
-        {/* Atajo "No asistio" disponible en TODOS los pasos. Si el
-            lead nunca aparecio, el profe no tiene que recorrer 8
-            pasos antes de marcarlo. Cierra el guion al instante. */}
-        <button
-          type="button"
-          onClick={onQuickAbsent}
-          disabled={absentPending}
-          className="text-xs font-semibold rounded-full border border-amber-400 bg-amber-100 dark:bg-amber-500/15 px-3 py-1.5 text-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-500/25 disabled:opacity-50"
-          title="Marcar al lead como NO ASISTIÓ (atajo desde cualquier paso)"
-        >
-          {absentPending ? "Marcando..." : "❌ No asistió"}
+        <button type="button" onClick={onQuickAbsent} disabled={absentPending}
+          className="text-xs font-semibold rounded-full border border-amber-400 bg-amber-100 dark:bg-amber-500/15 px-3 py-1.5 text-amber-900 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-500/25 disabled:opacity-50">
+          {absentPending ? "Marcando..." : "No asistió"}
         </button>
       </div>
     </header>
   );
 }
 
-function ClassTimer() {
-  const [secs, setSecs] = useState(0);
-  useEffect(() => {
-    const i = setInterval(() => setSecs(s => s + 1), 1000);
-    return () => clearInterval(i);
-  }, []);
-  const mm = String(Math.floor(secs / 60)).padStart(2, "0");
-  const ss = String(secs % 60).padStart(2, "0");
-  return (
-    <div className="mt-3 rounded-xl bg-amber-100/60 dark:bg-amber-500/10 border border-amber-300/40 px-4 py-2 flex items-center justify-between">
-      <span className="text-sm text-amber-900 dark:text-amber-200">
-        ⏱ Demo en curso · objetivo ~15 min (clase) — guía visual, no bloquea
-      </span>
-      <span className="text-xl font-mono font-bold text-amber-900 dark:text-amber-200 tabular-nums">
-        {mm}:{ss}
-      </span>
-    </div>
-  );
-}
-
-function NavRow({
-  step, pending, onBack, onNext,
-}: {
-  step: number; pending: boolean;
-  /** Si es función → handler de "Atrás" dentro del wizard.
-   *  Si es string → href absoluto (ej. salir del wizard). */
-  onBack?: (() => void) | string;
-  onNext: () => void;
-}) {
-  return (
-    <div className="mt-6 flex items-center justify-between">
-      {typeof onBack === "function" ? (
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={pending}
-          className="text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
-        >
-          ← Atrás
-        </button>
-      ) : typeof onBack === "string" ? (
-        <a
-          href={onBack}
-          className="text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-        >
-          ← Salir
-        </a>
-      ) : <span />}
-      <button
-        type="button"
-        onClick={onNext}
-        disabled={pending}
-        className="text-sm font-semibold rounded-full bg-emerald-500 text-white px-6 py-2 hover:bg-emerald-600 disabled:opacity-50"
-      >
-        {pending ? "Guardando..." : step === 7 ? "Ir al cierre" : "Siguiente →"}
-      </button>
-    </div>
-  );
-}
-
-function ProgressDots({ step }: { step: number }) {
-  const visualStep = Math.ceil(step);
-  return (
-    <div className="mt-4 flex items-center justify-center gap-1.5">
-      {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
-        <span
-          key={n}
-          className={`h-1.5 rounded-full transition-all ${
-            n === visualStep
-              ? "w-8 bg-emerald-500"
-              : n < visualStep
-                ? "w-2 bg-emerald-300"
-                : "w-2 bg-slate-300 dark:bg-slate-700"
-          }`}
-        />
-      ))}
-    </div>
-  );
-}
-
 // ─────────────────────────────────────────────────────────────────
-// Steps
+// Sections
 // ─────────────────────────────────────────────────────────────────
 
-const PREV_EXPERIENCE_OPTIONS = ["No, empiezo desde cero", "Un poco por mi cuenta", "Sí, tomé clases antes"];
-const LEVEL_OPTIONS = ["A0 — Principiante", "A1", "A2", "B1", "B2", "C1"];
-const DIFFICULTY_OPTIONS = [
-  "Pronunciación",
-  "Gramática",
-  "Vocabulario",
-  "Comprensión auditiva",
-  "Expresión oral / fluidez",
-  "Expresión escrita",
-  "Todo — estoy empezando",
-];
+function Section0Prep({ ctx }: { ctx: ClassContext }) {
+  const scheduledDate = new Date(ctx.scheduledAt);
+  const dateStr = scheduledDate.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+  const timeStr = scheduledDate.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
 
-function ChipSelect({ options, value, onChange, multi }: {
-  options: string[]; value: string; onChange: (v: string) => void; multi?: boolean;
-}) {
-  const selected = multi ? value.split("||").filter(Boolean) : [value];
-  const toggle = (opt: string) => {
-    if (multi) {
-      const set = new Set(selected);
-      if (set.has(opt)) set.delete(opt); else set.add(opt);
-      onChange([...set].join("||"));
-    } else {
-      onChange(opt === value ? "" : opt);
-    }
-  };
-  return (
-    <div className="flex flex-wrap gap-2 mt-1">
-      {options.map(opt => (
-        <button key={opt} type="button" onClick={() => toggle(opt)}
-          className={`rounded-xl px-4 py-2.5 text-sm font-medium transition border-2 ${
-            selected.includes(opt)
-              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
-              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-emerald-300"
-          }`}
-        >
-          {opt}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Step1Discovery({
-  objetivo, setObjetivo, nivelObjetivo, setNivelObjetivo,
-  deadline, setDeadline, motivacion, setMotivacion,
-}: {
-  objetivo: string; setObjetivo: (v: string) => void;
-  nivelObjetivo: string; setNivelObjetivo: (v: string) => void;
-  deadline: string; setDeadline: (v: string) => void;
-  motivacion: string; setMotivacion: (v: string) => void;
-}) {
   return (
     <div>
-      <StepTitle
-        emoji="🎯"
-        title="Discovery (5 min — antes de la demo)"
-        hint="Habla con el lead, captura los 4 datos. Estas respuestas las usaremos para personalizar el cierre."
-      />
-      <Field label="¿Por qué quieres aprender alemán?" required>
-        <textarea value={objetivo} onChange={e => setObjetivo(e.target.value)} rows={2}
-          placeholder='Ej: "Quiero mudarme a Alemania para trabajar como enfermera"'
-          className="input-text w-full" />
-      </Field>
-      <Field label="¿Has aprendido alemán antes?">
-        <ChipSelect options={PREV_EXPERIENCE_OPTIONS} value={deadline} onChange={setDeadline} />
-      </Field>
-      <Field label="Nivel actual">
-        <ChipSelect options={LEVEL_OPTIONS} value={nivelObjetivo} onChange={setNivelObjetivo} />
-      </Field>
-      <Field label="¿Qué te resulta más difícil al hablar y escribir en alemán?">
-        <ChipSelect options={DIFFICULTY_OPTIONS} value={motivacion} onChange={setMotivacion} multi />
-      </Field>
-    </div>
-  );
-}
-
-function Step2Demo() {
-  const LEVELS: LevelBucket[] = ["A0", "A1", "A2", "B1", "B2", "C1"];
-  return (
-    <div>
-      <StepTitle
-        emoji="📖"
-        title="Probestunde"
-        hint="Ok! Dann lass uns Deutsch lernen! Ich habe für dich eine Präsentation vorbereitet:"
-      />
-      <div className="rounded-xl bg-slate-100 dark:bg-slate-800 p-5 text-sm text-slate-700 dark:text-slate-300 leading-relaxed space-y-4">
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-          {LEVELS.map((lvl) => (
-            <a
-              key={lvl}
-              href={LEVEL_PRESENTATION_URL[lvl]}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center rounded-lg bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-3 py-2 font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors"
-            >
-              {lvl}
-            </a>
-          ))}
-        </div>
-        <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 p-3 text-amber-800 dark:text-amber-300 text-xs">
-          <p className="font-semibold mb-1">💡 Tips:</p>
-          <ul className="space-y-1 list-disc list-inside">
-            <li>Compartir pestaña con la presentación.</li>
-            <li>Abrir documento de Word para escribir ejemplos.</li>
-          </ul>
-        </div>
+      <StepTitle emoji="📋" title="Preparación"
+        hint="Revisa los datos del lead antes de comenzar. Cuando estés listo, pulsa 'Comenzar clase'." />
+      <div className="rounded-xl bg-slate-50 dark:bg-slate-800 p-5 space-y-3">
+        <DataRow label="Nombre" value={ctx.lead.name} />
+        <DataRow label="Email" value={ctx.lead.email} />
+        <DataRow label="WhatsApp" value={ctx.lead.whatsapp} />
+        <DataRow label="Fecha/hora" value={`${dateStr}, ${timeStr}`} />
+        <DataRow label="Nivel declarado" value={ctx.lead.germanLevel} />
+        <DataRow label="Motivo" value={ctx.lead.motivo} />
+        <DataRow label="Idioma" value={ctx.lead.language === "de" ? "Alemán" : "Español"} />
+        <DataRow label="Profesor" value={ctx.teacherName} />
       </div>
     </div>
   );
 }
 
-const FEEDBACK_CLASE_OPTIONS = [
-  "Me encantó",
-  "Muy bien, me gustó",
-  "Bien, interesante",
-  "Normal, esperaba más",
-  "No me convenció",
-];
-const FEEDBACK_GUSTO_OPTIONS = [
-  "El método / la dinámica",
-  "La paciencia del profesor",
-  "Que se adaptó a mi nivel",
-  "Los materiales / la plataforma",
-  "La interacción / fue divertida",
-  "Sentí que aprendí algo rápido",
-];
-
-function Step3PostDemo({
-  objetivo, feedbackClase, setFeedbackClase, feedbackGusto, setFeedbackGusto,
-  enrollmentSense, setEnrollmentSense,
+function Section1Presentacion({
+  checks, setChecks, firstName,
 }: {
-  objetivo: string;
-  feedbackClase: string; setFeedbackClase: (v: string) => void;
-  feedbackGusto: string; setFeedbackGusto: (v: string) => void;
-  enrollmentSense: boolean | null; setEnrollmentSense: (v: boolean) => void;
+  checks: string; setChecks: (v: string) => void; firstName: string;
 }) {
-  const [classTypePref, setClassTypePref] = useState("");
   return (
     <div>
-      <StepTitle
-        emoji="💬"
-        title="Post-demo · feedback del lead"
-        hint="Pregunta literal estas tres. Las respuestas las usaremos para personalizar el cierre."
-      />
-      <Field label="¿Qué te ha parecido la clase?">
-        <ChipSelect options={FEEDBACK_CLASE_OPTIONS} value={feedbackClase} onChange={setFeedbackClase} />
-      </Field>
-      <Field label="¿Qué fue lo que más te gustó?">
-        <ChipSelect options={FEEDBACK_GUSTO_OPTIONS} value={feedbackGusto} onChange={setFeedbackGusto} multi />
+      <StepTitle emoji="👋" title="Presentación (0-2 min)"
+        hint="Genera confianza con el lead. Sigue esta guía y marca los checkboxes cuando completes cada punto." />
+      <SuggestedPhrase text={`¡Hola ${firstName}! Bienvenido/a a tu clase de prueba. Soy [tu nombre] y seré tu profesor/a hoy. Antes de empezar con la clase, me gustaría conocerte un poco mejor para poder adaptarla a ti.`} />
+      <div className="mt-4 space-y-2">
+        {PRESENTACION_CHECKS.map(label => (
+          <CheckboxItem key={label} label={label}
+            checked={checks.includes(label)}
+            onChange={on => {
+              const set = new Set(checks.split("||").filter(Boolean));
+              if (on) set.add(label); else set.delete(label);
+              setChecks([...set].join("||"));
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Section2Descubrimiento({
+  firstName, objetivo, setObjetivo, nivelReal, setNivelReal,
+  dificultades, setDificultades, dificultadOtra, setDificultadOtra,
+}: {
+  firstName: string;
+  objetivo: string; setObjetivo: (v: string) => void;
+  nivelReal: string; setNivelReal: (v: string) => void;
+  dificultades: string; setDificultades: (v: string) => void;
+  dificultadOtra: string; setDificultadOtra: (v: string) => void;
+}) {
+  return (
+    <div>
+      <StepTitle emoji="🎯" title="Descubrimiento (2-5 min)"
+        hint="3 preguntas clave. Escucha atentamente — estas respuestas personalizan el cierre." />
+
+      <Field label="Pregunta 1: Objetivo" required>
+        <SuggestedPhrase text={`${firstName}, antes de empezar quiero conocerte mejor. ¿Cuál es tu objetivo principal con el alemán?`} />
+        <textarea value={objetivo} onChange={e => setObjetivo(e.target.value)} rows={2}
+          placeholder='Ej: "Quiero mudarme a Alemania para trabajar como enfermera"'
+          className="input-text w-full mt-2" />
       </Field>
 
-      {/* CTA Schule + Hans — se muestra siempre, el profe lo lee al lead */}
+      <Field label="Pregunta 2: Nivel real" required>
+        <SuggestedPhrase text="¿Has estudiado alemán antes? ¿Cuál es tu nivel actual?" />
+        <div className="flex flex-wrap gap-2 mt-2">
+          {NIVEL_OPTIONS.map(lvl => (
+            <button key={lvl} type="button" onClick={() => setNivelReal(lvl)}
+              className={`rounded-xl px-4 py-2.5 text-sm font-medium transition border-2 ${
+                nivelReal === lvl
+                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-emerald-300"
+              }`}>
+              {lvl}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label="Pregunta 3: Mayor dificultad">
+        <SuggestedPhrase text="¿Qué es lo que más te cuesta del alemán?" />
+        <ChipSelect options={DIFICULTAD_OPTIONS} value={dificultades} onChange={setDificultades} multi />
+        <input type="text" value={dificultadOtra} onChange={e => setDificultadOtra(e.target.value)}
+          placeholder="Otra (especificar)"
+          className="input-text w-full mt-2" />
+      </Field>
+    </div>
+  );
+}
+
+function Section3MiniClase({
+  nivelReal, checks, setChecks, obs, setObs, globalSecs,
+}: {
+  nivelReal: string;
+  checks: string; setChecks: (v: string) => void;
+  obs: string; setObs: (v: string) => void;
+  globalSecs: number;
+}) {
+  const bucket = normalizeLevelBucket(nivelReal) ?? "A1";
+  const mm = String(Math.floor(globalSecs / 60)).padStart(2, "0");
+  const ss = String(globalSecs % 60).padStart(2, "0");
+
+  const levelTips: Record<string, string> = {
+    A0: "Empieza con saludos básicos, números, presentarse. Usa visual aids.",
+    A1: "Verbos regulares, vocabulario cotidiano. Pregúntale cosas simples en alemán.",
+    A2: "Conversación guiada, situaciones reales. Prueba un pequeño diálogo.",
+    B1: "Debate un tema sencillo. Corrige gramática en contexto.",
+    B2: "Discusión sobre un artículo o tema complejo. Vocabulario avanzado.",
+    C1: "Debate libre, matices del idioma, expresiones idiomáticas.",
+  };
+
+  return (
+    <div>
+      <StepTitle emoji="📖" title="Mini clase (5-22 min)"
+        hint="¡Es hora de enseñar! Adapta el contenido al nivel del lead." />
+
+      <div className="rounded-xl bg-amber-100/60 dark:bg-amber-500/10 border border-amber-300/40 px-4 py-2 flex items-center justify-between mb-4">
+        <span className="text-sm text-amber-900 dark:text-amber-200">
+          Tiempo de clase — objetivo ~17 min
+        </span>
+        <span className="text-xl font-mono font-bold text-amber-900 dark:text-amber-200 tabular-nums">
+          {mm}:{ss}
+        </span>
+      </div>
+
+      <div className="rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/30 p-4 mb-4">
+        <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-200 mb-1">
+          Sugerencia para nivel {bucket}:
+        </p>
+        <p className="text-sm text-indigo-800 dark:text-indigo-300">
+          {levelTips[bucket] ?? levelTips.A1}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-4">
+        {(["A0","A1","A2","B1","B2","C1"] as const).map(lvl => (
+          <a key={lvl} href={LEVEL_PRESENTATION_URL[lvl]} target="_blank" rel="noopener noreferrer"
+            className={`flex items-center justify-center rounded-lg border px-3 py-2 font-semibold text-sm transition-colors ${
+              lvl === bucket
+                ? "bg-emerald-100 border-emerald-400 text-emerald-800 dark:bg-emerald-900/30 dark:border-emerald-500 dark:text-emerald-300"
+                : "bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-600"
+            }`}>
+            {lvl}
+          </a>
+        ))}
+      </div>
+
+      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mt-5 mb-2">Post mini-clase:</p>
+      <div className="space-y-2">
+        {MINI_CLASE_CHECKS.map(label => (
+          <CheckboxItem key={label} label={label}
+            checked={checks.includes(label)}
+            onChange={on => {
+              const set = new Set(checks.split("||").filter(Boolean));
+              if (on) set.add(label); else set.delete(label);
+              setChecks([...set].join("||"));
+            }}
+          />
+        ))}
+      </div>
+
+      <Field label="Observaciones de la clase">
+        <textarea value={obs} onChange={e => setObs(e.target.value)} rows={3}
+          placeholder="¿Cómo fue la interacción? ¿Qué tan cómodo se sintió el lead? ¿Algo que notar?"
+          className="input-text w-full" />
+      </Field>
+    </div>
+  );
+}
+
+function Section4Transicion({
+  q1, setQ1, q2, setQ2, q3, setQ3,
+}: {
+  q1: string; setQ1: (v: string) => void;
+  q2: string; setQ2: (v: string) => void;
+  q3: string; setQ3: (v: string) => void;
+}) {
+  const showObjectionQ1 = q1 && !isPositive(q1);
+  const showObjectionQ2 = q2 && !isPositive(q2);
+  const showObjectionQ3 = q3 && !isPositive(q3);
+
+  return (
+    <div>
+      <StepTitle emoji="🤝" title="Transición al cierre (22-25 min)"
+        hint="3 preguntas de cierre. Si alguna es negativa, se muestra una guía para manejar la objeción." />
+
+      <Field label="Pregunta 1" required>
+        <SuggestedPhrase text="¿Sentiste que mi método te funcionó? ¿Pudiste seguirme bien y aprender algo concreto en estos minutos?" />
+        <RadioGroup options={CIERRE_Q1_OPTIONS} value={q1} onChange={setQ1} />
+        {showObjectionQ1 && (
+          <ObjectionTip tip="Pregunta qué parte no le convenció. Ofrece adaptar el método: 'En las clases normales puedo ajustar el ritmo 100% a ti. Hoy era una muestra de 15 min — imagina lo que logramos en sesiones completas.'" />
+        )}
+      </Field>
+
+      <Field label="Pregunta 2" required>
+        <SuggestedPhrase text="Pensando en tu objetivo con el alemán, ¿estarías de acuerdo conmigo que con clases así, podrías llegar a tu meta mucho más rápido que aprendiendo solo/a?" />
+        <RadioGroup options={CIERRE_Q2_OPTIONS} value={q2} onChange={setQ2} />
+        {showObjectionQ2 && (
+          <ObjectionTip tip="Recuérdale su objetivo original y valida la preocupación: 'Entiendo la duda. Piensa que con un profesor tienes correcciones en tiempo real y un plan personalizado — eso es lo que marca la diferencia vs. apps o autodidacta.'" />
+        )}
+      </Field>
+
+      <Field label="Pregunta 3" required>
+        <SuggestedPhrase text="Si todo encajara — horario, grupo, inversión — ¿estarías listo/a para empezar esta semana?" />
+        <RadioGroup options={CIERRE_Q3_OPTIONS} value={q3} onChange={setQ3} />
+        {showObjectionQ3 && (
+          <ObjectionTip tip="No presiones. Pregunta: '¿Qué necesitarías resolver para poder tomar la decisión?' — deja que el lead hable. A veces solo necesita que le confirmes la flexibilidad de horarios o de pago." />
+        )}
+      </Field>
+
+      {q1 && q2 && q3 && (
+        <div className={`mt-4 rounded-xl p-4 text-sm font-semibold ${
+          isPositive(q1) && isPositive(q2) && isPositive(q3)
+            ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-500/30"
+            : "bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-500/30"
+        }`}>
+          {isPositive(q1) && isPositive(q2) && isPositive(q3)
+            ? "Las 3 respuestas son positivas — puedes pasar a presentar los packs."
+            : "Alguna respuesta es negativa — al pulsar 'Siguiente' irás directamente al resultado final."}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Section5Packs() {
+  return (
+    <div>
+      <StepTitle emoji="📦" title="Presentación de packs"
+        hint="Abre la página de cursos y presenta las opciones al lead desde ahí." />
+      <SuggestedPhrase text="Perfecto. Basándome en lo que vimos hoy y en tu objetivo, déjame mostrarte las opciones que tenemos." />
+
       <div className="mt-5 rounded-xl border-2 border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 p-4">
-        <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-          💡 ¡Qué bueno que te haya gustado! Además de las clases en vivo, la academia incluye:
+        <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100 mb-1">
+          Además de las clases en vivo, la academia incluye:
         </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           <a href="https://schule.aprender-aleman.de" target="_blank" rel="noopener noreferrer"
@@ -673,7 +830,7 @@ function Step3PostDemo({
             <span className="text-2xl">📚</span>
             <div>
               <div className="text-sm font-bold text-slate-900 dark:text-slate-100">SCHULE</div>
-              <div className="text-xs text-slate-600 dark:text-slate-400">Aplicación para hacer todo tipo de ejercicios: 📝 Gramática · 📖 Lectura · 👂 Escucha · 🗣️ Habla · ✍️ Escritura</div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Ejercicios: Gramática · Lectura · Escucha · Habla · Escritura</div>
             </div>
           </a>
           <a href="https://hans.aprender-aleman.de" target="_blank" rel="noopener noreferrer"
@@ -681,372 +838,270 @@ function Step3PostDemo({
             <span className="text-2xl">🤖</span>
             <div>
               <div className="text-sm font-bold text-slate-900 dark:text-slate-100">HANS</div>
-              <div className="text-xs text-slate-600 dark:text-slate-400">Profesor con IA que responde por texto y por voz.</div>
+              <div className="text-xs text-slate-600 dark:text-slate-400">Profesor con IA por texto y voz</div>
             </div>
           </a>
         </div>
-        <p className="mt-3 text-center text-sm font-bold text-emerald-800 dark:text-emerald-200">🎥 LAS CLASES QUEDAN GRABADAS</p>
+        <p className="mt-3 text-center text-sm font-bold text-emerald-800 dark:text-emerald-200">LAS CLASES QUEDAN GRABADAS</p>
       </div>
 
-      <Field
-        label="¿Crees que tomar clases semanales más practicar con SCHULE y Hans te puede ayudar a cumplir tu objetivo con el alemán?"
-        required
-      >
-        <div className="grid grid-cols-2 gap-2 mt-1">
-          <YesNoButton active={enrollmentSense === true}  onClick={() => setEnrollmentSense(true)}  label="✅ Sí" />
-          <YesNoButton active={enrollmentSense === false} onClick={() => setEnrollmentSense(false)} label="❌ No" />
-        </div>
-      </Field>
-
-      {enrollmentSense === true && (
-        <>
-          <Field label="¿Cómo crees que te sentirás más cómodo/a?">
-            <ChipSelect options={["Clases grupales", "Clases individuales"]} value={classTypePref} onChange={setClassTypePref} />
-          </Field>
-
-          <div className="mt-5 rounded-xl border-2 border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10 p-4">
-            <p className="text-sm font-semibold text-brand-900 dark:text-brand-100">
-              🎯 ¡Muy bien! Vamos a la página web de la academia y te muestro los packs.
-            </p>
-            <a
-              href="https://aprender-aleman.de/cursos"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold px-5 py-2.5 text-sm transition"
-            >
-              🌐 Ver packs en aprender-aleman.de/cursos →
-            </a>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function Step3bObjection({
-  objectionReason, setObjectionReason, objectionUnblock, setObjectionUnblock,
-}: {
-  objectionReason:  string; setObjectionReason:  (v: string) => void;
-  objectionUnblock: string; setObjectionUnblock: (v: string) => void;
-}) {
-  return (
-    <div>
-      <StepTitle
-        emoji="🤔"
-        title="Manejo de objeción"
-        hint="El lead dijo que no le tiene sentido. Antes de cerrar, captura el motivo real para que el equipo aprenda."
-      />
-      <Field label="¿Qué te frena? / ¿Por qué crees que no?" required>
-        <textarea value={objectionReason} onChange={e => setObjectionReason(e.target.value)} rows={3}
-          placeholder='Ej: "el precio", "tengo poco tiempo", "ya estoy con otra academia"...'
-          className="input-text w-full" />
-      </Field>
-      <Field label="¿Qué necesitarías para verlo natural / sentirte cómodo de empezar?">
-        <textarea value={objectionUnblock} onChange={e => setObjectionUnblock(e.target.value)} rows={3}
-          placeholder='Ej: "saber el precio exacto", "probar 1 semana", "consultarlo con mi pareja"...'
-          className="input-text w-full" />
-      </Field>
-      <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-        Tras esto saltarás al cierre. Si el lead cambia de opinión, marca "✅ Asistió" igual e indícalo
-        en notas — Stiv le hace seguimiento. Si no, marca "❌ No asistió" o cierra con cordialidad.
-      </p>
-    </div>
-  );
-}
-
-function Step4Filters({
-  scheduleType, setScheduleType, learningGoal, setLearningGoal,
-}: {
-  scheduleType: "fixed" | "changing" | ""; setScheduleType: (v: "fixed" | "changing") => void;
-  learningGoal: "one_level" | "confidence" | ""; setLearningGoal: (v: "one_level" | "confidence") => void;
-}) {
-  return (
-    <div>
-      <StepTitle
-        emoji="🎚"
-        title="Filtros antes de presentar packs"
-        hint="Estas 2 respuestas deciden qué 2 packs aparecen. Sé fiel a lo que dice el lead."
-      />
-      <Field label="¿Tienes horarios fijos cada semana o te cambian?" required>
-        <div className="grid grid-cols-2 gap-2 mt-1">
-          <YesNoButton active={scheduleType === "fixed"}    onClick={() => setScheduleType("fixed")}    label="🗓 Horarios fijos" />
-          <YesNoButton active={scheduleType === "changing"} onClick={() => setScheduleType("changing")} label="🔀 Cambiantes" />
-        </div>
-      </Field>
-      <Field label="¿Tu objetivo es lograr un nivel concreto o hablar alemán con confianza?" required>
-        <div className="grid grid-cols-2 gap-2 mt-1">
-          <YesNoButton active={learningGoal === "one_level"}  onClick={() => setLearningGoal("one_level")}  label="🎯 Un nivel concreto" />
-          <YesNoButton active={learningGoal === "confidence"} onClick={() => setLearningGoal("confidence")} label="💬 Hablar con confianza" />
-        </div>
-      </Field>
-      <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-        Horarios cambiantes → solo packs individuales. Horarios fijos +
-        1 nivel → Pack Inicio. Horarios fijos + confianza → Pack Fluidez Total.
-      </p>
-    </div>
-  );
-}
-
-function Step5Packs({
-  packs, chosenPack, setChosenPack,
-}: {
-  packs: PackId[];
-  chosenPack: PackId | "";
-  setChosenPack: (v: PackId) => void;
-}) {
-  return (
-    <div>
-      <StepTitle
-        emoji="📦"
-        title="Presenta estos 2 packs · que elija uno"
-        hint="Léelos con voz propia. Pide al lead que elija el que más le encaje."
-      />
-      <div className="grid md:grid-cols-2 gap-3 mt-3">
-        {packs.map(pid => {
-          const p = getPack(pid);
-          if (!p) return null;
-          return (
-            <button
-              key={pid}
-              type="button"
-              onClick={() => setChosenPack(pid)}
-              className={`text-left rounded-2xl p-4 border-2 transition ${
-                chosenPack === pid
-                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10"
-                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-emerald-300"
-              }`}
-            >
-              <div className="font-bold text-slate-900 dark:text-slate-50">{p.name}</div>
-              {chosenPack === pid && (
-                <div className="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300">✓ Eligió este</div>
-              )}
-            </button>
-          );
-        })}
+      <div className="mt-5 flex justify-center">
+        <a href="https://aprender-aleman.de/cursos" target="_blank" rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 text-base transition shadow-md">
+          ABRIR PÁGINA DE CURSOS →
+        </a>
       </div>
     </div>
   );
 }
 
-function Step6Payment({
+function Section6Cierre({
+  ctx, scriptId, firstName, objetivo,
+  chosenPack, setChosenPack, chosenPackOtro, setChosenPackOtro,
   paymentType, setPaymentType,
+  wasSent, setWasSent,
+  paymentConfirmed, setPaymentConfirmed,
+  onConverted, onAttended,
 }: {
+  ctx: ClassContext; scriptId: string; firstName: string; objetivo: string;
+  chosenPack: string; setChosenPack: (v: string) => void;
+  chosenPackOtro: string; setChosenPackOtro: (v: string) => void;
   paymentType: PaymentType | ""; setPaymentType: (v: PaymentType) => void;
+  wasSent: boolean; setWasSent: (v: boolean) => void;
+  paymentConfirmed: boolean | null; setPaymentConfirmed: (v: boolean | null) => void;
+  onConverted: () => void; onAttended: () => void;
 }) {
-  return (
-    <div>
-      <StepTitle
-        emoji="💳"
-        title="¿Cómo prefiere pagar?"
-        hint="Pago único = descuento por anticipado. Flexible = mensualidades."
-      />
-      <div className="grid grid-cols-2 gap-3 mt-3">
-        {(["single", "flexible"] as const).map(t => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setPaymentType(t)}
-            className={`rounded-2xl p-5 border-2 text-center transition ${
-              paymentType === t
-                ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10"
-                : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-emerald-300"
-            }`}
-          >
-            <div className="text-2xl">{t === "single" ? "💰" : "🗓"}</div>
-            <div className="mt-1 font-bold text-slate-900 dark:text-slate-50">
-              {t === "single" ? "Pago único" : "Pago flexible"}
-            </div>
-            <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-              {t === "single" ? "Descuento por anticipado" : "Mensualidades"}
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
+  const [sending, startSending] = useTransition();
+  const [confirming, startConfirming] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
 
-function Step7Closing({
-  closingYes, setClosingYes,
-}: {
-  closingYes: boolean | null; setClosingYes: (v: boolean) => void;
-}) {
-  return (
-    <div>
-      <StepTitle
-        emoji="🤝"
-        title="Cierre"
-        hint="Léelo literal. Tras la respuesta del lead, marca su decisión."
-      />
-      <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-amber-50 dark:from-emerald-500/10 dark:to-amber-500/10 border border-emerald-200/60 dark:border-emerald-500/30 p-5 text-slate-800 dark:text-slate-100 leading-relaxed">
-        <p className="text-base">
-          "Hemos avanzado muy bien hoy. El siguiente paso es inscribirte
-          formalmente en la academia.
-        </p>
-        <p className="mt-3 text-base font-semibold">
-          ¿Tiene sentido para ti si te envío el enlace para que completes
-          el pago mientras te voy inscribiendo en la academia?"
-        </p>
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <YesNoButton active={closingYes === true}  onClick={() => setClosingYes(true)}  label="✅ Sí, manda el enlace" />
-        <YesNoButton active={closingYes === false} onClick={() => setClosingYes(false)} label="❌ No / dudoso" />
-      </div>
-    </div>
-  );
-}
+  const packOptions = [
+    ...TRIAL_PACKS.map(p => ({ id: p.id, label: p.name })),
+    { id: "otro", label: "Otro pack (especificar)" },
+    { id: "necesita_tiempo", label: "Necesita más tiempo (objeción)" },
+  ];
 
-function Step8Final({
-  classCtx, scriptId, chosenPack, paymentType, objetivo, teacherNotes, setTeacherNotes, pending, onBack,
-}: {
-  classCtx: ClassContext;
-  scriptId: string;
-  chosenPack: PackId;
-  paymentType: PaymentType;
-  objetivo: string;
-  teacherNotes: string;
-  setTeacherNotes: (v: string) => void;
-  pending: boolean;
-  onBack: () => void;
-}) {
-  const [submitting, startTransition] = useTransition();
-  const [done, setDone] = useState<"attended" | "absent" | null>(null);
-  const [err, setErr]   = useState<string | null>(null);
-  const busy = pending || submitting;
+  const selectedPack = TRIAL_PACKS.find(p => p.id === chosenPack);
+  const canSendLink = selectedPack && paymentType;
 
-  const onAttended = () => {
+  const handleSendLink = () => {
+    if (!selectedPack || !paymentType) return;
     setErr(null);
-    startTransition(async () => {
+    startSending(async () => {
       try {
         await completeAttendedAction({
           scriptId,
-          leadId:    classCtx.leadId,
-          packId:    chosenPack,
-          paymentType,
+          leadId: ctx.leadId,
+          packId: selectedPack.id as PackId,
+          paymentType: paymentType as PaymentType,
           objective: objetivo,
-          teacherNotes,
+          teacherNotes: "",
         });
-        setDone("attended");
+        await saveStepAction(scriptId, {
+          chosen_pack: selectedPack.id,
+          payment_type: paymentType,
+        });
+        setWasSent(true);
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Error al marcar asistido.");
+        setErr(e instanceof Error ? e.message : "Error al enviar.");
       }
     });
   };
 
-  const onAbsent = () => {
+  const handlePaymentConfirmed = () => {
     setErr(null);
-    startTransition(async () => {
+    startConfirming(async () => {
       try {
-        await completeAbsentAction({ scriptId, leadId: classCtx.leadId, teacherNotes });
-        setDone("absent");
+        await saveStepAction(scriptId, {
+          payment_confirmed: true,
+          final_outcome: "converted",
+          completed_at: new Date().toISOString(),
+          final_marked_at: new Date().toISOString(),
+          resultado: "Pagó",
+        });
+        onConverted();
       } catch (e) {
-        setErr(e instanceof Error ? e.message : "Error al marcar no asistió.");
+        setErr(e instanceof Error ? e.message : "Error al confirmar.");
       }
     });
   };
 
-  if (done === "attended") {
+  if (wasSent && paymentConfirmed === null) {
     return (
-      <FinalDone
-        title="✅ Asistió — todo registrado"
-        body="El lead ha recibido el WhatsApp con el enlace de pago. Stiv hace el seguimiento."
-      />
-    );
-  }
-  if (done === "absent") {
-    return (
-      <FinalDone
-        title="❌ Marcado como no asistió"
-        body="La cadena de re-toques se activa automáticamente. Puedes cerrar esta pestaña."
-      />
+      <div>
+        <StepTitle emoji="⏳" title="Esperando confirmación del pago"
+          hint="El link de pago fue enviado por WhatsApp. Pregúntale al lead si completó el pago." />
+
+        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-4 mb-4 text-center">
+          <p className="text-base font-semibold text-emerald-800 dark:text-emerald-200">
+            Link enviado. Esperando confirmación del estudiante.
+          </p>
+        </div>
+
+        <SuggestedPhrase text={`Bien. Te paso el link de pago AHORA mismo por WhatsApp. Mientras lo abres, voy preparando tu inscripción. ¿Tienes el WhatsApp abierto?`} />
+
+        <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button type="button" onClick={handlePaymentConfirmed} disabled={confirming}
+            className="text-base font-bold rounded-xl bg-emerald-500 text-white px-5 py-3 hover:bg-emerald-600 disabled:opacity-50">
+            {confirming ? "Guardando..." : "PAGO CONFIRMADO"}
+          </button>
+          <button type="button" onClick={() => setPaymentConfirmed(false)} disabled={confirming}
+            className="text-base font-bold rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-200 px-5 py-3 hover:bg-amber-200 dark:hover:bg-amber-500/25 disabled:opacity-50">
+            PAGO NO CONFIRMADO AÚN
+          </button>
+        </div>
+        {err && <ErrorBar message={err} />}
+      </div>
     );
   }
 
-  const hasFullPath = Boolean(chosenPack && paymentType);
+  if (wasSent && paymentConfirmed === false) {
+    return (
+      <div>
+        <StepTitle emoji="📋" title="Pago pendiente"
+          hint="El link fue enviado pero el pago no se confirmó en la clase. Continúa al resultado final." />
+        <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-4 text-sm text-amber-800 dark:text-amber-200">
+          El lead tiene el link de pago. El seguimiento automático se encargará del follow-up.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <StepTitle
-        emoji="🏁"
-        title="Cierre del guion"
-        hint="Marca el resultado. Esto envía el WhatsApp final al lead (si asistió) y graba la clase."
-      />
-      {!hasFullPath && (
-        <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-300/40 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-          No completaste packs/pago (probablemente porque el lead dijo
-          que no le tenía sentido). Marca "No asistió" o "Asistió" sin
-          link (Stiv lo retomará).
+      <StepTitle emoji="💳" title="Cierre y envío de link"
+        hint="Registra qué pack eligió el lead y envía el link de pago." />
+
+      <Field label="¿Qué pack eligió?" required>
+        <SuggestedPhrase text="¿Cuál te encaja mejor para empezar esta semana?" />
+        <div className="space-y-2 mt-2">
+          {packOptions.map(opt => (
+            <button key={opt.id} type="button" onClick={() => setChosenPack(opt.id)}
+              className={`w-full text-left rounded-xl px-4 py-3 text-sm font-medium transition border-2 ${
+                chosenPack === opt.id
+                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-emerald-300"
+              }`}>
+              {opt.label}
+            </button>
+          ))}
         </div>
-      )}
-      <Field label="Notas del profe (opcional)">
-        <textarea value={teacherNotes} onChange={e => setTeacherNotes(e.target.value)} rows={3}
-          placeholder="Lo que quieras dejar registrado: actitud del lead, objeciones, observaciones..."
-          className="input-text w-full" />
+        {chosenPack === "otro" && (
+          <input type="text" value={chosenPackOtro} onChange={e => setChosenPackOtro(e.target.value)}
+            placeholder="Especifica el pack"
+            className="input-text w-full mt-2" />
+        )}
       </Field>
-      <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <button
-          type="button"
-          onClick={onAttended}
-          disabled={busy || !hasFullPath}
-          className="text-base font-bold rounded-xl bg-emerald-500 text-white px-5 py-3 hover:bg-emerald-600 disabled:opacity-50"
-          title={!hasFullPath ? "Falta pack + tipo de pago para mandar el enlace" : "Asistió y enviar enlace de pago"}
-        >
-          {busy ? "Guardando..." : "✅ Asistió · enviar enlace"}
-        </button>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={onAbsent}
-            disabled={busy}
-            className="flex-1 text-base font-bold rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-200 px-5 py-3 hover:bg-amber-200 dark:hover:bg-amber-500/25 disabled:opacity-50"
-          >
-            ❌ No asistió
+
+      {chosenPack && chosenPack !== "necesita_tiempo" && (
+        <Field label="¿Modalidad de pago?">
+          <SuggestedPhrase text={selectedPack
+            ? `Perfecto, ${selectedPack.name}. ¿Te ahorras con pago único o lo prefieres en cuotas?`
+            : "¿Pago único o cuotas?"} />
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            {(["single", "flexible"] as const).map(t => (
+              <button key={t} type="button" onClick={() => setPaymentType(t)}
+                className={`rounded-xl p-4 border-2 text-center transition ${
+                  paymentType === t
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10"
+                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-emerald-300"
+                }`}>
+                <div className="font-bold text-slate-900 dark:text-slate-50">
+                  {t === "single" ? "Pago único" : "Cuotas mensuales"}
+                </div>
+                <div className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  {t === "single" ? "Descuento por anticipado" : "Mensualidades"}
+                </div>
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
+
+      {canSendLink && (
+        <div className="mt-5">
+          <button type="button" onClick={handleSendLink} disabled={sending}
+            className="w-full text-base font-bold rounded-xl bg-green-600 text-white px-5 py-4 hover:bg-green-700 disabled:opacity-50 shadow-md">
+            {sending ? "Enviando..." : "ENVIAR LINK DE PAGO POR WHATSAPP"}
           </button>
-          {classCtx.lead.whatsapp && (
-            <a
-              href={`https://wa.me/${classCtx.lead.whatsapp.replace(/[^\d]/g, "")}`}
-              target="_blank" rel="noreferrer"
-              className="rounded-xl border border-emerald-300 bg-emerald-100 text-emerald-800 px-4 py-3 hover:bg-emerald-200 flex items-center justify-center"
-              title="Mensajear al lead — comprobar problema técnico"
-            >
-              💬
-            </a>
-          )}
-        </div>
-      </div>
-      {err && (
-        <div className="mt-4 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
-          {err}
         </div>
       )}
-      {/* Boton 'Atras' en paso 8 — corrige pack / pago / objetivo
-          antes de enviar el WhatsApp con el enlace de pago. */}
-      <div className="mt-5 flex justify-start">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={busy}
-          className="text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
-        >
-          ← Atrás
-        </button>
-      </div>
+
+      {err && <ErrorBar message={err} />}
     </div>
   );
 }
 
-function FinalDone({ title, body }: { title: string; body: string }) {
+function Section7Resultado({
+  resultado, setResultado, resultadoOtro, setResultadoOtro,
+  resultadoRazones, setResultadoRazones, razonOtra, setRazonOtra,
+  teacherNotes, setTeacherNotes, paymentConfirmed,
+}: {
+  resultado: string; setResultado: (v: string) => void;
+  resultadoOtro: string; setResultadoOtro: (v: string) => void;
+  resultadoRazones: string; setResultadoRazones: (v: string) => void;
+  razonOtra: string; setRazonOtra: (v: string) => void;
+  teacherNotes: string; setTeacherNotes: (v: string) => void;
+  paymentConfirmed: boolean | null;
+}) {
+  const isPaid = paymentConfirmed === true || resultado === "Pagó";
+  const showReasons = resultado && resultado !== "Pagó" && !resultado.startsWith("Dijo \"pago mañana\"");
+
   return (
-    <div className="text-center py-6">
-      <div className="text-5xl">🎉</div>
-      <h2 className="mt-3 text-xl font-bold text-slate-900 dark:text-slate-50">{title}</h2>
-      <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">{body}</p>
-      <button
-        type="button"
-        onClick={() => window.close()}
-        className="mt-5 text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-      >
-        Cerrar pestaña
-      </button>
+    <div>
+      <StepTitle emoji="🏁" title="Resultado final"
+        hint="Registra el resultado de la clase y cualquier observación." />
+
+      {paymentConfirmed === true && (
+        <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-4 mb-4 text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+          El pago fue confirmado en la sección anterior. Solo agrega tus comentarios finales.
+        </div>
+      )}
+
+      {paymentConfirmed !== true && (
+        <Field label="Resultado" required>
+          <div className="space-y-2 mt-1">
+            {RESULTADO_OPTIONS.map(opt => (
+              <button key={opt} type="button" onClick={() => setResultado(opt)}
+                className={`w-full text-left rounded-xl px-4 py-3 text-sm font-medium transition border-2 ${
+                  resultado === opt
+                    ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+                    : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-emerald-300"
+                }`}>
+                {opt}
+              </button>
+            ))}
+            <button type="button" onClick={() => setResultado("otro")}
+              className={`w-full text-left rounded-xl px-4 py-3 text-sm font-medium transition border-2 ${
+                resultado === "otro"
+                  ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+                  : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-emerald-300"
+              }`}>
+              Otro (especificar)
+            </button>
+          </div>
+          {resultado === "otro" && (
+            <input type="text" value={resultadoOtro} onChange={e => setResultadoOtro(e.target.value)}
+              placeholder="Especifica el resultado"
+              className="input-text w-full mt-2" />
+          )}
+        </Field>
+      )}
+
+      {showReasons && (
+        <Field label="Razones específicas de no compra">
+          <ChipSelect options={RESULTADO_RAZONES_OPTIONS} value={resultadoRazones} onChange={setResultadoRazones} multi />
+          <input type="text" value={razonOtra} onChange={e => setRazonOtra(e.target.value)}
+            placeholder="Otra razón (especificar)"
+            className="input-text w-full mt-2" />
+        </Field>
+      )}
+
+      <Field label="Comentarios finales del profesor">
+        <textarea value={teacherNotes} onChange={e => setTeacherNotes(e.target.value)} rows={3}
+          placeholder="Lo que quieras dejar registrado: actitud del lead, observaciones, seguimiento sugerido..."
+          className="input-text w-full" />
+      </Field>
     </div>
   );
 }
@@ -1070,34 +1125,136 @@ function Field({ label, required, children }: { label: string; required?: boolea
   return (
     <label className="block mt-4">
       <span className="block text-sm font-medium text-slate-700 dark:text-slate-200">
-        {label}{required && <span className="text-rose-500">  *</span>}
+        {label}{required && <span className="text-rose-500"> *</span>}
       </span>
       <div className="mt-1">{children}</div>
     </label>
   );
 }
 
-function YesNoButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+function SuggestedPhrase({ text }: { text: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-xl px-4 py-3 text-sm font-semibold transition border-2 ${
-        active
-          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
-          : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-emerald-300"
-      }`}
-    >
-      {label}
-    </button>
+    <div className="rounded-xl bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 px-4 py-3 text-sm text-sky-900 dark:text-sky-100 italic leading-relaxed">
+      <span className="not-italic font-semibold text-sky-700 dark:text-sky-300 text-xs uppercase tracking-wider block mb-1">
+        Di al lead:
+      </span>
+      &ldquo;{text}&rdquo;
+    </div>
   );
 }
 
-// Fallback global para no depender de input-text del proyecto sin chequearlo.
-// (Si .input-text ya existe en globals.css el atributo no choca — Tailwind
-// solo añade clases si no chocan.)
-declare global { /* eslint-disable @typescript-eslint/no-empty-object-type */
-  // noop
+function ChipSelect({ options, value, onChange, multi }: {
+  options: string[]; value: string; onChange: (v: string) => void; multi?: boolean;
+}) {
+  const selected = multi ? value.split("||").filter(Boolean) : [value];
+  const toggle = (opt: string) => {
+    if (multi) {
+      const set = new Set(selected);
+      if (set.has(opt)) set.delete(opt); else set.add(opt);
+      onChange([...set].join("||"));
+    } else {
+      onChange(opt === value ? "" : opt);
+    }
+  };
+  return (
+    <div className="flex flex-wrap gap-2 mt-1">
+      {options.map(opt => (
+        <button key={opt} type="button" onClick={() => toggle(opt)}
+          className={`rounded-xl px-4 py-2.5 text-sm font-medium transition border-2 ${
+            selected.includes(opt)
+              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-emerald-300"
+          }`}>
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
 }
-// nada que exportar — los estilos van inline.
+
+function RadioGroup({ options, value, onChange }: {
+  options: string[]; value: string; onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-2 mt-2">
+      {options.map(opt => (
+        <button key={opt} type="button" onClick={() => onChange(opt)}
+          className={`w-full text-left rounded-xl px-4 py-3 text-sm font-medium transition border-2 ${
+            value === opt
+              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+              : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:border-emerald-300"
+          }`}>
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CheckboxItem({ label, checked, onChange }: {
+  label: string; checked: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 cursor-pointer hover:border-emerald-300 transition">
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
+        className="h-4 w-4 rounded border-slate-300 text-emerald-500 focus:ring-emerald-400" />
+      <span className="text-sm text-slate-700 dark:text-slate-200">{label}</span>
+    </label>
+  );
+}
+
+function DataRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 w-28 shrink-0">{label}</span>
+      <span className="text-sm text-slate-800 dark:text-slate-200">{value || "—"}</span>
+    </div>
+  );
+}
+
+function ObjectionTip({ tip }: { tip: string }) {
+  return (
+    <div className="mt-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+      <span className="font-semibold text-xs uppercase tracking-wider block mb-1">Guía de objeción:</span>
+      {tip}
+    </div>
+  );
+}
+
+function ErrorBar({ message }: { message: string }) {
+  return (
+    <div className="mt-4 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
+      {message}
+    </div>
+  );
+}
+
+function ProgressBar({ step, total }: { step: number; total: number }) {
+  return (
+    <div className="mt-4 flex items-center justify-center gap-1.5">
+      {Array.from({ length: total }, (_, i) => (
+        <span key={i}
+          className={`h-1.5 rounded-full transition-all ${
+            i === step ? "w-8 bg-emerald-500"
+              : i < step ? "w-2 bg-emerald-300"
+              : "w-2 bg-slate-300 dark:bg-slate-700"
+          }`} />
+      ))}
+    </div>
+  );
+}
+
+function FinalDone({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="text-center py-6">
+      <h2 className="mt-3 text-xl font-bold text-slate-900 dark:text-slate-50">{title}</h2>
+      <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 max-w-md mx-auto">{body}</p>
+      <button type="button" onClick={() => window.close()}
+        className="mt-5 text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+        Cerrar pestaña
+      </button>
+    </div>
+  );
+}
+
 export {};

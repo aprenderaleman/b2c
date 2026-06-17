@@ -39,9 +39,19 @@ export type ScriptRow = {
   chosen_pack:     PackId | null;
   payment_type:    PaymentType | null;
   closing_yes:     boolean | null;
-  final_outcome:   "attended" | "absent" | null;
+  final_outcome:   "attended" | "absent" | "converted" | null;
   final_marked_at: string | null;
   teacher_notes:   string | null;
+  // v2 columns (migration 068)
+  presentacion_checks: string | null;
+  mini_clase_checks:   string | null;
+  mini_clase_obs:      string | null;
+  cierre_q1:           string | null;
+  cierre_q2:           string | null;
+  cierre_q3:           string | null;
+  payment_confirmed:   boolean | null;
+  resultado:           string | null;
+  resultado_razones:   string | null;
 };
 
 export type ClassContext = {
@@ -151,7 +161,7 @@ export async function startOrLoadScript(
       class_id:   classId,
       lead_id:    leadId,
       teacher_id: teacherId,
-      current_step: 1,
+      current_step: 0,
     })
     .select("*")
     .single();
