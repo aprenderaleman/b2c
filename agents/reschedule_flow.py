@@ -74,6 +74,27 @@ _CANCEL_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Confirm = confirma asistencia a la clase de prueba (Gelfis 2026-06-17).
+# El copy de book-trial pide explicitamente "CONFIRMO". Detectamos esa
+# palabra exacta y variantes naturales ("confirmo", "confirmado",
+# "confirmar", "voy", "alli estare", "ahi estare", "ahi te veo", etc.).
+# Para evitar falsos positivos con "no confirmo" o "no voy", chequeamos
+# que no haya negacion delante.
+_CONFIRM_RE = re.compile(
+    r"\b(confirmo|confirmado|confirmada|confirmar|confirmacion|confirmación|"
+    r"alli\s+estare|allí\s+estaré|ahi\s+estare|ahí\s+estaré|"
+    r"ahi\s+te\s+veo|ahí\s+te\s+veo|"
+    r"voy\s+a\s+(ir|asistir|estar)|"
+    r"si\s+(voy|asisto|estare|estaré)|"
+    r"bestätigt|bestaetigt|bestätige|bestaetige)\b",
+    re.IGNORECASE,
+)
+_NEGATION_BEFORE_CONFIRM_RE = re.compile(
+    r"\b(no|nicht|nein|kein)\s+\w*\s*(confirmo|confirmado|voy|asisto|"
+    r"estare|estaré|bestätig)",
+    re.IGNORECASE,
+)
+
 
 def detect_reschedule_intent(text: str) -> bool:
     return bool(_RESCHEDULE_RE.search(text or ""))
@@ -81,6 +102,13 @@ def detect_reschedule_intent(text: str) -> bool:
 
 def detect_cancel_intent(text: str) -> bool:
     return bool(_CANCEL_RE.search(text or ""))
+
+
+def detect_confirm_intent(text: str) -> bool:
+    t = text or ""
+    if _NEGATION_BEFORE_CONFIRM_RE.search(t):
+        return False
+    return bool(_CONFIRM_RE.search(t))
 
 
 # ─────────────────────────────────────────────────────────
@@ -185,6 +213,42 @@ def _msg_cancel(language: str, name: str) -> str:
     )
 
 
+def _msg_confirm_ack(language: str, name: str) -> str:
+    """Ack breve cuando el lead dice CONFIRMO. Gelfis 2026-06-17."""
+    if language == "de":
+        return (
+            f"Perfekt {name}! 🙌\n\n"
+            "Ich freue mich auf unsere Stunde. Du bekommst kurz vorher "
+            "noch einen Reminder mit dem Link.\n\n"
+            "Bis bald!\n\n"
+            "— Stiv · Aprender-Aleman.de"
+        )
+    return (
+        f"¡Perfecto {name}! 🙌\n\n"
+        "Cuento contigo. Te mando un recordatorio con el enlace antes "
+        "de la clase.\n\n"
+        "¡Nos vemos!\n\n"
+        "— Stiv · Aprender-Aleman.de"
+    )
+
+
+def _persist_confirmation(lead_id: str) -> None:
+    """Guarda timestamp de confirmacion en leads.meta.trial_confirmed_at
+    para tracking interno. Reuso del patron de awaiting_payment_..."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT meta FROM leads WHERE id = %s", (lead_id,))
+        row = cur.fetchone()
+    existing = (row[0] if row and row[0] else {}) or {}
+    if not isinstance(existing, dict):
+        existing = {}
+    existing["trial_confirmed_at"] = datetime.utcnow().isoformat() + "Z"
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE leads SET meta = %s WHERE id = %s",
+            (json.dumps(existing), lead_id),
+        )
+
+
 def _msg_followup_24h(language: str, name: str) -> str:
     """24h después de mandar el link y sin rebook → recordatorio."""
     if language == "de":
@@ -238,9 +302,10 @@ def handle_inbound(lead: dict, text: str) -> bool:
         # / etc., agent_4 lo manejará. No volvemos a saturar con el link.
         return False
 
+    is_confirm = detect_confirm_intent(text)
     is_reschedule = detect_reschedule_intent(text)
     is_cancel = detect_cancel_intent(text)
-    if not is_reschedule and not is_cancel:
+    if not is_confirm and not is_reschedule and not is_cancel:
         return False
 
     trial = _get_active_trial(lead_id)
@@ -248,12 +313,42 @@ def handle_inbound(lead: dict, text: str) -> bool:
         # No hay trial pendiente → no es nuestra responsabilidad.
         return False
 
+    if is_confirm:
+        return _send_confirm_ack(lead, trial)
     return _send_link(lead, trial, intent="cancel" if is_cancel else "reschedule")
 
 
 # ─────────────────────────────────────────────────────────
 # Acciones
 # ─────────────────────────────────────────────────────────
+
+def _send_confirm_ack(lead: dict, trial: dict) -> bool:
+    """Lead respondió CONFIRMO al trial confirmation. Mandamos ack breve,
+    marcamos confirmed_at en leads.meta y avisamos al timeline. Gelfis
+    2026-06-17."""
+    lang = lead.get("language") or "es"
+    name = (lead.get("name") or "").split()[0] or (lead.get("name") or "")
+
+    text = _msg_confirm_ack(lang, name)
+    res = send_approved(lead, text, advance_followup=False)
+    if not res.success:
+        log.warning("[confirm] ack send blocked/failed for %s: %s", lead["id"], res.reason)
+        return True   # mantenemos control (no caemos al flujo normal)
+
+    try:
+        _persist_confirmation(lead["id"])
+    except Exception:                                       # noqa: BLE001
+        log.exception("[confirm] could not persist trial_confirmed_at")
+
+    log_timeline(
+        lead["id"],
+        type="agent_note",
+        author="system",
+        content="✅ Lead confirmó asistencia al trial",
+        metadata={"class_id": trial["id"], "kind": "trial_confirmed"},
+    )
+    return True
+
 
 def _send_link(lead: dict, trial: dict, *, intent: str) -> bool:
     """Envía el mensaje breve con el link self-serve y registra state."""

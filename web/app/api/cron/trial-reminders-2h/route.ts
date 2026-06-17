@@ -94,9 +94,11 @@ async function run(req: Request) {
       classId: r.id, leadId: lead.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
     });
 
+    // Copy 2026-06-17 (Gelfis): "¿Estás listo/a?" en vez de "¿Me confirmas?"
+    // — ya hubo CONFIRMO en T+0, esto es solo check-in cercano + tips.
     const text = lead.language === "de"
-      ? `In 2 Stunden hast du deine Deutsch-Stunde.\n\nIch empfehle dir:\n- Computer mit Kamera und Mikrofon bereit\n- Ruhiger Ort\n\nDirektlink: ${joinUrl}`
-      : `En 2 horas tu clase de alemán.\n\nTe recomiendo:\n- Tener computador con cámara y micrófono\n- Lugar tranquilo\n\nLink directo: ${joinUrl}`;
+      ? `In 2 Stunden beginnt deine Deutsch-Stunde.\n\nIch empfehle dir:\n- Computer mit Kamera und Mikrofon bereit\n- Ruhiger Ort\n\nBist du bereit?\n\n🔗 Direktlink: ${joinUrl}`
+      : `En 2 horas inicia tu clase de alemán.\n\nTe recomiendo:\n- Tener computador con cámara y micrófono\n- Lugar tranquilo\n\n¿Estás listo/a?\n\n🔗 Link directo: ${joinUrl}`;
 
     const res = await sendWhatsappText(lead.whatsapp_normalized, text);
 

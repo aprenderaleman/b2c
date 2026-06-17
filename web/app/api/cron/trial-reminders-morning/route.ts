@@ -184,9 +184,11 @@ async function run(req: Request) {
         lead.language === "de" ? "de-DE" : "es-ES",
         { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" },
       );
+      // Copy 2026-06-17 (Gelfis): incluye link al aula (antes faltaba —
+      // caso John 2026-06-16: solo vio este WA matutino sin enlace).
       const waText = lead.language === "de"
-        ? `Guten Morgen ${leadFirst}! Heute ist der Tag.\n\nDeutsch-Stunde um ${timeLabel}.\n\nWir sehen uns endlich heute 😊`
-        : `¡Buenos días ${leadFirst}! Hoy es el día.\n\nClase de alemán a las ${timeLabel}.\n\nWir sehen uns endlich heute 😊`;
+        ? `Guten Morgen ${leadFirst}! Heute ist der Tag.\n\nDeutsch-Stunde um ${timeLabel}.\n\n🔗 Hier kommst du rein:\n${leadJoinUrl}\n\nWir sehen uns endlich heute 😊`
+        : `¡Buenos días ${leadFirst}! Hoy es el día.\n\nClase de alemán a las ${timeLabel}.\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}\n\nWir sehen uns endlich heute 😊`;
       const wa = await sendWhatsappText(lead.whatsapp_normalized, waText);
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
       else console.error(`[trial-reminders-morning] lead WA failed for ${r.id}: ${wa.reason}`);

@@ -140,9 +140,12 @@ async function run(req: Request) {
         lead.language === "de" ? "de-DE" : "es-ES",
         { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" },
       );
+      // Copy 2026-06-17 (Gelfis): minimalista — sin pedir confirmacion
+      // ya hubo CONFIRMO/CAMBIAR/CANCELAR en T+0, sin mencionar al profesor
+      // (politica Gelfis 2026-04-30). Solo recordatorio + link.
       const waText = lead.language === "de"
-        ? `Hallo ${leadFirst}!\n\nMorgen ${dayLabel} um ${timeLabel} ist deine Stunde mit ${teacherFirst}.\n\nBestätige bitte ein letztes Mal mit einem "ja", dass du bereit sein wirst. Ich habe andere Schüler auf der Warteliste für diesen Slot.\n\nLink Klassenzimmer: ${leadJoinUrl}`
-        : `¡Hola ${leadFirst}!\n\nMañana ${dayLabel} a las ${timeLabel} es tu clase con ${teacherFirst}.\n\nConfirma una última vez con un "sí" que estarás listo. Tengo otros leads en espera para ese slot.\n\nLink aula: ${leadJoinUrl}`;
+        ? `RECORDATORIO:\n\nHallo ${leadFirst}!\nMorgen ${dayLabel} um ${timeLabel} ist deine Deutsch-Stunde.\n\n🔗 Hier kommst du rein:\n${leadJoinUrl}`
+        : `RECORDATORIO:\n\n¡Hola ${leadFirst}!\nMañana ${dayLabel} a las ${timeLabel} es tu clase de alemán.\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}`;
       const wa = await sendWhatsappText(lead.whatsapp_normalized, waText);
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
       else console.error(`[trial-reminders-24h] lead WA failed for ${r.id}: ${wa.reason}`);
