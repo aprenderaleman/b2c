@@ -411,6 +411,16 @@ def handle_incoming_message(
     if _has_phrase(text_norm, HUMAN_WORDS[lang] + HUMAN_WORDS[other_lang]):
         return _handle_human_request(lead, wa)
 
+    # ABSENT-FOLLOWUP POSITIVE REPLY — el lead no asistió al trial y la
+    # cadena tick_absent_followups ya le mandó "¿mantienes el interés?"
+    # (FU1) o variantes (FU2/3). Si responde algo positivo ("sí", "claro",
+    # "ja", "me interesa"), le mandamos el link self-serve /agendar/cuando
+    # y paramos la cadena absent_followup (Gelfis 2026-06-17, caso Jhon).
+    if status in ("trial_absent", "absent_followup_1",
+                  "absent_followup_2", "absent_followup_3"):
+        if _looks_positive(text_norm, lang):
+            return _handle_absent_followup_positive(lead, wa)
+
     # TRIAL ALREADY BOOKED — if the lead already has a scheduled trial,
     # NEVER push them to book again. Recognise the state and respond with
     # the booking details, plus a soft prompt asking what they need. This
@@ -1084,6 +1094,83 @@ def _handle_human_request(lead: dict, wa: WhatsAppService | None) -> HandleResul
         metadata={"alert_gelfis": True, "silent": True},
     )
     return HandleResult("human_request", sent=False)
+
+
+# ──────────────────────────────────────────────────────────
+# ABSENT-FOLLOWUP positive reply (Gelfis 2026-06-17, caso Jhon)
+# ──────────────────────────────────────────────────────────
+
+# "Sí" puro, "si", "claro", "vale", "me interesa", "quiero", "ja",
+# "natürlich", "klar", "ja gerne", "of course"... y variantes.
+# Limitado al inicio del mensaje (^) o a una respuesta de hasta 30 chars
+# para no matchear frases largas donde "si" es condicional ("si me
+# das tiempo...").
+_POSITIVE_RE_ES = re.compile(
+    r"^(s[ií]+|claro|vale|me\s+interesa|quiero|por\s+supuesto|"
+    r"por\s+favor|estoy\s+interesad[oa]|me\s+gustar[ií]a)"
+    r"[\s\.\!\,\?\)\-:]*$",
+    re.IGNORECASE,
+)
+_POSITIVE_RE_DE = re.compile(
+    r"^(ja+|nat[üu]rlich|klar|gern(e)?|sicher|"
+    r"ich\s+(habe\s+)?interesse|ich\s+m[öo]chte)"
+    r"[\s\.\!\,\?\)\-:]*$",
+    re.IGNORECASE,
+)
+
+
+def _looks_positive(text_norm: str, lang: str) -> bool:
+    """True si el lead respondió algo positivo CORTO.
+    Robusto contra falsos positivos (no matchea 'si me das tiempo'
+    porque exige fin de mensaje tras la palabra)."""
+    if not text_norm:
+        return False
+    # Limita a respuestas breves — frases largas suelen tener matices.
+    if len(text_norm) > 60:
+        return False
+    pat = _POSITIVE_RE_DE if lang == "de" else _POSITIVE_RE_ES
+    return bool(pat.match(text_norm.strip()))
+
+
+def _handle_absent_followup_positive(
+    lead: dict, wa: WhatsAppService | None,
+) -> HandleResult:
+    """Lead que no asistió respondió afirmativamente al "¿mantienes el
+    interés?". Le mandamos el link self-serve y paramos la cadena
+    absent_followup moviéndolo a in_conversation."""
+    lang = lead.get("language", "es")
+    name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
+    book_url = f"{os.environ.get('PLATFORM_URL', 'https://b2c.aprender-aleman.de').rstrip('/')}/agendar/cuando"
+
+    if lang == "de":
+        body = (
+            f"Super {name}! 🙌\n\n"
+            f"Buch deine Deutsch-Probestunde in 3 Minuten: {book_url}\n\n"
+            f"Sag mir Bescheid, wenn du gebucht hast.\n\n"
+            f"— Stiv · Aprender-Aleman.de"
+        )
+    else:
+        body = (
+            f"¡Genial {name}! 🙌\n\n"
+            f"Agenda tu clase de alemán en 3 minutos: {book_url}\n\n"
+            f"Avísame cuando agendes.\n\n"
+            f"— Stiv · Aprender-Aleman.de"
+        )
+
+    # Para la cadena absent_followup_* moviendo a in_conversation.
+    # next_contact_date queda como esté — si el lead no agenda en
+    # ~unos días, agent_0 puede volver a tocarlo desde el flow normal.
+    update_status(lead["id"], "in_conversation", author="agent_4")
+    log_timeline(
+        lead["id"],
+        type="agent_note",
+        author="agent_4",
+        content="✅ Lead respondió SI a absent_followup — link self-serve enviado, cadena absent_* parada",
+        metadata={"kind": "absent_followup_positive_reply", "intent": "rebook"},
+    )
+
+    result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
+    return HandleResult("absent_followup_positive", sent=result.success, message_sent=body)
 
 
 def _handle_negative(lead: dict, wa: WhatsAppService | None) -> HandleResult:
