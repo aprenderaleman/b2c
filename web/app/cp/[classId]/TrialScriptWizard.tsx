@@ -613,18 +613,6 @@ function Section1Presentacion({
       <StepTitle emoji="👋" title="Presentación (0-2 min)"
         hint="Genera confianza con el lead. Sigue esta guía y marca los checkboxes cuando completes cada punto." />
       <SuggestedPhrase text={`¡Hola ${firstName}! Bienvenido/a a tu clase de prueba. Soy [tu nombre] y seré tu profesor/a hoy. Antes de empezar con la clase, me gustaría conocerte un poco mejor para poder adaptarla a ti.`} />
-      <div className="mt-4 space-y-2">
-        {PRESENTACION_CHECKS.map(label => (
-          <CheckboxItem key={label} label={label}
-            checked={checks.includes(label)}
-            onChange={on => {
-              const set = new Set(checks.split("||").filter(Boolean));
-              if (on) set.add(label); else set.delete(label);
-              setChecks([...set].join("||"));
-            }}
-          />
-        ))}
-      </div>
     </div>
   );
 }
@@ -735,25 +723,6 @@ function Section3MiniClase({
         ))}
       </div>
 
-      <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mt-5 mb-2">Post mini-clase:</p>
-      <div className="space-y-2">
-        {MINI_CLASE_CHECKS.map(label => (
-          <CheckboxItem key={label} label={label}
-            checked={checks.includes(label)}
-            onChange={on => {
-              const set = new Set(checks.split("||").filter(Boolean));
-              if (on) set.add(label); else set.delete(label);
-              setChecks([...set].join("||"));
-            }}
-          />
-        ))}
-      </div>
-
-      <Field label="Observaciones de la clase">
-        <textarea value={obs} onChange={e => setObs(e.target.value)} rows={3}
-          placeholder="¿Cómo fue la interacción? ¿Qué tan cómodo se sintió el lead? ¿Algo que notar?"
-          className="input-text w-full" />
-      </Field>
     </div>
   );
 }
