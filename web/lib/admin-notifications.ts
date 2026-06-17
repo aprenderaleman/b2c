@@ -50,7 +50,7 @@ export async function createAdminNotification(input: {
   if (dedupeHours) {
     const since = new Date(Date.now() - dedupeHours * 3600_000).toISOString();
     const { data: existing } = await sb
-      .from("notifications")
+      .from("admin_notifications")
       .select("id")
       .eq("type", input.type)
       .is("read_at", null)
@@ -59,7 +59,7 @@ export async function createAdminNotification(input: {
     if (existing && existing.length > 0) return null;
   }
   const { data, error } = await sb
-    .from("notifications")
+    .from("admin_notifications")
     .insert({
       type:       input.type,
       severity:   input.severity,
@@ -81,7 +81,7 @@ export async function createAdminNotification(input: {
 export async function listUnreadAdminNotifications(limit = 20): Promise<AdminNotification[]> {
   const sb = supabaseAdmin();
   const { data } = await sb
-    .from("notifications")
+    .from("admin_notifications")
     .select("*")
     .is("read_at", null)
     .order("created_at", { ascending: false })
@@ -92,7 +92,7 @@ export async function listUnreadAdminNotifications(limit = 20): Promise<AdminNot
 export async function listRecentAdminNotifications(limit = 50): Promise<AdminNotification[]> {
   const sb = supabaseAdmin();
   const { data } = await sb
-    .from("notifications")
+    .from("admin_notifications")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -103,7 +103,7 @@ export async function markAdminNotificationsRead(ids: string[]): Promise<number>
   if (ids.length === 0) return 0;
   const sb = supabaseAdmin();
   const { count } = await sb
-    .from("notifications")
+    .from("admin_notifications")
     .update({ read_at: new Date().toISOString() }, { count: "exact" })
     .in("id", ids)
     .is("read_at", null);
@@ -113,7 +113,7 @@ export async function markAdminNotificationsRead(ids: string[]): Promise<number>
 export async function markAllAdminNotificationsRead(): Promise<number> {
   const sb = supabaseAdmin();
   const { count } = await sb
-    .from("notifications")
+    .from("admin_notifications")
     .update({ read_at: new Date().toISOString() }, { count: "exact" })
     .is("read_at", null);
   return count ?? 0;
@@ -122,7 +122,7 @@ export async function markAllAdminNotificationsRead(): Promise<number> {
 export async function adminUnreadCount(): Promise<number> {
   const sb = supabaseAdmin();
   const { count } = await sb
-    .from("notifications")
+    .from("admin_notifications")
     .select("id", { count: "exact", head: true })
     .is("read_at", null);
   return count ?? 0;
