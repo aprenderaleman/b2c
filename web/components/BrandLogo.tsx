@@ -18,9 +18,16 @@ import Link from "next/link";
  *   - size: 'sm' (mobile/sidebar compacto) | 'md' (default) | 'lg' (hero)
  *   - href: target del Link (default '/')
  *   - showWordmark: false para variante solo-icono (sidebar admin colapsado)
+ *   - theme: 'light' (default — texto oscuro sobre fondo claro) |
+ *            'dark' (texto blanco sobre fondo oscuro — sidebar admin).
+ *            Antes usábamos `dark:text-white` Tailwind variant, pero esa
+ *            depende del system color-scheme; landings con fondo claro
+ *            forzado mostraban texto blanco invisible si el usuario tenía
+ *            el SO en dark mode. Explicit > automático.
  *   - ariaLabel: accesibilidad
  */
-type Size = "sm" | "md" | "lg";
+type Size  = "sm" | "md" | "lg";
+type Theme = "light" | "dark";
 
 const SIZE_MAP: Record<Size, { img: number; text: string; gap: string }> = {
   sm: { img: 28, text: "text-[14px]",                gap: "gap-2"   },
@@ -32,16 +39,19 @@ export function BrandLogo({
   size = "md",
   href = "/",
   showWordmark = true,
+  theme = "light",
   ariaLabel = "Aprender-Aleman.de",
   className = "",
 }: {
   size?:         Size;
   href?:         string;
   showWordmark?: boolean;
+  theme?:        Theme;
   ariaLabel?:    string;
   className?:    string;
 }) {
   const s = SIZE_MAP[size];
+  const wordmarkColor = theme === "dark" ? "text-white" : "text-slate-900";
   return (
     <Link
       href={href}
@@ -58,7 +68,7 @@ export function BrandLogo({
         style={{ width: s.img, height: s.img }}
       />
       {showWordmark && (
-        <span className={`font-extrabold tracking-tight text-slate-900 dark:text-white ${s.text}`}>
+        <span className={`font-extrabold tracking-tight ${wordmarkColor} ${s.text}`}>
           Aprender-Aleman<span className="text-warm">.de</span>
         </span>
       )}

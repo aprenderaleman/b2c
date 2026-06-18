@@ -16,11 +16,14 @@ export function Logo({
 }) {
   // Mapeo aproximado del tamaño numérico legacy al sistema sm/md/lg.
   const sized = size <= 30 ? "sm" : size <= 40 ? "md" : "lg";
+  // El sidebar admin tiene fondo oscuro → texto blanco. Sin esto
+  // mostraba slate-900 (oscuro) sobre fondo oscuro → invisible.
   return (
     <BrandLogo
       size={sized}
       href={href}
       showWordmark={variant === "full"}
+      theme="dark"
     />
   );
 }
