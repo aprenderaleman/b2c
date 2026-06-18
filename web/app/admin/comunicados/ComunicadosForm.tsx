@@ -151,8 +151,22 @@ export function ComunicadosForm({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ audience_filter: audienceFilter }),
         });
-        const data = await res.json();
-        if (!res.ok) { setPrevErr(data?.message ?? data?.error ?? "Error en la previsualización."); return; }
+        const text = await res.text();
+        let data: Record<string, unknown> | null = null;
+        try { data = JSON.parse(text) as Record<string, unknown>; } catch { /* HTML or empty */ }
+
+        if (res.status === 401) {
+          setPrevErr("Sesión expirada — recarga la página e inicia sesión de nuevo.");
+          return;
+        }
+        if (!data) {
+          setPrevErr(`Error del servidor (HTTP ${res.status}). Recarga la página e intenta de nuevo.`);
+          return;
+        }
+        if (!res.ok) {
+          setPrevErr((data.message ?? data.error ?? "Error en la previsualización.") as string);
+          return;
+        }
         setPreview(data.recipients as Recipient[]);
       } catch (e) {
         setPrevErr(e instanceof Error ? e.message : "Error de red.");
@@ -257,8 +271,13 @@ export function ComunicadosForm({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         });
-        const data = await res.json();
-        if (!res.ok) { setSendErr(data?.message ?? data?.error ?? "Error al enviar."); return; }
+        const text = await res.text();
+        let data: Record<string, unknown> | null = null;
+        try { data = JSON.parse(text) as Record<string, unknown>; } catch { /* HTML or empty */ }
+
+        if (res.status === 401) { setSendErr("Sesión expirada — recarga la página e inicia sesión de nuevo."); return; }
+        if (!data) { setSendErr(`Error del servidor (HTTP ${res.status}). Recarga la página e intenta de nuevo.`); return; }
+        if (!res.ok) { setSendErr((data.message ?? data.error ?? "Error al enviar.") as string); return; }
         setSendResult(data as SendResponse);
         // refresh history panel
         window.dispatchEvent(new CustomEvent("comunicados:sent"));
