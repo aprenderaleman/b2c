@@ -152,3 +152,82 @@ export function detectBrowserTimezone(): string | null {
     return null;
   }
 }
+
+/**
+ * Mapa inverso: prefijo país → TZ representativa (la más poblada).
+ *
+ * Por qué existe: cuando el navegador del lead reporta TZ raro (UTC,
+ * Europe/Berlin por VPN, vacío en in-app browsers), todavía podemos
+ * inferir su zona horaria real desde el prefijo que tecleó en el campo
+ * WhatsApp. Caso real Martin (2026-06-17): peruano (+51) que vio "09:30"
+ * pensando que era su hora local — eran las 02:30 AM Lima. El browser
+ * no detectó America/Lima pero el +51 lo delataba.
+ *
+ * Países con múltiples TZs (USA, Rusia, México partes): elegimos la
+ * TZ de la región MÁS POBLADA. Tradeoff aceptado: un mexicano en Tijuana
+ * verá su hora calculada como Mexico_City (Tijuana es PST, CDMX es CST,
+ * 2h diferencia). Mejor que mostrar todo en Berlin.
+ *
+ * Si el prefijo no está mapeado o coincide con DACH (+49/+43/+41),
+ * devuelve null — usar TZ del navegador o Berlin como default.
+ */
+const PREFIX_TO_TIMEZONE: Record<string, string> = {
+  // LATAM hispanohablante
+  "+52":  "America/Mexico_City",
+  "+54":  "America/Argentina/Buenos_Aires",
+  "+57":  "America/Bogota",
+  "+51":  "America/Lima",
+  "+56":  "America/Santiago",
+  "+58":  "America/Caracas",
+  "+591": "America/La_Paz",
+  "+595": "America/Asuncion",
+  "+598": "America/Montevideo",
+  "+593": "America/Guayaquil",
+  "+506": "America/Costa_Rica",
+  "+507": "America/Panama",
+  "+503": "America/El_Salvador",
+  "+504": "America/Tegucigalpa",
+  "+505": "America/Managua",
+  "+502": "America/Guatemala",
+  "+53":  "America/Havana",
+  // España (UTC+1/+2 igual que Berlin, no necesita dual-TZ — pero
+  // Canarias es UTC+0/+1 → 1h menos. Para simplificar usamos
+  // Europe/Madrid; en práctica el dual-TZ no se activará porque
+  // coincide con Berlin en hora estándar la mayor parte del año).
+  "+34":  "Europe/Madrid",
+  // Brasil — múltiples TZs, usamos Sao_Paulo (mayoría de la población)
+  "+55":  "America/Sao_Paulo",
+  // DACH: deliberadamente sin entry — son los defaults, no aplica dual-TZ
+};
+
+export function timezoneFromPrefix(prefix: string | null | undefined): string | null {
+  if (!prefix) return null;
+  const normalized = prefix.startsWith("+") ? prefix : `+${prefix}`;
+  return PREFIX_TO_TIMEZONE[normalized] ?? null;
+}
+
+/**
+ * Decide la TZ "efectiva" del lead combinando 2 señales:
+ *   1. TZ del navegador (si != Berlin/UTC/null)
+ *   2. TZ inferida del prefijo WhatsApp (si != DACH)
+ *
+ * El prefijo gana sobre el navegador si el navegador devolvió algo no
+ * útil (UTC, Berlin por VPN, etc). Si ninguna señal apunta a no-DACH,
+ * devuelve null → el caller usa Berlin como default y NO muestra dual-TZ.
+ */
+export function effectiveLeadTimezone(args: {
+  browserTimezone: string | null;
+  whatsappPrefix:  string | null;
+}): string | null {
+  const fromBrowser = args.browserTimezone;
+  const fromPrefix  = timezoneFromPrefix(args.whatsappPrefix);
+  // Browser TZ útil = existe, no es Berlin, no es UTC genérico
+  const browserUseful = !!fromBrowser
+    && fromBrowser !== "Europe/Berlin"
+    && fromBrowser !== "UTC"
+    && fromBrowser !== "Etc/UTC";
+  if (browserUseful) return fromBrowser;
+  // Fallback al prefijo si revela una TZ no-DACH
+  if (fromPrefix && fromPrefix !== "Europe/Berlin") return fromPrefix;
+  return null;
+}

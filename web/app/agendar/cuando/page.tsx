@@ -11,7 +11,7 @@ import { useLang } from "@/lib/lang-context";
 import { normalizePhone, resolvePhone } from "@/lib/phone";
 import { combineE164 } from "@/components/diagnostico/DiagnosticoFunnel";
 import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
-import { detectBrowserTimezone, detectCountryFromBrowser } from "@/lib/timezone-country";
+import { detectBrowserTimezone, detectCountryFromBrowser, effectiveLeadTimezone } from "@/lib/timezone-country";
 import { captureAttributionFromUrl, readAttribution, clearAttribution } from "@/lib/ads-attribution";
 
 /**
@@ -94,16 +94,27 @@ function StepCuandoInner() {
   // su hora local).
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
 
-  // TZ del lead — para mostrar dual-TZ en slots y agrupar días.
-  const [leadTimezone, setLeadTimezone] = useState<string | null>(null);
-  useEffect(() => { setLeadTimezone(detectBrowserTimezone()); }, []);
-  const displayTz = leadTimezone ?? "Europe/Berlin";
-  const showDualTz = !!leadTimezone && leadTimezone !== "Europe/Berlin";
+  // TZ del navegador (detectada al montar). Puede ser engañosa: VPN,
+  // in-app browsers, Brave/Firefox con privacidad agresiva → null,
+  // UTC o Berlin. Por eso la combinamos con el prefijo WhatsApp más
+  // abajo en `leadTimezone`.
+  const [browserTz, setBrowserTz] = useState<string | null>(null);
+  useEffect(() => { setBrowserTz(detectBrowserTimezone()); }, []);
 
   // Form inline (atajo desde landing). Se inicializa con auto-detect.
   const [form, setForm] = useState({
     name: "", email: "", whatsapp: "", countryCode: "+49",
   });
+
+  // TZ efectiva del lead: combina browser + prefijo WA. Si el lead
+  // tecleó "+51", incluso si el navegador miente con Berlin/UTC, sabemos
+  // que está en Perú y activamos dual-TZ. Caso Martin 2026-06-17.
+  const leadTimezone = effectiveLeadTimezone({
+    browserTimezone: browserTz,
+    whatsappPrefix:  form.countryCode,
+  });
+  const displayTz = leadTimezone ?? "Europe/Berlin";
+  const showDualTz = !!leadTimezone && leadTimezone !== "Europe/Berlin";
   // Placeholder del input WhatsApp — número de ejemplo del país detectado.
   const [phonePlaceholder, setPhonePlaceholder] = useState("15253409644");
   useEffect(() => {
