@@ -79,6 +79,7 @@ export type AttendedOptions = {
   objective:   string;      // free-text — lo que el lead nos contó en clase
   packId:      PackId;
   paymentType: PaymentType; // "single" (pago único) | "flexible" (mensualidades)
+  nivel?:      string;      // nivel del pack (ej. "A1", "B1") — para el copy del WA
 };
 
 export async function markTrialAttendedAwaitingConversion(
@@ -236,34 +237,27 @@ export async function markTrialAttendedAwaitingConversion(
     // Copy fijo aprobado por Gelfis. NO modificar el wording sin pedirle
     // antes — el equipo lo usa palabra por palabra.
     // Copy Mensaje 1 — aprobado por Gelfis 08/06.
+    const nivelLabel = opts.nivel ? ` · Nivel ${opts.nivel}` : "";
     text = lead.language === "de"
       ? [
           `Hallo ${firstName}! 😊`,
           ``,
-          `Es war mir eine Freude, dich heute in der Probestunde dabei zu haben — schön, dass es dir gefallen hat.`,
-          ``,
-          `Basierend auf deinem Ziel (${opts.objective}) passt das Paket ${packName} am besten zu dir.`,
-          ``,
-          `Hier dein Anmeldelink:`,
+          `Schön, dass du den Schritt machst! Hier ist dein Anmeldelink für das ${packName}${nivelLabel}:`,
           `👉 ${packLink || "(Ich schicke dir den Link gleich nach.)"}`,
           ``,
-          `Sag mir Bescheid, sobald du die Zahlung abgeschlossen hast. Bei Fragen bin ich da.`,
+          `Es dauert nur 5 Minuten. Sag mir Bescheid, sobald du fertig bist. 😊`,
           ``,
-          `Gelfis | Aprender-Aleman.de`,
+          `Stiv | Aprender-Aleman.de`,
         ].join("\n")
       : [
           `¡Hola ${firstName}! 😊`,
           ``,
-          `Ha sido un placer tenerte en la clase de prueba de hoy — qué bueno que la hayas disfrutado.`,
-          ``,
-          `Según tu objetivo (${opts.objective}), el pack que mejor se adapta a ti es el ${packName}.`,
-          ``,
-          `Aquí tienes el enlace para formalizar tu inscripción:`,
+          `Me alegra que hayas decidido dar el paso. Aquí tienes el enlace para formalizar tu inscripción en el ${packName}${nivelLabel}:`,
           `👉 ${packLink || "(Te paso el enlace en breve.)"}`,
           ``,
-          `Avísame cuando hayas realizado el pago. Cualquier duda, aquí estoy.`,
+          `Solo tardará 5 minutos. Avísame cuando lo hayas completado. 😊`,
           ``,
-          `Gelfis | Aprender-Aleman.de`,
+          `Stiv | Aprender-Aleman.de`,
         ].join("\n");
     }  // fin del else del template-override
   } else {
@@ -337,6 +331,142 @@ export async function markTrialAttendedAwaitingConversion(
         metadata: { kind: "post_trial_followup", channel: "email" },
       });
     }
+  }
+}
+
+/**
+ * Flujo 2: lead asistió pero NO le enviamos enlace de pago.
+ * Mandamos un mensaje motivacional y programamos la misma cadena
+ * de follow-ups del cron post-trial-followups (usa el mismo flag
+ * awaiting_payment_confirmation_since).
+ */
+export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
+  const sb = supabaseAdmin();
+  const { data: leadRow } = await sb
+    .from("leads")
+    .select("name, language, whatsapp_normalized, email")
+    .eq("id", leadId)
+    .maybeSingle();
+  const lead = (leadRow ?? null) as {
+    name: string | null; language: "es" | "de" | null;
+    whatsapp_normalized: string | null; email: string | null;
+  } | null;
+
+  const followupAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: metaRow } = await sb
+    .from("leads")
+    .select("meta")
+    .eq("id", leadId)
+    .maybeSingle();
+  const existingMeta = (metaRow?.meta && typeof metaRow.meta === "object") ? metaRow.meta as Record<string, unknown> : {};
+
+  await sb
+    .from("leads")
+    .update({
+      status: "trial_attended",
+      trial_attended_at: new Date().toISOString(),
+      next_contact_date: followupAt,
+      meta: {
+        ...existingMeta,
+        [AWAITING_PAYMENT_KEY]: new Date().toISOString(),
+        post_trial_flow: "no_link",
+      },
+    })
+    .eq("id", leadId);
+
+  try {
+    const phone = lead?.whatsapp_normalized ?? null;
+    if (phone) {
+      const { error: cancelErr, count } = await sb
+        .from("outbound_queue")
+        .update({
+          status: "failed_permanent",
+          last_error: "Auto-cancelado: lead marcado attended (no-link); mensaje obsoleto",
+          updated_at: new Date().toISOString(),
+        }, { count: "exact" })
+        .eq("phone_e164", phone)
+        .eq("status", "queued")
+        .neq("kind", "post_trial_followup");
+      if (cancelErr) {
+        console.warn(`[markTrialAttendedNoLink] no pude cancelar queued de ${phone}: ${cancelErr.message}`);
+      } else if ((count ?? 0) > 0) {
+        console.log(`[markTrialAttendedNoLink] cancelados ${count} mensajes obsoletos en cola para ${phone}`);
+      }
+    }
+  } catch (e) {
+    console.warn("[markTrialAttendedNoLink] cleanup queue exception:", e instanceof Error ? e.message : e);
+  }
+
+  await sb.from("lead_timeline").insert({
+    lead_id: leadId,
+    type: "status_change",
+    author: "gelfis",
+    content: "Lead attended trial (no payment link sent). Motivational message sent. Follow-up chain active. Escalate to needs_human on any reply.",
+    metadata: { flow: "no_link", awaiting_payment: true },
+  });
+
+  try {
+    const trial = await getLeadTrialTeacher(leadId);
+    if (trial) {
+      const paid = await payTrialBase({
+        classId:   trial.classId,
+        teacherId: trial.teacherId,
+      });
+      if (paid !== null) {
+        await sb.from("lead_timeline").insert({
+          lead_id: leadId,
+          type:    "agent_note",
+          author:  "system",
+          content: `💰 Pagado 15€ base de trial al profesor (class ${trial.classId.slice(0,8)})`,
+          metadata: { kind: "trial_base_paid", class_id: trial.classId, teacher_id: trial.teacherId, amount_cents: paid },
+        });
+      }
+    }
+  } catch (e) {
+    console.error("[markTrialAttendedNoLink] payTrialBase failed:", e instanceof Error ? e.message : e);
+  }
+
+  if (!lead?.whatsapp_normalized) return;
+  const firstName = (lead.name || "").split(/\s+/)[0] || "";
+
+  const text = lead.language === "de"
+    ? [
+        `Hallo ${firstName}! 😊`,
+        ``,
+        `Es war mir eine große Freude, dich heute in der Probestunde dabei zu haben. Du hast heute gezeigt, dass du es kannst. 💪`,
+        ``,
+        `Ich weiß, wie wichtig es für dich ist, Deutsch zu lernen. Was hält dich davon ab, heute den nächsten Schritt zu machen?`,
+        ``,
+        `Stiv | Aprender-Aleman.de`,
+      ].join("\n")
+    : [
+        `¡Hola ${firstName}! 😊`,
+        ``,
+        `Ha sido un placer tenerte hoy en la clase de prueba. Hoy demostraste que puedes. 💪`,
+        ``,
+        `Sé lo importante que es para ti aprender alemán. ¿Qué te frena para dar el paso hoy mismo?`,
+        ``,
+        `Stiv | Aprender-Aleman.de`,
+      ].join("\n");
+
+  const res = await sendWhatsappText(lead.whatsapp_normalized, text);
+  if (res.ok) {
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type: "system_message_sent",
+      author: "gelfis",
+      content: `💬 Mensaje motivacional post-clase enviado a ${lead.whatsapp_normalized} (sin enlace de pago)`,
+      metadata: { kind: "post_trial_followup", channel: "whatsapp", flow: "no_link" },
+    });
+  } else {
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type: "send_failed",
+      author: "gelfis",
+      content: `💬 Falló el mensaje motivacional post-clase: ${res.reason}`,
+      metadata: { kind: "post_trial_followup", channel: "whatsapp", flow: "no_link" },
+    });
   }
 }
 

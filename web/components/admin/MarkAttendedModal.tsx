@@ -26,6 +26,7 @@ export function MarkAttendedModal({
   const [objective,   setObjective]   = useState("");
   const [packId,      setPackId]      = useState<PackId | "">("");
   const [paymentType, setPaymentType] = useState<PaymentType>("single");
+  const [nivel,       setNivel]       = useState("");
   const [error,       setError]       = useState<string | null>(null);
   const [pending,     startTransition] = useTransition();
 
@@ -43,7 +44,7 @@ export function MarkAttendedModal({
         const res = await fetch(`/api/admin/leads/${leadId}/trial/attended`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ objective: objective.trim(), packId, paymentType }),
+          body: JSON.stringify({ objective: objective.trim(), packId, paymentType, ...(nivel ? { nivel } : {}) }),
         });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
@@ -110,6 +111,25 @@ export function MarkAttendedModal({
                 Link según pago elegido: {paymentType === "single" ? "pago único" : "flexible (mensualidades)"}.
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Nivel del pack
+            </label>
+            <select
+              value={nivel}
+              onChange={(e) => setNivel(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              <option value="">— Sin especificar —</option>
+              {["A1", "A2", "B1", "B2", "C1"].map(n => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Se incluye en el mensaje de WhatsApp junto al nombre del pack.
+            </p>
           </div>
 
           <div>

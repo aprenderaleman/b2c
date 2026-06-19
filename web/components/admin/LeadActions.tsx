@@ -184,9 +184,37 @@ export function LeadActions({ lead }: { lead: Lead }) {
             type="button"
             onClick={() => setAttendedOpen(true)}
             className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25"
-            title="Lead asistió a la clase de prueba — abre el formulario de pack/objetivo/pago"
+            title="Lead asistió — enviar enlace de pago con pack/nivel/objetivo"
           >
-            ✓ Asistió
+            ✓ Enviar enlace de pago
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              if (!confirm(
+                "Marcar como ASISTIÓ sin enviar enlace de pago.\n\n" +
+                "• El lead recibirá un mensaje motivacional por WhatsApp.\n" +
+                "• Si responde → se escala a needs_human.\n" +
+                "• Si no responde → 2 follow-ups automáticos en +2d y +3d.\n" +
+                "• Tras 3 días sin respuesta → pasa a cold.\n\n" +
+                "¿Continuar?"
+              )) return;
+              try {
+                const res = await fetch(`/api/admin/leads/${lead.id}/trial/attended-no-link`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: "{}",
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                router.refresh();
+              } catch (err) {
+                alert(err instanceof Error ? err.message : "Error al marcar asistencia sin enlace");
+              }
+            }}
+            className="text-xs font-semibold rounded-full border border-sky-300 dark:border-sky-500/40 bg-sky-100 dark:bg-sky-500/15 px-3 py-1 text-sky-800 dark:text-sky-200 hover:bg-sky-200 dark:hover:bg-sky-500/25"
+            title="Lead asistió — mensaje motivacional sin enlace de pago"
+          >
+            ✓ No enviar enlace
           </button>
           <form
             action={`/api/admin/leads/${lead.id}/trial/absent`}

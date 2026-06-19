@@ -1,0 +1,17 @@
+import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
+import { markTrialAttendedNoLink } from "@/lib/admin-actions";
+
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { id } = await params;
+
+  await markTrialAttendedNoLink(id);
+
+  const ct = req.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    return NextResponse.json({ ok: true });
+  }
+  return NextResponse.redirect(new URL(`/admin/leads/${id}`, req.url), { status: 303 });
+}
