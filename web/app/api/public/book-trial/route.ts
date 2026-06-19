@@ -323,12 +323,30 @@ export async function POST(req: Request) {
     }
   }
 
-  // ── 3.5. Anti-double-booking. If this lead already has an active
-  // trial in the next 30 days, refuse to create a second one — return
-  // the existing booking so the funnel lands on /confirmacion for
-  // that one instead. This used to silently create duplicates when a
-  // lead double-clicked Continuar (e.g. Bayron 2026-04-29: 16:00 +
-  // 17:00 UTC), wasting a teacher slot and confusing the lead.
+  // ── 3.5. Anti-double-booking + auto-reschedule.
+  //
+  // Si el lead ya tiene una clase activa, distinguimos 2 casos:
+  //
+  //   A) Slot pedido == slot existente → es un re-submit (lead pulsó
+  //      "Confirmar" dos veces, refrescó /confirmacion, etc). Devolver
+  //      la existente. Evita crear duplicados (caso Bayron 2026-04-29).
+  //
+  //   B) Slot pedido != slot existente → es un RE-AGENDADO via self-
+  //      service. El lead reservó originalmente, no pudo ir, pidió a
+  //      Stiv reagendar, recibió el link /agendar/cuando y eligió un
+  //      slot nuevo. Antes (bug Ana 2026-06-19) devolvíamos la vieja
+  //      silenciosamente, dejando leads.trial_scheduled_at (ya
+  //      actualizado por el upsert arriba) descincronizado con
+  //      classes.scheduled_at. Ahora: UPDATE la clase al nuevo slot
+  //      + reset notes_admin para que los crons de recordatorios
+  //      re-disparen en la fecha nueva.
+  //
+  // Google Calendar: el evento del profe NO se patchea aquí — eso
+  // requiere disponibilidad de @/lib/google-calendar y race-condition
+  // handling más cuidadoso (ver reschedule-trial endpoint admin).
+  // Cron `class-reminders` o handler manual del profe lo sincroniza.
+  // Trade-off aceptado: mejor inconsistencia menor de Calendar que
+  // inconsistencia mayor de BD vs lo que ve el lead.
   {
     const { data: existingTrials } = await sb
       .from("classes")
@@ -341,15 +359,52 @@ export async function POST(req: Request) {
     const active = (existingTrials ?? []) as Array<{ id: string; scheduled_at: string; short_code: string }>;
     if (active.length > 0) {
       const ex = active[0];
-      // Return the EXISTING class id + a fresh trial token so the
-      // funnel's redirect to /confirmacion still works.
+      const existingSlotIso = new Date(ex.scheduled_at).toISOString();
+      const requestedSlotIso = new Date(b.slot_iso).toISOString();
+
+      if (existingSlotIso === requestedSlotIso) {
+        // Caso A: mismo slot → re-submit, devolver existente sin tocar.
+        const token = buildTrialToken(leadId, ex.id);
+        return NextResponse.json({
+          ok: true,
+          classId: ex.id,
+          leadId,
+          token,
+          already: true,
+          scheduled_at: ex.scheduled_at,
+        });
+      }
+
+      // Caso B: slot distinto → auto-reschedule. UPDATE + reset notes
+      // para que los crons de recordatorios re-disparen en la fecha
+      // nueva. lead_timeline registra el cambio para auditoría.
+      const { error: rescheduleErr } = await sb
+        .from("classes")
+        .update({
+          scheduled_at: requestedSlotIso,
+          notes_admin:  null,
+        })
+        .eq("id", ex.id);
+      if (rescheduleErr) {
+        return NextResponse.json({
+          error:   "auto_reschedule_failed",
+          message: rescheduleErr.message,
+        }, { status: 500 });
+      }
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "status_change",
+        author:  "system",
+        content: `Trial reagendado vía self-service: ${existingSlotIso} → ${requestedSlotIso}.`,
+      });
       const token = buildTrialToken(leadId, ex.id);
       return NextResponse.json({
         ok: true,
-        classId: ex.id,
+        classId:    ex.id,
+        leadId,
         token,
-        already: true,
-        scheduled_at: ex.scheduled_at,
+        rescheduled: true,
+        scheduled_at: requestedSlotIso,
       });
     }
   }
