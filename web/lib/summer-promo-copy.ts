@@ -82,6 +82,9 @@ export function renderPromoMessage(step: PromoStep, name: string): string {
 
 // ── Fechas calendario fijas ──────────────────────────────────────
 // 8 AM Berlin en CEST verano = 06:00 UTC. Las usa el cron para gate.
-export const MSG1_START_AT = Date.parse("2026-06-20T06:00:00Z");
+// MSG1_START_AT corregido 2026-06-22: originalmente puse 20 jun por
+// confiar en currentDate del contexto que estaba desfasado 5 días vs
+// la realidad. Real arranque = 23 jun 8 AM Berlin (martes).
+export const MSG1_START_AT = Date.parse("2026-06-23T06:00:00Z");
 export const MSG2_AT       = Date.parse("2026-07-02T06:00:00Z");
 export const MSG3_AT       = Date.parse("2026-07-04T06:00:00Z");
