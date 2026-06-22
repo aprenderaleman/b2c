@@ -1,20 +1,15 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { normaliseLevel, LEVEL_PRIORITY, type PromoLevel } from "@/lib/summer-promo-copy";
 
 /**
- * POST /api/admin/summer-promo  body: { action: "start"|"pause"|"status", levels?: ["A0","A1",...] }
- * GET  /api/admin/summer-promo  → status
+ * GET/POST /api/admin/summer-promo
+ *   POST { action: "start" | "pause" } — flip flag system_config.summer_promo_enabled.
+ *   GET → status (counts por step).
  *
- * Auth: CRON_SECRET (header Authorization Bearer o X-Cron-Secret).
+ * Auth: CRON_SECRET.
  *
- * Actions:
- *  - start  → activa flag system_config.summer_promo_enabled=true.
- *             Si `levels` viene, sólo bumpea step=0 a los leads de esos
- *             niveles (default: ["A0","A1"]). NO toca leads con step>0
- *             para no resetear progreso de los ya tocados.
- *  - pause  → desactiva flag (no borra progreso).
- *  - status → cuenta por step y por nivel.
+ * Nota: el cron tiene gate de MSG1_START_AT — si activas el flag antes
+ * de la fecha de arranque calendario, el cron espera igualmente.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,29 +41,23 @@ async function getStatus(): Promise<Record<string, unknown>> {
   // Conteo por step
   const { data: rows } = await sb
     .from("leads")
-    .select("summer_promo_step, german_level, diagnostico_answers")
+    .select("summer_promo_step")
     .not("whatsapp_normalized", "is", null);
 
   const byStep: Record<string, number> = { "0": 0, "1": 0, "2": 0, "3": 0, "4": 0 };
-  const byLevel: Record<PromoLevel, { total: number; sent: number; pending: number }> = {
-    A0: { total: 0, sent: 0, pending: 0 },
-    A1: { total: 0, sent: 0, pending: 0 },
-    A2: { total: 0, sent: 0, pending: 0 },
-    B1: { total: 0, sent: 0, pending: 0 },
-    B2: { total: 0, sent: 0, pending: 0 },
-    C1: { total: 0, sent: 0, pending: 0 },
-    unknown: { total: 0, sent: 0, pending: 0 },
-  };
-  for (const r of (rows ?? []) as Array<{ summer_promo_step: number; german_level: string | null; diagnostico_answers: Record<string, unknown> | null }>) {
+  for (const r of (rows ?? []) as Array<{ summer_promo_step: number }>) {
     const step = String(r.summer_promo_step ?? 0);
     byStep[step] = (byStep[step] ?? 0) + 1;
-    const lvl = normaliseLevel(r.diagnostico_answers, r.german_level);
-    byLevel[lvl].total += 1;
-    if (r.summer_promo_step >= 1) byLevel[lvl].sent += 1;
-    else byLevel[lvl].pending += 1;
   }
 
-  return { enabled, by_step: byStep, by_level: byLevel };
+  // Conteo eligible (mismo criterio que el cron)
+  const { count: eligibleAll } = await sb.from("leads")
+    .select("id", { count: "exact", head: true })
+    .not("whatsapp_normalized", "is", null)
+    .not("status", "in", '("converted","in_conversation","needs_human","trial_scheduled","trial_reminded")')
+    .lt("summer_promo_step", 4);
+
+  return { enabled, eligible_pool: eligibleAll ?? 0, by_step: byStep };
 }
 
 export async function POST(req: Request) {
@@ -77,43 +66,25 @@ export async function POST(req: Request) {
   }
   const body = await req.json().catch(() => ({})) as {
     action?: "start" | "pause" | "status";
-    levels?: PromoLevel[];
   };
   const action = body.action ?? "status";
 
   if (action === "status") {
     return NextResponse.json({ ok: true, status: await getStatus() });
   }
-
   if (action === "pause") {
     await setFlag(false);
     return NextResponse.json({ ok: true, action: "pause", status: await getStatus() });
   }
-
   if (action === "start") {
-    const levels = (body.levels && body.levels.length > 0)
-      ? body.levels
-      : ["A0", "A1"] as PromoLevel[];
-    // Validar
-    const valid = levels.filter(l => LEVEL_PRIORITY.includes(l));
-    if (valid.length === 0) {
-      return NextResponse.json({ error: "invalid_levels", got: body.levels }, { status: 400 });
-    }
-
-    // No tocamos leads ya en pipeline (step>0). Solo nos aseguramos
-    // que summer_promo_step=0 sea el estado por defecto — la migration
-    // ya lo garantiza con DEFAULT 0. Aquí solo activamos el flag.
     await setFlag(true);
-
     return NextResponse.json({
       ok: true,
       action: "start",
-      levels_filter: valid,
-      note: "El cron solo procesa los niveles indicados primero (orden A0→C1). Para forzar a otros niveles, llama de nuevo con `levels` distintos.",
+      note: "Flag activado. El cron solo dispara cuando NOW >= MSG1_START_AT (2026-06-20 06:00 UTC = 08:00 Berlin).",
       status: await getStatus(),
     });
   }
-
   return NextResponse.json({ error: "unknown_action", got: action }, { status: 400 });
 }
 
