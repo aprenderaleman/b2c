@@ -1186,156 +1186,53 @@ def _handle_absent_followup_positive(
 
 
 # ──────────────────────────────────────────────────────────
-# SUMMER PROMO reply handler (Gelfis 2026-06-19)
+# SUMMER PROMO reply handler (Gelfis 2026-06-19, simplificado)
 # ──────────────────────────────────────────────────────────
-
-_PROMO_INSCRIPCION_URL = os.environ.get(
-    "SUMMER_PROMO_INSCRIPCION_URL",
-    "https://b2c.aprender-aleman.de/inscripcion/sommer",  # fallback temporal
-)
-
-# Detecta horario preferido. Tolera variantes habituales en WA:
-# "mañana", "manana", "mañanas", "por la mañana", "morning", "Por la tarde"...
-# Sin \b problemático (la ñ rompe boundary en algunos contextos).
-_HORARIO_RE = re.compile(
-    r"("
-    r"(?P<manana>ma[ñn]an[ao]?s?|morning|vormittag|fr[üu]h)|"
-    r"(?P<tarde>tardes?|afternoon|nachmittag)|"
-    r"(?P<noche>noches?|evening|night|abend)|"
-    r"(?P<finde>fin\s*de\s*semana|finde|s[áa]bados?|domingos?|weekend|wochenende)"
-    r")",
-    re.IGNORECASE,
-)
-
-
-def _detect_horario(text: str) -> str | None:
-    """Devuelve 'manana' | 'tarde' | 'noche' | 'finde' | None.
-    Si encuentra varios, prioriza el primero del mensaje (orden natural)."""
-    m = _HORARIO_RE.search(text or "")
-    if not m:
-        return None
-    for key in ("manana", "tarde", "noche", "finde"):
-        if m.group(key):
-            return key
-    return None
-
-
-_HORARIO_LABEL = {
-    "manana": "Mañana",
-    "tarde":  "Tarde",
-    "noche":  "Noche",
-    "finde":  "Fin de semana",
-}
-
-
-def _save_promo_horario(lead_id: str, horario: str) -> None:
-    """Persiste el horario elegido en leads.summer_promo_horario +
-    marca summer_promo_responded_at + bumpea step=4 (cierra cadena)."""
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            UPDATE leads
-               SET summer_promo_horario      = %s,
-                   summer_promo_responded_at = NOW(),
-                   summer_promo_step         = 4
-             WHERE id = %s
-            """,
-            (horario, lead_id),
-        )
+# Estrategia final: cualquier respuesta del lead que recibió summer_promo
+# → ack breve + escalar a needs_human para que Gelfis/equipo le atienda
+# personalmente. La conversion la hace la landing /promo/verano-2026, no
+# el bot — el bot solo se encarga de NO dejarlo sin respuesta.
 
 
 def _try_handle_summer_promo_reply(
     lead: dict, text: str, wa: WhatsAppService | None,
 ) -> HandleResult | None:
-    """Lead que recibió summer_promo_msg respondió algo.
-
-    Caso A: dice horario claro (mañana/tarde/noche/finde) →
-      - Persiste horario
-      - Manda link de inscripción + nota "info por email + llamada"
-      - Escala a needs_human (equipo confirma la inscripción)
-
-    Caso B: cualquier otra respuesta →
-      - Escala a needs_human directamente (Gelfis atiende)
-      - Notifica in-app
-
-    En ambos casos, cierra cadena summer_promo (step=4) para que el
-    cron no le mande msg 2/3.
-    """
+    """Lead que recibió summer_promo_msg respondió algo. Stiv ack +
+    escala a needs_human. Cierra cadena (step=4) para que el cron no
+    le mande msg 2/3 después."""
     name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
     lang = lead.get("language", "es")
 
-    horario = _detect_horario(text)
-
-    if horario:
-        _save_promo_horario(lead["id"], horario)
-        label = _HORARIO_LABEL[horario]
-        if lang == "de":
-            body = (
-                f"Super {name}! 🙌\n\n"
-                f"Notiert: {label}.\n\n"
-                f"Hier dein Anmeldelink für Deutsch im Sommer:\n"
-                f"👉 {_PROMO_INSCRIPCION_URL}\n\n"
-                f"Sobald du dich angemeldet hast, bekommst du alle Details "
-                f"per E-Mail und unser Team ruft dich an, um die letzten "
-                f"Punkte zu besprechen.\n\n"
-                f"— Stiv · Aprender-Aleman.de"
-            )
-        else:
-            body = (
-                f"¡Genial {name}! 🙌\n\n"
-                f"Apuntado: {label}.\n\n"
-                f"Aquí tienes tu enlace de inscripción para Deutsch im Sommer:\n"
-                f"👉 {_PROMO_INSCRIPCION_URL}\n\n"
-                f"Una vez te inscribas recibirás toda la información detallada "
-                f"por email y nuestro equipo te llamará para coordinar contigo "
-                f"los últimos detalles.\n\n"
-                f"— Stiv · Aprender-Aleman.de"
-            )
-        log_timeline(
-            lead["id"],
-            type="agent_note",
-            author="agent_4",
-            content=f"📅 Summer promo: lead eligió horario {label} — link inscripción enviado",
-            metadata={"kind": "summer_promo_horario_reply", "horario": horario},
+    if lang == "de":
+        body = (
+            f"Danke {name}! 👋\n\n"
+            f"Unser Team meldet sich gleich bei dir mit allen Details "
+            f"zu Deutsch im Sommer.\n\n"
+            f"— Stiv · Aprender-Aleman.de"
         )
     else:
-        # Cualquier otra respuesta → escala directo a Gelfis
-        if lang == "de":
-            body = (
-                f"Danke {name}! 👋\n\n"
-                f"Ich leite dich an unser Team weiter, sie melden sich gleich "
-                f"bei dir mit allen Details zu Deutsch im Sommer.\n\n"
-                f"— Stiv · Aprender-Aleman.de"
-            )
-        else:
-            body = (
-                f"¡Gracias {name}! 👋\n\n"
-                f"Te paso con nuestro equipo, te contactan en breve con todos "
-                f"los detalles de Deutsch im Sommer.\n\n"
-                f"— Stiv · Aprender-Aleman.de"
-            )
-        # cerramos cadena igualmente (no más msg 2/3)
-        with get_conn() as conn, conn.cursor() as cur:
-            cur.execute(
-                "UPDATE leads SET summer_promo_step=4, summer_promo_responded_at=NOW() WHERE id=%s",
-                (lead["id"],),
-            )
-        log_timeline(
-            lead["id"],
-            type="agent_note",
-            author="agent_4",
-            content="📨 Summer promo: lead respondió algo distinto a horario → needs_human",
-            metadata={"kind": "summer_promo_other_reply", "reply": text[:200]},
+        body = (
+            f"¡Gracias {name}! 👋\n\n"
+            f"Nuestro equipo te contacta en breve con todos los detalles "
+            f"de Deutsch im Sommer.\n\n"
+            f"— Stiv · Aprender-Aleman.de"
         )
 
-    update_status(lead["id"], "needs_human", author="agent_4")
+    # Cierra cadena: step=4 → cron no le mandará msg 2/3.
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE leads SET summer_promo_step=4, summer_promo_responded_at=NOW() WHERE id=%s",
+            (lead["id"],),
+        )
+    log_timeline(
+        lead["id"],
+        type="agent_note",
+        author="agent_4",
+        content=f"📨 Summer promo: lead respondió — escalado a needs_human (reply: {text[:120]!r})",
+        metadata={"kind": "summer_promo_reply", "reply": text[:200]},
+    )
 
-    # Notificación in-app para Gelfis (admin_notifications)
-    try:
-        from agents.notifications import notify_summer_promo_reply
-        notify_summer_promo_reply(lead, horario, text)
-    except Exception:                                       # noqa: BLE001
-        log.debug("[summer_promo] notif helper no disponible — sin alert in-app")
+    update_status(lead["id"], "needs_human", author="agent_4")
 
     result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
     return HandleResult("summer_promo_reply_handled", sent=result.success, message_sent=body)
