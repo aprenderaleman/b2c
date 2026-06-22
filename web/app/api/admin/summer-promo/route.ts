@@ -81,7 +81,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       action: "start",
-      note: "Flag activado. El cron solo dispara cuando NOW >= MSG1_START_AT (2026-06-20 06:00 UTC = 08:00 Berlin).",
+      note: "Flag activado. El cron solo dispara cuando NOW >= MSG1_START_AT (2026-06-23 06:00 UTC = 08:00 Berlin martes).",
       status: await getStatus(),
     });
   }
