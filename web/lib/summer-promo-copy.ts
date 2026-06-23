@@ -1,22 +1,23 @@
 /**
  * Copys de la campaña Deutsch im Sommer (Gelfis 2026-06-19).
  *
- * Opción A (Gelfis 2026-06-19): UN solo msg 1 para todos los niveles —
- * no se diferencia por A0/A1/A2/B1/B2/C1. Saltos: 1 línea vacía entre
- * bloques (versión "tight" tras feedback Gelfis 2026-06-19).
+ * Tras ban WA 2026-06-23: 3 variantes del msg 1 para diversificar el
+ * patrón (Meta menos sensible si no es texto idéntico repetido). El
+ * lead recibe siempre la misma variante (asignación determinística
+ * por hash del id) para idempotencia.
  *
- * Fechas calendario fijas:
- *   msg 1 → sábado 20 jun 2026 desde 08:00 Berlin (gate en el cron)
- *   msg 2 → jueves 02 jul 2026 desde 08:00 Berlin
- *   msg 3 → viernes 04 jul 2026 desde 08:00 Berlin
+ * Fechas calendario:
+ *   MSG1_START_AT → 2026-06-25 06:00 UTC (post-ban, miércoles 8 AM Berlin)
+ *   MSG2_AT       → 2026-07-02 06:00 UTC
+ *   MSG3_AT       → 2026-07-04 06:00 UTC
  */
 
 export type PromoStep = 1 | 2 | 3;
 
 const LINK = "https://aprender-aleman.de/promo/verano-2026";
 
-/** Mensaje 1 — presenta la promo. Mismo para todos. */
-function renderMsg1(name: string): string {
+// ── 3 variantes del msg 1 ────────────────────────────────────────
+function msg1_v0(name: string): string {
   return [
     `¡Hola ${name}!`,
     ``,
@@ -36,7 +37,62 @@ function renderMsg1(name: string): string {
   ].join("\n");
 }
 
-/** Mensaje 2 — jueves 02 jul: "faltan solo 3 días". */
+function msg1_v1(name: string): string {
+  return [
+    `Hola ${name}, ¿qué tal?`,
+    ``,
+    `Te escribo porque sé que llevabas tiempo dándole vueltas al alemán. Acabamos de abrir algo para este verano que puede ser justo lo que necesitas.`,
+    ``,
+    `Deutsch im Sommer ☀️ — 4 semanas intensivas, 150 € pago único.`,
+    `Cupos limitados, inscripción hasta el 5 de julio.`,
+    ``,
+    `Te dejo los detalles:`,
+    `👉 ${LINK}`,
+    ``,
+    `Cualquier cosa, aquí estoy.`,
+    ``,
+    `Stiv | Aprender-Aleman.de`,
+  ].join("\n");
+}
+
+function msg1_v2(name: string): string {
+  return [
+    `${name}, una propuesta rápida 👋`,
+    ``,
+    `Si el alemán sigue siendo un tema pendiente para ti, tenemos una promo de verano que merece que la veas.`,
+    ``,
+    `4 semanas intensivas. 150 € pago único. Pocos cupos.`,
+    `Cierre de inscripciones: 5 de julio.`,
+    ``,
+    `Toda la info aquí:`,
+    `👉 ${LINK}`,
+    ``,
+    `Si te encaja, dime y lo cerramos.`,
+    ``,
+    `Stiv | Aprender-Aleman.de`,
+  ].join("\n");
+}
+
+const MSG1_VARIANTS = [msg1_v0, msg1_v1, msg1_v2];
+
+/**
+ * Asigna determinísticamente una variante 0|1|2 a partir del lead id.
+ * Garantiza que si reintentamos al mismo lead, recibe la misma variante
+ * (idempotente — útil tras un retry tras ban).
+ */
+export function pickMsg1Variant(leadId: string): number {
+  let hash = 0;
+  for (let i = 0; i < leadId.length; i++) {
+    hash = ((hash << 5) - hash + leadId.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % MSG1_VARIANTS.length;
+}
+
+function renderMsg1(name: string, leadId: string): string {
+  return MSG1_VARIANTS[pickMsg1Variant(leadId)](name);
+}
+
+/** Msg 2 — jueves 02 jul: "faltan solo 3 días". */
 function renderMsg2(name: string): string {
   return [
     `¡Hola ${name}!`,
@@ -56,7 +112,7 @@ function renderMsg2(name: string): string {
   ].join("\n");
 }
 
-/** Mensaje 3 — viernes 04 jul: "último día". */
+/** Msg 3 — viernes 04 jul: "último día". */
 function renderMsg3(name: string): string {
   return [
     `¡Hola ${name}!`,
@@ -74,17 +130,16 @@ function renderMsg3(name: string): string {
   ].join("\n");
 }
 
-export function renderPromoMessage(step: PromoStep, name: string): string {
-  if (step === 1) return renderMsg1(name);
+export function renderPromoMessage(step: PromoStep, name: string, leadId: string): string {
+  if (step === 1) return renderMsg1(name, leadId);
   if (step === 2) return renderMsg2(name);
   return renderMsg3(name);
 }
 
 // ── Fechas calendario fijas ──────────────────────────────────────
-// 8 AM Berlin en CEST verano = 06:00 UTC. Las usa el cron para gate.
-// MSG1_START_AT corregido 2026-06-22: originalmente puse 20 jun por
-// confiar en currentDate del contexto que estaba desfasado 5 días vs
-// la realidad. Real arranque = 23 jun 8 AM Berlin (martes).
-export const MSG1_START_AT = Date.parse("2026-06-23T06:00:00Z");
+// Post-ban Gelfis 2026-06-23: MSG1_START_AT movido al miércoles 25 jun
+// para dar 36h de margen tras el bloqueo de 24h. Si Gelfis quiere
+// arrancar antes, editar aquí y push.
+export const MSG1_START_AT = Date.parse("2026-06-25T06:00:00Z");
 export const MSG2_AT       = Date.parse("2026-07-02T06:00:00Z");
 export const MSG3_AT       = Date.parse("2026-07-04T06:00:00Z");

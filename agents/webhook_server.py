@@ -803,6 +803,59 @@ async def internal_send_document(request: Request):
 
 
 # ──────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────
+# /internal/check-numbers — batch validate phones on WhatsApp
+# ──────────────────────────────────────────────────────────
+# Pre-validación de números antes de enviar campañas masivas (Gelfis
+# 2026-06-23, tras ban summer_promo). Toma una lista de phones, llama
+# /chat/whatsappNumbers (rate-limited de Evolution) y devuelve qué
+# números SÍ están en WhatsApp y cuáles no. Usa el cache _WA_EXISTS_CACHE
+# para evitar re-validar repetidamente.
+#
+# Body: { "phones": ["+34...", "+49..."] }
+# Resp: { "ok": true, "results": { "+34...": true, "+49...": false } }
+
+@app.post("/internal/check-numbers")
+async def internal_check_numbers(request: Request):
+    expected = os.environ.get("AGENTS_INTERNAL_SECRET")
+    if not expected:
+        raise HTTPException(status_code=503, detail="internal_secret_not_configured")
+    provided = request.headers.get("x-internal-secret")
+    if not provided or not hmac.compare_digest(provided, expected):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid_json")
+    phones = body.get("phones") or []
+    if not isinstance(phones, list) or len(phones) == 0:
+        raise HTTPException(status_code=400, detail="missing_phones")
+    if len(phones) > 200:
+        raise HTTPException(status_code=400, detail="too_many_phones_max_200")
+
+    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    wa = WhatsAppService()
+
+    results: dict[str, bool] = {}
+    for p in phones:
+        if not isinstance(p, str): continue
+        try:
+            normalized = normalize_phone(p)
+        except ValueError:
+            results[p] = False
+            continue
+        try:
+            exists = _exists_on_whatsapp_cached(wa, instance, normalized)
+            results[p] = bool(exists)
+        except Exception as e:                                # noqa: BLE001
+            log.warning("check-numbers failed for %s: %s", normalized, e)
+            # Si la validación falla, decimos None (no contamos como falso)
+            results[p] = True  # asumimos OK en error de API — el send real lo cogerá
+
+    return {"ok": True, "checked": len(results), "results": results}
+
+
 # /internal/whatsapp-status — used by /admin/system dashboard
 # ──────────────────────────────────────────────────────────
 

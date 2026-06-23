@@ -36,8 +36,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-const MAX_PER_RUN = Number(process.env.SUMMER_PROMO_MAX_PER_RUN ?? 10);
-const PAUSE_MS    = 5000;
+// Post-ban Gelfis 2026-06-23: ritmo conservador.
+// 5 sends/h con 20s entre cada uno = ~5/h efectivo (1 send cada 12 min).
+// Para los 142 pendientes: ~28h de envíos repartidos en ~3 días.
+const MAX_PER_RUN = Number(process.env.SUMMER_PROMO_MAX_PER_RUN ?? 5);
+const PAUSE_MS    = 20000;
 const DAY_MS      = 24 * 3600_000;
 
 function authorised(req: Request): boolean {
@@ -138,7 +141,9 @@ async function run(req: Request) {
 
     const firstName = (cand.name ?? "").trim().split(/\s+/)[0] || (cand.name ?? "");
     const nextStep = (cand.summer_promo_step + 1) as PromoStep;
-    const body = renderPromoMessage(nextStep, firstName);
+    // leadId pasado a renderPromoMessage para asignar variante msg1
+    // determinísticamente (post-ban 2026-06-23: 3 variantes vs texto único).
+    const body = renderPromoMessage(nextStep, firstName, cand.id);
 
     if (sent + errors > 0) {
       await new Promise(r => setTimeout(r, PAUSE_MS));
