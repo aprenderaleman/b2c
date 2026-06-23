@@ -91,11 +91,23 @@ export async function convertLeadToStudent(
 
   const trial = await getLeadTrialTeacher(lead.id);
   if (trial) {
+    const updateFields: Record<string, unknown> = {
+      trial_teacher_id: trial.teacherId,
+      trial_class_id:   trial.classId,
+    };
+
+    const { data: script } = await sb
+      .from("trial_class_scripts")
+      .select("teacher_notes")
+      .eq("class_id", trial.classId)
+      .maybeSingle();
+
+    if (script?.teacher_notes) {
+      updateFields.notes = script.teacher_notes;
+    }
+
     await sb.from("students")
-      .update({
-        trial_teacher_id: trial.teacherId,
-        trial_class_id:   trial.classId,
-      })
+      .update(updateFields)
       .eq("id", created.studentId);
   }
 
