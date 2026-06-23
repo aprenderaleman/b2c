@@ -1,0 +1,70 @@
+import { NextResponse } from "next/server";
+import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
+import { createAdminNotification } from "@/lib/admin-notifications";
+import { supabaseAdmin } from "@/lib/supabase";
+import { sendWhatsappText } from "@/lib/whatsapp";
+
+export async function POST(req: Request, { params }: { params: Promise<{ leadId: string }> }) {
+  let user;
+  try { user = await requireTeacherSession(); }
+  catch { return NextResponse.json({ error: "unauthorized" }, { status: 401 }); }
+
+  const { leadId } = await params;
+
+  let teacherName: string;
+  try {
+    const result = await assertTeacherOwnsTrialLead(user.id, leadId);
+    teacherName = result.teacherName ?? user.id;
+  } catch {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  let message = "";
+  try {
+    const raw = (await req.json()) as Record<string, unknown>;
+    message = typeof raw.message === "string" ? raw.message.trim() : "";
+  } catch {
+    return NextResponse.json({ error: "invalid_body" }, { status: 400 });
+  }
+
+  if (message.length < 3) {
+    return NextResponse.json({ error: "message_too_short" }, { status: 400 });
+  }
+
+  const sb = supabaseAdmin();
+
+  const { data: lead } = await sb
+    .from("leads")
+    .select("name, whatsapp_normalized")
+    .eq("id", leadId)
+    .maybeSingle();
+
+  const leadName = lead?.name ?? "Lead";
+
+  await sb.from("lead_timeline").insert({
+    lead_id: leadId,
+    type:    "agent_note",
+    author:  teacherName,
+    content: `🚨 Escalado por profesor: ${message}`,
+  });
+
+  await createAdminNotification({
+    type:       "teacher_escalation",
+    severity:   "warning",
+    title:      `${teacherName} escalo a ${leadName}`,
+    body:       message,
+    lead_id:    leadId,
+    action_url: `/admin/leads/${leadId}`,
+    dedupeHours: false,
+  });
+
+  const adminWa = (process.env.NEW_LEAD_ALERT_WHATSAPP ?? "").trim();
+  if (adminWa) {
+    await sendWhatsappText(
+      adminWa,
+      `🚨 *Escalacion de ${teacherName}*\n\nLead: ${leadName}\nMensaje: ${message}\n\nVer: ${process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de"}/admin/leads/${leadId}`,
+    );
+  }
+
+  return NextResponse.json({ ok: true });
+}

@@ -5,7 +5,7 @@ import { supabaseAdmin } from "./supabase";
 export async function assertTeacherOwnsTrialLead(
   userId: string,
   leadId: string,
-): Promise<{ teacherId: string }> {
+): Promise<{ teacherId: string; teacherName: string | null }> {
   const teacher = await getTeacherByUserId(userId);
   if (!teacher) throw new Error("no_teacher_profile");
 
@@ -21,7 +21,13 @@ export async function assertTeacherOwnsTrialLead(
 
   if (!data) throw new Error("not_owner");
 
-  return { teacherId: teacher.id };
+  const { data: userRow } = await sb
+    .from("users")
+    .select("full_name")
+    .eq("id", userId)
+    .maybeSingle();
+
+  return { teacherId: teacher.id, teacherName: userRow?.full_name ?? null };
 }
 
 export async function requireTeacherSession() {
