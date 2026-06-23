@@ -1186,39 +1186,24 @@ def _handle_absent_followup_positive(
 
 
 # ──────────────────────────────────────────────────────────
-# SUMMER PROMO reply handler (Gelfis 2026-06-19, simplificado)
+# SUMMER PROMO reply handler (Gelfis 2026-06-23, silencioso)
 # ──────────────────────────────────────────────────────────
-# Estrategia final: cualquier respuesta del lead que recibió summer_promo
-# → ack breve + escalar a needs_human para que Gelfis/equipo le atienda
-# personalmente. La conversion la hace la landing /promo/verano-2026, no
-# el bot — el bot solo se encarga de NO dejarlo sin respuesta.
+# Estrategia: cualquier respuesta del lead que recibió summer_promo
+# → silencio del bot + escalar a needs_human para que el equipo le
+# atienda personalmente. El bot NO manda ack ni nada (Gelfis 2026-06-23).
+# La cadena se cierra (step=4) para que el cron no le mande msg 2/3.
 
 
 def _try_handle_summer_promo_reply(
     lead: dict, text: str, wa: WhatsAppService | None,
 ) -> HandleResult | None:
-    """Lead que recibió summer_promo_msg respondió algo. Stiv ack +
-    escala a needs_human. Cierra cadena (step=4) para que el cron no
-    le mande msg 2/3 después."""
-    name = (lead.get("name") or "").strip().split()[0] if lead.get("name") else ""
-    lang = lead.get("language", "es")
-
-    if lang == "de":
-        body = (
-            f"Danke {name}! 👋\n\n"
-            f"Unser Team meldet sich gleich bei dir mit allen Details "
-            f"zu Deutsch im Sommer.\n\n"
-            f"— Stiv · Aprender-Aleman.de"
-        )
-    else:
-        body = (
-            f"¡Gracias {name}! 👋\n\n"
-            f"Nuestro equipo te contacta en breve con todos los detalles "
-            f"de Deutsch im Sommer.\n\n"
-            f"— Stiv · Aprender-Aleman.de"
-        )
-
-    # Cierra cadena: step=4 → cron no le mandará msg 2/3.
+    """Lead que recibió summer_promo_msg respondió algo.
+    Acciones (sin enviar nada al lead):
+      - Cierra cadena (step=4, responded_at=NOW).
+      - Cambia status a needs_human.
+      - Log agent_note + notif in-app.
+    """
+    # Cierra cadena.
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
             "UPDATE leads SET summer_promo_step=4, summer_promo_responded_at=NOW() WHERE id=%s",
@@ -1228,14 +1213,13 @@ def _try_handle_summer_promo_reply(
         lead["id"],
         type="agent_note",
         author="agent_4",
-        content=f"📨 Summer promo: lead respondió — escalado a needs_human (reply: {text[:120]!r})",
-        metadata={"kind": "summer_promo_reply", "reply": text[:200]},
+        content=f"📨 Summer promo: lead respondió — escalado a needs_human (silencio bot). Reply: {text[:160]!r}",
+        metadata={"kind": "summer_promo_reply", "reply": text[:300]},
     )
-
     update_status(lead["id"], "needs_human", author="agent_4")
 
-    result = send_approved(lead, body, is_new_conversation=False, advance_followup=False, wa=wa)
-    return HandleResult("summer_promo_reply_handled", sent=result.success, message_sent=body)
+    # sent=False porque NO mandamos nada al lead — solo escalación silenciosa.
+    return HandleResult("summer_promo_reply_silenced", sent=False)
 
 
 def _handle_negative(lead: dict, wa: WhatsAppService | None) -> HandleResult:
