@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
 import { ConvertBody, convertLeadToStudent } from "@/lib/lead-conversion";
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+export async function POST(req: Request, { params }: { params: Promise<{ leadId: string }> }) {
+  let user;
+  try { user = await requireTeacherSession(); }
+  catch { return NextResponse.json({ error: "unauthorized" }, { status: 401 }); }
 
-  const { id: leadId } = await params;
+  const { leadId } = await params;
+
+  try { await assertTeacherOwnsTrialLead(user.id, leadId); }
+  catch { return NextResponse.json({ error: "forbidden" }, { status: 403 }); }
 
   let rawBody: unknown;
   try { rawBody = await req.json(); }

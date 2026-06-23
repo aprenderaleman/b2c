@@ -39,9 +39,10 @@ type Props = {
   lead: Lead;
   open: boolean;
   onClose: () => void;
+  convertEndpoint?: string;
 };
 
-export function ConvertLeadModal({ lead, open, onClose }: Props) {
+export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +87,7 @@ export function ConvertLeadModal({ lead, open, onClose }: Props) {
         currency: "EUR",
       };
 
-      const res = await fetch(`/api/admin/leads/${lead.id}/convert`, {
+      const res = await fetch(convertEndpoint ?? `/api/admin/leads/${lead.id}/convert`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify(payload),

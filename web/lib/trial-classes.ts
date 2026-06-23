@@ -23,9 +23,13 @@ export type TrialClassRow = {
   leadLanguage:       "es" | "de" | null;
   leadGermanLevel:    string | null;
   leadGoal:           string | null;
+  leadStatus:         string | null;
+  leadConvertedToUserId: string | null;
   leadFirstNote:      string | null;
   leadFirstNoteAt:    string | null;
   leadFirstNoteAuthor:string | null;
+  scriptTeacherNotes: string | null;
+  scriptFinalOutcome: string | null;
   teacherId:          string;
   teacherName:        string;
   teacherEmail:       string;
@@ -44,7 +48,8 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       id, scheduled_at, duration_minutes, status, short_code, notes_admin,
       teacher_id,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal)
+      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id),
+      script:trial_class_scripts(teacher_notes, final_outcome)
     `)
     .eq("is_trial", true)
     .order("scheduled_at", { ascending: true });
@@ -74,6 +79,8 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       language: "es" | "de" | null;
       german_level: string | null;
       goal: string | null;
+      status: string | null;
+      converted_to_user_id: string | null;
     } | Array<{
       id: string;
       name: string | null;
@@ -82,6 +89,15 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       language: "es" | "de" | null;
       german_level: string | null;
       goal: string | null;
+      status: string | null;
+      converted_to_user_id: string | null;
+    }> | null;
+    script: {
+      teacher_notes: string | null;
+      final_outcome: string | null;
+    } | Array<{
+      teacher_notes: string | null;
+      final_outcome: string | null;
     }> | null;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null =>
@@ -117,6 +133,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
     const teacherWrap = flat(row.teacher);
     const tu = teacherWrap ? flat(teacherWrap.users) : null;
     const lead = flat(row.lead);
+    const script = flat(row.script);
     const note = lead?.id ? firstNoteByLead.get(lead.id) ?? null : null;
     return {
       classId:         row.id,
@@ -132,9 +149,13 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       leadLanguage:    lead?.language ?? null,
       leadGermanLevel: lead?.german_level ?? null,
       leadGoal:        lead?.goal ?? null,
+      leadStatus:      lead?.status ?? null,
+      leadConvertedToUserId: lead?.converted_to_user_id ?? null,
       leadFirstNote:       note?.content ?? null,
       leadFirstNoteAt:     note?.timestamp ?? null,
       leadFirstNoteAuthor: note?.author ?? null,
+      scriptTeacherNotes:  script?.teacher_notes ?? null,
+      scriptFinalOutcome:  script?.final_outcome ?? null,
       teacherId:       row.teacher_id,
       teacherName:     tu?.full_name ?? tu?.email ?? "—",
       teacherEmail:    tu?.email ?? "",

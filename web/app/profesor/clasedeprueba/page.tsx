@@ -1,16 +1,12 @@
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { listTrialClasses, partitionByTime } from "@/lib/trial-classes";
-import { TrialClassCard } from "@/components/TrialClassCard";
+import { supabaseAdmin } from "@/lib/supabase";
+import { TrialHubList } from "./TrialHubList";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Clases de prueba · Profesor" };
 
-/**
- * Teacher view of THEIR trial classes. Same card UI as the admin page
- * but scoped to `teacher_id = <current teacher>`, and without the
- * "ver lead" link (teachers don't have access to /admin/leads).
- */
 export default async function TeacherTrialClassesPage() {
   const session = await requireRoleWithImpersonation(
     ["teacher", "admin", "superadmin"],
@@ -34,6 +30,26 @@ export default async function TeacherTrialClassesPage() {
   const rows = await listTrialClasses(teacher.id);
   const { upcoming, past } = partitionByTime(rows);
 
+  // Resolve converted_to_user_id → students.id for scheduling
+  const convertedUserIds = [
+    ...new Set(
+      rows
+        .map((r) => r.leadConvertedToUserId)
+        .filter((x): x is string => !!x),
+    ),
+  ];
+  const studentMap: Record<string, string> = {};
+  if (convertedUserIds.length > 0) {
+    const sb = supabaseAdmin();
+    const { data: students } = await sb
+      .from("students")
+      .select("id, user_id")
+      .in("user_id", convertedUserIds);
+    for (const s of students ?? []) {
+      studentMap[s.user_id] = s.id;
+    }
+  }
+
   return (
     <main className="space-y-5">
       <header>
@@ -41,7 +57,7 @@ export default async function TeacherTrialClassesPage() {
           Mis clases de prueba
         </h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          {upcoming.length} próxima{upcoming.length === 1 ? "" : "s"} ·{" "}
+          {upcoming.length} proxima{upcoming.length === 1 ? "" : "s"} ·{" "}
           {past.length} pasada{past.length === 1 ? "" : "s"}.
         </p>
       </header>
@@ -51,24 +67,18 @@ export default async function TeacherTrialClassesPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-3">
             Siguiente clase
           </h2>
-          <div className="rounded-2xl ring-2 ring-emerald-400/60 dark:ring-emerald-500/40 shadow-md">
-            <TrialClassCard row={upcoming[0]} />
-          </div>
+          <TrialHubList rows={[upcoming[0]]} studentMap={studentMap} />
         </section>
       )}
 
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-3">
-          {upcoming.length > 1 ? "Siguientes" : "Próximas"}
+          {upcoming.length > 1 ? "Siguientes" : "Proximas"}
         </h2>
         {upcoming.length <= 1 ? (
-          <EmptyState text={upcoming.length === 0 ? "No tienes clases de prueba agendadas. Verifica que tu admin te haya marcado como elegible para clases de prueba." : "No hay más clases agendadas después de la siguiente."} />
+          <EmptyState text={upcoming.length === 0 ? "No tienes clases de prueba agendadas." : "No hay mas clases agendadas despues de la siguiente."} />
         ) : (
-          <div className="grid gap-3">
-            {upcoming.slice(1).map((r) => (
-              <TrialClassCard key={r.classId} row={r} />
-            ))}
-          </div>
+          <TrialHubList rows={upcoming.slice(1)} studentMap={studentMap} />
         )}
       </section>
 
@@ -77,13 +87,9 @@ export default async function TeacherTrialClassesPage() {
           Historial
         </h2>
         {past.length === 0 ? (
-          <EmptyState text="Aún no tienes clases de prueba pasadas." />
+          <EmptyState text="Aun no tienes clases de prueba pasadas." />
         ) : (
-          <div className="grid gap-3">
-            {past.map((r) => (
-              <TrialClassCard key={r.classId} row={r} />
-            ))}
-          </div>
+          <TrialHubList rows={past} studentMap={studentMap} />
         )}
       </section>
     </main>

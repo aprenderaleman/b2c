@@ -4,23 +4,13 @@ import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { saveStepAction, completeAttendedAction, completeAbsentAction } from "./actions";
 import { TRIAL_PACKS, getPack, type PackId, type PaymentType } from "@/lib/trial-packs";
 import type { ScriptRow, ClassContext } from "@/lib/trial-script";
+import { LEVEL_PRESENTATION_URL, type LevelBucket } from "@/lib/trial-presentations";
 
 // ─────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────
 
 const TOTAL_SECTIONS = 8; // 0-7
-
-type LevelBucket = "A0" | "A1" | "A2" | "B1" | "B2" | "C1";
-
-const LEVEL_PRESENTATION_URL: Record<LevelBucket, string> = {
-  A0: "https://gamma.app/docs/8p0c89sshy99997",
-  A1: "https://gamma.app/docs/v7w2wbdxd95n3sg",
-  A2: "https://gamma.app/docs/ptfb8toca4msdav",
-  B1: "https://gamma.app/docs/zooeusyqq9mrhw4",
-  B2: "https://gamma.app/docs/ki7poj0542swdl2",
-  C1: "https://gamma.app/docs/7kaqe967ge5a4ly",
-};
 
 const NIVEL_OPTIONS = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"];
 
