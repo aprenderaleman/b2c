@@ -4,18 +4,25 @@ import {
   type TrialClassRow,
 } from "@/lib/trial-classes";
 import { DeleteTrialClassButton } from "./DeleteTrialClassButton";
+import { CancelTrialClassButton } from "./CancelTrialClassButton";
 
 /**
  * Card used by /admin/clasedeprueba and /profesor/clasedeprueba to show
- * a single trial class plus quick-contact buttons. Both pages share the
- * same card; the only difference is `showLeadDetailLink` (admin → yes).
+ * a single trial class plus quick-contact buttons.
+ *
+ * Props:
+ *   - showLeadDetailLink → admin context (link al perfil del lead).
+ *   - canDelete → solo superadmin puede eliminar definitivamente
+ *     (Gelfis 2026-06-23). Admin y teacher solo Cancelan.
  */
 export function TrialClassCard({
   row,
   showLeadDetailLink = false,
+  canDelete = false,
 }: {
   row: TrialClassRow;
   showLeadDetailLink?: boolean;
+  canDelete?: boolean;
 }) {
   const date = formatBerlinDate(row.scheduledAt);
   const time = formatBerlinTime(row.scheduledAt);
@@ -158,10 +165,16 @@ export function TrialClassCard({
             </Link>
           )}
 
-          <DeleteTrialClassButton
+          <CancelTrialClassButton
             classId={row.classId}
             scheduledAtIso={row.scheduledAt}
           />
+          {canDelete && (
+            <DeleteTrialClassButton
+              classId={row.classId}
+              scheduledAtIso={row.scheduledAt}
+            />
+          )}
         </div>
       </div>
 

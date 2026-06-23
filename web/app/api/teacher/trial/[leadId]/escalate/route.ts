@@ -41,6 +41,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
 
   const leadName = lead?.name ?? "Lead";
 
+  // Fix Gelfis 2026-06-23: el profe escala porque pasó algo raro →
+  // status=needs_human para PARAR todos los flows automáticos (drips,
+  // post_trial_followup, absent_followup, summer_promo, etc) hasta
+  // que Gelfis intervenga manualmente.
+  await sb.from("leads")
+    .update({ status: "needs_human", next_contact_date: null })
+    .eq("id", leadId);
+
+  await sb.from("lead_timeline").insert({
+    lead_id: leadId,
+    type:    "status_change",
+    author:  teacherName,
+    content: `Escalado por profesor → needs_human. Motivo: ${message}`,
+    metadata: { kind: "teacher_escalation", from_teacher: teacherName },
+  });
+
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type:    "agent_note",

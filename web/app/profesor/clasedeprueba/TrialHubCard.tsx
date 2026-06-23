@@ -6,7 +6,7 @@ import {
   formatBerlinDate, formatBerlinTime, formatGoalEs, formatStatusEs,
   type TrialClassRow,
 } from "@/lib/trial-classes";
-import { DeleteTrialClassButton } from "@/components/DeleteTrialClassButton";
+import { CancelTrialClassButton } from "@/components/CancelTrialClassButton";
 import { ConvertLeadModal } from "@/components/admin/ConvertLeadModal";
 import { NotesField } from "./NotesField";
 import { PaymentLinkModal } from "./PaymentLinkModal";
@@ -113,7 +113,10 @@ export function TrialHubCard({
                 👤 {expanded ? "Cerrar" : "Ver Lead"}
               </button>
 
-              <DeleteTrialClassButton
+              {/* Fix Gelfis 2026-06-23: profesor solo Cancela (preserva
+                  registro). Eliminar definitivo es exclusivo de superadmin
+                  desde /admin/clasedeprueba. */}
+              <CancelTrialClassButton
                 classId={row.classId}
                 scheduledAtIso={row.scheduledAt}
               />

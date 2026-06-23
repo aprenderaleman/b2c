@@ -59,26 +59,23 @@ export async function POST(
     );
   }
 
-  // Teacher may only delete their own classes.
-  if (role === "teacher") {
-    const { data: teacher } = await sb
-      .from("teachers")
-      .select("id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (!teacher || (teacher as { id: string }).id !== c.teacher_id) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
-    }
-  } else if (role !== "admin" && role !== "superadmin") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // Fix Gelfis 2026-06-23: ELIMINAR es exclusivo del superadmin.
+  // Teacher y admin solo pueden Cancelar (endpoint /cancel separado,
+  // marca status='cancelled' sin borrar).
+  if (role !== "superadmin") {
+    return NextResponse.json(
+      { error: "forbidden", message: "Solo superadmin puede eliminar clases. Usa Cancelar." },
+      { status: 403 },
+    );
   }
+  void userId; // suppress unused — superadmin no requiere check de teacher_id
 
   // Audit row BEFORE the delete (so we still have the lead_id).
   if (c.lead_id) {
     await sb.from("lead_timeline").insert({
       lead_id: c.lead_id,
       type:    "status_change",
-      author:  role === "teacher" ? "teacher" : "admin",
+      author:  "superadmin",
       content: `🗑️ Clase de prueba eliminada (${new Date(c.scheduled_at).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })})`,
       metadata: { class_id: c.id, deleted_by_role: role },
     });

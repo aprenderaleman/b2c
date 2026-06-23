@@ -1,5 +1,6 @@
 import { listTrialClasses, partitionByTime } from "@/lib/trial-classes";
 import { TrialClassCard } from "@/components/TrialClassCard";
+import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Clases de prueba · Admin" };
@@ -9,10 +10,15 @@ export const metadata = { title: "Clases de prueba · Admin" };
  * eyeball who is showing up tomorrow without paging through the
  * generic /admin/clases list. Each row exposes a one-click WhatsApp
  * and email contact for the lead.
+ *
+ * Eliminar definitivo solo para superadmin (Gelfis 2026-06-23).
+ * Admin regular ve Cancelar pero no Eliminar.
  */
 export default async function AdminTrialClassesPage() {
   const rows = await listTrialClasses();
   const { upcoming, past } = partitionByTime(rows);
+  const session = await auth();
+  const canDelete = (session?.user as { role?: string } | undefined)?.role === "superadmin";
 
   return (
     <main className="space-y-5">
@@ -34,7 +40,7 @@ export default async function AdminTrialClassesPage() {
             Siguiente clase
           </h2>
           <div className="rounded-2xl ring-2 ring-emerald-400/60 dark:ring-emerald-500/40 shadow-md">
-            <TrialClassCard row={upcoming[0]} showLeadDetailLink />
+            <TrialClassCard row={upcoming[0]} showLeadDetailLink canDelete={canDelete} />
           </div>
         </section>
       )}
@@ -49,7 +55,7 @@ export default async function AdminTrialClassesPage() {
         ) : (
           <div className="grid gap-3">
             {upcoming.slice(1).map((r) => (
-              <TrialClassCard key={r.classId} row={r} showLeadDetailLink />
+              <TrialClassCard key={r.classId} row={r} showLeadDetailLink canDelete={canDelete} />
             ))}
           </div>
         )}
@@ -65,7 +71,7 @@ export default async function AdminTrialClassesPage() {
         ) : (
           <div className="grid gap-3">
             {past.map((r) => (
-              <TrialClassCard key={r.classId} row={r} showLeadDetailLink />
+              <TrialClassCard key={r.classId} row={r} showLeadDetailLink canDelete={canDelete} />
             ))}
           </div>
         )}

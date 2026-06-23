@@ -12,7 +12,8 @@ import { sendWhatsappText } from "./whatsapp";
 import {
   getLeadTrialTeacher,
   payConversionCommission,
-  PACK_COMMISSION_CENTS,
+  payPerformanceBonus,
+  getCommissionCents,
 } from "./trial-compensation";
 
 export const ConvertBody = z.object({
@@ -27,6 +28,11 @@ export const ConvertBody = z.object({
   classesPerMonth:   z.coerce.number().int().min(0).max(100).nullable().default(null),
   monthlyPriceEuros: z.coerce.number().min(0).max(10000).nullable().default(null),
   currency:          z.enum(["EUR", "USD", "CHF"]).default("EUR"),
+  // Horarios preferidos del estudiante (texto libre, e.g. "Lunes y
+  // miércoles 18:00 CET"). El modal del profesor lo recoge — se
+  // persiste en students.notes para que el equipo pueda agendar
+  // (Gelfis 2026-06-23).
+  horarios:          z.string().trim().max(300).nullable().default(null),
 });
 
 export type ConvertInput = z.infer<typeof ConvertBody>;
@@ -102,12 +108,23 @@ export async function convertLeadToStudent(
       .eq("class_id", trial.classId)
       .maybeSingle();
 
-    if (script?.teacher_notes) {
-      updateFields.notes = script.teacher_notes;
+    // Combina horarios (del modal del profesor) + teacher_notes (script
+    // de la clase) en students.notes. Fix Gelfis 2026-06-23: el campo
+    // "Horarios" del modal antes se descartaba.
+    const noteParts: string[] = [];
+    if (body.horarios) noteParts.push(`Horarios preferidos: ${body.horarios}`);
+    if (script?.teacher_notes) noteParts.push(script.teacher_notes);
+    if (noteParts.length > 0) {
+      updateFields.notes = noteParts.join("\n\n");
     }
 
     await sb.from("students")
       .update(updateFields)
+      .eq("id", created.studentId);
+  } else if (body.horarios) {
+    // No hubo trial pero el profe rellenó horarios → persistir igual.
+    await sb.from("students")
+      .update({ notes: `Horarios preferidos: ${body.horarios}` })
       .eq("id", created.studentId);
   }
 
@@ -120,11 +137,13 @@ export async function convertLeadToStudent(
         .maybeSingle();
       const meta = (leadMetaRow?.meta ?? {}) as Record<string, unknown>;
       const packId = typeof meta.last_offered_pack === "string" ? meta.last_offered_pack : null;
-      if (packId && PACK_COMMISSION_CENTS[packId] != null) {
+      const paymentType = meta.last_offered_payment === "flexible" ? "flexible" as const : "single" as const;
+      if (packId && getCommissionCents(packId, paymentType) > 0) {
         const paid = await payConversionCommission({
           trialClassId: trial.classId,
           teacherId:    trial.teacherId,
           packId,
+          paymentType,
         });
         if (paid && paid > 0) {
           await sb.from("lead_timeline").insert({
@@ -138,6 +157,24 @@ export async function convertLeadToStudent(
       }
     } catch (e) {
       console.error("[convert] payConversionCommission failed:", e instanceof Error ? e.message : e);
+    }
+
+    try {
+      const bonus = await payPerformanceBonus({
+        trialClassId: trial.classId,
+        teacherId:    trial.teacherId,
+      });
+      if (bonus && bonus > 0) {
+        await sb.from("lead_timeline").insert({
+          lead_id: lead.id,
+          type:    "agent_note",
+          author:  "system",
+          content: `🎯 Bono de desempeño: ${(bonus/100).toFixed(0)}€ (close rate ≥30%)`,
+          metadata: { kind: "performance_bonus_paid", class_id: trial.classId, teacher_id: trial.teacherId, amount_cents: bonus },
+        });
+      }
+    } catch (e) {
+      console.error("[convert] payPerformanceBonus failed:", e instanceof Error ? e.message : e);
     }
   }
 
