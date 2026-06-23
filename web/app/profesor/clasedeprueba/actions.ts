@@ -29,16 +29,25 @@ export async function saveTeacherNotes(classId: string, notes: string) {
 
   if (!cls) throw new Error("not_owner");
 
+  const { data: userRow } = await sb
+    .from("users")
+    .select("full_name")
+    .eq("id", user.id)
+    .maybeSingle();
+  const teacherName = userRow?.full_name ?? user.id;
+
   const { data: existing } = await sb
     .from("trial_class_scripts")
     .select("id")
     .eq("class_id", classId)
     .maybeSingle();
 
+  const now = new Date().toISOString();
+
   if (existing) {
     await sb
       .from("trial_class_scripts")
-      .update({ teacher_notes: notes })
+      .update({ teacher_notes: notes, updated_at: now })
       .eq("id", existing.id);
   } else {
     await sb.from("trial_class_scripts").insert({
@@ -47,6 +56,16 @@ export async function saveTeacherNotes(classId: string, notes: string) {
       teacher_id:    user.id,
       current_step:  0,
       teacher_notes: notes,
+    });
+  }
+
+  if (cls.lead_id) {
+    await sb.from("lead_timeline").insert({
+      lead_id:   cls.lead_id,
+      type:      "teacher_note",
+      author:    teacherName,
+      content:   notes,
+      timestamp: now,
     });
   }
 }
