@@ -112,6 +112,14 @@ function ctaLabelDE(v: ClassLifecycleVars): string {
 // ─────────────────────────────────────────────────────────
 
 function renderES(v: ClassLifecycleVars): RenderedEmail {
+  // Para el caso "estudiante / clase agendada" añadimos instrucciones
+  // claras de cómo unirse el día de la clase (Gelfis 2026-06-23).
+  const joinInstructionsES = (v.audience === "student" && v.kind === "created")
+    ? `${h2(`Cómo unirte el día de la clase`)}
+       ${p(`<strong>5 minutos antes</strong>, entra a tu panel y pulsa <strong>“Entrar al aula”</strong>. No hace falta instalar nada — el aula se abre directamente en el navegador.`)}
+       ${p(`Antes de empezar, asegúrate de tener:`)}
+       ${p(`• Buena conexión a internet<br>• Cámara y micrófono funcionando<br>• Un sitio tranquilo durante la clase`)}`
+    : "";
   const body = `
     ${h2(`¡Hola ${escapeHtml(v.recipientName)}! 👋`)}
     ${p(openerES(v))}
@@ -122,23 +130,40 @@ function renderES(v: ClassLifecycleVars): RenderedEmail {
     <div style="text-align:center;margin:24px 0 8px 0;">
       ${button(v.classUrl, ctaLabelES(v))}
     </div>
+    ${joinInstructionsES}
     ${p(`<em style="color:#64748b;">— Aprender-Aleman.de</em>`)}
   `;
   const footerNote = v.audience === "teacher"
     ? "Recibes este correo porque eres el profesor/a asignado/a a esta clase."
     : "Recibes este correo porque tienes esta clase en tu plan de estudios.";
+  const plainJoinES = (v.audience === "student" && v.kind === "created")
+    ? [
+        `Cómo unirte el día de la clase:`,
+        `5 minutos antes, entra a tu panel y pulsa "Entrar al aula".`,
+        `No hace falta instalar nada — el aula se abre en el navegador.`,
+        `Necesitas: buena conexión, cámara y micrófono, lugar tranquilo.`,
+        ``,
+      ]
+    : [];
   const text = [
     `¡Hola ${v.recipientName}!`, ``,
     plainOpenerES(v),
     `Fecha: ${v.startDate}`,
     `Duración: ${v.durationMin} min`, ``,
     `Ver detalles: ${v.classUrl}`, ``,
+    ...plainJoinES,
     `— Aprender-Aleman.de`,
   ].join("\n");
   return { subject: subject(v), html: renderEnvelope(body, footerNote), text };
 }
 
 function renderDE(v: ClassLifecycleVars): RenderedEmail {
+  const joinInstructionsDE = (v.audience === "student" && v.kind === "created")
+    ? `${h2(`So trittst du am Tag der Stunde bei`)}
+       ${p(`<strong>5 Minuten vorher</strong> gehst du in deinen Bereich und klickst auf <strong>„Zum Klassenzimmer“</strong>. Du musst nichts installieren — das Klassenzimmer öffnet sich direkt im Browser.`)}
+       ${p(`Stell vorher sicher:`)}
+       ${p(`• Stabile Internetverbindung<br>• Funktionierende Kamera und Mikrofon<br>• Ein ruhiger Ort während der Stunde`)}`
+    : "";
   const body = `
     ${h2(`Hallo ${escapeHtml(v.recipientName)}! 👋`)}
     ${p(openerDE(v))}
@@ -149,17 +174,28 @@ function renderDE(v: ClassLifecycleVars): RenderedEmail {
     <div style="text-align:center;margin:24px 0 8px 0;">
       ${button(v.classUrl, ctaLabelDE(v))}
     </div>
+    ${joinInstructionsDE}
     ${p(`<em style="color:#64748b;">— Aprender-Aleman.de</em>`)}
   `;
   const footerNote = v.audience === "teacher"
     ? "Du erhältst diese E-Mail, weil du der/die zugewiesene Lehrer/in bist."
     : "Du erhältst diese E-Mail, weil diese Stunde in deinem Plan ist.";
+  const plainJoinDE = (v.audience === "student" && v.kind === "created")
+    ? [
+        `So trittst du am Tag der Stunde bei:`,
+        `5 Minuten vorher gehst du in deinen Bereich und klickst auf "Zum Klassenzimmer".`,
+        `Du musst nichts installieren — das Klassenzimmer öffnet sich im Browser.`,
+        `Brauchst: stabile Verbindung, Kamera und Mikrofon, ruhiger Ort.`,
+        ``,
+      ]
+    : [];
   const text = [
     `Hallo ${v.recipientName}!`, ``,
     plainOpenerDE(v),
     `Datum: ${v.startDate}`,
     `Dauer: ${v.durationMin} Min`, ``,
     `Details: ${v.classUrl}`, ``,
+    ...plainJoinDE,
     `— Aprender-Aleman.de`,
   ].join("\n");
   return { subject: subject(v), html: renderEnvelope(body, footerNote), text };

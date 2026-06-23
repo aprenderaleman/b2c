@@ -93,7 +93,12 @@ export type EmailAttachment = {
  * daily digest, etc.) are NOT gated by this flag.
  */
 export function lifecycleEmailsEnabled(): boolean {
-  return (process.env.LIFECYCLE_EMAILS_ENABLED ?? "false") === "true";
+  // Gelfis 2026-06-23: default a true (antes false). Razón: el email
+  // "Tus clases están agendadas" al estudiante es parte del flujo
+  // estándar tras convertir lead → student y agendar — no debería
+  // estar opt-in. Para desactivar, setear LIFECYCLE_EMAILS_ENABLED=false
+  // explícitamente.
+  return (process.env.LIFECYCLE_EMAILS_ENABLED ?? "true") === "true";
 }
 
 /**
