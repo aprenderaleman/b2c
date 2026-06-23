@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
+import { TRIAL_PACKS, type PackId } from "@/lib/trial-packs";
 
 type Lead = {
   id:    string;
@@ -15,22 +16,17 @@ type Lead = {
 
 const CEFR_LEVELS = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
-/**
- * Map the funnel's german_level (now sub-divided: A0, A1.1, A1.2,
- * A2.1, A2.2, B1, B2 — plus legacy A1-A2 / B2+) to a single CEFR
- * level for the student record. Admin can override in the form.
- */
 function defaultLevelFrom(lead: Lead): typeof CEFR_LEVELS[number] {
   switch (lead.german_level) {
     case "A0":    return "A0";
     case "A1.1":  return "A1";
     case "A1.2":  return "A1";
-    case "A1-A2": return "A1";   // legacy
+    case "A1-A2": return "A1";
     case "A2.1":  return "A2";
     case "A2.2":  return "A2";
     case "B1":    return "B1";
     case "B2":    return "B2";
-    case "B2+":   return "B2";   // legacy
+    case "B2+":   return "B2";
     default:      return "A0";
   }
 }
@@ -47,26 +43,27 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  // Form state
-  const [email,            setEmail]            = useState(lead.email ?? "");
-  const [fullName,         setFullName]         = useState(lead.name);
-  const [currentLevel,     setCurrentLevel]     = useState<typeof CEFR_LEVELS[number]>(defaultLevelFrom(lead));
-  const [subscriptionType, setSubscriptionType] = useState<
-    "single_classes" | "package" | "monthly_subscription" | "combined"
-  >("package");
-  const [classesRemaining,  setClassesRemaining]  = useState<number>(20);
-  const [classesPerMonth,   setClassesPerMonth]   = useState<number>(4);
-  const [monthlyPriceEuros, setMonthlyPriceEuros] = useState<number>(200);
-  const [goal,              setGoal]              = useState(lead.goal ?? "");
+  const [email,        setEmail]        = useState(lead.email ?? "");
+  const [fullName,     setFullName]     = useState(lead.name);
+  const [currentLevel, setCurrentLevel] = useState<typeof CEFR_LEVELS[number]>(defaultLevelFrom(lead));
+  const [packId,       setPackId]       = useState<PackId | "">("");
+  const [horarios,     setHorarios]     = useState("");
 
   const needsEmail = !email.trim();
+  const needsPack  = packId === "";
 
   if (!open) return null;
+
+  const selectedPack = TRIAL_PACKS.find(p => p.id === packId);
 
   const submit = () => {
     setError(null);
     if (needsEmail) {
-      setError("El correo del lead es obligatorio. Pídeselo por WhatsApp si aún no lo tienes.");
+      setError("El correo del lead es obligatorio. Pideselo por WhatsApp si aun no lo tienes.");
+      return;
+    }
+    if (needsPack) {
+      setError("Selecciona un pack.");
       return;
     }
 
@@ -76,14 +73,12 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
         fullName,
         phone: lead.phone,
         language: lead.language,
-
         currentLevel,
-        goal: goal || null,
-
-        subscriptionType,
-        classesRemaining:  subscriptionType === "monthly_subscription" ? 0 : classesRemaining,
-        classesPerMonth:   subscriptionType === "monthly_subscription" ? classesPerMonth : null,
-        monthlyPriceEuros: subscriptionType === "monthly_subscription" ? monthlyPriceEuros : null,
+        goal: lead.goal || null,
+        subscriptionType: "package" as const,
+        classesRemaining: selectedPack?.classes ?? 32,
+        horarios: horarios.trim() || null,
+        packId,
         currency: "EUR",
       };
 
@@ -95,7 +90,7 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body?.message ?? body?.error ?? "Error al convertir. Inténtalo de nuevo.");
+        setError(body?.message ?? body?.error ?? "Error al convertir. Intentalo de nuevo.");
         return;
       }
 
@@ -117,12 +112,11 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
             Convertir en estudiante
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Se creará el usuario, se enviará el email de bienvenida con sus accesos y un WhatsApp.
+            Se creara el usuario, se enviara el email de bienvenida con sus accesos y un WhatsApp.
           </p>
         </header>
 
         <div className="p-6 space-y-4">
-          {/* Identity */}
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Nombre completo">
               <input
@@ -132,30 +126,21 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
                 maxLength={120}
               />
             </Field>
-            <Field label="WhatsApp (sólo lectura)">
+            <Field
+              label="Correo electronico"
+              hint={needsEmail ? "Obligatorio — pideselo al lead" : undefined}
+            >
               <input
-                value={lead.phone}
-                disabled
-                className="input-text opacity-70 cursor-not-allowed font-mono text-sm"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="alumno@correo.com"
+                className="input-text"
+                autoFocus={needsEmail}
               />
             </Field>
           </div>
 
-          <Field
-            label="Correo electrónico"
-            hint={needsEmail ? "Obligatorio — pídeselo al lead si aún no lo tienes" : undefined}
-          >
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="alumno@correo.com"
-              className="input-text"
-              autoFocus={needsEmail}
-            />
-          </Field>
-
-          {/* Academic */}
           <div className="grid sm:grid-cols-2 gap-4">
             <Field label="Nivel actual">
               <select
@@ -168,60 +153,29 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
                 ))}
               </select>
             </Field>
-            <Field label="Meta (opcional)">
-              <input
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                placeholder="p.ej. pasar B1 en 6 meses"
+            <Field label="Pack">
+              <select
+                value={packId}
+                onChange={(e) => setPackId(e.target.value as PackId)}
                 className="input-text"
-                maxLength={300}
-              />
+              >
+                <option value="">— Selecciona —</option>
+                {TRIAL_PACKS.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.classes} clases)</option>
+                ))}
+              </select>
             </Field>
           </div>
 
-          {/* Plan */}
-          <Field label="Tipo de plan">
-            <select
-              value={subscriptionType}
-              onChange={(e) => setSubscriptionType(e.target.value as typeof subscriptionType)}
+          <Field label="Horarios">
+            <input
+              value={horarios}
+              onChange={(e) => setHorarios(e.target.value)}
+              placeholder='Ej: "Lunes y miercoles 18:00 CET"'
               className="input-text"
-            >
-              <option value="package">Paquete de clases</option>
-              <option value="monthly_subscription">Suscripción mensual</option>
-              <option value="single_classes">Clases sueltas</option>
-              <option value="combined">Combinado</option>
-            </select>
+              maxLength={300}
+            />
           </Field>
-
-          {subscriptionType === "monthly_subscription" ? (
-            <div className="grid sm:grid-cols-2 gap-4">
-              <Field label="Clases al mes">
-                <input
-                  type="number" min={1} max={100}
-                  value={classesPerMonth}
-                  onChange={(e) => setClassesPerMonth(Number(e.target.value))}
-                  className="input-text"
-                />
-              </Field>
-              <Field label="Precio mensual (€)">
-                <input
-                  type="number" min={0} step="0.01"
-                  value={monthlyPriceEuros}
-                  onChange={(e) => setMonthlyPriceEuros(Number(e.target.value))}
-                  className="input-text"
-                />
-              </Field>
-            </div>
-          ) : (
-            <Field label="Clases contratadas">
-              <input
-                type="number" min={0} max={500}
-                value={classesRemaining}
-                onChange={(e) => setClassesRemaining(Number(e.target.value))}
-                className="input-text"
-              />
-            </Field>
-          )}
 
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400" role="alert">
@@ -243,7 +197,7 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
             type="button"
             className="btn-primary"
             onClick={submit}
-            disabled={pending || needsEmail}
+            disabled={pending || needsEmail || needsPack}
           >
             {pending ? "Convirtiendo…" : "Convertir en estudiante"}
           </button>

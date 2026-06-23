@@ -127,7 +127,7 @@ export function PaymentLinkModal({
             >
               <option value="">— Selecciona —</option>
               {TRIAL_PACKS.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>{p.name} ({p.classes} clases)</option>
               ))}
             </select>
           </div>

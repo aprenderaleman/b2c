@@ -10,49 +10,63 @@
  */
 
 export type PackId =
-  | "vip_individual"
+  | "basico"
+  | "intermedio"
+  | "avanzado"
   | "vip_express"
-  | "inicio_grupal"
-  | "fluidez_total_grupal";
+  | "inmersion_total";
 
 export type PaymentType = "single" | "flexible";
 
 export type Pack = {
   id:           PackId;
-  name:         string;          // nombre mostrado en el WA y en el dropdown
-  bestFor:      string[];        // goal ids para los que es recomendado (referencia)
+  name:         string;
+  classes:      number;
+  bestFor:      string[];
   urlSingle:    string;
   urlFlexible:  string;
 };
 
 export const TRIAL_PACKS: Pack[] = [
   {
-    id:    "vip_individual",
-    name:  "Clases VIP Individuales",
-    bestFor: ["work", "exam", "personal_growth"],
+    id:    "basico",
+    name:  "Pack Basico",
+    classes: 32,
+    bestFor: ["personal_growth", "travel"],
     urlSingle:   "https://buy.stripe.com/6oU00k2KPctnat3g8GdnW1m",
     urlFlexible: "https://buy.stripe.com/5kQ9AU2KPdxr1Wx7CadnW1n",
   },
   {
+    id:    "intermedio",
+    name:  "Pack Intermedio",
+    classes: 48,
+    bestFor: ["studies", "work"],
+    urlSingle:   "https://buy.stripe.com/fZufZi3OT2SN7gR4pYdnW1i",
+    urlFlexible: "https://buy.stripe.com/4gM7sMdpt8d7cBb5u2dnW1j",
+  },
+  {
+    id:    "avanzado",
+    name:  "Pack Avanzado",
+    classes: 60,
+    bestFor: ["work", "exam"],
+    urlSingle:   "https://buy.stripe.com/bJeeVeetxctn30B4pYdnW1k",
+    urlFlexible: "https://buy.stripe.com/eVq3cwadh9hb9oZ6y6dnW1l",
+  },
+  {
     id:    "vip_express",
     name:  "Pack VIP Express",
+    classes: 72,
     bestFor: ["work", "already_in_dach", "exam"],
     urlSingle:   "https://buy.stripe.com/fZu3cwbhl50VdFf8GednW1o",
     urlFlexible: "https://buy.stripe.com/aFafZiadh8d7at3bSqdnW1p",
   },
   {
-    id:    "inicio_grupal",
-    name:  "Pack Inicio (Grupal)",
-    bestFor: ["personal_growth", "travel", "studies"],
-    urlSingle:   "https://buy.stripe.com/fZufZi3OT2SN7gR4pYdnW1i",
-    urlFlexible: "https://buy.stripe.com/4gM7sMdpt8d7cBb5u2dnW1j",
-  },
-  {
-    id:    "fluidez_total_grupal",
-    name:  "Pack Fluidez Total (Grupal)",
-    bestFor: ["work", "studies", "already_in_dach"],
-    urlSingle:   "https://buy.stripe.com/bJeeVeetxctn30B4pYdnW1k",
-    urlFlexible: "https://buy.stripe.com/eVq3cwadh9hb9oZ6y6dnW1l",
+    id:    "inmersion_total",
+    name:  "Pack Inmersion Total",
+    classes: 100,
+    bestFor: ["work", "already_in_dach", "studies"],
+    urlSingle:   "https://buy.stripe.com/inmersion_single",
+    urlFlexible: "https://buy.stripe.com/inmersion_flexible",
   },
 ];
 
@@ -86,13 +100,13 @@ export function recommendPacks(
   goal:     LearningGoal,
 ): [PackId, PackId] {
   if (schedule === "changing") {
-    return ["vip_individual", "vip_express"];
+    return ["avanzado", "vip_express"];
   }
   // fixed schedule
   if (goal === "one_level") {
-    return ["inicio_grupal", "vip_express"];
+    return ["basico", "intermedio"];
   }
-  return ["fluidez_total_grupal", "vip_individual"];
+  return ["avanzado", "vip_express"];
 }
 
 /** Override por env var (PACK_URL_<PACKID>_<SINGLE|FLEXIBLE>) — sin redeploy. */
