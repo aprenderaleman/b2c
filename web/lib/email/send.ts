@@ -28,6 +28,10 @@ import {
   type ClassLifecycleVars,
 } from "./templates/class-lifecycle";
 import {
+  renderClassScheduleSummary,
+  type ClassScheduleSummaryVars,
+} from "./templates/class-schedule-summary";
+import {
   renderTrialRescheduled,
   type TrialRescheduledVars,
 } from "./templates/trial-rescheduled";
@@ -361,6 +365,19 @@ export async function sendClassLifecycleEmail(
   vars: ClassLifecycleVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderClassLifecycle(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Email "resumen de clases agendadas" — un solo correo cuando el
+ * profesor agenda múltiples slots desde el modal flexible de
+ * /api/teacher/classes/bulk (Gelfis 2026-06-23).
+ */
+export async function sendClassScheduleSummaryEmail(
+  to: string,
+  vars: ClassScheduleSummaryVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderClassScheduleSummary(vars);
   return sendRaw(to, subject, html, text);
 }
 
