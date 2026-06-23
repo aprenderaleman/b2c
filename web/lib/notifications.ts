@@ -23,6 +23,7 @@ export type NotificationType =
   // completa el paso 5 del funnel. Destinada a superadmins — render
   // en rojo con badge "IMPORTANTE" porque hay <5 min para contactar.
   | "lead_new_urgent"
+  | "trial_assigned"
   | "generic";
 
 export type NotificationRow = {

@@ -63,6 +63,10 @@ import {
   renderDiagnosticoTestFollowup,
   type DiagnosticoTestFollowupVars,
 } from "./templates/diagnostico-test-followup";
+import {
+  renderTrialAssignedTeacher,
+  type TrialAssignedTeacherVars,
+} from "./templates/trial-assigned-teacher";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -477,5 +481,13 @@ export async function sendLeadNewUrgentEmail(
   vars: LeadNewUrgentVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderLeadNewUrgent(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+export async function sendTrialAssignedTeacherEmail(
+  to: string,
+  vars: TrialAssignedTeacherVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTrialAssignedTeacher(vars);
   return sendRaw(to, subject, html, text);
 }

@@ -5,6 +5,7 @@ import { getTeacherUpcomingClasses, type ClassWithPeople, classStatusEs, formatC
 import { NextClassCard } from "@/components/classes/NextClassCard";
 import { getUserIcalToken, icalUrlFor } from "@/lib/user-extras";
 import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
+import { GoogleCalendarConnectButton } from "@/components/calendar/GoogleCalendarConnectButton";
 import { OpenSchuleTeacherButton } from "@/components/entitlements/OpenSchuleTeacherButton";
 import { HansTeacherCard } from "@/components/dashboard/HansTeacherCard";
 
@@ -62,7 +63,10 @@ export default async function TeacherHome() {
             Esto es lo que tienes agendado.
           </p>
         </div>
-        {icalToken && <CalendarSyncButton icalUrl={icalUrlFor(icalToken)} />}
+        <div className="flex items-center gap-2 flex-wrap">
+          {icalToken && <CalendarSyncButton icalUrl={icalUrlFor(icalToken)} />}
+          <GoogleCalendarConnectButton />
+        </div>
       </header>
 
       {next ? (

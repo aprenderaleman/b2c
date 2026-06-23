@@ -10,6 +10,8 @@ import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { createTrialEvent } from "@/lib/google-calendar";
 import { sanitizeE164 } from "@/lib/phone";
 import { buildTrialIcs } from "@/lib/ics";
+import { notifyTeacherOfTrial } from "@/lib/teacher-trial-notification";
+import { createTeacherTrialEvent } from "@/lib/google-calendar-oauth";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
 function generateShortCode(): string {
@@ -671,6 +673,29 @@ export async function POST(req: Request) {
         });
       }
     }
+
+    // ── Notify the assigned teacher (in-app bell + email) ──
+    await notifyTeacherOfTrial({
+      teacherId:   b.teacher_id,
+      leadName:    b.name,
+      startIso:    b.slot_iso,
+      germanLevel: b.german_level ?? null,
+      goal:        goal,
+      classId,
+    }).catch(e => console.error("[book-trial] teacher notification failed:", e));
+
+    // ── Mirror event to teacher's personal Google Calendar (if connected) ──
+    await createTeacherTrialEvent(b.teacher_id, {
+      leadName:        b.name,
+      teacherName:     match.teacherName,
+      startIso:        b.slot_iso,
+      durationMinutes: TRIAL_DURATION_MIN,
+      leadEmail:       b.email,
+      leadWhatsapp:    b.whatsapp_e164 ?? null,
+      germanLevel:     b.german_level ?? null,
+      goal:            goal,
+      joinUrl:         shortLinkUrl,
+    }).catch(e => console.error("[book-trial] teacher gcal event failed:", e));
   });
 
   return NextResponse.json({

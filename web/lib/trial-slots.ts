@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { getCalendarBusy } from "./google-calendar";
+import { getConnectedTeacherIds, getTeacherCalendarBusy } from "./google-calendar-oauth";
 
 /**
  * Trial-slot computation for the public funnel.
@@ -191,6 +192,29 @@ async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
         const list = busyByTeacher.get(gcalTeacher.id) ?? [];
         list.push(...personalBusy);
         busyByTeacher.set(gcalTeacher.id, list);
+      }
+    }
+  }
+
+  // ── Teacher personal Google Calendars (OAuth) ────────────────
+  // For each teacher who connected their personal Google Calendar,
+  // fetch busy intervals and merge into their busyByTeacher entry.
+  // Fail-open: if any teacher's calendar fails, their slots still
+  // appear (better a potential conflict than hiding all availability).
+  const poolTeacherIds = teachers.map(t => t.id);
+  const connectedIds = await getConnectedTeacherIds(poolTeacherIds);
+  if (connectedIds.length > 0) {
+    const teacherBusyResults = await Promise.allSettled(
+      connectedIds.map(tid =>
+        getTeacherCalendarBusy(tid, now.toISOString(), horizonEnd.toISOString())
+          .then(intervals => ({ teacherId: tid, intervals })),
+      ),
+    );
+    for (const result of teacherBusyResults) {
+      if (result.status === "fulfilled" && result.value.intervals.length > 0) {
+        const list = busyByTeacher.get(result.value.teacherId) ?? [];
+        list.push(...result.value.intervals);
+        busyByTeacher.set(result.value.teacherId, list);
       }
     }
   }

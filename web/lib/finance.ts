@@ -117,8 +117,9 @@ export async function logClassHoursAndRollup(args: {
       rate_at_time:     rate,
       amount_cents:     amountCents,
       currency,
+      kind:             "class",
     },
-    { onConflict: "class_id" },
+    { onConflict: "class_id,kind" },
   );
   if (insErr) {
     console.error("class_hours_log upsert failed:", insErr.message);
