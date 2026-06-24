@@ -220,6 +220,40 @@ export default async function FunnelControlPage({
   const leads = leadsResult.rows;
   const totalPages = Math.max(1, Math.ceil(leadsResult.total / PAGE_SIZE));
 
+  // Enriquecemos cada lead con el nombre del profesor de su trial (si
+  // tiene). Una sola query JOIN classes→teachers→users por todos los
+  // lead_ids de la página actual — no hace N+1.
+  // Result: Map<leadId, teacherName>.
+  const teacherByLead = new Map<string, string>();
+  const leadIdsWithTrial = leads.filter(l => l.trial_scheduled_at).map(l => l.id);
+  if (leadIdsWithTrial.length > 0) {
+    const { supabaseAdmin } = await import("@/lib/supabase");
+    const sb = supabaseAdmin();
+    const { data: classRows } = await sb
+      .from("classes")
+      .select("lead_id, teacher:teachers!inner(users!inner(full_name, email))")
+      .in("lead_id", leadIdsWithTrial)
+      .eq("is_trial", true)
+      .order("created_at", { ascending: false });
+    type Row = {
+      lead_id: string;
+      teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
+               Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
+    };
+    const flat = <T,>(x: T | T[] | null | undefined): T | null =>
+      !x ? null : Array.isArray(x) ? x[0] ?? null : x;
+    for (const r of (classRows ?? []) as Row[]) {
+      if (teacherByLead.has(r.lead_id)) continue; // primera fila (más reciente)
+      const tw = flat(r.teacher);
+      const u  = tw ? flat(tw.users) : null;
+      const name = (u?.full_name ?? u?.email ?? "").trim();
+      if (name) {
+        // Solo primer nombre para que quepa en la tabla compacta.
+        teacherByLead.set(r.lead_id, name.split(/\s+/)[0]);
+      }
+    }
+  }
+
   // KPIs derivados (mismos cálculos que /admin/ads — fuente única).
   const entry          = data.steps[0]?.reached ?? 0;
   const formCompleted  = data.steps[2]?.reached ?? 0;
@@ -683,6 +717,9 @@ export default async function FunnelControlPage({
                       {l.trial_scheduled_at ? (
                         <>
                           <div className="text-white/80 tabular-nums whitespace-nowrap">{fmtTrialDate(l.trial_scheduled_at)}</div>
+                          {teacherByLead.get(l.id) && (
+                            <div className="text-[10px] text-sky-300/85">👨‍🏫 {teacherByLead.get(l.id)}</div>
+                          )}
                           {attState === "attended" && <span className="text-[10px] text-emerald-300">✓ asistió</span>}
                           {attState === "absent" && <span className="text-[10px] text-red-300">✗ no asistió</span>}
                           {attState === "scheduled" && <span className="text-[10px] text-white/40">pendiente</span>}
@@ -764,12 +801,17 @@ export default async function FunnelControlPage({
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <div className="text-[11px]">
                     {l.trial_scheduled_at ? (
-                      <span className="text-white/70">
-                        🗓 {fmtTrialDate(l.trial_scheduled_at)}
-                        {attState === "attended" && <span className="ml-1.5 text-emerald-300">✓</span>}
-                        {attState === "absent"   && <span className="ml-1.5 text-red-300">✗</span>}
-                        {attState === "scheduled"&& <span className="ml-1.5 text-white/40">…</span>}
-                      </span>
+                      <>
+                        <span className="text-white/70">
+                          🗓 {fmtTrialDate(l.trial_scheduled_at)}
+                          {attState === "attended" && <span className="ml-1.5 text-emerald-300">✓</span>}
+                          {attState === "absent"   && <span className="ml-1.5 text-red-300">✗</span>}
+                          {attState === "scheduled"&& <span className="ml-1.5 text-white/40">…</span>}
+                        </span>
+                        {teacherByLead.get(l.id) && (
+                          <div className="text-[10.5px] text-sky-300/85 mt-0.5">👨‍🏫 {teacherByLead.get(l.id)}</div>
+                        )}
+                      </>
                     ) : <span className="text-white/30">sin trial</span>}
                   </div>
                   <div className="flex items-center gap-2">
