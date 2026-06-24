@@ -10,9 +10,9 @@ import { getConnectedTeacherIds, getTeacherCalendarBusy } from "./google-calenda
  *      is the rotation pool. If empty → no slots.
  *   2. For each pool teacher, fetch their weekly `teacher_availability`
  *      windows + every `scheduled` / `live` class in the lookahead
- *      horizon (45 min apart from `now`).
+ *      horizon (30 min apart from `now`).
  *   3. For each Berlin-day in the horizon, walk each teacher's
- *      availability windows for that weekday and carve out 45-min
+ *      availability windows for that weekday and carve out 30-min
  *      blocks that don't overlap any of their existing classes.
  *      Days with no availability simply produce no slots; weekend
  *      days appear iff at least one trial-eligible teacher has a
@@ -31,7 +31,7 @@ import { getConnectedTeacherIds, getTeacherCalendarBusy } from "./google-calenda
 const BERLIN_TZ = "Europe/Berlin";
 const DEFAULT_HORIZON_DAYS = 15;
 const EXTENDED_HORIZON_DAYS = 30;
-const TRIAL_MINUTES = 45;
+const TRIAL_MINUTES = 30;
 // Trial slots are offered ONLY on the hour (09:00, 10:00, 11:00…).
 // Cadence of 15 min gave too many near-identical options and felt
 // noisy in the mobile picker; 60 min keeps the list scannable while
@@ -236,7 +236,7 @@ async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
         .filter(w => isWindowValid(w, dayDate));
 
       for (const w of windows) {
-        // For each 15-min start time in [w.start_time, w.end_time - 45min)
+        // For each start time in [w.start_time, w.end_time - 30min)
         const winStartMs = berlinClockToUtcMs(dayDate, w.start_time);
         const winEndMs   = berlinClockToUtcMs(dayDate, w.end_time);
         const lastValidStart = winEndMs - TRIAL_MINUTES * 60_000;

@@ -118,7 +118,7 @@ async function run(req: Request) {
         recipientName:   leadFirst,
         counterpartName: "tu profesor/a",
         startDate,
-        durationMin:     r.duration_minutes ?? 45,
+        durationMin:     r.duration_minutes ?? 30,
         joinUrl,
         language:        lead.language,
       });

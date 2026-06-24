@@ -10,7 +10,7 @@ export type TrialConfirmationVars = {
   leadName:       string;          // first name
   classTitle:     string;          // "Clase de prueba con Sabine"
   startDate:      string;          // pre-formatted "viernes 26 de abril, 17:00 (Berlín)"
-  durationMin:    number;          // 45
+  durationMin:    number;          // 30
   teacherName:    string;
   joinUrl:        LeadJoinUrl;     // OBLIGATORIO: construir vía buildLeadJoinUrl()
   language:       "es" | "de";
@@ -47,7 +47,7 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
     </div>
     ${h2(`Cómo prepararte`)}
     ${p(`No necesitas estudiar nada — la clase es 100% conversacional y tu profesor/a se adapta a tu nivel. Solo asegúrate de tener:`)}
-    ${p(`• Buena conexión a internet<br>• Cámara y micrófono funcionando<br>• Un sitio tranquilo durante 45 min`)}
+    ${p(`• Buena conexión a internet<br>• Cámara y micrófono funcionando<br>• Un sitio tranquilo durante 30 min`)}
     ${p(`<em style="color:#64748b;">— Stiv · Aprender-Aleman.de</em>`)}
   `;
   const footerNote =
@@ -100,7 +100,7 @@ function renderDE(v: TrialConfirmationVars): RenderedEmail {
     ${p(`<em style="color:#64748b;">Dieser Link ist nur für dich. Speichere ihn — du brauchst ihn am Tag der Stunde, um ohne Passwort einzutreten.</em>`)}
     ${h2(`Wie du dich vorbereitest`)}
     ${p(`Du musst nichts lernen — die Stunde ist konversationsbasiert und deine Lehrer/in passt sich deinem Niveau an. Stell nur Folgendes sicher:`)}
-    ${p(`• Stabile Internetverbindung<br>• Funktionierende Kamera und Mikrofon<br>• Ein ruhiger Ort für 45 Minuten`)}
+    ${p(`• Stabile Internetverbindung<br>• Funktionierende Kamera und Mikrofon<br>• Ein ruhiger Ort für 30 Minuten`)}
     ${p(`<em style="color:#64748b;">— Stiv · Aprender-Aleman.de</em>`)}
   `;
   const footerNote =

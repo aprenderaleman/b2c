@@ -36,7 +36,7 @@ import { listTrialSlots } from "@/lib/trial-slots";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TRIAL_DURATION_MIN = 45;
+const TRIAL_DURATION_MIN = 30;
 // Tolerancia ±15min: si el lead pide 17:00 y hay un slot a 16:45 lo
 // consideramos "exacto" para no quemar al lead con "no hay" cuando
 // hay un hueco a 15min de su petición.
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
     alternatives,
   });
 
-  // Nota: TRIAL_DURATION_MIN está fijo en 45min — coincide con la
+  // Nota: TRIAL_DURATION_MIN está fijo en 30min — coincide con la
   // duración de los trials del funnel actual y con el cap implícito en
   // listTrialSlots. Si en el futuro varía, hay que pasarlo por body.
   void TRIAL_DURATION_MIN;

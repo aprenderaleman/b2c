@@ -82,7 +82,7 @@ export async function GET(
   const uFlat = Array.isArray(u) ? u[0] : u;
   const teacherEmail = ((uFlat as { email?: string } | null)?.email ?? "").toLowerCase();
 
-  const duration = c.duration_minutes ?? 45;
+  const duration = c.duration_minutes ?? 30;
   const slotEnd  = new Date(newStart.getTime() + duration * 60_000);
   const warnings: string[] = [];
 

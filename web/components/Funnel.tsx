@@ -490,7 +490,7 @@ function StepSlot({ form, setForm, refreshTrigger }: StepProps & { refreshTrigge
       </h2>
       <p className="text-base font-medium text-foreground/80">Elige el día y la hora</p>
       <p className="text-muted-foreground text-sm">
-        45 min · clase de prueba gratis · 100% online · zona horaria Berlín
+        30 min · clase de prueba gratis · 100% online · zona horaria Berlín
       </p>
 
       {slots === null && !loadErr && (

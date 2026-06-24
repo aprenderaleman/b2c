@@ -20,7 +20,7 @@ import { patchTrialEvent } from "@/lib/google-calendar";
  *     class_id: "uuid",
  *     new_start_iso: "2026-05-08T17:00:00.000Z",
  *     new_teacher_id: "uuid",
- *     duration_minutes: 45
+ *     duration_minutes: 30
  *   }
  *
  * Resp:
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   if (Number.isNaN(newStart.getTime())) {
     return NextResponse.json({ error: "invalid_iso" }, { status: 400 });
   }
-  const duration = body.duration_minutes ?? 45;
+  const duration = body.duration_minutes ?? 30;
 
   const sb = supabaseAdmin();
 

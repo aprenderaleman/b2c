@@ -138,7 +138,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
     return {
       classId:         row.id,
       scheduledAt:     row.scheduled_at,
-      durationMinutes: row.duration_minutes ?? 45,
+      durationMinutes: row.duration_minutes ?? 30,
       status:          row.status,
       shortCode:       row.short_code,
       notesAdmin:      row.notes_admin,

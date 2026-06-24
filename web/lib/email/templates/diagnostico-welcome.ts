@@ -32,7 +32,7 @@ function renderES(v: DiagnosticoWelcomeVars): RenderedEmail {
     ${p(`Recibimos tu interés para aprender alemán. ¿Te parece si hablamos <strong>15 minutos</strong> para contarte cómo podemos ayudarte a lograrlo?`)}
     ${p(`<strong>¿A qué hora te vendría bien que te llame hoy o mañana?</strong>`)}
     ${p(`Respóndenos por WhatsApp o contestando este correo y te confirmo en cuanto vea hueco en mi agenda.`)}
-    ${p(`O si prefieres ir más rápido, <strong>agenda directamente tu clase de prueba gratuita</strong> — 45 min con un profesor nativo:`)}
+    ${p(`O si prefieres ir más rápido, <strong>agenda directamente tu clase de prueba gratuita</strong> — 30 min con un profesor nativo:`)}
     <div style="text-align:center;margin:20px 0 8px 0;">
       <a href="${escapeHtml(v.bookUrl)}"
          style="display:inline-block;background:#F4A261;color:#0F2847;font-weight:bold;
@@ -64,7 +64,7 @@ function renderDE(v: DiagnosticoWelcomeVars): RenderedEmail {
     ${p(`Wir haben dein Interesse am Deutschlernen erhalten. Hast du Lust auf ein kurzes Gespräch von <strong>15 Minuten</strong>, damit ich dir erkläre, wie wir dir helfen können?`)}
     ${p(`<strong>Wann würde es dir heute oder morgen passen, dass ich dich anrufe?</strong>`)}
     ${p(`Antworte per WhatsApp oder direkt auf diese Mail und ich bestätige dir den Termin, sobald ich freie Zeit in meinem Kalender sehe.`)}
-    ${p(`Oder, wenn du gleich loslegen willst, <strong>buche direkt deine kostenlose Probestunde</strong> — 45 Min mit einem Muttersprachler:`)}
+    ${p(`Oder, wenn du gleich loslegen willst, <strong>buche direkt deine kostenlose Probestunde</strong> — 30 Min mit einem Muttersprachler:`)}
     <div style="text-align:center;margin:20px 0 8px 0;">
       <a href="${escapeHtml(v.bookUrl)}"
          style="display:inline-block;background:#F4A261;color:#0F2847;font-weight:bold;

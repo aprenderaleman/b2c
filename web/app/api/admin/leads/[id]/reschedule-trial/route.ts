@@ -17,7 +17,7 @@ import { buildLeadJoinUrl } from "@/lib/trial-token";
  *   {
  *     class_id:        "uuid",
  *     new_start_iso:   "2026-05-09T15:00:00Z",
- *     duration_minutes?: 45
+ *     duration_minutes?: 30
  *   }
  *
  * Comportamiento:
@@ -117,7 +117,7 @@ export async function POST(
     );
   }
 
-  const duration = b.duration_minutes ?? c.duration_minutes ?? 45;
+  const duration = b.duration_minutes ?? c.duration_minutes ?? 30;
   const slotEnd  = new Date(newStart.getTime() + duration * 60_000);
   const slotPrev = new Date(newStart.getTime() - duration * 60_000);
 

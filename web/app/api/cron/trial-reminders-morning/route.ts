@@ -151,7 +151,7 @@ async function run(req: Request) {
         recipientName:   leadFirst,
         counterpartName: teacherName,
         startDate,
-        durationMin:     r.duration_minutes ?? 45,
+        durationMin:     r.duration_minutes ?? 30,
         joinUrl:         leadJoinUrl,
         language:        lead.language,
       });
@@ -167,7 +167,7 @@ async function run(req: Request) {
         recipientName:   teacherFirst,
         counterpartName: lead.name || leadFirst,
         startDate,
-        durationMin:     r.duration_minutes ?? 45,
+        durationMin:     r.duration_minutes ?? 30,
         joinUrl:         teacherJoinUrl,
         language:        "es",
       });

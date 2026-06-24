@@ -30,7 +30,7 @@ type Slot = {
 const makeSlot = (): Slot => ({
   id: Math.random().toString(36).slice(2),
   dateTime: "",
-  duration: 45,
+  duration: 30,
   recurrence: "weekly",
   endDate: "",
 });

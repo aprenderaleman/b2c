@@ -49,7 +49,7 @@ export const runtime  = "nodejs";
 export const dynamic  = "force-dynamic";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
-const TRIAL_DURATION_MIN = 45;
+const TRIAL_DURATION_MIN = 30;
 
 // WhatsApp es OPCIONAL desde 2026-06-XX (Gelfis: todo lead debe poder
 // agendar incluso sin WA). Si el lead no lo da, la confirmación va
@@ -528,7 +528,7 @@ export async function POST(req: Request) {
     summary:       classTitle,
     description:
       `¿Quieres probar nuestro método antes de comprometerte?\n\n` +
-      `Reserva una sesión individual de 45 minutos con un profesor bilingüe experto. Analizaremos tu nivel, definiremos tus objetivos y vivirás la experiencia de nuestra metodología.\n\n` +
+      `Reserva una sesión individual de 30 minutos con un profesor bilingüe experto. Analizaremos tu nivel, definiremos tus objetivos y vivirás la experiencia de nuestra metodología.\n\n` +
       `Aula virtual: ${shortLinkUrl}\n\n` +
       `Importante: al abrir el enlace tu navegador te pedirá permiso para micrófono y cámara — pulsa "Permitir".`,
     organizerName:  "Aprender-Aleman.de",

@@ -39,7 +39,7 @@ export async function notifyTeacherOfTrial(opts: {
     teacherFirstName: firstName,
     leadName:         opts.leadName,
     startDate,
-    durationMin:      45,
+    durationMin:      30,
     germanLevel:      opts.germanLevel,
     goal:             opts.goal,
     language:         lang,

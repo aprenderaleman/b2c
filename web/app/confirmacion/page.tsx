@@ -146,7 +146,7 @@ export default async function ConfirmacionPage({
             <div className="mt-4 rounded-2xl bg-white border border-slate-200 shadow-sm p-5 md:p-6 space-y-3">
               <SummaryRow k="Fecha"     v={startDate} cap />
               <SummaryRow k="Profesor"  v={teacherName} />
-              <SummaryRow k="Duración"  v={`${r.duration_minutes ?? 45} minutos`} />
+              <SummaryRow k="Duración"  v={`${r.duration_minutes ?? 30} minutos`} />
             </div>
 
             {/* CTA principal — al catálogo de cursos */}

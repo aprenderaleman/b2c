@@ -77,7 +77,7 @@ export async function POST(
     leadName,
     teacherName,
     startIso:        c.scheduled_at,
-    durationMinutes: c.duration_minutes ?? 45,
+    durationMinutes: c.duration_minutes ?? 30,
     leadEmail:       lead?.email ?? null,
     leadWhatsapp:    lead?.whatsapp_normalized ?? null,
     germanLevel:     lead?.german_level ?? null,
