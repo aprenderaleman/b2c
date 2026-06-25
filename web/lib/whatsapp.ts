@@ -45,6 +45,39 @@ export function isWhatsappBlocked(phoneE164: string): boolean {
 }
 
 /**
+ * Kill switch global de WhatsApp. Cuando Stiv está sin canal (ban,
+ * migración a Cloud API, etc.) ponemos `whatsapp_disabled=true` en
+ * system_config y CUALQUIER intento de envío retorna inmediatamente
+ * sin tocar Evolution ni el VPS.
+ *
+ * Cachea 30s en memoria — los crons no llaman tantas veces.
+ */
+let _waDisabledCache: { v: boolean; ts: number } | null = null;
+const WA_DISABLED_TTL_MS = 30_000;
+
+export async function isWhatsappGloballyDisabled(): Promise<boolean> {
+  const now = Date.now();
+  if (_waDisabledCache && now - _waDisabledCache.ts < WA_DISABLED_TTL_MS) {
+    return _waDisabledCache.v;
+  }
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const sb = supabaseAdmin();
+    const { data } = await sb
+      .from("system_config")
+      .select("value")
+      .eq("key", "whatsapp_disabled")
+      .maybeSingle();
+    const raw = (data as { value?: unknown } | null)?.value;
+    const v = raw === true || raw === "true" || raw === "1";
+    _waDisabledCache = { v, ts: now };
+    return v;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Send a plain-text WhatsApp message to a phone number in E.164 format.
  * Caller is responsible for ensuring the number is valid & opted-in.
  */
@@ -60,6 +93,10 @@ export async function sendWhatsappText(
   if (isWhatsappBlocked(phoneE164)) {
     console.warn("[whatsapp] número en blocklist, mensaje suprimido:", phoneE164);
     return { ok: false, reason: "blocklisted" };
+  }
+  // Kill switch global. Sin tocar Evolution ni el VPS.
+  if (await isWhatsappGloballyDisabled()) {
+    return { ok: false, reason: "whatsapp_globally_disabled" };
   }
 
   const baseUrl = process.env.AGENTS_BASE_URL?.replace(/\/$/, "");
@@ -124,6 +161,10 @@ export async function sendWhatsappDocument(
   if (isWhatsappBlocked(phoneE164)) {
     console.warn("[whatsapp] número en blocklist, documento suprimido:", phoneE164);
     return { ok: false, reason: "blocklisted" };
+  }
+  // Kill switch global.
+  if (await isWhatsappGloballyDisabled()) {
+    return { ok: false, reason: "whatsapp_globally_disabled" };
   }
 
   const baseUrl = process.env.AGENTS_BASE_URL?.replace(/\/$/, "");
