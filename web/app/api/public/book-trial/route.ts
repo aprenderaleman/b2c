@@ -344,22 +344,24 @@ export async function POST(req: Request) {
   //      + reset notes_admin para que los crons de recordatorios
   //      re-disparen en la fecha nueva.
   //
-  // Google Calendar: el evento del profe NO se patchea aquí — eso
-  // requiere disponibilidad de @/lib/google-calendar y race-condition
-  // handling más cuidadoso (ver reschedule-trial endpoint admin).
-  // Cron `class-reminders` o handler manual del profe lo sincroniza.
-  // Trade-off aceptado: mejor inconsistencia menor de Calendar que
-  // inconsistencia mayor de BD vs lo que ve el lead.
+  // Google Calendar: el evento del profe SÍ se patchea aquí desde el
+  // bug Pedro 2026-06-25 (antes quedaba desincronizado y el profe veía
+  // el slot viejo en su agenda). Si el patch falla → rollback de la
+  // actualización en BD para no dejar inconsistencia silenciosa.
   {
     const { data: existingTrials } = await sb
       .from("classes")
-      .select("id, scheduled_at, short_code")
+      .select("id, scheduled_at, short_code, google_calendar_event_id, duration_minutes")
       .eq("lead_id", leadId)
       .eq("is_trial", true)
       .in("status", ["scheduled", "live"])
       .gte("scheduled_at", new Date(Date.now() - 60 * 60_000).toISOString())
       .order("scheduled_at", { ascending: true });
-    const active = (existingTrials ?? []) as Array<{ id: string; scheduled_at: string; short_code: string }>;
+    type ExistingTrial = {
+      id: string; scheduled_at: string; short_code: string;
+      google_calendar_event_id: string | null; duration_minutes: number | null;
+    };
+    const active = (existingTrials ?? []) as ExistingTrial[];
     if (active.length > 0) {
       const ex = active[0];
       const existingSlotIso = new Date(ex.scheduled_at).toISOString();
@@ -394,11 +396,40 @@ export async function POST(req: Request) {
           message: rescheduleErr.message,
         }, { status: 500 });
       }
+
+      // Patchear Google Calendar event del profe (si existe). Si falla
+      // → rollback de la BD para no dejar inconsistencia. Caso Pedro
+      // 2026-06-25: antes la BD se actualizaba pero Calendar quedaba en
+      // el slot viejo → el profe se conectaba a la hora equivocada.
+      if (ex.google_calendar_event_id) {
+        const { patchTrialEvent } = await import("@/lib/google-calendar");
+        let patched = false;
+        try {
+          patched = await patchTrialEvent(
+            ex.google_calendar_event_id,
+            requestedSlotIso,
+            ex.duration_minutes ?? TRIAL_DURATION_MIN,
+          );
+        } catch (e) {
+          console.error("[book-trial] gcal patch threw:", e);
+        }
+        if (!patched) {
+          // Rollback — no dejar BD y Calendar desincronizados.
+          await sb.from("classes")
+            .update({ scheduled_at: ex.scheduled_at })
+            .eq("id", ex.id);
+          return NextResponse.json({
+            error:   "gcal_patch_failed",
+            message: "No pudimos actualizar el calendario del profesor. Inténtalo de nuevo o avísanos por WhatsApp.",
+          }, { status: 500 });
+        }
+      }
+
       await sb.from("lead_timeline").insert({
         lead_id: leadId,
         type:    "status_change",
         author:  "system",
-        content: `Trial reagendado vía self-service: ${existingSlotIso} → ${requestedSlotIso}.`,
+        content: `Trial reagendado vía self-service: ${existingSlotIso} → ${requestedSlotIso}. Google Calendar patched.`,
       });
       const token = buildTrialToken(leadId, ex.id);
       return NextResponse.json({
