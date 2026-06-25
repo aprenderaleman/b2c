@@ -75,6 +75,30 @@ export function button(href: string, label: string): string {
   return `<a href="${href}" style="display:inline-block;padding:14px 24px;background:linear-gradient(135deg,#fb923c 0%,#f97316 100%);color:#ffffff;font-weight:700;text-decoration:none;border-radius:14px;font-size:15px;">${escapeHtml(label)}</a>`;
 }
 
+/**
+ * Botones full-width usados en los emails de trial. Diseñados para
+ * ser táctiles (44px+ height) y obvios en cualquier cliente de email.
+ * Cada uno tiene un color distinto para que el lead distinga la
+ * acción a primera vista: verde = confirmar, ámbar = reagendar,
+ * azul = entrar al aula.
+ */
+export function bigButton(
+  href: string,
+  label: string,
+  variant: "confirm" | "reschedule" | "join",
+): string {
+  const palette = {
+    confirm:    { bg: "#16a34a", shadow: "rgba(22,163,74,0.25)" },
+    reschedule: { bg: "#d97706", shadow: "rgba(217,119,6,0.25)" },
+    join:       { bg: "#2563eb", shadow: "rgba(37,99,235,0.25)" },
+  }[variant];
+  return `<table role="presentation" cellspacing="0" cellpadding="0" style="width:100%;margin:10px 0;">
+    <tr><td align="center">
+      <a href="${href}" style="display:block;padding:16px 20px;background:${palette.bg};color:#ffffff;font-weight:700;text-decoration:none;border-radius:12px;font-size:16px;text-align:center;box-shadow:0 4px 12px ${palette.shadow};">${escapeHtml(label)}</a>
+    </td></tr>
+  </table>`;
+}
+
 export function h2(text: string): string {
   return `<h1 style="font-size:22px;font-weight:800;margin:0 0 14px 0;color:#0f172a;letter-spacing:-0.01em;">${escapeHtml(text)}</h1>`;
 }

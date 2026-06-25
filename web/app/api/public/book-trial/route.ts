@@ -4,6 +4,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
 import { listTrialSlots } from "@/lib/trial-slots";
 import { buildTrialToken, buildLeadJoinUrl } from "@/lib/trial-token";
+import { buildEmailActionUrl } from "@/lib/email-action-token";
 import { sendTrialConfirmationEmail } from "@/lib/email/send";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
@@ -547,6 +548,8 @@ export async function POST(req: Request) {
         durationMin: TRIAL_DURATION_MIN,
         teacherName: match.teacherName,
         joinUrl:     shortLinkUrl,
+        confirmUrl:    buildEmailActionUrl({ leadId, classId, action: "confirm" }),
+        rescheduleUrl: buildEmailActionUrl({ leadId, classId, action: "reschedule" }),
         language:    b.language,
       }, {
         content:  icsContent,

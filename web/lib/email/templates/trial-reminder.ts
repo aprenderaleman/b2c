@@ -1,4 +1,4 @@
-import { button, escapeHtml, h2, kvBlock, p, renderEnvelope, type RenderedEmail } from "./base";
+import { bigButton, button, escapeHtml, h2, kvBlock, p, renderEnvelope, type RenderedEmail } from "./base";
 
 /**
  * Pre-class reminder used by both the 24h-before and 8 AM same-day
@@ -17,6 +17,9 @@ export type TrialReminderVars = {
   durationMin: number;
   joinUrl:     string;              // magic-link for lead, /aula/<id> for teacher
   language:    "es" | "de";
+  /** URLs de los botones del email — solo para audience=lead, tone=24h_before|morning_of. */
+  confirmUrl?:    string;
+  rescheduleUrl?: string;
 };
 
 export function renderTrialReminder(v: TrialReminderVars): RenderedEmail {
@@ -54,61 +57,103 @@ function renderES(v: TrialReminderVars): RenderedEmail {
     ? leadSubjectES(v.tone, v.startDate)
     : teacherSubjectES(v.tone, v.counterpartName);
 
-  // Policy Gelfis 2026-04-30: NO mencionar nombre del profesor en
-  // mensajes salientes al lead. Para el lead omitimos counterpartName
-  // (lo verá al entrar al aula). Para el profesor sí mantenemos el
-  // nombre del lead (es info operativa).
-  const opener = isLead
-    ? (v.tone === "imminent_15m"
-        ? `⏰ <strong>En 15 minutos</strong> empieza tu clase de prueba de alemán. Entra desde el botón de abajo.`
-        : v.tone === "24h_before"
-          ? `<strong>Mañana</strong> tienes tu clase de prueba de alemán. Aquí van los detalles para que la tengas a mano.`
-          : `<strong>Hoy es el día</strong> — tu clase de prueba de alemán. Te dejamos los detalles para que entres directo.`)
-    : (v.tone === "imminent_15m"
-        ? `⏰ <strong>En 15 minutos</strong> tienes la clase con ${escapeHtml(v.counterpartName)}.`
-        : v.tone === "24h_before"
-          ? `Recordatorio: <strong>mañana</strong> tienes una clase de prueba de alemán con ${escapeHtml(v.counterpartName)}. Toda la info abajo.`
-          : `Recordatorio: <strong>hoy</strong> tienes una clase de prueba de alemán con ${escapeHtml(v.counterpartName)}. Toda la info abajo.`);
-
-  const kvRows: Array<[string, string]> = [
-    ["📅 Fecha",     escapeHtml(v.startDate)],
-    ["⏱ Duración",   `${v.durationMin} minutos`],
-  ];
+  // Profesores: layout original — info operativa, 1 botón al aula.
+  // Policy Gelfis 2026-04-30: NO mencionar nombre del profesor al lead.
   if (!isLead) {
-    kvRows.push(["👤 Lead", escapeHtml(v.counterpartName)]);
+    const opener = v.tone === "imminent_15m"
+      ? `⏰ <strong>En 15 minutos</strong> tienes la clase con ${escapeHtml(v.counterpartName)}.`
+      : v.tone === "24h_before"
+        ? `Recordatorio: <strong>mañana</strong> tienes una clase de prueba de alemán con ${escapeHtml(v.counterpartName)}.`
+        : `Recordatorio: <strong>hoy</strong> tienes una clase de prueba de alemán con ${escapeHtml(v.counterpartName)}.`;
+    const body = `
+      ${h2(`¡Hola ${escapeHtml(v.recipientName)}! 👋`)}
+      ${p(opener)}
+      ${kvBlock([
+        ["📅 Fecha",   escapeHtml(v.startDate)],
+        ["⏱ Duración", `${v.durationMin} minutos`],
+        ["👤 Lead",    escapeHtml(v.counterpartName)],
+      ])}
+      <div style="text-align:center;margin:24px 0 8px 0;">
+        ${button(v.joinUrl, "Entrar al aula →")}
+      </div>
+      ${p(`<em style="color:#64748b;">El aula abre 15 min antes. Si necesitas reagendar, escribe a Gelfis.</em>`)}
+      ${p(`<em style="color:#64748b;">— Aprender-Aleman.de</em>`)}
+    `;
+    const text = [
+      `¡Hola ${v.recipientName}!`, ``,
+      v.tone === "imminent_15m" ? `⏰ En 15 min: clase con ${v.counterpartName}.` : `Recordatorio: clase de prueba con ${v.counterpartName}.`,
+      `Fecha: ${v.startDate}`, `Duración: ${v.durationMin} min`, ``,
+      `Entrar al aula: ${v.joinUrl}`, ``,
+      `— Aprender-Aleman.de`,
+    ].join("\n");
+    return { subject, html: renderEnvelope(body, "Recibes este correo porque eres el profesor/a asignado/a a esta clase de prueba."), text };
   }
 
-  const body = `
-    ${h2(`¡Hola ${escapeHtml(v.recipientName)}! 👋`)}
-    ${p(opener)}
-    ${kvBlock(kvRows)}
-    <div style="text-align:center;margin:24px 0 8px 0;">
-      ${button(v.joinUrl, "Entrar al aula →")}
-    </div>
-    ${isLead
-      ? p(`<em style="color:#64748b;">Este enlace es exclusivo para ti — no necesitas contraseña. El aula abre 15 min antes.</em>`)
-      : p(`<em style="color:#64748b;">El aula abre 15 min antes. Si necesitas reagendar, escribe a Gelfis.</em>`)}
-    ${p(`<em style="color:#64748b;">— Aprender-Aleman.de</em>`)}
-  `;
+  // Lead — layout por tono. Botones CONFIRMAR/CAMBIAR solo en 24h_before
+  // y morning_of (en 15m no tiene sentido — ya empezó la clase).
+  const showActionButtons = (v.tone === "24h_before" || v.tone === "morning_of") && !!v.confirmUrl && !!v.rescheduleUrl;
 
-  const footerNote = isLead
-    ? "Recibes este correo porque tienes una clase de prueba agendada con nosotros."
-    : "Recibes este correo porque eres el profesor/a asignado/a a esta clase de prueba.";
+  let body: string;
+  if (v.tone === "imminent_15m") {
+    body = `
+      ${h2(`${escapeHtml(v.recipientName)}, en 15 minutos empieza tu clase ⏰`)}
+      ${p(`Tu clase de alemán comienza en muy poco. Entra ya:`)}
+      ${bigButton(v.joinUrl, "Entrar al aula →", "join")}
+      ${p(`<em style="color:#64748b;font-size:13px;">No necesitas instalar nada — el aula abre en el navegador.</em>`)}
+      ${p(`¡Te veo en un rato!<br><em style="color:#64748b;">— Stiv</em>`)}
+    `;
+  } else if (v.tone === "morning_of") {
+    body = `
+      ${h2(`¡Buenos días ${escapeHtml(v.recipientName)}! Hoy es el día 🎉`)}
+      ${p(`Tu <strong>clase de prueba de alemán</strong> es HOY:`)}
+      ${kvBlock([
+        ["📅 Cuándo",   escapeHtml(v.startDate)],
+        ["⏱ Duración", `${v.durationMin} minutos`],
+      ])}
+      ${bigButton(v.joinUrl, "Entrar al aula →", "join")}
+      ${p(`<em style="color:#64748b;font-size:13px;">Abre el enlace 5 min antes. No instala nada — abre en el navegador.</em>`)}
+      ${showActionButtons ? `
+        <hr style="border:0;border-top:1px solid #fed7aa;margin:24px 0;">
+        ${p(`Si por algún imprevisto <strong>no puedes asistir hoy</strong>, avísame con un clic:`)}
+        ${bigButton(v.rescheduleUrl!, "📅 CAMBIAR DE FECHA", "reschedule")}
+      ` : ""}
+      ${p(`Wir sehen uns endlich heute 😊<br><em style="color:#64748b;">— Stiv</em>`)}
+    `;
+  } else {
+    // 24h_before
+    body = `
+      ${h2(`¡Hola ${escapeHtml(v.recipientName)}! 👋`)}
+      ${p(`Te recuerdo que <strong>mañana</strong> es tu clase de prueba de alemán:`)}
+      ${kvBlock([
+        ["📅 Cuándo",   escapeHtml(v.startDate)],
+        ["⏱ Duración", `${v.durationMin} minutos`],
+      ])}
+      ${showActionButtons ? `
+        ${p(`<strong>¿Sigues pudiendo asistir?</strong> Un clic me lo confirma:`)}
+        ${bigButton(v.confirmUrl!, "✅ SÍ, CONFIRMADO", "confirm")}
+        ${bigButton(v.rescheduleUrl!, "📅 NECESITO CAMBIAR FECHA", "reschedule")}
+        <hr style="border:0;border-top:1px solid #fed7aa;margin:24px 0;">
+      ` : ""}
+      ${p(`🔗 <strong>Tu enlace al aula:</strong>`)}
+      <div style="text-align:center;margin:14px 0;">${button(v.joinUrl, "Entrar al aula →")}</div>
+      ${p(`<em style="color:#64748b;font-size:13px;">Te recordaré también mañana por la mañana y poco antes de la clase. ¡Nos vemos pronto!</em>`)}
+      ${p(`<em style="color:#64748b;">— Stiv</em>`)}
+    `;
+  }
 
   const text = [
     `¡Hola ${v.recipientName}!`, ``,
-    isLead
-      ? (v.tone === "imminent_15m" ? `⏰ En 15 minutos empieza tu clase de prueba de alemán.`
-         : v.tone === "24h_before" ? `Mañana es tu clase de prueba de alemán.`
-         : `Hoy es tu clase de prueba de alemán.`)
-      : (v.tone === "imminent_15m" ? `⏰ En 15 min: clase con ${v.counterpartName}.`
-         : `Recordatorio: clase de prueba con ${v.counterpartName}.`),
+    v.tone === "imminent_15m" ? `⏰ En 15 minutos empieza tu clase de prueba de alemán.`
+      : v.tone === "24h_before" ? `Mañana es tu clase de prueba de alemán.`
+      : `Hoy es tu clase de prueba de alemán.`,
     `Fecha: ${v.startDate}`,
     `Duración: ${v.durationMin} min`, ``,
     `Entrar al aula: ${v.joinUrl}`, ``,
-    `— Aprender-Aleman.de`,
+    ...(showActionButtons && v.confirmUrl ? [`✅ Confirmar: ${v.confirmUrl}`] : []),
+    ...(showActionButtons && v.rescheduleUrl ? [`📅 Cambiar fecha: ${v.rescheduleUrl}`, ``] : []),
+    `— Stiv · Aprender-Aleman.de`,
   ].join("\n");
-  return { subject, html: renderEnvelope(body, footerNote), text };
+  return { subject, html: renderEnvelope(body, "Recibes este correo porque tienes una clase de prueba agendada con nosotros."), text };
 }
 
 function renderDE(v: TrialReminderVars): RenderedEmail {

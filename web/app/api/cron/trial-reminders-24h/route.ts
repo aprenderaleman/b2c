@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { sendTrialReminderEmail } from "@/lib/email/send";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { buildLeadJoinUrl, buildTrialClassUrl } from "@/lib/trial-token";
+import { buildEmailActionUrl } from "@/lib/email-action-token";
 
 /**
  * GET/POST /api/cron/trial-reminders-24h
@@ -117,6 +118,8 @@ async function run(req: Request) {
         startDate,
         durationMin:     r.duration_minutes ?? 30,
         joinUrl:         leadJoinUrl,
+        confirmUrl:      buildEmailActionUrl({ leadId: lead.id, classId: r.id, action: "confirm" }),
+        rescheduleUrl:   buildEmailActionUrl({ leadId: lead.id, classId: r.id, action: "reschedule" }),
         language:        lead.language,
       });
       if (res.ok) { sentLead++; leadDelivered = true; }

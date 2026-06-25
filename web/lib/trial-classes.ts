@@ -33,6 +33,7 @@ export type TrialClassRow = {
   teacherId:          string;
   teacherName:        string;
   teacherEmail:       string;
+  trialConfirmedAt:   string | null;
 };
 
 /**
@@ -48,7 +49,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       id, scheduled_at, duration_minutes, status, short_code, notes_admin,
       teacher_id,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id),
+      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at),
       script:trial_class_scripts(teacher_notes, final_outcome)
     `)
     .eq("is_trial", true)
@@ -81,6 +82,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       goal: string | null;
       status: string | null;
       converted_to_user_id: string | null;
+      trial_confirmed_at: string | null;
     } | Array<{
       id: string;
       name: string | null;
@@ -91,6 +93,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       goal: string | null;
       status: string | null;
       converted_to_user_id: string | null;
+      trial_confirmed_at: string | null;
     }> | null;
     script: {
       teacher_notes: string | null;
@@ -159,6 +162,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       teacherId:       row.teacher_id,
       teacherName:     tu?.full_name ?? tu?.email ?? "—",
       teacherEmail:    tu?.email ?? "",
+      trialConfirmedAt: lead?.trial_confirmed_at ?? null,
     };
   });
 }
