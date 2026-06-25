@@ -24,6 +24,14 @@ import {
   type TrialReminderVars,
 } from "./templates/trial-reminder";
 import {
+  renderTrialAttendedFollowup,
+  type TrialAttendedFollowupVars,
+} from "./templates/trial-attended-followup";
+import {
+  renderTrialAbsentFollowup,
+  type TrialAbsentFollowupVars,
+} from "./templates/trial-absent-followup";
+import {
   renderClassLifecycle,
   type ClassLifecycleVars,
 } from "./templates/class-lifecycle";
@@ -336,6 +344,31 @@ export async function sendTrialReminderEmail(
     assertLeadJoinUrl(vars.joinUrl, "sendTrialReminderEmail/lead");
   }
   const { subject, html, text } = renderTrialReminder(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Email post-trial cuando el lead asistio. Disparado por
+ * `markTrialAttended` (con pack URL como ctaUrl) y por
+ * `markTrialAttendedNoLink` (con /inscripciones como ctaUrl).
+ */
+export async function sendTrialAttendedFollowupEmail(
+  to: string,
+  vars: TrialAttendedFollowupVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTrialAttendedFollowup(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Email cuando el profesor marca al lead como "No asistió". Botón
+ * principal lleva a /agendar/cuando con su lead_id pre-rellenado.
+ */
+export async function sendTrialAbsentFollowupEmail(
+  to: string,
+  vars: TrialAbsentFollowupVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTrialAbsentFollowup(vars);
   return sendRaw(to, subject, html, text);
 }
 

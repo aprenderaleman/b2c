@@ -194,7 +194,7 @@ export function TrialHubCard({
                     onClick={() => setPaymentOpen(true)}
                     className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1.5 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25"
                   >
-                    💳 Enviar enlace de pago
+                    💳 Enviar enlace de inscripción
                   </button>
 
                   <button

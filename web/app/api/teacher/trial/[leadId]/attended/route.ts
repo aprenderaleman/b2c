@@ -26,7 +26,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     const paymentType = typeof raw.paymentType === "string" ? raw.paymentType : "";
     const objective   = typeof raw.objective   === "string" ? raw.objective.trim() : "";
     const nivel       = typeof raw.nivel       === "string" ? raw.nivel.trim() : "";
-    if (VALID_PACKS.has(packId) && isPaymentType(paymentType) && objective.length > 0) {
+    // objective ya no es obligatorio (PaymentLinkModal lo eliminó). Si
+    // el profesor lo manda igual queda en metadata, si no se omite.
+    if (VALID_PACKS.has(packId) && isPaymentType(paymentType)) {
       opts = { packId: packId as PackId, paymentType, objective, ...(nivel ? { nivel } : {}) };
     }
   } catch {

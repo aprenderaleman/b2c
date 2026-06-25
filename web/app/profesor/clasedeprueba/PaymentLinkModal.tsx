@@ -19,12 +19,11 @@ export function PaymentLinkModal({
   const [nivel, setNivel]           = useState(defaultLevel || "");
   const [packId, setPackId]         = useState<PackId | "">("");
   const [paymentType, setPaymentType] = useState<PaymentType>("single");
-  const [objective, setObjective]   = useState("");
   const [error, setError]           = useState<string | null>(null);
   const [sent, setSent]             = useState(false);
   const [pending, startTransition]  = useTransition();
 
-  const canSubmit = packId !== "" && objective.trim().length >= 3;
+  const canSubmit = packId !== "";
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,7 +37,6 @@ export function PaymentLinkModal({
           body: JSON.stringify({
             packId,
             paymentType,
-            objective: objective.trim(),
             ...(nivel ? { nivel } : {}),
           }),
         });
@@ -63,7 +61,7 @@ export function PaymentLinkModal({
             Enlace enviado
           </h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-            {leadName} recibio el enlace de pago por WhatsApp y email.
+            {leadName} recibio el enlace de inscripcion por WhatsApp y email.
           </p>
           <button
             onClick={onClose}
@@ -79,26 +77,13 @@ export function PaymentLinkModal({
   return (
     <Overlay onClose={onClose}>
       <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-        Enviar enlace de pago · {leadName}
+        Enviar enlace de inscripcion · {leadName}
       </h2>
       <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-        El lead recibira el enlace por WhatsApp y email.
+        El lead recibira el enlace de Stripe del pack seleccionado por email.
       </p>
 
       <form onSubmit={submit} className="mt-5 space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Objetivo del lead <span className="text-rose-500">*</span>
-          </label>
-          <textarea
-            value={objective}
-            onChange={(e) => setObjective(e.target.value)}
-            rows={2}
-            placeholder='Ej: "Mudarse a Berlin en 6 meses por trabajo"'
-            className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-          />
-        </div>
-
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -184,7 +169,7 @@ export function PaymentLinkModal({
             disabled={!canSubmit || pending}
             className="text-sm font-semibold rounded-full border border-emerald-400 bg-emerald-500 text-white px-4 py-1.5 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {pending ? "Enviando..." : "Enviar enlace de pago"}
+            {pending ? "Enviando..." : "Enviar enlace de inscripcion"}
           </button>
         </div>
       </form>

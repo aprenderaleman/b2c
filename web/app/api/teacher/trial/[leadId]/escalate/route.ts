@@ -3,6 +3,8 @@ import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendWhatsappText } from "@/lib/whatsapp";
+import { sendRaw } from "@/lib/email/send";
+import { renderEnvelope, h2, p, button, escapeHtml } from "@/lib/email/templates/base";
 
 export async function POST(req: Request, { params }: { params: Promise<{ leadId: string }> }) {
   let user;
@@ -74,12 +76,42 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     dedupeHours: false,
   });
 
+  const platformUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+  const adminLink = `${platformUrl}/admin/leads/${leadId}`;
+
   const adminWa = (process.env.NEW_LEAD_ALERT_WHATSAPP ?? "").trim();
   if (adminWa) {
     await sendWhatsappText(
       adminWa,
-      `🚨 *Escalacion de ${teacherName}*\n\nLead: ${leadName}\nMensaje: ${message}\n\nVer: ${process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de"}/admin/leads/${leadId}`,
+      `🚨 *Escalacion de ${teacherName}*\n\nLead: ${leadName}\nMensaje: ${message}\n\nVer: ${adminLink}`,
     );
+  }
+
+  // Email al admin (aprenderaleman2026@gmail.com por defecto). Sin
+  // gating LIFECYCLE_EMAILS_ENABLED — las escalaciones son
+  // operativas, no comerciales.
+  const adminEmail = (process.env.ADMIN_ESCALATION_EMAIL ?? "aprenderaleman2026@gmail.com").trim();
+  if (adminEmail) {
+    const subject = `🚨 ${teacherName} escaló a ${leadName}`;
+    const body = `
+      ${h2(`🚨 Escalación de ${escapeHtml(teacherName)}`)}
+      ${p(`<strong>Lead:</strong> ${escapeHtml(leadName)}`)}
+      ${p(`<strong>Profesor:</strong> ${escapeHtml(teacherName)}`)}
+      ${p(`<strong>Motivo:</strong><br><em>${escapeHtml(message)}</em>`)}
+      <div style="text-align:center;margin:24px 0;">
+        ${button(adminLink, "Abrir ficha del lead →")}
+      </div>
+      ${p(`<em style="color:#64748b;font-size:13px;">El lead ya fue puesto en status=needs_human — todos los flows automáticos están pausados hasta que intervengas.</em>`)}
+    `;
+    const text = [
+      `🚨 Escalación de ${teacherName}`, ``,
+      `Lead: ${leadName}`,
+      `Profesor: ${teacherName}`,
+      `Motivo: ${message}`, ``,
+      `Abrir ficha: ${adminLink}`, ``,
+      `El lead está en status=needs_human (flows pausados).`,
+    ].join("\n");
+    await sendRaw(adminEmail, subject, renderEnvelope(body, "Notificación operativa de Aprender-Aleman.de."), text);
   }
 
   return NextResponse.json({ ok: true });

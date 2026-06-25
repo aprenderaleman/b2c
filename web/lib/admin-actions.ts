@@ -3,7 +3,7 @@
 
 import { supabaseAdmin } from "./supabase";
 import { sendWhatsappText } from "./whatsapp";
-import { sendPostTrialFollowupEmail, sendPostTrialFollowupGenericEmail } from "./email/send";
+import { sendPostTrialFollowupEmail, sendPostTrialFollowupGenericEmail, sendTrialAttendedFollowupEmail, sendTrialAbsentFollowupEmail } from "./email/send";
 import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "./trial-packs";
 import { getLeadTrialTeacher } from "./trial-compensation";
 import { renderTemplate } from "./message-stats";
@@ -271,18 +271,16 @@ export async function markTrialAttendedAwaitingConversion(
   // el WA ya fue suficiente — solo logueamos el fallo.
   if (lead?.email) {
     const langForEmail: "es" | "de" = lead.language === "de" ? "de" : "es";
-    const emailRes = opts
-      ? await sendPostTrialFollowupEmail(lead.email, {
-          name:      firstName || lead.name || "",
-          objective: opts.objective,
-          packName:  getPack(opts.packId)?.name ?? opts.packId,
-          packUrl:   getPackUrlWithOverride(opts.packId, opts.paymentType) ?? "",
-          language:  langForEmail,
-        })
-      : await sendPostTrialFollowupGenericEmail(lead.email, {
-          name:     firstName || lead.name || "",
-          language: langForEmail,
-        });
+    const ctaUrl = opts
+      ? (getPackUrlWithOverride(opts.packId, opts.paymentType) ?? "https://aprender-aleman.de/inscripciones")
+      : "https://aprender-aleman.de/inscripciones";
+    const packName = opts ? (getPack(opts.packId)?.name ?? opts.packId) : undefined;
+    const emailRes = await sendTrialAttendedFollowupEmail(lead.email, {
+      leadName: firstName || lead.name || "",
+      language: langForEmail,
+      ctaUrl,
+      packName,
+    });
 
     if (emailRes.ok) {
       await sb.from("lead_timeline").insert({
@@ -428,16 +426,17 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
   // pack porque este flow es "no link").
   if (lead?.email) {
     const langForEmail: "es" | "de" = lead.language === "de" ? "de" : "es";
-    const emailRes = await sendPostTrialFollowupGenericEmail(lead.email, {
-      name:     firstName || lead.name || "",
+    const emailRes = await sendTrialAttendedFollowupEmail(lead.email, {
+      leadName: firstName || lead.name || "",
       language: langForEmail,
+      ctaUrl:   "https://aprender-aleman.de/inscripciones",
     });
     if (emailRes.ok) {
       await sb.from("lead_timeline").insert({
         lead_id: leadId,
         type:    "system_message_sent",
         author:  "gelfis",
-        content: `📧 Follow-up motivacional post-clase enviado por email a ${lead.email} (sin enlace de pago)`,
+        content: `📧 Email "fue un placer" enviado a ${lead.email} (sin enlace de pago)`,
         metadata: { kind: "post_trial_followup", channel: "email", flow: "no_link" },
       });
     } else {
@@ -445,7 +444,7 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
         lead_id: leadId,
         type:    "send_failed",
         author:  "gelfis",
-        content: `📧 Falló el follow-up motivacional por email: ${emailRes.error ?? "unknown"}`,
+        content: `📧 Falló el email post-clase: ${emailRes.error ?? "unknown"}`,
         metadata: { kind: "post_trial_followup", channel: "email", flow: "no_link" },
       });
     }
@@ -480,4 +479,44 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     author: "gelfis",
     content: "Lead did not attend trial — first absent follow-up scheduled for T+60min.",
   });
+
+  // Email "no te vimos hoy" con botón directo a /agendar/cuando.
+  // Antes solo se mandaban 3 WA via cron tick_absent_followups — pero
+  // con WA inestable y la migración a Cloud API en curso, el email
+  // inmediato es el camino más confiable para que el lead vuelva al
+  // funnel.
+  const { data: leadInfo } = await sb
+    .from("leads")
+    .select("name, email, language")
+    .eq("id", leadId)
+    .maybeSingle();
+  const linfo = leadInfo as { name: string | null; email: string | null; language: "es"|"de"|null } | null;
+  if (linfo?.email) {
+    const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
+    const langForEmail: "es" | "de" = linfo.language === "de" ? "de" : "es";
+    const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+    const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=trial_absent`;
+    const emailRes = await sendTrialAbsentFollowupEmail(linfo.email, {
+      leadName: firstName,
+      language: langForEmail,
+      rescheduleUrl,
+    });
+    if (emailRes.ok) {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "system_message_sent",
+        author:  "gelfis",
+        content: `📧 Email "no te vimos hoy" enviado a ${linfo.email}`,
+        metadata: { kind: "absent_followup", channel: "email" },
+      });
+    } else {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "send_failed",
+        author:  "gelfis",
+        content: `📧 Falló el email absent followup: ${emailRes.error ?? "unknown"}`,
+        metadata: { kind: "absent_followup", channel: "email" },
+      });
+    }
+  }
 }
