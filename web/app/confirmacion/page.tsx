@@ -116,14 +116,30 @@ export default async function ConfirmacionPage({
               ✓ Reserva confirmada
             </p>
             <h1 className="mt-2 text-[28px] sm:text-3xl md:text-4xl lg:text-[40px] font-extrabold tracking-tight text-slate-900 leading-tight">
-              ¡Listo{firstName ? `, ${firstName}` : ""}!<br />
-              Tu clase está agendada.
+              ¡Casi listo{firstName ? `, ${firstName}` : ""}!<br />
+              Falta un último paso.
             </h1>
             <p className="mt-3 text-[15px] md:text-base text-slate-600 leading-relaxed">
-              Te enviamos los detalles a tu WhatsApp (y también a tu email si nos lo diste).
-              El día de la clase entrarás directamente con el enlace que te llegó —
-              sin contraseña.
+              Revisa tu <strong>correo electrónico</strong> ahora — te acabamos
+              de enviar un email con el botón <strong>«Confirmar asistencia»</strong>.
+              Un solo clic y tu profesor sabrá que vas a venir.
             </p>
+
+            {/* 📧 Bloque acción principal — confirmar por email */}
+            <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 md:p-5">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl leading-none mt-0.5" aria-hidden>📧</span>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-bold uppercase tracking-wider text-emerald-900">
+                    Abre tu email y haz clic en «Confirmar»
+                  </p>
+                  <p className="mt-1.5 text-[14.5px] md:text-[15px] text-emerald-900 leading-snug">
+                    Si no lo ves en la bandeja de entrada, revisa <strong>Promociones</strong> o <strong>Spam</strong>.
+                    Sin confirmar, tu profesor podría liberar el horario.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* 💎 Bloque "valor 30 €" — refuerzo de asistencia. Va antes
                 del summary para que sea lo primero que vea el lead. */}
