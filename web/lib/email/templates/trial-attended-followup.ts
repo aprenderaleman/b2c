@@ -35,12 +35,12 @@ function renderES(v: TrialAttendedFollowupVars): RenderedEmail {
     : `🎓 INSCRIBIRME EN LA ACADEMIA`;
 
   const intro = v.packName
-    ? `Acabas de terminar tu clase de prueba — ¡qué energía has tenido hoy! Como hablamos, te dejo el enlace directo para inscribirte en el plan que te recomendé:`
-    : `Acabas de terminar tu clase de prueba — y la verdad es que ha sido una clase muy chula. Has demostrado que tienes lo que hay que tener para llevarte el alemán por delante.`;
+    ? `Acabas de terminar tu clase de prueba con nosotros. Como hablamos, te dejo el enlace directo para inscribirte en el plan que te recomendamos:`
+    : `Acabas de terminar tu clase de prueba con nosotros. Gracias por dedicar este rato — espero que te haya servido para hacerte una idea de cómo trabajamos en la academia.`;
 
   const middle = v.packName
     ? `Con este plan tendrás tu profesor fijo, materiales, certificado al terminar y el seguimiento de la academia para que no te quedes a medias.`
-    : `Si te apetece seguir con nosotros, aquí abajo te dejo el enlace para que veas todos los planes y elijas el que mejor te encaje.`;
+    : `Si quieres seguir con nosotros, aquí abajo te dejo el enlace para que veas todos los planes disponibles y elijas el que mejor te encaje.`;
 
   const body = `
     ${h2(`¡Hola ${escapeHtml(v.leadName)}! 👋`)}
