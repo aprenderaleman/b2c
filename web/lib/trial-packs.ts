@@ -30,7 +30,7 @@ export type Pack = {
 export const TRIAL_PACKS: Pack[] = [
   {
     id:    "basico",
-    name:  "Pack Básico (A1/A2)",
+    name:  "Pack Básico · 1.280 € (o 460 € × 3)",
     classes: 32,
     bestFor: ["personal_growth", "travel"],
     urlSingle:   "https://buy.stripe.com/aFa8wIg9L0naa076L50co0b",
@@ -38,7 +38,7 @@ export const TRIAL_PACKS: Pack[] = [
   },
   {
     id:    "intermedio",
-    name:  "Pack Intermedio (B1/B2)",
+    name:  "Pack Intermedio · 1.920 € (o 530 € × 4)",
     classes: 48,
     bestFor: ["studies", "work"],
     urlSingle:   "https://buy.stripe.com/00w6oA8Hj8TG5JR8Td0co0d",
@@ -46,7 +46,7 @@ export const TRIAL_PACKS: Pack[] = [
   },
   {
     id:    "avanzado",
-    name:  "Pack Avanzado (C1/C2)",
+    name:  "Pack Avanzado · 2.400 € (o 540 € × 5)",
     classes: 60,
     bestFor: ["work", "exam"],
     urlSingle:   "https://buy.stripe.com/dRmaEQ2iV3zmb4b6L50co0f",
@@ -54,7 +54,7 @@ export const TRIAL_PACKS: Pack[] = [
   },
   {
     id:    "vip_express",
-    name:  "Pack VIP Express (2 niveles)",
+    name:  "Pack VIP Express · 2.690 € (o 500 € × 6)",
     classes: 72,
     bestFor: ["work", "already_in_dach", "exam"],
     urlSingle:   "https://buy.stripe.com/9B65kwg9Lfi4a07fhB0co0h",
@@ -62,7 +62,7 @@ export const TRIAL_PACKS: Pack[] = [
   },
   {
     id:    "inmersion_total",
-    name:  "Pack Inmersión Total (3 niveles)",
+    name:  "Pack Inmersión Total · 3.290 € (o 455 € × 8)",
     classes: 100,
     bestFor: ["work", "already_in_dach", "studies"],
     urlSingle:   "https://buy.stripe.com/3cI28kf5H8TG6NVfhB0co0j",
