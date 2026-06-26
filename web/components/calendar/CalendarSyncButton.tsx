@@ -28,7 +28,8 @@ export function CalendarSyncButton({ icalUrl }: { icalUrl: string }) {
 
   // Google's "add by URL" deep link. When it opens, Google asks the user
   // to confirm + subscribe. No OAuth, no backend token exchange.
-  const googleUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(icalUrl)}`;
+  const webcalUrl = icalUrl.replace(/^https?:\/\//, "webcal://");
+  const googleUrl = `https://calendar.google.com/calendar/u/0/r?cid=${encodeURIComponent(webcalUrl)}`;
 
   return (
     <>
