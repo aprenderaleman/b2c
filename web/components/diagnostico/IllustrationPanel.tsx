@@ -90,16 +90,20 @@ function IllustrationMotivo() {
       <rect x="80" y="195" width="90" height="5" rx="2" fill="#f59e0b" opacity="0.4" style={{ animation: "illoFadeIn 300ms 620ms ease-out both" }} />
       <rect x="80" y="210" width="100" height="5" rx="2" fill="#f59e0b" opacity="0.4" style={{ animation: "illoFadeIn 300ms 740ms ease-out both" }} />
       {/* Lápiz — slide in desde la izquierda */}
-      <g transform="rotate(-25 110 130)" className="illo-anim" style={{ animation: "illoSlideInLeft 480ms 200ms cubic-bezier(.34,1.4,.64,1) both" }}>
-        <rect x="60" y="50" width="20" height="100" rx="3" fill="#f97316" />
-        <polygon points="60,150 80,150 70,170" fill="#1e293b" />
-        <rect x="60" y="50" width="20" height="20" fill="#fbbf24" />
+      <g transform="rotate(-25 110 130)">
+        <g style={{ animation: "illoSlideInLeft 480ms 200ms cubic-bezier(.34,1.4,.64,1) both" }}>
+          <rect x="60" y="50" width="20" height="100" rx="3" fill="#f97316" />
+          <polygon points="60,150 80,150 70,170" fill="#1e293b" />
+          <rect x="60" y="50" width="20" height="20" fill="#fbbf24" />
+        </g>
       </g>
       {/* Bombilla — pop + twinkle infinito (la idea brilla) */}
-      <g transform="translate(170 50)" className="illo-anim" style={{ transformOrigin: "190px 70px", animation: "illoPopIn 420ms 900ms cubic-bezier(.34,1.56,.64,1) both, illoTwinkle 2.4s 1500ms ease-in-out infinite" }}>
-        <circle cx="20" cy="20" r="22" fill="#fde68a" stroke="#f59e0b" strokeWidth="3" />
-        <rect x="14" y="40" width="12" height="8" rx="2" fill="#94a3b8" />
-        <path d="M14 25 L16 22 M20 14 V18 M26 22 L24 25" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
+      <g transform="translate(170 50)">
+        <g style={{ animation: "illoPopIn 420ms 900ms cubic-bezier(.34,1.56,.64,1) both, illoTwinkle 2.4s 1500ms ease-in-out infinite" }}>
+          <circle cx="20" cy="20" r="22" fill="#fde68a" stroke="#f59e0b" strokeWidth="3" />
+          <rect x="14" y="40" width="12" height="8" rx="2" fill="#94a3b8" />
+          <path d="M14 25 L16 22 M20 14 V18 M26 22 L24 25" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
+        </g>
       </g>
     </svg>
   );
@@ -118,8 +122,10 @@ function IllustrationNivel() {
       <rect x="140" y="125" width="28" height="105" rx="3" fill="#fb923c" className="illo-anim" style={{ transformOrigin: "154px 230px", animation: "illoGrowUp 480ms 520ms cubic-bezier(.34,1.4,.64,1) both" }} />
       <rect x="176" y="85"  width="28" height="145" rx="3" fill="#f97316" className="illo-anim" style={{ transformOrigin: "190px 230px", animation: "illoGrowUp 540ms 680ms cubic-bezier(.34,1.4,.64,1) both" }} />
       {/* Estrella — pop + twinkle infinito */}
-      <g transform="translate(190 65)" className="illo-anim" style={{ animation: "illoPopIn 420ms 1180ms cubic-bezier(.34,1.56,.64,1) both, illoTwinkle 2.6s 1700ms ease-in-out infinite" }}>
-        <polygon points="0,-12 3,-4 12,-3 5,3 7,12 0,7 -7,12 -5,3 -12,-3 -3,-4" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
+      <g transform="translate(190 65)">
+        <g style={{ animation: "illoPopIn 420ms 1180ms cubic-bezier(.34,1.56,.64,1) both, illoTwinkle 2.6s 1700ms ease-in-out infinite" }}>
+          <polygon points="0,-12 3,-4 12,-3 5,3 7,12 0,7 -7,12 -5,3 -12,-3 -3,-4" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
+        </g>
       </g>
     </svg>
   );
@@ -137,10 +143,12 @@ function IllustrationDatos() {
         <circle cx="140" cy="217" r="4" fill="#475569" />
       </g>
       {/* Burbuja WhatsApp — pop + float infinito */}
-      <g transform="translate(165 30)" className="illo-anim" style={{ transformOrigin: "195px 60px", animation: "illoPopIn 420ms 600ms cubic-bezier(.34,1.56,.64,1) both, illoFloat 3s 1100ms ease-in-out infinite" }}>
-        <circle cx="30" cy="30" r="30" fill="#25D366" />
-        <path d="M30 14c-9 0-16 7-16 16 0 3 1 6 2 8l-2 8 8-2c2 1 5 2 8 2 9 0 16-7 16-16s-7-16-16-16z" fill="white" />
-        <path d="M24 22c-1 0-2 1-2 2 0 5 5 11 11 11 1 0 2 0 2-1l1-2c0-1 0-1-1-1l-2-1c-1 0-1 0-2 1l-1 1c-2-1-3-2-4-4l1-1c1-1 1-1 1-2l-1-2c0-1 0-1-1-1h-2z" fill="#25D366" />
+      <g transform="translate(165 30)">
+        <g style={{ animation: "illoPopIn 420ms 600ms cubic-bezier(.34,1.56,.64,1) both, illoFloat 3s 1100ms ease-in-out infinite" }}>
+          <circle cx="30" cy="30" r="30" fill="#25D366" />
+          <path d="M30 14c-9 0-16 7-16 16 0 3 1 6 2 8l-2 8 8-2c2 1 5 2 8 2 9 0 16-7 16-16s-7-16-16-16z" fill="white" />
+          <path d="M24 22c-1 0-2 1-2 2 0 5 5 11 11 11 1 0 2 0 2-1l1-2c0-1 0-1-1-1l-2-1c-1 0-1 0-2 1l-1 1c-2-1-3-2-4-4l1-1c1-1 1-1 1-2l-1-2c0-1 0-1-1-1h-2z" fill="#25D366" />
+        </g>
       </g>
       {/* Líneas de mensaje — cascada */}
       <rect x="115" y="90"  width="50" height="6" rx="3" fill="#fed7aa" style={{ animation: "illoFadeIn 280ms 800ms ease-out both" }} />
@@ -233,11 +241,13 @@ function IllustrationFormulario() {
       </g>
 
       {/* Bandera 🇩🇪 — fade + onda infinito (refuerza idioma) */}
-      <g transform="translate(38 38)" className="illo-anim" style={{ transformOrigin: "21px 27px", animation: "illoFadeIn 380ms 400ms ease-out both, illoWave 3.4s 800ms ease-in-out infinite" }}>
-        <rect x="0" y="0"  width="42" height="9"  fill="#1e293b" />
-        <rect x="0" y="9"  width="42" height="9"  fill="#dc2626" />
-        <rect x="0" y="18" width="42" height="9"  fill="#fbbf24" />
-        <rect x="0" y="0"  width="42" height="27" fill="none" stroke="#0f172a" strokeWidth="1.5" opacity="0.5" />
+      <g transform="translate(38 38)">
+        <g style={{ transformOrigin: "21px 27px", animation: "illoFadeIn 380ms 400ms ease-out both, illoWave 3.4s 800ms ease-in-out infinite" }}>
+          <rect x="0" y="0"  width="42" height="9"  fill="#1e293b" />
+          <rect x="0" y="9"  width="42" height="9"  fill="#dc2626" />
+          <rect x="0" y="18" width="42" height="9"  fill="#fbbf24" />
+          <rect x="0" y="0"  width="42" height="27" fill="none" stroke="#0f172a" strokeWidth="1.5" opacity="0.5" />
+        </g>
       </g>
     </svg>
   );
@@ -265,59 +275,67 @@ function IllustrationParticulares() {
       <ellipse cx="140" cy="240" rx="100" ry="9" fill="#0f172a" opacity="0.08" />
 
       {/* ── Estudiante (izquierda) — slide in desde la izquierda ── */}
-      <g transform="translate(35 95)" className="illo-anim" style={{ animation: "illoSlideInLeft 520ms ease-out both" }}>
-        {/* hombros / cuerpo */}
-        <path d="M0 90 Q0 55 35 55 L55 55 Q90 55 90 90 L90 110 L0 110 Z" fill="#fdba74" />
-        {/* cabeza */}
-        <circle cx="45" cy="32" r="26" fill="#fde68a" />
-        {/* pelo */}
-        <path d="M22 25 Q28 5 45 5 Q62 5 68 25 Q60 18 45 18 Q30 18 22 25 Z" fill="#92400e" />
-        {/* ojos */}
-        <circle cx="36" cy="33" r="2.3" fill="#1e293b" />
-        <circle cx="54" cy="33" r="2.3" fill="#1e293b" />
-        {/* sonrisa */}
-        <path d="M37 42 Q45 48 53 42" stroke="#1e293b" strokeWidth="2" fill="none" strokeLinecap="round" />
+      <g transform="translate(35 95)">
+        <g style={{ animation: "illoSlideInLeft 520ms ease-out both" }}>
+          {/* hombros / cuerpo */}
+          <path d="M0 90 Q0 55 35 55 L55 55 Q90 55 90 90 L90 110 L0 110 Z" fill="#fdba74" />
+          {/* cabeza */}
+          <circle cx="45" cy="32" r="26" fill="#fde68a" />
+          {/* pelo */}
+          <path d="M22 25 Q28 5 45 5 Q62 5 68 25 Q60 18 45 18 Q30 18 22 25 Z" fill="#92400e" />
+          {/* ojos */}
+          <circle cx="36" cy="33" r="2.3" fill="#1e293b" />
+          <circle cx="54" cy="33" r="2.3" fill="#1e293b" />
+          {/* sonrisa */}
+          <path d="M37 42 Q45 48 53 42" stroke="#1e293b" strokeWidth="2" fill="none" strokeLinecap="round" />
+        </g>
       </g>
 
       {/* ── Burbuja de chat — pop tras los personajes + 3 puntos blink ── */}
-      <g transform="translate(108 75)" className="illo-anim" style={{ transformOrigin: "139px 97px", animation: "illoPopIn 380ms 600ms cubic-bezier(.34,1.56,.64,1) both" }}>
-        <rect x="0" y="0" width="62" height="44" rx="14" fill="#ffffff" stroke="#f97316" strokeWidth="2.5" />
-        {/* "cola" de la burbuja apuntando hacia el profe */}
-        <path d="M50 38 L62 50 L54 40 Z" fill="#ffffff" stroke="#f97316" strokeWidth="2.5" strokeLinejoin="round" />
-        {/* 3 puntos chat — blink infinito en stagger */}
-        <circle cx="18" cy="22" r="3" fill="#f97316" style={{ animation: "illoBlink 1.4s 1000ms ease-in-out infinite" }} />
-        <circle cx="31" cy="22" r="3" fill="#f97316" style={{ animation: "illoBlink 1.4s 1180ms ease-in-out infinite" }} />
-        <circle cx="44" cy="22" r="3" fill="#f97316" style={{ animation: "illoBlink 1.4s 1360ms ease-in-out infinite" }} />
+      <g transform="translate(108 75)">
+        <g style={{ animation: "illoPopIn 380ms 600ms cubic-bezier(.34,1.56,.64,1) both" }}>
+          <rect x="0" y="0" width="62" height="44" rx="14" fill="#ffffff" stroke="#f97316" strokeWidth="2.5" />
+          {/* "cola" de la burbuja apuntando hacia el profe */}
+          <path d="M50 38 L62 50 L54 40 Z" fill="#ffffff" stroke="#f97316" strokeWidth="2.5" strokeLinejoin="round" />
+          {/* 3 puntos chat — blink infinito en stagger */}
+          <circle cx="18" cy="22" r="3" fill="#f97316" style={{ animation: "illoBlink 1.4s 1000ms ease-in-out infinite" }} />
+          <circle cx="31" cy="22" r="3" fill="#f97316" style={{ animation: "illoBlink 1.4s 1180ms ease-in-out infinite" }} />
+          <circle cx="44" cy="22" r="3" fill="#f97316" style={{ animation: "illoBlink 1.4s 1360ms ease-in-out infinite" }} />
+        </g>
       </g>
 
       {/* ── Profesor (derecha) — slide in desde la derecha ── */}
-      <g transform="translate(155 95)" className="illo-anim" style={{ animation: "illoSlideInRight 520ms 80ms ease-out both" }}>
-        {/* hombros / cuerpo */}
-        <path d="M0 90 Q0 55 35 55 L55 55 Q90 55 90 90 L90 110 L0 110 Z" fill="#f97316" />
-        {/* pin "DE" pecho */}
-        <circle cx="45" cy="80" r="9" fill="#fff7ed" stroke="#fbbf24" strokeWidth="2" />
-        <text x="45" y="83.5" fontSize="9" fontWeight="700" fill="#92400e" textAnchor="middle">DE</text>
-        {/* cabeza */}
-        <circle cx="45" cy="32" r="26" fill="#fde68a" />
-        {/* ojos */}
-        <circle cx="36" cy="33" r="2.3" fill="#1e293b" />
-        <circle cx="54" cy="33" r="2.3" fill="#1e293b" />
-        {/* sonrisa */}
-        <path d="M37 42 Q45 48 53 42" stroke="#1e293b" strokeWidth="2" fill="none" strokeLinecap="round" />
-        {/* Gorro académico */}
-        <g>
-          <rect x="20" y="7" width="50" height="6" fill="#1e293b" />
-          <path d="M14 13 L45 0 L76 13 L45 22 Z" fill="#1e293b" />
-          {/* borla */}
-          <line x1="68" y1="13" x2="74" y2="22" stroke="#fbbf24" strokeWidth="2" />
-          <circle cx="74" cy="24" r="3" fill="#fbbf24" />
+      <g transform="translate(155 95)">
+        <g style={{ animation: "illoSlideInRight 520ms 80ms ease-out both" }}>
+          {/* hombros / cuerpo */}
+          <path d="M0 90 Q0 55 35 55 L55 55 Q90 55 90 90 L90 110 L0 110 Z" fill="#f97316" />
+          {/* pin "DE" pecho */}
+          <circle cx="45" cy="80" r="9" fill="#fff7ed" stroke="#fbbf24" strokeWidth="2" />
+          <text x="45" y="83.5" fontSize="9" fontWeight="700" fill="#92400e" textAnchor="middle">DE</text>
+          {/* cabeza */}
+          <circle cx="45" cy="32" r="26" fill="#fde68a" />
+          {/* ojos */}
+          <circle cx="36" cy="33" r="2.3" fill="#1e293b" />
+          <circle cx="54" cy="33" r="2.3" fill="#1e293b" />
+          {/* sonrisa */}
+          <path d="M37 42 Q45 48 53 42" stroke="#1e293b" strokeWidth="2" fill="none" strokeLinecap="round" />
+          {/* Gorro académico */}
+          <g>
+            <rect x="20" y="7" width="50" height="6" fill="#1e293b" />
+            <path d="M14 13 L45 0 L76 13 L45 22 Z" fill="#1e293b" />
+            {/* borla */}
+            <line x1="68" y1="13" x2="74" y2="22" stroke="#fbbf24" strokeWidth="2" />
+            <circle cx="74" cy="24" r="3" fill="#fbbf24" />
+          </g>
         </g>
       </g>
 
       {/* Pequeña corona "1:1" arriba — pop in al final */}
-      <g transform="translate(115 30)" className="illo-anim" style={{ transformOrigin: "140px 41px", animation: "illoPopIn 380ms 900ms cubic-bezier(.34,1.56,.64,1) both" }}>
-        <rect x="0" y="0" width="50" height="22" rx="11" fill="#fbbf24" />
-        <text x="25" y="15.5" fontSize="11" fontWeight="800" fill="#92400e" textAnchor="middle">1 : 1</text>
+      <g transform="translate(115 30)">
+        <g style={{ animation: "illoPopIn 380ms 900ms cubic-bezier(.34,1.56,.64,1) both" }}>
+          <rect x="0" y="0" width="50" height="22" rx="11" fill="#fbbf24" />
+          <text x="25" y="15.5" fontSize="11" fontWeight="800" fill="#92400e" textAnchor="middle">1 : 1</text>
+        </g>
       </g>
     </svg>
   );
@@ -354,8 +372,10 @@ function IllustrationSuccess() {
         style={{ strokeDasharray: 100, strokeDashoffset: 100, animation: "illoStrokeDraw 480ms 600ms ease-out both" }}
       />
       {/* Estrella — pop + twinkle */}
-      <g transform="translate(195 50)" className="illo-anim" style={{ animation: "illoPopIn 380ms 1000ms cubic-bezier(.34,1.56,.64,1) both, illoTwinkle 2.4s 1500ms ease-in-out infinite" }}>
-        <polygon points="0,-12 3,-4 12,-3 5,3 7,12 0,7 -7,12 -5,3 -12,-3 -3,-4" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
+      <g transform="translate(195 50)">
+        <g style={{ animation: "illoPopIn 380ms 1000ms cubic-bezier(.34,1.56,.64,1) both, illoTwinkle 2.4s 1500ms ease-in-out infinite" }}>
+          <polygon points="0,-12 3,-4 12,-3 5,3 7,12 0,7 -7,12 -5,3 -12,-3 -3,-4" fill="#fbbf24" stroke="#f59e0b" strokeWidth="1.5" />
+        </g>
       </g>
     </svg>
   );
