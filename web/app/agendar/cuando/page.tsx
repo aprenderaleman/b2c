@@ -8,10 +8,9 @@ import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
 import { useBookingState } from "@/lib/booking-state";
 import { useLang } from "@/lib/lang-context";
-import { normalizePhone, resolvePhone } from "@/lib/phone";
-import { combineE164 } from "@/components/diagnostico/DiagnosticoFunnel";
+import { normalizePhone } from "@/lib/phone";
 import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
-import { detectBrowserTimezone, detectCountryFromBrowser, effectiveLeadTimezone } from "@/lib/timezone-country";
+import { detectBrowserTimezone, effectiveLeadTimezone } from "@/lib/timezone-country";
 import { captureAttributionFromUrl, readAttribution, clearAttribution } from "@/lib/ads-attribution";
 
 /**
@@ -101,28 +100,26 @@ function StepCuandoInner() {
   const [browserTz, setBrowserTz] = useState<string | null>(null);
   useEffect(() => { setBrowserTz(detectBrowserTimezone()); }, []);
 
-  // Form inline (atajo desde landing). Se inicializa con auto-detect.
+  // Form inline (atajo desde landing). WhatsApp eliminado 2026-06-26
+  // (Gelfis): el canal lleva semanas con bloqueos y no podemos garantizar
+  // contacto, así que pedirlo era ruido en el form. Confirmación + todos
+  // los recordatorios van por email.
   const [form, setForm] = useState({
-    name: "", email: "", whatsapp: "", countryCode: "+49",
+    name: "", email: "", germanLevel: null as null | "A0" | "A1" | "A2" | "B1" | "B2" | "C1",
+    commitment: false,
   });
 
-  // TZ efectiva del lead: combina browser + prefijo WA. Si el lead
-  // tecleó "+51", incluso si el navegador miente con Berlin/UTC, sabemos
-  // que está en Perú y activamos dual-TZ. Caso Martin 2026-06-17.
+  // TZ efectiva del lead — sin WhatsApp como fallback solo queda
+  // el browser. Si el browser miente (Berlin/UTC genérico), no
+  // mostramos dual-TZ. Tradeoff aceptado: leads LATAM con browser
+  // "limpio" verán solo hora Berlin, pero el modal de confirmación
+  // sigue mostrando ambas si la TZ es no-DACH.
   const leadTimezone = effectiveLeadTimezone({
     browserTimezone: browserTz,
-    whatsappPrefix:  form.countryCode,
+    whatsappPrefix:  null,
   });
   const displayTz = leadTimezone ?? "Europe/Berlin";
   const showDualTz = !!leadTimezone && leadTimezone !== "Europe/Berlin";
-  // Placeholder del input WhatsApp — número de ejemplo del país detectado.
-  const [phonePlaceholder, setPhonePlaceholder] = useState("15253409644");
-  useEffect(() => {
-    const det = detectCountryFromBrowser();
-    if (!det) return;
-    setPhonePlaceholder(det.examplePhone);
-    setForm(f => (f.countryCode === "+49" ? { ...f, countryCode: det.countryCode } : f));
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -237,44 +234,26 @@ function StepCuandoInner() {
     }, 2200);
   };
 
-  // Validación form inline.
+  // Validación form inline (sin WhatsApp desde 2026-06-26).
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
   const nameValid  = form.name.trim().length >= 2;
-  const phoneInfo  = useMemo(() => {
-    const digits = form.whatsapp.replace(/\D/g, "");
-    if (digits.length === 0) return { state: "empty" as const };
-    if (digits.length < 6)   return { state: "short" as const };
-    const res = resolvePhone(form.countryCode, form.whatsapp);
-    if (res.ccMismatch && res.detectedCc) {
-      return { state: "mismatch" as const, detectedCc: res.detectedCc, e164: res.e164 };
-    }
-    if (!res.valid) return { state: "invalid" as const };
-    return { state: "ok" as const, e164: res.e164 };
-  }, [form.countryCode, form.whatsapp]);
-  const phoneError =
-    phoneInfo.state === "short"   ? "El número parece muy corto."
-    : phoneInfo.state === "invalid" ? "Número no válido. Revisa el prefijo y los dígitos."
-    : null;
-  const phoneOk    = phoneInfo.state === "ok" || phoneInfo.state === "mismatch";
-  const canSubmitForm = nameValid && emailValid && phoneOk && !!selectedSlot && !submitting;
+  const canSubmitForm = nameValid && emailValid && form.commitment && !!selectedSlot && !submitting;
 
   const submitInlineForm = async () => {
     if (!selectedSlot || !canSubmitForm) return;
     setSubmitting(true);
     setSubmitErr(null);
     try {
-      const cc = form.countryCode.startsWith("+") ? form.countryCode : `+${form.countryCode}`;
-      const whatsapp_e164 = combineE164(form.countryCode, form.whatsapp);
-      const whatsapp_raw  = `${cc} ${form.whatsapp}`;
       const res = await fetch("/api/public/book-trial", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name:          form.name.trim(),
           email:         form.email.trim().toLowerCase(),
-          whatsapp_e164,
-          whatsapp_raw,
-          german_level:  levelFromUrl ?? "A0",
+          // WhatsApp eliminado del form — book-trial lo acepta opcional.
+          whatsapp_e164: null,
+          whatsapp_raw:  null,
+          german_level:  form.germanLevel ?? levelFromUrl ?? "A0",
           goal:          "work",
           language:      lang,
           slot_iso:      selectedSlot.startIso,
@@ -313,7 +292,7 @@ function StepCuandoInner() {
           leadId:      json.leadId,
           email:       form.email.trim().toLowerCase(),
           budget:      null,
-          hasWhatsapp: true,
+          hasWhatsapp: false,
         });
         firePixelSchedule({ leadId: json.leadId });
       }
@@ -515,46 +494,56 @@ function StepCuandoInner() {
                              }`}
                   placeholder="tu@email.com"
                 />
-              </div>
-
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1">
-                  WhatsApp <span className="text-warm">*</span>
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    value={form.countryCode}
-                    onChange={e => setForm(f => ({ ...f, countryCode: e.target.value.replace(/[^0-9+]/g, "") }))}
-                    className="w-20 h-11 px-2.5 rounded-xl bg-white border border-slate-200
-                               text-slate-900 text-center
-                               focus:outline-none focus:border-warm"
-                    placeholder="+49"
-                  />
-                  <input
-                    type="tel"
-                    inputMode="tel"
-                    autoComplete="tel"
-                    value={form.whatsapp}
-                    onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
-                    className={`flex-1 h-11 px-3.5 rounded-xl bg-white border
-                               text-slate-900 placeholder:text-slate-400
-                               focus:outline-none ${
-                                 phoneError
-                                   ? "border-red-400 focus:border-red-500"
-                                   : "border-slate-200 focus:border-warm"
-                               }`}
-                    placeholder={phonePlaceholder}
-                  />
-                </div>
-                {phoneError && (
-                  <p className="mt-1 text-[12px] text-red-600">{phoneError}</p>
-                )}
-                <p className="mt-1.5 text-[11.5px] text-slate-500">
-                  Te contactaremos solo con <strong>fines educativos</strong>.
+                <p className="mt-1.5 text-[11.5px] text-slate-500 leading-snug">
+                  📬 Después de confirmar, <strong>revisa tu correo</strong> — te llegarán los detalles de la clase y el botón para confirmar tu asistencia.
                 </p>
               </div>
+
+              {/* Selector de nivel — opcional. Pills de un click para que
+                  el lead nos cuente su nivel sin teclear. Si lo omite,
+                  asumimos A0 (caso más frecuente en este atajo). */}
+              <div>
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1">
+                  Tu nivel de alemán <span className="text-slate-400 font-normal">(opcional)</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["A0","A1","A2","B1","B2","C1"] as const).map(lvl => {
+                    const active = form.germanLevel === lvl;
+                    return (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, germanLevel: active ? null : lvl }))}
+                        className={`h-11 rounded-xl border-2 font-bold text-sm transition active:scale-[0.97]
+                                    ${active
+                                      ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-200"
+                                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"}`}
+                        aria-pressed={active}
+                      >
+                        {lvl}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 text-[11.5px] text-slate-500 leading-snug">
+                  A0 = cero, no sé nada · C1 = hablo con fluidez. <em>Si no estás seguro, déjalo en blanco — tu profesor lo evaluará.</em>
+                </p>
+              </div>
+
+              {/* Compromiso obligatorio antes de reservar. Activa el botón
+                  solo cuando el lead marca el check (Gelfis: filtra leads
+                  que reservan por curiosidad y no asisten). */}
+              <label className="flex items-start gap-2.5 cursor-pointer select-none rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50 transition">
+                <input
+                  type="checkbox"
+                  checked={form.commitment}
+                  onChange={e => setForm(f => ({ ...f, commitment: e.target.checked }))}
+                  className="mt-0.5 h-5 w-5 accent-emerald-600 shrink-0"
+                />
+                <span className="text-[13px] text-slate-700 leading-snug">
+                  Me comprometo a asistir a mi clase de alemán en el horario acordado con mi profesor/a nativo.
+                </span>
+              </label>
 
               <button
                 type="button"
@@ -571,7 +560,7 @@ function StepCuandoInner() {
                            shadow-lg shadow-warm/20 active:scale-[0.98] transition
                            disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? "Confirmando…" : "Confirmar mi clase gratis →"}
+                {submitting ? "Confirmando…" : "Confirmar clase de Alemán →"}
               </button>
             </div>
           )}
