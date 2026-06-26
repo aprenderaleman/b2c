@@ -135,7 +135,6 @@ export default async function ConfirmacionPage({
                   </p>
                   <p className="mt-1.5 text-[14.5px] md:text-[15px] text-emerald-900 leading-snug">
                     Si no lo ves en la bandeja de entrada, revisa <strong>Promociones</strong> o <strong>Spam</strong>.
-                    Sin confirmar, tu profesor podría liberar el horario.
                   </p>
                 </div>
               </div>
