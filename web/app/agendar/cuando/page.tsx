@@ -541,7 +541,7 @@ function StepCuandoInner() {
                   className="mt-0.5 h-5 w-5 accent-emerald-600 shrink-0"
                 />
                 <span className="text-[13px] text-slate-700 leading-snug">
-                  Me comprometo a asistir a mi clase de alemán con profesor nativo que habla español. Es mi primer paso hacia el alemán.
+                  Reservo este espacio con la intención real de aprender alemán. Me comprometo a asistir puntualmente a mi clase.
                 </span>
               </label>
 
