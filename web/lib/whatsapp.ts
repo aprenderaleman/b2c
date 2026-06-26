@@ -45,17 +45,20 @@ export function isWhatsappBlocked(phoneE164: string): boolean {
 }
 
 /**
- * Kill switch global de WhatsApp. Cuando Stiv está sin canal (ban,
- * migración a Cloud API, etc.) ponemos `whatsapp_disabled=true` en
- * system_config y CUALQUIER intento de envío retorna inmediatamente
- * sin tocar Evolution ni el VPS.
+ * Kill switch global de WhatsApp. Lee `system_config.whatsapp_disabled`:
+ *  - "true" / true / "1" → modo "full": bloquea TODO envío sin
+ *    excepción (uso tras bans repetidos a v3 — Gelfis 2026-06-25).
+ *  - "partial"            → bloquea TODO excepto los 5 kinds de
+ *    `ALLOWED_WA_KINDS` (modo "WA mínimo" pre-Cloud API).
+ *  - cualquier otra cosa  → modo "off" (sistema normal).
  *
  * Cachea 30s en memoria — los crons no llaman tantas veces.
  */
-let _waDisabledCache: { v: boolean; ts: number } | null = null;
+export type WhatsappDisableMode = "off" | "partial" | "full";
+let _waDisabledCache: { v: WhatsappDisableMode; ts: number } | null = null;
 const WA_DISABLED_TTL_MS = 30_000;
 
-export async function isWhatsappGloballyDisabled(): Promise<boolean> {
+export async function getWhatsappDisableMode(): Promise<WhatsappDisableMode> {
   const now = Date.now();
   if (_waDisabledCache && now - _waDisabledCache.ts < WA_DISABLED_TTL_MS) {
     return _waDisabledCache.v;
@@ -69,11 +72,13 @@ export async function isWhatsappGloballyDisabled(): Promise<boolean> {
       .eq("key", "whatsapp_disabled")
       .maybeSingle();
     const raw = (data as { value?: unknown } | null)?.value;
-    const v = raw === true || raw === "true" || raw === "1";
-    _waDisabledCache = { v, ts: now };
-    return v;
+    let mode: WhatsappDisableMode = "off";
+    if (raw === "partial") mode = "partial";
+    else if (raw === true || raw === "true" || raw === "1") mode = "full";
+    _waDisabledCache = { v: mode, ts: now };
+    return mode;
   } catch {
-    return false;
+    return "off";
   }
 }
 
@@ -137,12 +142,18 @@ export async function sendWhatsappText(
     console.warn("[whatsapp] número en blocklist, mensaje suprimido:", phoneE164);
     return { ok: false, reason: "blocklisted" };
   }
-  // Kill switch global con whitelist por kind. El bypass se usa solo
-  // desde endpoints admin (Gelfis enviando manualmente).
-  if (await isWhatsappGloballyDisabled()) {
+  // Kill switch global con dos modos:
+  //  - "true" / true / "1"  → bloquea TODO (ni siquiera los 5 kinds de
+  //    la whitelist; usado tras bans repetidos a v3).
+  //  - "partial"            → bloquea TODO excepto kinds en
+  //    ALLOWED_WA_KINDS (modo WA mínimo).
+  // El bypass se usa solo desde endpoints admin (Gelfis manualmente).
+  const killMode = await getWhatsappDisableMode();
+  if (killMode !== "off") {
     if (!opts.bypassKillSwitch) {
       const kind = opts.kind ?? "";
-      if (!ALLOWED_WA_KINDS.has(kind)) {
+      const passesWhitelist = killMode === "partial" && ALLOWED_WA_KINDS.has(kind);
+      if (!passesWhitelist) {
         return { ok: false, reason: "whatsapp_globally_disabled" };
       }
     }
@@ -218,8 +229,11 @@ export async function sendWhatsappDocument(
     console.warn("[whatsapp] número en blocklist, documento suprimido:", phoneE164);
     return { ok: false, reason: "blocklisted" };
   }
-  // Kill switch global.
-  if (await isWhatsappGloballyDisabled()) {
+  // Kill switch global (cualquier modo que no sea "off" → bloquea
+  // documentos sin excepción — no hay use-case crítico de documentos
+  // en los 5 kinds permitidos).
+  const docKillMode = await getWhatsappDisableMode();
+  if (docKillMode !== "off") {
     return { ok: false, reason: "whatsapp_globally_disabled" };
   }
 
