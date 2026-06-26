@@ -587,7 +587,7 @@ export async function POST(req: Request) {
         filename: "clase-de-prueba-aleman.ics",
       }),
       waText && b.whatsapp_e164
-        ? sendWhatsappText(b.whatsapp_e164, waText)
+        ? sendWhatsappText(b.whatsapp_e164, waText, { kind: "trial_confirmation" })
         : Promise.resolve(null),
       // Google Calendar mirror — env-gated. Si no hay creds, devuelve
       // null y no logueamos error. Si está configurado y crea el

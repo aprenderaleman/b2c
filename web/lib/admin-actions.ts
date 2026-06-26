@@ -241,7 +241,9 @@ export async function markTrialAttendedAwaitingConversion(
       : `¡Hola ${firstName}! 😊\n\n¡Gracias por asistir a tu clase de prueba de alemán!\n\n¿Qué te pareció? Si te interesa avanzar, te preparo un plan personalizado con horarios y precio exacto — dime cuando quieras seguir.\n\nStiv, Aprender-Aleman.de`;
   }
 
-  const res = await sendWhatsappText(lead.whatsapp_normalized, text);
+  const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
+    kind: opts ? "trial_inscription_initial" : "trial_attended_initial",
+  });
   if (res.ok) {
     await sb.from("lead_timeline").insert({
       lead_id: leadId,
@@ -401,7 +403,9 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
         `Stiv | Aprender-Aleman.de`,
       ].join("\n");
 
-  const res = await sendWhatsappText(lead.whatsapp_normalized, text);
+  const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
+    kind: "trial_attended_initial",
+  });
   if (res.ok) {
     await sb.from("lead_timeline").insert({
       lead_id: leadId,
@@ -480,22 +484,48 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     content: "Lead did not attend trial — first absent follow-up scheduled for T+60min.",
   });
 
-  // Email "no te vimos hoy" con botón directo a /agendar/cuando.
+  // Email "no te vimos hoy" + WA inmediato con botón a /agendar/cuando.
   // Antes solo se mandaban 3 WA via cron tick_absent_followups — pero
   // con WA inestable y la migración a Cloud API en curso, el email
-  // inmediato es el camino más confiable para que el lead vuelva al
-  // funnel.
+  // inmediato es el camino más confiable. El WA es uno de los 5
+  // mensajes permitidos en modo restringido (kind=trial_absent_initial).
   const { data: leadInfo } = await sb
     .from("leads")
-    .select("name, email, language")
+    .select("name, email, language, whatsapp_normalized")
     .eq("id", leadId)
     .maybeSingle();
-  const linfo = leadInfo as { name: string | null; email: string | null; language: "es"|"de"|null } | null;
+  const linfo = leadInfo as { name: string | null; email: string | null; language: "es"|"de"|null; whatsapp_normalized: string | null } | null;
+  const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+  const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=trial_absent`;
+
+  if (linfo?.whatsapp_normalized) {
+    const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
+    const waText = linfo.language === "de"
+      ? `Hallo ${firstName}! 👋\n\nWir waren heute für deine Probestunde bereit, konnten dich aber nicht erreichen. Kein Stress — sowas passiert.\n\nWann passt es dir besser? Such dir einen neuen Termin aus:\n${rescheduleUrl}\n\nBis bald.\n— Stiv`
+      : `¡Hola ${firstName}! 👋\n\nHoy estábamos preparados para tu clase de prueba pero no pudimos conectarnos contigo. Sin problema — sé que pasan cosas.\n\n¿Cuándo te viene bien retomarla?\n${rescheduleUrl}\n\nEspero verte pronto.\n— Stiv`;
+    const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "trial_absent_initial" });
+    if (waRes.ok) {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "system_message_sent",
+        author:  "gelfis",
+        content: `💬 WA "no te vimos hoy" enviado a ${linfo.whatsapp_normalized}`,
+        metadata: { kind: "absent_followup", channel: "whatsapp" },
+      });
+    } else {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "send_failed",
+        author:  "gelfis",
+        content: `💬 Falló WA absent followup: ${waRes.reason ?? "unknown"}`,
+        metadata: { kind: "absent_followup", channel: "whatsapp" },
+      });
+    }
+  }
+
   if (linfo?.email) {
     const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
     const langForEmail: "es" | "de" = linfo.language === "de" ? "de" : "es";
-    const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
-    const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=trial_absent`;
     const emailRes = await sendTrialAbsentFollowupEmail(linfo.email, {
       leadName: firstName,
       language: langForEmail,

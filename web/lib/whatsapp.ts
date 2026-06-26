@@ -78,12 +78,55 @@ export async function isWhatsappGloballyDisabled(): Promise<boolean> {
 }
 
 /**
+ * Tipos de mensaje permitidos cuando el kill switch global está on.
+ * Cualquier kind que no esté aquí es silenciado mientras el sistema
+ * funciona en modo "WhatsApp mínimo" (post-ban v3 — Gelfis 2026-06-25).
+ *
+ * Los 5 únicos puntos donde el lead recibe WA en este modo:
+ *  - trial_confirmation       → al agendar trial
+ *  - trial_reminder_2h        → 2h antes de la clase
+ *  - trial_attended_initial   → profesor marca asistió
+ *  - trial_inscription_initial→ profesor envía enlace inscripción
+ *  - trial_absent_initial     → profesor marca no asistió
+ *
+ * Drips (24h, morning, 15m, post-trial-followup, absent-followup,
+ * summer-promo, comunicados, alertas admin, etc.) quedan silenciados.
+ */
+const ALLOWED_WA_KINDS = new Set([
+  "trial_confirmation",
+  "trial_reminder_2h",
+  "trial_attended_initial",
+  "trial_inscription_initial",
+  "trial_absent_initial",
+  "admin_manual",  // bypass para Gelfis desde endpoints admin
+]);
+
+/**
+ * Rate limit cliente: no permite dos envíos en menos de 15s para evitar
+ * que ráfagas (varios crons disparando a la vez) parezcan bot a WA.
+ * Estado en memoria — al ser un único Vercel worker por request,
+ * actúa como per-request guard, no como lock global. Para spike
+ * sostenido, el agente Python en el VPS aplica su propio rate-limit.
+ */
+const MIN_GAP_MS = 15_000;
+let _lastWaSentAt = 0;
+
+export type SendWaOpts = {
+  /** Etiqueta de propósito. Si el kill switch está on y este kind NO
+   *  está en `ALLOWED_WA_KINDS`, el envío se silencia. */
+  kind?: string;
+  /** Bypass total del kill switch (uso interno admin). */
+  bypassKillSwitch?: boolean;
+};
+
+/**
  * Send a plain-text WhatsApp message to a phone number in E.164 format.
  * Caller is responsible for ensuring the number is valid & opted-in.
  */
 export async function sendWhatsappText(
   phoneE164: string | null | undefined,
   text: string,
+  opts: SendWaOpts = {},
 ): Promise<WhatsappResult> {
   // Guarda: lead sin WhatsApp (form en 2 pasos, fase 2 saltada).
   if (!phoneE164 || phoneE164.trim().length === 0) {
@@ -94,10 +137,23 @@ export async function sendWhatsappText(
     console.warn("[whatsapp] número en blocklist, mensaje suprimido:", phoneE164);
     return { ok: false, reason: "blocklisted" };
   }
-  // Kill switch global. Sin tocar Evolution ni el VPS.
+  // Kill switch global con whitelist por kind. El bypass se usa solo
+  // desde endpoints admin (Gelfis enviando manualmente).
   if (await isWhatsappGloballyDisabled()) {
-    return { ok: false, reason: "whatsapp_globally_disabled" };
+    if (!opts.bypassKillSwitch) {
+      const kind = opts.kind ?? "";
+      if (!ALLOWED_WA_KINDS.has(kind)) {
+        return { ok: false, reason: "whatsapp_globally_disabled" };
+      }
+    }
   }
+  // Rate limit cliente — separa envíos al menos 15s.
+  const now = Date.now();
+  const elapsed = now - _lastWaSentAt;
+  if (elapsed < MIN_GAP_MS && _lastWaSentAt > 0) {
+    await new Promise(r => setTimeout(r, MIN_GAP_MS - elapsed));
+  }
+  _lastWaSentAt = Date.now();
 
   const baseUrl = process.env.AGENTS_BASE_URL?.replace(/\/$/, "");
   const secret  = process.env.AGENTS_INTERNAL_SECRET;

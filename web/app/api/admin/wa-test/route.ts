@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   if (!body.phone || !body.text) {
     return NextResponse.json({ error: "missing_fields", required: ["phone","text"] }, { status: 400 });
   }
-  const r = await sendWhatsappText(body.phone, body.text);
+  const r = await sendWhatsappText(body.phone, body.text, { kind: "admin_manual" });
   if (!r.ok) return NextResponse.json({ ok: false, reason: r.reason }, { status: 502 });
   return NextResponse.json({ ok: true, messageId: r.messageId });
 }

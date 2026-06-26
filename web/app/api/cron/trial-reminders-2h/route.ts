@@ -100,7 +100,7 @@ async function run(req: Request) {
       ? `In 2 Stunden beginnt deine Deutsch-Stunde.\n\nIch empfehle dir:\n- Computer mit Kamera und Mikrofon bereit\n- Ruhiger Ort\n\nBist du bereit?\n\n🔗 Direktlink: ${joinUrl}`
       : `En 2 horas inicia tu clase de alemán.\n\nTe recomiendo:\n- Tener computador con cámara y micrófono\n- Lugar tranquilo\n\n¿Estás listo/a?\n\n🔗 Link directo: ${joinUrl}`;
 
-    const res = await sendWhatsappText(lead.whatsapp_normalized, text);
+    const res = await sendWhatsappText(lead.whatsapp_normalized, text, { kind: "trial_reminder_2h" });
 
     if (res.ok) {
       sent++;
