@@ -113,13 +113,147 @@ export function lifecycleEmailsEnabled(): boolean {
   return (process.env.LIFECYCLE_EMAILS_ENABLED ?? "true") === "true";
 }
 
+// Backoff entre reintentos por proveedor: 2s, 8s, 30s.
+const RETRY_DELAYS_MS = [2_000, 8_000, 30_000];
+
 /**
- * Low-level send. Tries Resend first (if configured), then SMTP (if
- * configured), and finally falls back to logging the email to stdout
- * so dev environments don't break.
+ * Chequea si el destinatario tiene email_status="bounced" o "complained"
+ * en leads. Si sí, retorna true → sendRaw aborta sin intentar.
  *
- * Returns a SendResult with either the provider's message id (or a
- * synthesised one for SMTP) or a clear error reason.
+ * Cache 60s para no martillar la BD en bursts (drips, broadcasts).
+ * Si el lead no está en BD (estudiante/admin/profesor) devolvemos
+ * false (sigue intentando — esos canales no están en leads).
+ */
+const _bouncedCache = new Map<string, { v: boolean; ts: number }>();
+const BOUNCED_TTL_MS = 60_000;
+
+async function isRecipientBounced(to: string): Promise<boolean> {
+  const email = to.toLowerCase().trim();
+  if (!email) return false;
+  const cached = _bouncedCache.get(email);
+  if (cached && Date.now() - cached.ts < BOUNCED_TTL_MS) return cached.v;
+  try {
+    const { supabaseAdmin } = await import("../supabase");
+    const sb = supabaseAdmin();
+    const { data } = await sb
+      .from("leads")
+      .select("email_status")
+      .ilike("email", email)
+      .maybeSingle();
+    const status = (data as { email_status?: string } | null)?.email_status ?? null;
+    const v = status === "bounced" || status === "complained";
+    _bouncedCache.set(email, { v, ts: Date.now() });
+    return v;
+  } catch {
+    return false;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+/**
+ * ¿El error retornado por un proveedor justifica un retry? Solo
+ * para errores transitorios (5xx, timeout, network); permanentes
+ * (400, invalid_to, dominio rebote) NO se reintentan.
+ */
+function isTransient(err: string): boolean {
+  const e = err.toLowerCase();
+  return (
+    e.includes("timeout") ||
+    e.includes("timed out") ||
+    e.includes("etimedout") ||
+    e.includes("econnreset") ||
+    e.includes("econnrefused") ||
+    e.includes("network") ||
+    e.includes("socket") ||
+    e.includes("503") ||
+    e.includes("502") ||
+    e.includes("504") ||
+    e.includes("500 ") ||
+    e.includes("rate_limit") ||
+    e.includes("too many requests") ||
+    e.includes("temporarily") ||
+    e.includes("try again")
+  );
+}
+
+async function sendViaResend(
+  to: string, subject: string, html: string, text: string,
+  attachments?: EmailAttachment[],
+): Promise<SendResult> {
+  const resend = getResend();
+  if (!resend) return { ok: false, error: "resend_not_configured" };
+  try {
+    const { data, error } = await resend.emails.send({
+      from: fromAddress(), to, subject, html, text,
+      ...(attachments && attachments.length > 0
+        ? { attachments: attachments.map(a => ({ filename: a.filename, content: a.content })) }
+        : {}),
+    });
+    if (error) return { ok: false, error: error.message ?? "resend error" };
+    return { ok: true, id: data?.id ?? null };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "unknown" };
+  }
+}
+
+async function sendViaSmtp(
+  to: string, subject: string, html: string, text: string,
+  attachments?: EmailAttachment[],
+): Promise<SendResult> {
+  const smtp = getSmtp();
+  if (!smtp) return { ok: false, error: "smtp_not_configured" };
+  try {
+    const info = await smtp.sendMail({
+      from: fromAddress(), to, subject, html, text,
+      ...(attachments && attachments.length > 0
+        ? { attachments: attachments.map(a => ({
+            filename:    a.filename,
+            content:     a.content,
+            contentType: a.contentType,
+          })) }
+        : {}),
+    });
+    return { ok: true, id: info.messageId ?? null };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "smtp error" };
+  }
+}
+
+/**
+ * Intenta un proveedor con backoff 2s/8s/30s para errores transitorios.
+ * Errores permanentes (validación, dominio rebote) cortan inmediato.
+ */
+async function trySendWithBackoff(
+  send: () => Promise<SendResult>,
+  label: string,
+): Promise<SendResult> {
+  let last: SendResult = { ok: false, error: `${label}_no_attempts` };
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    last = await send();
+    if (last.ok) return last;
+    if (!isTransient(last.error)) return last;
+    if (attempt < RETRY_DELAYS_MS.length) {
+      await sleep(RETRY_DELAYS_MS[attempt]);
+    }
+  }
+  return last;
+}
+
+/**
+ * Low-level send. Política:
+ *  1. Intenta Resend con retry+backoff (4 intentos, 2s/8s/30s).
+ *  2. Si Resend queda en error (transitorio agotado o config faltante),
+ *     intenta SMTP también con retry+backoff.
+ *  3. Si ambos fallan o no hay backend, loguea y devuelve error.
+ *
+ * Sin retries para errores permanentes (400, dominio inválido, etc.)
+ * porque no van a mejorar reintentando — desperdiciaría latencia.
+ *
+ * Hasta 2026-06-25 la lógica era "Resend O SMTP" sin fallback ni retry,
+ * lo cual dejaba huecos en cuanto Resend tenía cualquier hipo.
  */
 export async function sendRaw(
   to: string,
@@ -128,57 +262,48 @@ export async function sendRaw(
   text: string,
   attachments?: EmailAttachment[],
 ): Promise<SendResult> {
-  const backend = emailBackendConfigured();
+  // Skip si el destinatario está marcado como bounced/complained
+  // por el webhook Resend — protege la reputación del dominio.
+  if (await isRecipientBounced(to)) {
+    return { ok: false, error: "recipient_email_bounced" };
+  }
 
-  // --- 1. Resend ---
-  if (backend === "resend") {
-    const resend = getResend()!;
-    try {
-      const { data, error } = await resend.emails.send({
-        from: fromAddress(), to, subject, html, text,
-        // Resend accepts { filename, content } where content can be a
-        // Buffer or base64 string. Buffer works directly.
-        ...(attachments && attachments.length > 0
-          ? { attachments: attachments.map(a => ({ filename: a.filename, content: a.content })) }
-          : {}),
-      });
-      if (error) return { ok: false, error: error.message ?? "resend error" };
-      return { ok: true, id: data?.id ?? null };
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "unknown" };
+  const hasResend = !!getResend();
+  const hasSmtp   = !!getSmtp();
+
+  // --- Sin backend configurado: log + pretend-success ---
+  if (!hasResend && !hasSmtp) {
+    console.log("=".repeat(60));
+    console.log(`[email DEV] to=${to}`);
+    console.log(`[email DEV] subject=${subject}`);
+    console.log(`[email DEV] text=\n${text}`);
+    if (attachments && attachments.length > 0) {
+      console.log(`[email DEV] attachments=${attachments.map(a => `${a.filename} (${a.content.length}B)`).join(", ")}`);
     }
+    console.log("=".repeat(60));
+    return { ok: true, id: null };
   }
 
-  // --- 2. SMTP (nodemailer) ---
-  if (backend === "smtp") {
-    const smtp = getSmtp()!;
-    try {
-      const info = await smtp.sendMail({
-        from: fromAddress(), to, subject, html, text,
-        ...(attachments && attachments.length > 0
-          ? { attachments: attachments.map(a => ({
-              filename:    a.filename,
-              content:     a.content,
-              contentType: a.contentType,
-            })) }
-          : {}),
-      });
-      return { ok: true, id: info.messageId ?? null };
-    } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : "smtp error" };
-    }
+  // --- 1. Resend con retry ---
+  if (hasResend) {
+    const r = await trySendWithBackoff(
+      () => sendViaResend(to, subject, html, text, attachments),
+      "resend",
+    );
+    if (r.ok) return r;
+    console.warn(`[email] Resend falló (${r.error}). ${hasSmtp ? "Failover SMTP." : "Sin SMTP configurado."}`);
   }
 
-  // --- 3. No backend configured: log + pretend-success so dev keeps flowing. ---
-  console.log("=".repeat(60));
-  console.log(`[email DEV] to=${to}`);
-  console.log(`[email DEV] subject=${subject}`);
-  console.log(`[email DEV] text=\n${text}`);
-  if (attachments && attachments.length > 0) {
-    console.log(`[email DEV] attachments=${attachments.map(a => `${a.filename} (${a.content.length}B)`).join(", ")}`);
+  // --- 2. SMTP fallback con retry ---
+  if (hasSmtp) {
+    const s = await trySendWithBackoff(
+      () => sendViaSmtp(to, subject, html, text, attachments),
+      "smtp",
+    );
+    return s;
   }
-  console.log("=".repeat(60));
-  return { ok: true, id: null };
+
+  return { ok: false, error: "all_email_backends_failed" };
 }
 
 /**
