@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { StepFrame } from "@/components/agendar/FunnelShell";
+import { StepFrame, useSetIllustration } from "@/components/agendar/FunnelShell";
 import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
 import { useBookingState } from "@/lib/booking-state";
@@ -85,6 +85,13 @@ function StepCuandoInner() {
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  // Cambia la ilustración del shell mientras el lead rellena el form
+  // (antes era la misma del calendario, era confuso).
+  const setIllustration = useSetIllustration();
+  useEffect(() => {
+    setIllustration(showForm ? "formulario" : null);
+    return () => setIllustration(null);
+  }, [showForm, setIllustration]);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
   // Modal de doble confirmación dual-TZ. Igual que el CalendarStep

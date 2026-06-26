@@ -2,9 +2,23 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
-import { IllustrationPanel } from "@/components/diagnostico/IllustrationPanel";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { IllustrationPanel, type StepKey } from "@/components/diagnostico/IllustrationPanel";
 import { BrandLogo } from "@/components/BrandLogo";
+
+/**
+ * Permite a una página /agendar/* sobreescribir la ilustración del
+ * shell según su estado interno (ej. /cuando muestra "calendario"
+ * mientras se elige slot y cambia a "formulario" al rellenar datos).
+ * `null` = usar el default basado en la URL.
+ */
+const IllustrationOverrideCtx = createContext<{
+  set: (key: StepKey | null) => void;
+}>({ set: () => {} });
+
+export function useSetIllustration(): (key: StepKey | null) => void {
+  return useContext(IllustrationOverrideCtx).set;
+}
 
 /**
  * Mobile-first app-shell for the booking funnel.
@@ -67,14 +81,19 @@ export function FunnelShell({ children }: { children: React.ReactNode }) {
   };
 
   const progressPct = (stepNum / total) * 100;
-  const illoKey = illustrationKeyFor(pathname);
+  const defaultIllo = illustrationKeyFor(pathname);
+  const [override, setOverride] = useState<StepKey | null>(null);
+  // Reset al cambiar de paso para que la página nueva parta del default.
+  useEffect(() => { setOverride(null); }, [pathname]);
+  const ctxValue = useMemo(() => ({ set: setOverride }), []);
 
   return (
+    <IllustrationOverrideCtx.Provider value={ctxValue}>
     <div
       className="min-h-[100dvh] bg-white text-slate-900"
       style={{ overscrollBehavior: "contain" }}
     >
-      <IllustrationPanel step={illoKey}>
+      <IllustrationPanel step={override ?? defaultIllo}>
         <div className="flex flex-col min-h-[100dvh]">
           {/* ── Sticky header ───────────────────────────── */}
           <header
@@ -123,6 +142,7 @@ export function FunnelShell({ children }: { children: React.ReactNode }) {
         </div>
       </IllustrationPanel>
     </div>
+    </IllustrationOverrideCtx.Provider>
   );
 }
 

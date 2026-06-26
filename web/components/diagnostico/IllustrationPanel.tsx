@@ -12,11 +12,12 @@
  */
 import { type ReactNode } from "react";
 
-type StepKey =
+export type StepKey =
   | "motivo"
   | "nivel"
   | "datos"
   | "calendario"
+  | "formulario"
   | "low_budget"
   | "already_registered"
   | "success"
@@ -63,6 +64,7 @@ function IllustrationFor({ step }: { step: StepKey }) {
   if (step === "nivel")         return <IllustrationNivel />;
   if (step === "datos")         return <IllustrationDatos />;
   if (step === "calendario")    return <IllustrationCalendario />;
+  if (step === "formulario")    return <IllustrationFormulario />;
   if (step === "low_budget")    return <IllustrationLowBudget />;
   if (step === "already_registered") return <IllustrationAlreadyReg />;
   if (step === "success")       return <IllustrationSuccess />;
@@ -162,6 +164,42 @@ function IllustrationCalendario() {
       {/* Día seleccionado — con check */}
       <circle cx="141" cy="153" r="14" fill="#f97316" />
       <path d="M134 153 L139 158 L148 148" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </svg>
+  );
+}
+
+function IllustrationFormulario() {
+  // Sobre con corazón + pluma firmando — refuerza "te llegará el email
+  // de confirmación, comprométete a venir". Paleta brand (warm+amber).
+  return (
+    <svg viewBox="0 0 280 280" className="w-full h-auto max-h-[180px] md:max-h-[360px]" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <ellipse cx="140" cy="248" rx="92" ry="9" fill="#0f172a" opacity="0.08" />
+
+      {/* Sobre — body */}
+      <rect x="58" y="90" width="164" height="118" rx="10" fill="#fff7ed" stroke="#f97316" strokeWidth="3.5" />
+      {/* Solapa abierta (triángulo invertido) */}
+      <path d="M58 100 L140 165 L222 100" fill="none" stroke="#f97316" strokeWidth="3.5" strokeLinejoin="round" />
+      {/* Líneas internas — simulando contenido */}
+      <rect x="78"  y="178" width="80" height="5" rx="2" fill="#fed7aa" />
+      <rect x="78"  y="190" width="56" height="5" rx="2" fill="#fed7aa" />
+
+      {/* Badge ✓ verde — la asistencia confirmada */}
+      <g transform="translate(190 60)">
+        <circle cx="22" cy="22" r="24" fill="#10b981" stroke="#059669" strokeWidth="3" />
+        <path d="M12 23 L19 30 L33 16" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+      </g>
+
+      {/* Bandera 🇩🇪 pequeña — refuerza idioma */}
+      <g transform="translate(38 38)">
+        <rect x="0" y="0"  width="42" height="9"  fill="#1e293b" />
+        <rect x="0" y="9"  width="42" height="9"  fill="#dc2626" />
+        <rect x="0" y="18" width="42" height="9"  fill="#fbbf24" />
+        <rect x="0" y="0"  width="42" height="27" fill="none" stroke="#0f172a" strokeWidth="1.5" opacity="0.5" />
+      </g>
+
+      {/* Líneas tipo "asunto" arriba del sobre — refuerza email */}
+      <rect x="98"  y="120" width="84" height="4" rx="2" fill="#fbbf24" opacity="0.6" />
+      <rect x="110" y="132" width="60" height="4" rx="2" fill="#fbbf24" opacity="0.6" />
     </svg>
   );
 }
