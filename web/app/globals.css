@@ -225,6 +225,73 @@
   * { animation: none !important; transition: none !important; }
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Animaciones para IllustrationPanel (funnel /agendar/*).
+   Patrón C+B: intro storytelling al montar + micro-loops sutiles
+   en elementos vivos (✓, banderas, estrellas, 3 dots, etc.).
+   `both` mantiene el frame 0 visible antes de que arranque, para
+   evitar el flash inicial a tamaño final.
+   ───────────────────────────────────────────────────────────── */
+@keyframes illoFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes illoDropIn {
+  from { opacity: 0; transform: translateY(-24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes illoSlideInLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes illoSlideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes illoPopIn {
+  0%   { opacity: 0; transform: scale(0); }
+  60%  { opacity: 1; transform: scale(1.15); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes illoGrowUp {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+@keyframes illoStrokeDraw {
+  from { stroke-dashoffset: 100; }
+  to   { stroke-dashoffset: 0; }
+}
+@keyframes illoPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.08); }
+}
+@keyframes illoFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+@keyframes illoWave {
+  0%, 100% { transform: rotate(-4deg); }
+  50%      { transform: rotate(4deg); }
+}
+@keyframes illoTwinkle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.9); }
+}
+@keyframes illoSpinSlow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes illoBlink {
+  0%, 80%, 100% { opacity: 0.25; }
+  40%           { opacity: 1; }
+}
+
+/* Elementos que se animan deben tener su origen de transformación
+   centrado o en el punto natural (p.ej. estrella desde el centro,
+   barras desde abajo). Helper de transform-box para los <g> SVG. */
+.illo-anim { transform-box: fill-box; transform-origin: center; }
+.illo-anim-bottom { transform-box: fill-box; transform-origin: center bottom; }
+
 /* Hide native scrollbar on horizontally-scrolling strips (mobile day
    picker, etc.). Behaviour stays scrollable; we just don't render the
    bar. */
