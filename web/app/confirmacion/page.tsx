@@ -117,7 +117,7 @@ export default async function ConfirmacionPage({
             </p>
             <h1 className="mt-2 text-[28px] sm:text-3xl md:text-4xl lg:text-[40px] font-extrabold tracking-tight text-slate-900 leading-tight">
               ¡Casi listo{firstName ? `, ${firstName}` : ""}!<br />
-              Falta un último paso.
+              Revisa tu correo electrónico.
             </h1>
             <p className="mt-3 text-[15px] md:text-base text-slate-600 leading-relaxed">
               Revisa tu <strong>correo electrónico</strong> ahora — te acabamos
