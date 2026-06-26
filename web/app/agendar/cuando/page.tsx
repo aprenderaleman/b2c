@@ -556,11 +556,11 @@ function StepCuandoInner() {
                   }
                 }}
                 disabled={!canSubmitForm}
-                className="w-full h-12 rounded-2xl bg-warm text-warm-foreground font-bold
-                           shadow-lg shadow-warm/20 active:scale-[0.98] transition
-                           disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold
+                           shadow-lg shadow-emerald-600/25 active:scale-[0.98] transition
+                           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
               >
-                {submitting ? "Confirmando…" : "Confirmar clase de Alemán →"}
+                {submitting ? "Confirmando…" : "Confirmar"}
               </button>
             </div>
           )}
