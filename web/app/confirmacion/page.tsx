@@ -116,9 +116,11 @@ export default async function ConfirmacionPage({
               ✓ Reserva confirmada
             </p>
             <h1 className="mt-2 text-[28px] sm:text-3xl md:text-4xl lg:text-[40px] font-extrabold tracking-tight text-slate-900 leading-tight">
-              ¡Casi listo{firstName ? `, ${firstName}` : ""}!<br />
-              Revisa tu correo electrónico.
+              ¡Casi listo{firstName ? `, ${firstName}` : ""}!
             </h1>
+            <p className="mt-3 text-[22px] sm:text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
+              Revisa tu correo electrónico.
+            </p>
             <p className="mt-3 text-[15px] md:text-base text-slate-600 leading-relaxed">
               Revisa tu <strong>correo electrónico</strong> ahora — te acabamos
               de enviar un email con el botón <strong>«Confirmar asistencia»</strong>.
