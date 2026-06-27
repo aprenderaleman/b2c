@@ -47,14 +47,17 @@ function renderES(v: TrialAttendedFollowupVars): RenderedEmail {
     ${p(intro)}
     ${p(`<strong>${escapeHtml(middle)}</strong>`)}
     ${bigButton(v.ctaUrl, ctaLabel, "confirm")}
-    ${p(`<em style="color:#64748b;font-size:13px;">Un solo clic y eliges tu plan. Si tienes dudas, respóndeme directamente a este email y te ayudo.</em>`)}
+    <p style="margin:0 0 14px 0;font-size:13px;color:#64748b;">
+      <em>Un solo clic y eliges tu plan. Si tienes dudas, escríbenos </em>
+      <a href="https://wa.me/4915253409644" style="display:inline-block;background:#25D366;color:#ffffff;text-decoration:none;padding:5px 12px;border-radius:999px;font-size:12px;font-weight:600;vertical-align:middle;line-height:1.2;">💬 WhatsApp</a>
+    </p>
     ${p(`Nos vemos pronto del otro lado.<br><em style="color:#64748b;">— Stiv · Aprender-Aleman.de</em>`)}
   `;
   const text = [
     `¡Hola ${v.leadName}!`, ``,
     intro, ``, middle, ``,
     `🔗 ${v.ctaUrl}`, ``,
-    `Si tienes dudas, responde a este email.`, ``,
+    `Si tienes dudas, escríbenos por WhatsApp: https://wa.me/4915253409644`, ``,
     `— Stiv · Aprender-Aleman.de`,
   ].join("\n");
   return {
