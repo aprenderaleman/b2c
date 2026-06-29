@@ -13,11 +13,18 @@ export const runtime = "nodejs";
  * Admin-only. Body: { studentIds: string[] }
  */
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const role = (session.user as { role?: string }).role;
-  if (role !== "admin" && role !== "superadmin")
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // Auth: either admin session or CRON_SECRET bearer token
+  const bearer = req.headers.get("authorization")?.replace("Bearer ", "");
+  const cronSecret = process.env.CRON_SECRET;
+  if (bearer && cronSecret && bearer === cronSecret) {
+    // OK — trusted cron/script caller
+  } else {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const role = (session.user as { role?: string }).role;
+    if (role !== "admin" && role !== "superadmin")
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const { studentIds } = (await req.json()) as { studentIds: string[] };
   if (!studentIds?.length) return NextResponse.json({ error: "no_students" }, { status: 400 });
