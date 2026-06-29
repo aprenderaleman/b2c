@@ -625,7 +625,7 @@ function StepCuandoInner() {
               <Field
                 label="WhatsApp"
                 required
-                valid={phoneOk}
+                valid={phoneInfo.state === "ok"}
                 helper="Te contactaremos solo con fines educativos."
                 error={phoneError}
               >
@@ -646,10 +646,40 @@ function StepCuandoInner() {
                     autoComplete="tel"
                     value={form.whatsapp}
                     onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
-                    className={`flex-1 ${inputCls(phoneOk, !!phoneError)}`}
+                    className={`flex-1 ${inputCls(phoneOk && phoneInfo.state !== "mismatch", !!phoneError)}`}
                     placeholder={phonePlaceholder}
                   />
                 </div>
+                {/* Aviso ccMismatch — libphonenumber detectó que el número
+                    tecleado pertenece a otro país. No bloquea, pero ofrece
+                    auto-corrección con 1 clic. Previene casos como Maria
+                    que escribe su número peruano con el +49 default. */}
+                {phoneInfo.state === "mismatch" && phoneInfo.detectedCc && (
+                  <div className="mt-2 rounded-xl bg-amber-50 ring-1 ring-amber-200 p-3 flex items-start gap-2.5">
+                    <span className="text-[18px] leading-none shrink-0" aria-hidden>⚠️</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-amber-900 leading-snug">
+                        Tu número parece de <strong>{phoneInfo.detectedCc}</strong> pero seleccionaste <strong>{form.countryCode}</strong>.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => phoneInfo.detectedCc && setForm(f => ({ ...f, countryCode: phoneInfo.detectedCc as string }))}
+                          className="h-8 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-[12.5px] font-semibold transition"
+                        >
+                          Usar {phoneInfo.detectedCc}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => phoneInfo.e164 && setForm(f => ({ ...f, whatsapp: "" }))}
+                          className="h-8 px-3 rounded-lg bg-white ring-1 ring-amber-200 text-amber-900 text-[12.5px] font-semibold hover:bg-amber-50 transition"
+                        >
+                          Corregir manualmente
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </Field>
 
               {/* ── Compromiso ── */}
