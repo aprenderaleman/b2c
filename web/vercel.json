@@ -97,6 +97,10 @@
     {
       "path": "/api/cron/summer-promo-dispatch",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/cron/pack-alerts",
+      "schedule": "30 * * * *"
     }
   ]
 }
