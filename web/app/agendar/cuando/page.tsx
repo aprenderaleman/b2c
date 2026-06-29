@@ -43,6 +43,63 @@ function fullDateLabel(key: string): string {
 }
 
 /**
+ * Helpers de estilo del form inline (rediseño moderno limpio
+ * estilo Stripe/Linear). Sacados aquí para no repetir clases
+ * largas por cada input.
+ *
+ * `inputCls(valid, error)` devuelve las clases del input según
+ * estado: error (rojo), valid (verde sutil), default (slate).
+ *
+ * `Field` componente wrap con label + helper + error + check verde
+ * inline cuando el valor es válido. El check da feedback visible
+ * sin necesidad de leer el botón de submit.
+ */
+function inputCls(valid: boolean, error: boolean): string {
+  const base = "w-full h-12 px-4 rounded-xl bg-slate-50 text-slate-900 text-[16px] " +
+               "placeholder:text-slate-400 ring-1 ring-inset transition " +
+               "focus:outline-none focus:ring-2 focus:bg-white";
+  if (error) return `${base} ring-red-300 focus:ring-red-500`;
+  if (valid) return `${base} ring-emerald-300 focus:ring-emerald-500`;
+  return `${base} ring-slate-200 focus:ring-emerald-500`;
+}
+
+function Field({
+  label, required, valid, helper, error, children,
+}: {
+  label:    string;
+  required?: boolean;
+  valid?:    boolean;
+  helper?:   React.ReactNode;
+  error?:    string | null;
+  children:  React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-2">
+        <label className="text-[15px] font-medium text-slate-900">
+          {label}
+        </label>
+        <span className="text-[12px] text-slate-400 flex items-center gap-1.5">
+          {valid && (
+            <svg viewBox="0 0 20 20" className="h-4 w-4 text-emerald-500" aria-hidden>
+              <path d="M5 10.5 L8.5 14 L15 7" stroke="currentColor" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+          {required ? "requerido" : "opcional"}
+        </span>
+      </div>
+      {children}
+      {error && (
+        <p className="mt-1.5 text-[12.5px] text-red-600">{error}</p>
+      )}
+      {!error && helper && (
+        <p className="mt-1.5 text-[12.5px] text-slate-500 leading-relaxed">{helper}</p>
+      )}
+    </div>
+  );
+}
+
+/**
  * Wrapper con Suspense — necesario porque StepCuandoInner usa
  * `useSearchParams()`, que en Next 15 fuerza un CSR bailout en
  * prerender y exige un boundary explícito (ver build error
@@ -470,77 +527,77 @@ function StepCuandoInner() {
             </button>
           )}
           {selectedSlot && showForm && !isFromDiagnostico && slotLabel && (
-            <div className="mt-2 rounded-2xl border-2 border-warm bg-warm/5 p-4 space-y-4 animate-fade-in">
-              <div className="text-center space-y-1">
-                <p className="text-[20px] font-extrabold text-slate-900">
-                  🎉 <em>Sehr gut!</em>
+            <div className="mt-2 rounded-3xl bg-white shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-slate-100 p-5 md:p-6 space-y-6 animate-fade-in">
+              {/* Header sobrio — sin emoji gigante */}
+              <div className="space-y-1.5">
+                <p className="text-[13px] font-semibold uppercase tracking-wider text-emerald-600">
+                  Casi listo
                 </p>
-                <p className="text-[15px] text-slate-600">
-                  Tenemos todo listo para tu <strong className="text-emerald-700">Clase de Alemán</strong>
-                </p>
+                <h2 className="text-[22px] md:text-[26px] font-bold text-slate-900 leading-tight tracking-tight">
+                  Confirma tus datos
+                </h2>
               </div>
 
-              <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-sky-50 border border-emerald-200 p-4 text-center">
-                <p className="mt-1 text-[18px] font-extrabold text-slate-900 capitalize">
-                  📅 {slotLabel.day}
+              {/* Slot card — tipografía más limpia, un solo emoji */}
+              <div className="rounded-2xl bg-emerald-50/60 border border-emerald-100 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700/80">
+                  Tu clase de prueba
                 </p>
-                <p className="mt-1 text-[22px] font-black text-emerald-700 tabular-nums">
-                  🕐 {slotLabel.time}
+                <p className="mt-1.5 text-[17px] font-semibold text-slate-900 capitalize leading-tight">
+                  {slotLabel.day}
+                </p>
+                <p className="mt-0.5 text-[24px] font-bold text-emerald-700 tabular-nums leading-tight">
+                  {slotLabel.time}
                 </p>
                 {showDualTz && (
-                  <p className="mt-1 text-[12px] text-slate-500">
-                    🇩🇪 {slotLabel.berlinTime} hora de Berlín
+                  <p className="mt-1.5 text-[12.5px] text-slate-500">
+                    En Berlín: <span className="font-medium text-slate-700">{slotLabel.berlinTime}</span>
                   </p>
                 )}
               </div>
 
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1">
-                  Tu nombre <span className="text-warm">*</span>
-                </label>
+              {/* ── Nombre ── */}
+              <Field
+                label="Tu nombre"
+                required
+                valid={nameValid}
+              >
                 <input
                   type="text"
                   autoComplete="given-name"
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full h-11 px-3.5 rounded-xl bg-white border border-slate-200
-                             text-slate-900 placeholder:text-slate-400
-                             focus:outline-none focus:border-warm"
+                  className={inputCls(nameValid && form.name.length > 0, false)}
                   placeholder="Maria"
                 />
-              </div>
+              </Field>
 
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1">
-                  Email <span className="text-warm">*</span>
-                </label>
+              {/* ── Email ── */}
+              <Field
+                label="Email"
+                required
+                valid={emailValid && form.email.length > 0}
+                helper={<>Después de confirmar, <strong className="text-slate-700">revisa tu correo</strong> — te llegan los detalles y el botón para confirmar.</>}
+              >
                 <input
                   type="email"
                   autoComplete="email"
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                  className={`w-full h-11 px-3.5 rounded-xl bg-white border
-                             text-slate-900 placeholder:text-slate-400
-                             focus:outline-none ${
-                               form.email.length > 0 && !emailValid
-                                 ? "border-red-400 focus:border-red-500"
-                                 : "border-slate-200 focus:border-warm"
-                             }`}
+                  className={inputCls(emailValid && form.email.length > 0, form.email.length > 0 && !emailValid)}
                   placeholder="tu@email.com"
                 />
-                <p className="mt-1.5 text-[11.5px] text-slate-500 leading-snug">
-                  📬 Después de confirmar, <strong>revisa tu correo</strong> — te llegarán los detalles de la clase y el botón para confirmar tu asistencia.
-                </p>
-              </div>
+              </Field>
 
-              {/* Selector de nivel — opcional. Pills de un click para que
-                  el lead nos cuente su nivel sin teclear. Si lo omite,
-                  asumimos A0 (caso más frecuente en este atajo). */}
+              {/* ── Nivel (opcional) ── */}
               <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1">
-                  Tu nivel de alemán <span className="text-slate-400 font-normal">(opcional)</span>
-                </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="flex items-baseline justify-between mb-2">
+                  <label className="text-[15px] font-medium text-slate-900">
+                    Tu nivel de alemán
+                  </label>
+                  <span className="text-[12px] text-slate-400">opcional</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2.5">
                   {(["A0","A1","A2","B1","B2","C1"] as const).map(lvl => {
                     const active = form.germanLevel === lvl;
                     return (
@@ -548,10 +605,10 @@ function StepCuandoInner() {
                         key={lvl}
                         type="button"
                         onClick={() => setForm(f => ({ ...f, germanLevel: active ? null : lvl }))}
-                        className={`h-11 rounded-xl border-2 font-bold text-sm transition active:scale-[0.97]
+                        className={`h-12 rounded-xl font-semibold text-[15px] transition active:scale-[0.97]
                                     ${active
-                                      ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm shadow-emerald-200"
-                                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"}`}
+                                      ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/25"
+                                      : "bg-slate-50 text-slate-700 hover:bg-slate-100 ring-1 ring-inset ring-slate-200"}`}
                         aria-pressed={active}
                       >
                         {lvl}
@@ -559,26 +616,28 @@ function StepCuandoInner() {
                     );
                   })}
                 </div>
-                <p className="mt-1.5 text-[11.5px] text-slate-500 leading-snug">
-                  A0 = cero, no sé nada · C1 = hablo con fluidez. <em>Si no estás seguro, déjalo en blanco — tu profesor lo evaluará.</em>
+                <p className="mt-2 text-[12.5px] text-slate-500 leading-relaxed">
+                  A0 = empiezas de cero · C1 = ya hablas con fluidez. Si dudas, déjalo en blanco.
                 </p>
               </div>
 
-              {/* WhatsApp — obligatorio, después del nivel. Canal de
-                  respaldo si el email falla o el lead lo prefiere. */}
-              <div>
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1">
-                  WhatsApp <span className="text-warm">*</span>
-                </label>
+              {/* ── WhatsApp ── */}
+              <Field
+                label="WhatsApp"
+                required
+                valid={phoneOk}
+                helper="Te contactaremos solo con fines educativos."
+                error={phoneError}
+              >
                 <div className="flex gap-2">
                   <input
                     type="tel"
                     inputMode="tel"
                     value={form.countryCode}
                     onChange={e => setForm(f => ({ ...f, countryCode: e.target.value.replace(/[^0-9+]/g, "") }))}
-                    className="w-20 h-11 px-2.5 rounded-xl bg-white border border-slate-200
-                               text-slate-900 text-center
-                               focus:outline-none focus:border-warm"
+                    className="w-[88px] h-12 px-3 rounded-xl bg-slate-50 ring-1 ring-inset ring-slate-200
+                               text-slate-900 text-[16px] text-center font-medium
+                               focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition"
                     placeholder="+49"
                   />
                   <input
@@ -587,39 +646,26 @@ function StepCuandoInner() {
                     autoComplete="tel"
                     value={form.whatsapp}
                     onChange={e => setForm(f => ({ ...f, whatsapp: e.target.value }))}
-                    className={`flex-1 h-11 px-3.5 rounded-xl bg-white border
-                               text-slate-900 placeholder:text-slate-400
-                               focus:outline-none ${
-                                 phoneError
-                                   ? "border-red-400 focus:border-red-500"
-                                   : "border-slate-200 focus:border-warm"
-                               }`}
+                    className={`flex-1 ${inputCls(phoneOk, !!phoneError)}`}
                     placeholder={phonePlaceholder}
                   />
                 </div>
-                {phoneError && (
-                  <p className="mt-1 text-[12px] text-red-600">{phoneError}</p>
-                )}
-                <p className="mt-1.5 text-[11.5px] text-slate-500">
-                  Te contactaremos solo con <strong>fines educativos</strong>.
-                </p>
-              </div>
+              </Field>
 
-              {/* Compromiso obligatorio antes de reservar. Activa el botón
-                  solo cuando el lead marca el check (Gelfis: filtra leads
-                  que reservan por curiosidad y no asisten). */}
-              <label className="flex items-start gap-2.5 cursor-pointer select-none rounded-xl border border-slate-200 bg-white p-3 hover:bg-slate-50 transition">
+              {/* ── Compromiso ── */}
+              <label className="flex items-start gap-3 cursor-pointer select-none rounded-2xl bg-slate-50 hover:bg-slate-100/80 p-4 transition">
                 <input
                   type="checkbox"
                   checked={form.commitment}
                   onChange={e => setForm(f => ({ ...f, commitment: e.target.checked }))}
-                  className="mt-0.5 h-5 w-5 accent-emerald-600 shrink-0"
+                  className="mt-0.5 h-5 w-5 accent-emerald-600 shrink-0 cursor-pointer"
                 />
-                <span className="text-[13px] text-slate-700 leading-snug">
+                <span className="text-[14px] text-slate-700 leading-relaxed">
                   Reservo este espacio con la intención real de aprender alemán. Me comprometo a asistir puntualmente a mi clase.
                 </span>
               </label>
 
+              {/* ── CTA ── */}
               <button
                 type="button"
                 onClick={() => {
@@ -631,9 +677,10 @@ function StepCuandoInner() {
                   }
                 }}
                 disabled={!canSubmitForm}
-                className="w-full h-12 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold
-                           shadow-lg shadow-emerald-600/25 active:scale-[0.98] transition
-                           disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
+                className="w-full h-13 min-h-[52px] rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white
+                           text-[16px] font-semibold tracking-wide
+                           shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition
+                           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-600 disabled:shadow-none"
               >
                 {submitting ? "Confirmando…" : "Confirmar"}
               </button>
