@@ -671,3 +671,36 @@ export async function sendTrialAssignedTeacherEmail(
   const { subject, html, text } = renderTrialAssignedTeacher(vars);
   return sendRaw(to, subject, html, text);
 }
+
+import {
+  renderPackCompleted,
+  type PackCompletedVars,
+} from "./templates/pack-completed";
+import {
+  renderPackLowBalance,
+  type PackLowBalanceVars,
+} from "./templates/pack-low-balance";
+
+/**
+ * Email when a student completes all classes in their pack.
+ * Asks for feedback and prompts them to contact Gelfis for next steps.
+ */
+export async function sendPackCompletedEmail(
+  to: string,
+  vars: PackCompletedVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderPackCompleted(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Email when a student has few classes remaining (e.g. 5).
+ * Prompts them to contact Gelfis to renew before they run out.
+ */
+export async function sendPackLowBalanceEmail(
+  to: string,
+  vars: PackLowBalanceVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderPackLowBalance(vars);
+  return sendRaw(to, subject, html, text);
+}
