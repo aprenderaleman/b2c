@@ -26,7 +26,7 @@ export type RecordingRowItem = {
   is_content?:      boolean;
 };
 
-export function RecordingRow({ item }: { item: RecordingRowItem }) {
+export function RecordingRow({ item, canDownload }: { item: RecordingRowItem; canDownload?: boolean }) {
   const router = useRouter();
   const [gone, setGone] = useState(false);
   const [pending, start] = useTransition();
@@ -114,7 +114,7 @@ export function RecordingRow({ item }: { item: RecordingRowItem }) {
 
       {/* Download + Trash buttons on the far right */}
       <div className="absolute top-1/2 right-4 -translate-y-1/2 flex items-center gap-1">
-        {item.is_content && item.status === "ready" && (
+        {item.is_content && item.status === "ready" && canDownload && (
           <button
             type="button"
             onClick={(e) => {

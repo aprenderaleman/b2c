@@ -9,7 +9,7 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  await requireRole(["admin", "superadmin"]);
+  await requireRole(["superadmin"]);
 
   const { id } = await params;
   const sb = supabaseAdmin();

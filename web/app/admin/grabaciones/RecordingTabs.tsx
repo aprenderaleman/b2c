@@ -111,7 +111,7 @@ export function RecordingTabs({ contentItems, regularItems, trialItems, isSuper 
         ) : (
           <ul className={`divide-y ${style.divider}`}>
             {items.map(it => (
-              <RecordingRow key={it.recording_id} item={it} />
+              <RecordingRow key={it.recording_id} item={it} canDownload={isSuper} />
             ))}
           </ul>
         )}
