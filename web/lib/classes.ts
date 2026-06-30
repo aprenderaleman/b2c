@@ -288,8 +288,10 @@ export async function getTeacherUpcomingClasses(
   if (error) throw error;
   // Defence in depth: skip orphan trial classes (lead deleted but the
   // class survived because of ON DELETE SET NULL on the FK).
+  // Also exclude content recording sessions — those show in /profesor/videos.
   const filtered = (data ?? [])
-    .filter((c: { is_trial?: boolean; lead_id?: string | null }) => {
+    .filter((c: { is_trial?: boolean; lead_id?: string | null; is_content_recording?: boolean }) => {
+      if (c.is_content_recording) return false;
       if (c.is_trial && !c.lead_id) return false;
       return true;
     })

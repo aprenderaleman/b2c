@@ -47,7 +47,7 @@ export async function POST(
   // Fetch teacher_id from the class so we can log hours.
   const { data: cls } = await sb
     .from("classes")
-    .select("teacher_id, status")
+    .select("teacher_id, status, is_content_recording")
     .eq("id", id)
     .maybeSingle();
   if (!cls) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -69,16 +69,17 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  // Log hours into the teacher's monthly earnings aggregate. Best-effort:
-  // if this fails the class is still completed — admin can re-run rollup.
-  try {
-    await logClassHoursAndRollup({
-      classId:         id,
-      teacherId:       (cls as { teacher_id: string }).teacher_id,
-      durationMinutes: parsed.data.actualDurationMinutes,
-    });
-  } catch (e) {
-    console.error("logClassHoursAndRollup failed:", e);
+  // Skip billing for content recording sessions (YouTube videos etc.)
+  if (!(cls as { is_content_recording?: boolean }).is_content_recording) {
+    try {
+      await logClassHoursAndRollup({
+        classId:         id,
+        teacherId:       (cls as { teacher_id: string }).teacher_id,
+        durationMinutes: parsed.data.actualDurationMinutes,
+      });
+    } catch (e) {
+      console.error("logClassHoursAndRollup failed:", e);
+    }
   }
 
   return NextResponse.json({ ok: true });
