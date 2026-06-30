@@ -146,12 +146,25 @@ function CreatePostBox({
     setImagePreview(URL.createObjectURL(file));
     setUploading(true);
 
+    if (file.size > 4 * 1024 * 1024) {
+      setImagePreview(null);
+      setUploadError("La imagen es demasiado grande. Máximo 4 MB.");
+      if (fileRef.current) fileRef.current.value = "";
+      setUploading(false);
+      return;
+    }
+
     const form = new FormData();
     form.append("file", file);
     try {
       const res = await fetch("/api/community/upload", { method: "POST", body: form });
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = "Error al subir la imagen";
+        try { msg = JSON.parse(text).error ?? msg; } catch { msg = text.slice(0, 100) || msg; }
+        throw new Error(msg);
+      }
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
       setImageData(data);
     } catch (err) {
       setImagePreview(null);

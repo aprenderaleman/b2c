@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { uploadToBucket } from "@/lib/storage";
 
-const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 30;
+
+const MAX_SIZE = 4 * 1024 * 1024; // 4 MB (fits within Vercel's ~4.5 MB body limit)
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 export async function POST(req: Request) {
@@ -10,9 +14,11 @@ export async function POST(req: Request) {
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const userId = (session.user as { id: string }).id;
 
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-  if (!file) return NextResponse.json({ error: "file required" }, { status: 400 });
+  const form = await req.formData().catch(() => null);
+  if (!form) return NextResponse.json({ error: "Archivo demasiado grande (max 4 MB)" }, { status: 400 });
+
+  const file = form.get("file");
+  if (!(file instanceof File)) return NextResponse.json({ error: "file required" }, { status: 400 });
 
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json({ error: "Only JPEG, PNG, WebP and GIF are allowed" }, { status: 400 });
