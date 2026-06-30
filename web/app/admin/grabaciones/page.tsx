@@ -2,16 +2,12 @@ import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 import { formatBytes, formatDurationHms } from "@/lib/recordings";
-import { RecordingRow } from "./RecordingRow";
+import { RecordingTabs } from "./RecordingTabs";
+import type { RecordingRowItem } from "./RecordingRow";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Grabaciones · Admin" };
 
-/**
- * Centralised admin view of every class recording.
- * Default order: newest first. 50 per page is fine for now; pagination
- * can come later if we accumulate thousands.
- */
 export default async function AdminRecordingsPage() {
   const session = await requireRole(["admin", "superadmin"]);
   const isSuper = session.user.role === "superadmin";
@@ -86,16 +82,25 @@ export default async function AdminRecordingsPage() {
     };
   });
 
-  // Separate content recordings (YouTube videos) from class recordings
-  const contentItems = allItems.filter(i => i.is_content);
+  const toRowItem = (it: typeof allItems[number]): RecordingRowItem => ({
+    recording_id:   it.recording_id,
+    status:         it.status,
+    class_id:       it.class_id,
+    class_title:    it.class_title,
+    teacher_name:   it.teacher_name,
+    student_names:  it.is_content ? [] : it.students.map(s => (s.full_name || s.email).split(/\s+/)[0]),
+    duration_label: it.duration ? formatDurationHms(it.duration) : "—",
+    size_label:     formatBytes(it.size),
+    date_label:     fmtDate(it.class_date),
+    is_content:     it.is_content,
+  });
+
+  const contentItems = allItems.filter(i => i.is_content).map(toRowItem);
   const classItems   = allItems.filter(i => !i.is_content);
+  const trialItems   = (isSuper ? classItems.filter(i => i.is_trial) : []).map(toRowItem);
+  const regularItems = classItems.filter(i => !i.is_trial).map(toRowItem);
 
-  // Trials solo para superadmin. Para admin normal se ocultan totalmente.
-  const trialItems   = isSuper ? classItems.filter(i => i.is_trial)  : [];
-  const regularItems = classItems.filter(i => !i.is_trial);
-
-  // Aggregate counters: solo cuentan las que el rol puede ver.
-  const visibleItems = isSuper ? allItems : regularItems;
+  const visibleItems = isSuper ? allItems : allItems.filter(i => !i.is_trial);
   const ready      = visibleItems.filter(i => i.status === "ready").length;
   const processing = visibleItems.filter(i => i.status === "processing").length;
   const failed     = visibleItems.filter(i => i.status === "failed").length;
@@ -106,7 +111,7 @@ export default async function AdminRecordingsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Grabaciones</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Últimas 50 clases grabadas, las más recientes primero.
+            Todas las grabaciones, las más recientes primero.
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">
@@ -122,107 +127,12 @@ export default async function AdminRecordingsPage() {
         </div>
       </header>
 
-      {/* Videos de contenido (YouTube) */}
-      <section className="rounded-3xl border border-purple-200 dark:border-purple-500/30 bg-purple-50/40 dark:bg-purple-500/5 overflow-hidden">
-        <header className="px-5 py-3 border-b border-purple-200 dark:border-purple-500/30 flex items-center gap-2">
-          <span className="text-sm font-bold text-purple-800 dark:text-purple-300">🎬 Videos de contenido</span>
-          <span className="rounded-full bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 px-2 py-0.5 text-[10px] font-bold uppercase">
-            {contentItems.length}
-          </span>
-          <span className="ml-auto text-[11px] text-purple-700/80 dark:text-purple-300/80">
-            Grabaciones para YouTube · descarga directa
-          </span>
-        </header>
-        {contentItems.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500 dark:text-slate-400 text-center">
-            Aún no hay videos de contenido. Los profesores pueden crear sesiones desde /profesor/videos.
-          </p>
-        ) : (
-          <ul className="divide-y divide-purple-200/60 dark:divide-purple-500/20">
-            {contentItems.map(it => (
-              <RecordingRow
-                key={it.recording_id}
-                item={{
-                  recording_id:   it.recording_id,
-                  status:         it.status,
-                  class_id:       it.class_id,
-                  class_title:    it.class_title,
-                  teacher_name:   it.teacher_name,
-                  student_names:  [],
-                  duration_label: it.duration ? formatDurationHms(it.duration) : "—",
-                  size_label:     formatBytes(it.size),
-                  date_label:     fmtDate(it.class_date),
-                  is_content:     true,
-                }}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Clases de prueba — sólo visible para superadmin */}
-      {isSuper && trialItems.length > 0 && (
-        <section className="rounded-3xl border border-amber-300 dark:border-amber-500/40 bg-amber-50/40 dark:bg-amber-500/5 overflow-hidden">
-          <header className="px-5 py-3 border-b border-amber-200 dark:border-amber-500/30 flex items-center gap-2">
-            <span className="text-sm font-bold text-amber-800 dark:text-amber-300">🎯 Clases de prueba</span>
-            <span className="rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 px-2 py-0.5 text-[10px] font-bold uppercase">
-              {trialItems.length}
-            </span>
-            <span className="ml-auto text-[11px] text-amber-700/80 dark:text-amber-300/80">
-              Solo visibles para superadmin y profesor asignado
-            </span>
-          </header>
-          <ul className="divide-y divide-amber-200/60 dark:divide-amber-500/20">
-            {trialItems.map(it => (
-              <RecordingRow
-                key={it.recording_id}
-                item={{
-                  recording_id:   it.recording_id,
-                  status:         it.status,
-                  class_id:       it.class_id,
-                  class_title:    it.class_title,
-                  teacher_name:   it.teacher_name,
-                  student_names:  it.students.map(s => (s.full_name || s.email).split(/\s+/)[0]),
-                  duration_label: it.duration ? formatDurationHms(it.duration) : "—",
-                  size_label:     formatBytes(it.size),
-                  date_label:     fmtDate(it.class_date),
-                }}
-              />
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {/* Clases regulares */}
-      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-        <header className="px-5 py-3 border-b border-slate-100 dark:border-slate-800">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100">Clases regulares</h2>
-        </header>
-        {regularItems.length === 0 ? (
-          <p className="p-6 text-sm text-slate-500 dark:text-slate-400 text-center">
-            Aún no hay grabaciones. Cuando se termine una clase en el aula, aparecerá aquí.
-          </p>
-        ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {regularItems.map(it => (
-              <RecordingRow
-                key={it.recording_id}
-                item={{
-                  recording_id:   it.recording_id,
-                  status:         it.status,
-                  class_id:       it.class_id,
-                  class_title:    it.class_title,
-                  teacher_name:   it.teacher_name,
-                  student_names:  it.students.map(s => (s.full_name || s.email).split(/\s+/)[0]),
-                  duration_label: it.duration ? formatDurationHms(it.duration) : "—",
-                  size_label:     formatBytes(it.size),
-                  date_label:     fmtDate(it.class_date),
-                }}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+      <RecordingTabs
+        contentItems={contentItems}
+        regularItems={regularItems}
+        trialItems={trialItems}
+        isSuper={isSuper}
+      />
     </main>
   );
 }
