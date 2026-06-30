@@ -21,9 +21,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Max 5 MB" }, { status: 400 });
   }
 
-  const uploaded = await uploadToBucket("comunidad", userId, file, file.name);
-  return NextResponse.json({
-    url: uploaded.url,
-    path: uploaded.path,
-  });
+  try {
+    const uploaded = await uploadToBucket("comunidad", userId, file, file.name);
+    return NextResponse.json({
+      url: uploaded.url,
+      path: uploaded.path,
+    });
+  } catch (err) {
+    console.error("[community/upload] failed:", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "upload failed" },
+      { status: 500 },
+    );
+  }
 }

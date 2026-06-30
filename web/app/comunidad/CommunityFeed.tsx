@@ -136,10 +136,13 @@ function CreatePostBox({
   const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadError(null);
     setImagePreview(URL.createObjectURL(file));
     setUploading(true);
 
@@ -147,11 +150,13 @@ function CreatePostBox({
     form.append("file", file);
     try {
       const res = await fetch("/api/community/upload", { method: "POST", body: form });
-      if (!res.ok) throw new Error("Upload failed");
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
       setImageData(data);
-    } catch {
+    } catch (err) {
       setImagePreview(null);
+      setUploadError(err instanceof Error ? err.message : "Error al subir la imagen");
+      if (fileRef.current) fileRef.current.value = "";
     }
     setUploading(false);
   };
@@ -159,6 +164,7 @@ function CreatePostBox({
   const removeImage = () => {
     setImagePreview(null);
     setImageData(null);
+    setUploadError(null);
     if (fileRef.current) fileRef.current.value = "";
   };
 
@@ -213,6 +219,12 @@ function CreatePostBox({
           className="flex-1 resize-none rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-400 focus:border-transparent"
         />
       </div>
+
+      {uploadError && (
+        <div className="rounded-xl bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+          {uploadError}
+        </div>
+      )}
 
       {imagePreview && (
         <div className="relative inline-block">
