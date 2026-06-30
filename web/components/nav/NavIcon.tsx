@@ -112,6 +112,11 @@ const PATHS: Record<NavIconKey, React.ReactNode> = {
       <path d="M12 2.5 14.9 8.6l6.7.7-5 4.6 1.5 6.6L12 17.3l-6.1 3.2 1.5-6.6-5-4.6 6.7-.7L12 2.5Z" />
     </>
   ),
+  heart: (
+    <>
+      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+    </>
+  ),
 };
 
 export function NavIcon({ name, className = "h-5 w-5" }: { name: NavIconKey; className?: string }) {

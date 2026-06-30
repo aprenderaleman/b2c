@@ -16,6 +16,7 @@ const PROTECTED: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/estudiante", roles: ["superadmin", "admin", "student"] },
   { prefix: "/aula",       roles: ["superadmin", "admin", "teacher", "student"] },
   { prefix: "/grabacion",  roles: ["superadmin", "admin", "teacher", "student"] },
+  { prefix: "/comunidad",  roles: ["superadmin", "admin", "teacher", "student"] },
   { prefix: "/chat",       roles: ["superadmin", "admin", "teacher", "student"] },
 ];
 

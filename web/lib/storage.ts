@@ -19,7 +19,7 @@ const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;   // 7 days
  * Returns the final path + a 7-day signed URL the frontend can embed.
  */
 export async function uploadToBucket(
-  bucket:   "chat-uploads" | "materials",
+  bucket:   "chat-uploads" | "materials" | "comunidad",
   pathPrefix: string,              // e.g. "userId" or "teacherId"
   file:     File | Blob,
   fileName: string,
@@ -56,7 +56,7 @@ export async function uploadToBucket(
  * expired and we want to re-sign on demand.
  */
 export async function refreshSignedUrl(
-  bucket: "chat-uploads" | "materials",
+  bucket: "chat-uploads" | "materials" | "comunidad",
   path: string,
 ): Promise<string | null> {
   const sb = supabaseAdmin();

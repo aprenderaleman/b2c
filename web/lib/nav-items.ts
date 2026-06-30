@@ -15,6 +15,7 @@ export type NavItem = {
   icon:     NavIconKey;          // lucide icon name (see NavIcon)
   priority: number;              // lower = shows first in bottom bar
   external?: boolean;            // true → opens in new tab via plain <a>
+  highlight?: boolean;           // true → renders as a highlighted CTA button
 };
 
 export type NavIconKey =
@@ -34,7 +35,8 @@ export type NavIconKey =
   | "userCircle"
   | "video"
   | "star"
-  | "trendingUp";
+  | "trendingUp"
+  | "heart";
 
 export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" | "teacher" | "student", NavItem[]> = {
   superadmin: adminItems(),
@@ -42,6 +44,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
   teacher: [
     { label: "Hoy",              href: "/profesor",                 icon: "home",           priority: 1 },
     { label: "Mis clases",       href: "/profesor/clases",          icon: "calendarDays",   priority: 2 },
+    { label: "Comunidad",        href: "/comunidad",                icon: "heart",          priority: 2.2, highlight: true },
     { label: "Clases de prueba", href: "/profesor/clasedeprueba",   icon: "userCheck",      priority: 2.5 },
     { label: "Estudiantes",      href: "/profesor/estudiantes",     icon: "graduationCap",  priority: 3 },
     { label: "Mis grupos",       href: "/profesor/grupos",          icon: "folder",         priority: 3.5 },
@@ -52,16 +55,15 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
     { label: "Recursos",         href: "/profesor/recursos",        icon: "bookOpen",       priority: 6.2 },
     { label: "Grabaciones",      href: "/profesor/grabaciones",     icon: "video",          priority: 6.5 },
     { label: "Videos",           href: "/profesor/videos",          icon: "video",          priority: 6.7 },
-    { label: "Chat",             href: "/chat",                      icon: "messageCircle",  priority: 7 },
   ],
   student: [
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
     { label: "Mis clases",   href: "/estudiante/clases",        icon: "calendarDays",   priority: 2 },
+    { label: "Comunidad",   href: "/comunidad",                 icon: "heart",          priority: 2.5, highlight: true },
     { label: "Material",     href: "/estudiante/materiales",    icon: "bookOpen",       priority: 3 },
     { label: "Biblioteca",   href: "/estudiante/biblioteca",    icon: "folder",         priority: 3.3 },
     { label: "Grabaciones",  href: "/estudiante/grabaciones",   icon: "video",          priority: 3.5 },
     { label: "Tareas",       href: "/estudiante/tareas",        icon: "fileText",       priority: 4 },
-    { label: "Chat",         href: "/chat",                      icon: "messageCircle",  priority: 5 },
     { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
   ],
 };
@@ -83,10 +85,9 @@ function adminItems(): NavItem[] {
     { label: "Funnel",      href: "/admin/funnel",      icon: "users",         priority: 6 },
     { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 7 },
     { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
-    { label: "Mensajes",    href: "/admin/mensajes",    icon: "messageCircle", priority: 8.3 },
+    { label: "Comunidad",   href: "/comunidad",          icon: "heart",         priority: 2.6, highlight: true },
     { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
-    { label: "Chat",        href: "/chat",               icon: "messageCircle", priority: 10 },
   ];
 }
 

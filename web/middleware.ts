@@ -10,6 +10,7 @@ export const config = {
     "/admin/:path*",
     "/profesor/:path*",
     "/estudiante/:path*",
+    "/comunidad/:path*",
     "/aula/:path*",
     "/grabacion/:path*",
     "/chat/:path*",
