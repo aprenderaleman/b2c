@@ -63,6 +63,7 @@ export function CommunityFeed({ initialPosts, currentUserId, currentUserRole, cu
   };
 
   const isAdmin = currentUserRole === "superadmin" || currentUserRole === "admin";
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -96,6 +97,7 @@ export function CommunityFeed({ initialPosts, currentUserId, currentUserRole, cu
           onDelete={handleDelete}
           onLikeToggle={handleLikeToggle}
           onCommentAdded={handleCommentAdded}
+          onImageClick={setLightboxUrl}
         />
       ))}
 
@@ -109,6 +111,29 @@ export function CommunityFeed({ initialPosts, currentUserId, currentUserRole, cu
           >
             {loading ? "Cargando…" : "Ver más publicaciones"}
           </button>
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 cursor-zoom-out"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 h-10 w-10 flex items-center justify-center rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors text-xl"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="max-w-full max-h-[90vh] object-contain rounded-lg"
+            onClick={e => e.stopPropagation()}
+          />
         </div>
       )}
     </div>
@@ -329,6 +354,7 @@ function PostCard({
   onDelete,
   onLikeToggle,
   onCommentAdded,
+  onImageClick,
 }: {
   post: Post;
   currentUserId: string;
@@ -336,6 +362,7 @@ function PostCard({
   onDelete: (id: string) => void;
   onLikeToggle: (id: string) => void;
   onCommentAdded: (postId: string) => void;
+  onImageClick: (url: string) => void;
 }) {
   const [showComments, setShowComments] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -411,8 +438,9 @@ function PostCard({
           <img
             src={post.image_url}
             alt=""
-            className="w-full max-h-96 object-cover rounded-xl"
+            className="w-full max-h-96 object-cover rounded-xl cursor-zoom-in hover:opacity-90 transition-opacity"
             loading="lazy"
+            onClick={() => onImageClick(post.image_url!)}
           />
         </div>
       )}
