@@ -146,26 +146,47 @@ function CreatePostBox({
     setImagePreview(URL.createObjectURL(file));
     setUploading(true);
 
-    if (file.size > 4 * 1024 * 1024) {
+    if (file.size > 10 * 1024 * 1024) {
       setImagePreview(null);
-      setUploadError("La imagen es demasiado grande. Máximo 4 MB.");
+      setUploadError("La imagen es demasiado grande. Máximo 10 MB.");
       if (fileRef.current) fileRef.current.value = "";
       setUploading(false);
       return;
     }
 
-    const form = new FormData();
-    form.append("file", file);
     try {
-      const res = await fetch("/api/community/upload", { method: "POST", body: form });
-      if (!res.ok) {
-        const text = await res.text();
-        let msg = "Error al subir la imagen";
-        try { msg = JSON.parse(text).error ?? msg; } catch { msg = text.slice(0, 100) || msg; }
-        throw new Error(msg);
+      // 1. Get signed upload URL from our API
+      const prepRes = await fetch("/api/community/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          content_type: file.type,
+          size: file.size,
+        }),
+      });
+      if (!prepRes.ok) {
+        const data = await prepRes.json().catch(() => ({}));
+        throw new Error(data.error ?? "Error al preparar la subida");
       }
-      const data = await res.json();
-      setImageData(data);
+      const { upload_url, path } = await prepRes.json();
+
+      // 2. Upload directly to Supabase Storage (bypasses Vercel body limit)
+      const upRes = await fetch(upload_url, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!upRes.ok) throw new Error("Error al subir la imagen al servidor");
+
+      // 3. Get signed download URL
+      const urlRes = await fetch(`/api/community/upload?path=${encodeURIComponent(path)}`, {
+        method: "PUT",
+      });
+      if (!urlRes.ok) throw new Error("Error al generar URL de la imagen");
+      const { url } = await urlRes.json();
+
+      setImageData({ url, path });
     } catch (err) {
       setImagePreview(null);
       setUploadError(err instanceof Error ? err.message : "Error al subir la imagen");
