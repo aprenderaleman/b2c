@@ -23,6 +23,7 @@ export type RecordingRowItem = {
   duration_label:   string;
   size_label:       string;
   date_label:       string;
+  is_content?:      boolean;
 };
 
 export function RecordingRow({ item }: { item: RecordingRowItem }) {
@@ -30,6 +31,7 @@ export function RecordingRow({ item }: { item: RecordingRowItem }) {
   const [gone, setGone] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const detailHref =
     item.status === "ready"
@@ -110,23 +112,60 @@ export function RecordingRow({ item }: { item: RecordingRowItem }) {
         </div>
       </Link>
 
-      {/* Trash button sits on top of the link on the far right. Always
-          visible on mobile; on desktop it appears on hover to reduce
-          clutter but stays tab-focusable. */}
-      <button
-        type="button"
-        onClick={onDelete}
-        disabled={pending}
-        aria-label={`Borrar grabación de ${item.class_title}`}
-        title="Borrar grabación (irreversible)"
-        className="absolute top-1/2 right-4 -translate-y-1/2
-                   h-9 w-9 inline-flex items-center justify-center rounded-full
-                   text-slate-400 hover:text-red-600 hover:bg-red-50
-                   dark:hover:text-red-400 dark:hover:bg-red-500/10
-                   sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100
-                   transition-opacity
-                   disabled:opacity-50 disabled:cursor-wait"
-      >
+      {/* Download + Trash buttons on the far right */}
+      <div className="absolute top-1/2 right-4 -translate-y-1/2 flex items-center gap-1">
+        {item.is_content && item.status === "ready" && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDownloading(true);
+              fetch(`/api/admin/recordings/${item.recording_id}/download`)
+                .then(r => r.json())
+                .then(data => {
+                  if (data.ok && data.url) {
+                    const a = document.createElement("a");
+                    a.href = data.url;
+                    a.download = "";
+                    a.click();
+                  }
+                })
+                .finally(() => setDownloading(false));
+            }}
+            disabled={downloading}
+            aria-label={`Descargar ${item.class_title}`}
+            title="Descargar MP4"
+            className="h-9 w-9 inline-flex items-center justify-center rounded-full
+                       text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50
+                       dark:hover:text-emerald-300 dark:hover:bg-emerald-500/10
+                       transition-colors
+                       disabled:opacity-50 disabled:cursor-wait"
+          >
+            {downloading ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
+            ) : (
+              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            )}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={pending}
+          aria-label={`Borrar grabación de ${item.class_title}`}
+          title="Borrar grabación (irreversible)"
+          className="h-9 w-9 inline-flex items-center justify-center rounded-full
+                     text-slate-400 hover:text-red-600 hover:bg-red-50
+                     dark:hover:text-red-400 dark:hover:bg-red-500/10
+                     sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100
+                     transition-opacity
+                     disabled:opacity-50 disabled:cursor-wait"
+        >
         {pending ? "…" : (
           <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <path d="M3 6h18" />
@@ -137,6 +176,7 @@ export function RecordingRow({ item }: { item: RecordingRowItem }) {
           </svg>
         )}
       </button>
+      </div>
 
       {error && (
         <div className="px-5 pb-3 -mt-1 text-xs text-red-600 dark:text-red-400">

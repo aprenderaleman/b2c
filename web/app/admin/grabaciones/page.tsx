@@ -22,7 +22,7 @@ export default async function AdminRecordingsPage() {
     .select(`
       id, status, duration_seconds, file_size_bytes, created_at, processed_at,
       class:classes!inner(
-        id, title, scheduled_at, is_trial,
+        id, title, scheduled_at, is_trial, is_content_recording,
         teacher:teachers!inner(
           users!inner(full_name, email)
         ),
@@ -40,6 +40,7 @@ export default async function AdminRecordingsPage() {
     title:        string | null;
     scheduled_at: string | null;
     is_trial:     boolean;
+    is_content_recording?: boolean;
     teacher: {
       users: UserLite | UserLite[];
     } | Array<{ users: UserLite | UserLite[] }>;
@@ -80,13 +81,18 @@ export default async function AdminRecordingsPage() {
       class_date:   c?.scheduled_at ?? r.created_at,
       teacher_name: tu?.full_name || tu?.email || "—",
       is_trial:     Boolean(c?.is_trial),
+      is_content:   Boolean(c?.is_content_recording),
       students,
     };
   });
 
+  // Separate content recordings (YouTube videos) from class recordings
+  const contentItems = allItems.filter(i => i.is_content);
+  const classItems   = allItems.filter(i => !i.is_content);
+
   // Trials solo para superadmin. Para admin normal se ocultan totalmente.
-  const trialItems   = isSuper ? allItems.filter(i => i.is_trial)  : [];
-  const regularItems = allItems.filter(i => !i.is_trial);
+  const trialItems   = isSuper ? classItems.filter(i => i.is_trial)  : [];
+  const regularItems = classItems.filter(i => !i.is_trial);
 
   // Aggregate counters: solo cuentan las que el rol puede ver.
   const visibleItems = isSuper ? allItems : regularItems;
@@ -115,6 +121,44 @@ export default async function AdminRecordingsPage() {
           </Link>
         </div>
       </header>
+
+      {/* Videos de contenido (YouTube) */}
+      <section className="rounded-3xl border border-purple-200 dark:border-purple-500/30 bg-purple-50/40 dark:bg-purple-500/5 overflow-hidden">
+        <header className="px-5 py-3 border-b border-purple-200 dark:border-purple-500/30 flex items-center gap-2">
+          <span className="text-sm font-bold text-purple-800 dark:text-purple-300">🎬 Videos de contenido</span>
+          <span className="rounded-full bg-purple-100 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300 px-2 py-0.5 text-[10px] font-bold uppercase">
+            {contentItems.length}
+          </span>
+          <span className="ml-auto text-[11px] text-purple-700/80 dark:text-purple-300/80">
+            Grabaciones para YouTube · descarga directa
+          </span>
+        </header>
+        {contentItems.length === 0 ? (
+          <p className="p-6 text-sm text-slate-500 dark:text-slate-400 text-center">
+            Aún no hay videos de contenido. Los profesores pueden crear sesiones desde /profesor/videos.
+          </p>
+        ) : (
+          <ul className="divide-y divide-purple-200/60 dark:divide-purple-500/20">
+            {contentItems.map(it => (
+              <RecordingRow
+                key={it.recording_id}
+                item={{
+                  recording_id:   it.recording_id,
+                  status:         it.status,
+                  class_id:       it.class_id,
+                  class_title:    it.class_title,
+                  teacher_name:   it.teacher_name,
+                  student_names:  [],
+                  duration_label: it.duration ? formatDurationHms(it.duration) : "—",
+                  size_label:     formatBytes(it.size),
+                  date_label:     fmtDate(it.class_date),
+                  is_content:     true,
+                }}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
 
       {/* Clases de prueba — sólo visible para superadmin */}
       {isSuper && trialItems.length > 0 && (
