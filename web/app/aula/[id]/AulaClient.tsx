@@ -203,7 +203,7 @@ export function AulaClient(p: Props) {
           onToggleChat={() => setChatOpen(o => !o)}
         />
         <div className="flex-1 min-h-0 flex bg-slate-900">
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 h-full">
             <VideoArea classId={p.classId} isHost={p.isHost} />
           </div>
           {panelOpen && (

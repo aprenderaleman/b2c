@@ -298,6 +298,17 @@
 .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
+/* ── LiveKit: larger participant tiles ── */
+[data-lk-theme] {
+  --lk-grid-gap: 0.25rem;
+}
+.lk-grid-layout {
+  padding: 0.25rem !important;
+}
+.lk-participant-tile video {
+  border-radius: 0.5rem;
+}
+
 /* Ensure inputs and text are 16px+ on mobile to avoid iOS auto-zoom */
 @media (max-width: 480px) {
   input[type="text"], input[type="tel"], input[type="email"],
