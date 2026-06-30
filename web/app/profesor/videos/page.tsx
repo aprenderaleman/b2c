@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { VIDEO_CHECKLIST_ITEMS } from "@/lib/video-checklist";
 
 type Recording = {
   id: string;
@@ -28,6 +29,39 @@ export default function VideosPage() {
   const [title, setTitle] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [checkedItems, setCheckedItems] = useState<Record<string, string>>({});
+  const [togglingKey, setTogglingKey] = useState<string | null>(null);
+
+  const fetchChecklist = useCallback(async () => {
+    try {
+      const res = await fetch("/api/teacher/videos/checklist");
+      const data = await res.json();
+      if (data.ok) setCheckedItems(data.completed);
+    } catch { /* ignore */ }
+  }, []);
+
+  const toggleCheck = async (key: string) => {
+    if (togglingKey) return;
+    setTogglingKey(key);
+    try {
+      const res = await fetch("/api/teacher/videos/checklist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setCheckedItems(prev => {
+          const next = { ...prev };
+          if (data.checked) next[key] = new Date().toISOString();
+          else delete next[key];
+          return next;
+        });
+      }
+    } finally {
+      setTogglingKey(null);
+    }
+  };
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -39,7 +73,7 @@ export default function VideosPage() {
     }
   }, []);
 
-  useEffect(() => { fetchSessions(); }, [fetchSessions]);
+  useEffect(() => { fetchSessions(); fetchChecklist(); }, [fetchSessions, fetchChecklist]);
 
   const createSession = async () => {
     if (!title.trim() || creating) return;
@@ -120,6 +154,107 @@ export default function VideosPage() {
           Nueva grabación
         </button>
       </header>
+
+      {/* ── Checklist mensual ── */}
+      {(() => {
+        const done = VIDEO_CHECKLIST_ITEMS.filter(i => checkedItems[i.key]).length;
+        const total = VIDEO_CHECKLIST_ITEMS.length;
+        const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+        return (
+          <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+            <div className="flex items-center justify-between gap-3 mb-1">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                Videos por grabar este mes
+              </h2>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                {done}/{total} completados
+              </span>
+            </div>
+
+            {/* Progress bar */}
+            <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden mb-4">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+
+            <ul className="space-y-1">
+              {VIDEO_CHECKLIST_ITEMS.map((item, idx) => {
+                const checked = Boolean(checkedItems[item.key]);
+                const toggling = togglingKey === item.key;
+                return (
+                  <li
+                    key={item.key}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors ${
+                      checked
+                        ? "bg-emerald-50 dark:bg-emerald-500/10"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => toggleCheck(item.key)}
+                      disabled={toggling}
+                      className={`shrink-0 h-5 w-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                        checked
+                          ? "bg-emerald-500 border-emerald-500 text-white"
+                          : "border-slate-300 dark:border-slate-600 hover:border-emerald-400"
+                      } ${toggling ? "opacity-50" : ""}`}
+                      aria-label={checked ? `Desmarcar ${item.title}` : `Marcar ${item.title}`}
+                    >
+                      {checked && (
+                        <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </button>
+
+                    <span className="text-xs font-mono text-slate-400 dark:text-slate-500 w-5 text-center shrink-0">
+                      {idx + 1}
+                    </span>
+
+                    {item.gammaUrl ? (
+                      <a
+                        href={item.gammaUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`text-sm font-medium transition-colors ${
+                          checked
+                            ? "text-emerald-700 dark:text-emerald-300 line-through decoration-emerald-400/50"
+                            : "text-slate-800 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400"
+                        }`}
+                      >
+                        {item.title}
+                        <span className="ml-1.5 text-[10px] text-slate-400 dark:text-slate-500">↗</span>
+                      </a>
+                    ) : (
+                      <span className={`text-sm font-medium ${
+                        checked
+                          ? "text-emerald-700 dark:text-emerald-300 line-through decoration-emerald-400/50"
+                          : "text-slate-500 dark:text-slate-400"
+                      }`}>
+                        {item.title}
+                        <span className="ml-1.5 text-[10px] text-slate-400 dark:text-slate-500 italic">
+                          (enlace pendiente)
+                        </span>
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+
+            {done === total && total > 0 && (
+              <div className="mt-3 rounded-xl bg-emerald-100 dark:bg-emerald-500/15 px-4 py-2 text-center">
+                <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                  🎉 ¡Todos los videos del mes completados!
+                </span>
+              </div>
+            )}
+          </section>
+        );
+      })()}
 
       {/* ── Formulario nueva sesión ── */}
       {showForm && (
