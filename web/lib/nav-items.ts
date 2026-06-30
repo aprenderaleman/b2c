@@ -15,7 +15,6 @@ export type NavItem = {
   icon:     NavIconKey;          // lucide icon name (see NavIcon)
   priority: number;              // lower = shows first in bottom bar
   external?: boolean;            // true → opens in new tab via plain <a>
-  highlight?: boolean;           // true → renders as a highlighted CTA button
 };
 
 export type NavIconKey =
@@ -44,7 +43,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
   teacher: [
     { label: "Hoy",              href: "/profesor",                 icon: "home",           priority: 1 },
     { label: "Mis clases",       href: "/profesor/clases",          icon: "calendarDays",   priority: 2 },
-    { label: "Comunidad",        href: "/comunidad",                icon: "heart",          priority: 2.2, highlight: true },
+    { label: "Comunidad",        href: "/comunidad",                icon: "heart",          priority: 2.2 },
     { label: "Clases de prueba", href: "/profesor/clasedeprueba",   icon: "userCheck",      priority: 2.5 },
     { label: "Estudiantes",      href: "/profesor/estudiantes",     icon: "graduationCap",  priority: 3 },
     { label: "Mis grupos",       href: "/profesor/grupos",          icon: "folder",         priority: 3.5 },
@@ -59,7 +58,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
   student: [
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
     { label: "Mis clases",   href: "/estudiante/clases",        icon: "calendarDays",   priority: 2 },
-    { label: "Comunidad",   href: "/comunidad",                 icon: "heart",          priority: 2.5, highlight: true },
+    { label: "Comunidad",   href: "/comunidad",                 icon: "heart",          priority: 2.5 },
     { label: "Material",     href: "/estudiante/materiales",    icon: "bookOpen",       priority: 3 },
     { label: "Biblioteca",   href: "/estudiante/biblioteca",    icon: "folder",         priority: 3.3 },
     { label: "Grabaciones",  href: "/estudiante/grabaciones",   icon: "video",          priority: 3.5 },
@@ -85,7 +84,7 @@ function adminItems(): NavItem[] {
     { label: "Funnel",      href: "/admin/funnel",      icon: "users",         priority: 6 },
     { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 7 },
     { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
-    { label: "Comunidad",   href: "/comunidad",          icon: "heart",         priority: 2.6, highlight: true },
+    { label: "Comunidad",   href: "/comunidad",          icon: "heart",         priority: 2.6 },
     { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
   ];

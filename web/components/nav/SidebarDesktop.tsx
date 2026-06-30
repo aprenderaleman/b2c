@@ -35,13 +35,7 @@ export function SidebarDesktop({
       <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
         {items.map(it => {
           const active = !it.external && isActive(pathname, it.href);
-          const className = it.highlight
-            ? `group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition-all
-                ${active
-                  ? "bg-gradient-to-r from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/25"
-                  : "bg-gradient-to-r from-rose-50 to-pink-50 dark:from-rose-500/10 dark:to-pink-500/10 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-500/20 hover:from-rose-100 hover:to-pink-100 dark:hover:from-rose-500/20 dark:hover:to-pink-500/20 hover:shadow-sm"
-                }`
-            : `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors
+          const className = `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors
                 ${active
                   ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
                   : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"

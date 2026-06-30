@@ -24,15 +24,10 @@ export function BottomNavMobile({
 
   const renderTab = (it: NavItem) => {
     const active = !it.external && isActive(pathname, it.href);
-    const cls = it.highlight
-      ? `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-bold
-            ${active
-              ? "text-rose-500 dark:text-rose-400"
-              : "text-rose-500/70 dark:text-rose-400/70"}`
-      : `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium
-            ${active
-              ? "text-brand-600 dark:text-brand-400"
-              : "text-slate-500 dark:text-slate-400"}`;
+    const cls = `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium
+          ${active
+            ? "text-brand-600 dark:text-brand-400"
+            : "text-slate-500 dark:text-slate-400"}`;
     const inner = (
       <>
         <NavIcon name={it.icon} className="h-5 w-5" />
