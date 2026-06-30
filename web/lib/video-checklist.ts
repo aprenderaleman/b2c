@@ -12,8 +12,8 @@ export const VIDEO_CHECKLIST_ITEMS: VideoChecklistItem[] = [
   },
   {
     key: "2026-07_a1_leccion2",
-    title: "A1 – Lección 2: Artículos y género",
-    gammaUrl: "",
+    title: "A1 – Lección 2: Verbos irregulares (sein, haben) y los más usados",
+    gammaUrl: "https://gamma.app/docs/Leccion-2-Verbos-irregulares-sein-haben-y-los-mas-usados-7m7soi7vwo7v0za",
   },
   {
     key: "2026-07_a1_leccion3",
