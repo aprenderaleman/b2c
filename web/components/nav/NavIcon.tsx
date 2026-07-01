@@ -120,16 +120,17 @@ const PATHS: Record<NavIconKey, React.ReactNode> = {
 };
 
 export function NavIcon({ name, className = "h-5 w-5" }: { name: NavIconKey; className?: string }) {
+  const isHeart = name === "heart";
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 24 24"
-      fill="none"
+      fill={isHeart ? "currentColor" : "none"}
       stroke="currentColor"
       strokeWidth={2}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={className}
+      className={`${className}${isHeart ? " animate-heartbeat" : ""}`}
       aria-hidden
     >
       {PATHS[name]}

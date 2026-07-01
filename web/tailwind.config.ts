@@ -102,6 +102,13 @@ const config: Config = {
           "0%,100%": { transform: "translate3d(0,0,0) scale(1)" },
           "50%":     { transform: "translate3d(-40px,-50px,0) scale(1.1)" },
         },
+        heartbeat: {
+          "0%,100%": { transform: "scale(1)" },
+          "15%":     { transform: "scale(1.25)" },
+          "30%":     { transform: "scale(1)" },
+          "45%":     { transform: "scale(1.15)" },
+          "60%":     { transform: "scale(1)" },
+        },
       },
       animation: {
         "fade-in":    "fadeIn 0.4s ease-out",
@@ -110,6 +117,7 @@ const config: Config = {
         "aurora-a":   "auroraA 18s ease-in-out infinite",
         "aurora-b":   "auroraB 22s ease-in-out infinite",
         "aurora-c":   "auroraC 26s ease-in-out infinite",
+        "heartbeat":  "heartbeat 1.5s ease-in-out infinite",
       },
     },
   },
