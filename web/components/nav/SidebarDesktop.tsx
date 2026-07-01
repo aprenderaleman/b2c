@@ -42,7 +42,7 @@ export function SidebarDesktop({
                 }`;
           const inner = (
             <>
-              <NavIcon name={it.icon} className={`h-[18px] w-[18px] ${active ? "text-brand-600 dark:text-brand-400" : ""}`} />
+              <NavIcon name={it.icon} className={`h-[18px] w-[18px] ${it.icon === "heart" ? "text-red-500" : active ? "text-brand-600 dark:text-brand-400" : ""}`} />
               <span className="truncate">{it.label}</span>
               {it.external && <span aria-hidden className="ml-auto text-xs text-slate-400">↗</span>}
             </>
