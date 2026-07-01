@@ -212,6 +212,45 @@ class WhatsAppService:
         digits = re.sub(r"\D", "", to_e164)
         return digits in cls._blocklist_digits()
 
+    # Whitelist de kinds que sí pasan cuando system_config.whatsapp_disabled
+    # está en modo "partial". Coincide con la lista del TypeScript
+    # (web/lib/whatsapp.ts). Cuando el flag está en modo "full" ningún
+    # envío pasa, ni siquiera estos.
+    _ALLOWED_KINDS_PARTIAL = frozenset({
+        "trial_confirmation",
+        "trial_reminder_2h",
+        "trial_attended_initial",
+        "trial_inscription_initial",
+        "trial_absent_initial",
+        "admin_manual",
+    })
+
+    @staticmethod
+    def _wa_disabled_mode() -> str:
+        """Lee system_config.whatsapp_disabled:
+          - "true"/"1"/true → "full"  (bloquea TODO)
+          - "partial"       → "partial" (solo kinds en whitelist)
+          - otro / None     → "off"    (sistema normal)
+        Cacheado 30s por proceso para no martillar BD.
+        """
+        now = time.time()
+        cache = getattr(WhatsAppService, "_wa_disabled_cache", None)
+        if cache and now - cache[1] < 30:
+            return cache[0]
+        try:
+            from agents.shared.db import get_config
+            raw = get_config("whatsapp_disabled")
+        except Exception:
+            raw = None
+        if raw in ("partial",):
+            mode = "partial"
+        elif raw in (True, "true", "1"):
+            mode = "full"
+        else:
+            mode = "off"
+        setattr(WhatsAppService, "_wa_disabled_cache", (mode, now))
+        return mode
+
     def send_text(
         self,
         name: str,
@@ -243,6 +282,19 @@ class WhatsAppService:
                 to_e164, kind, lead_id,
             )
             return "blocklisted"
+
+        # Kill switch global. Antes que nada: si el flag está on, no
+        # tocamos Evolution — evita seguir generando errores 500 que
+        # inflaman el alerta de janitor "sends están fallando".
+        mode = self._wa_disabled_mode()
+        if mode != "off":
+            if not (mode == "partial" and kind in self._ALLOWED_KINDS_PARTIAL):
+                import logging
+                logging.getLogger("whatsapp_service").info(
+                    "[wa-disabled] mensaje suprimido (mode=%s kind=%s lead=%s)",
+                    mode, kind, lead_id,
+                )
+                return "whatsapp_globally_disabled"
 
         payload = {
             "number": self._to_jid(to_e164),
@@ -319,6 +371,15 @@ class WhatsAppService:
                 to_e164, kind, lead_id, file_name,
             )
             return "blocklisted"
+        # Kill switch global — no distinguimos partial vs full para media;
+        # ningún kind de la whitelist envía documentos.
+        if self._wa_disabled_mode() != "off":
+            import logging
+            logging.getLogger("whatsapp_service").info(
+                "[wa-disabled] documento suprimido (kind=%s lead=%s file=%s)",
+                kind, lead_id, file_name,
+            )
+            return "whatsapp_globally_disabled"
         payload = {
             "number": self._to_jid(to_e164),
             "options": {"delay": 1200, "presence": "composing"},
