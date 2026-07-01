@@ -30,7 +30,7 @@ export function BottomNavMobile({
             : "text-slate-500 dark:text-slate-400"}`;
     const inner = (
       <>
-        <NavIcon name={it.icon} className="h-5 w-5" />
+        <NavIcon name={it.icon} className={`h-5 w-5 ${it.icon === "heart" ? "text-red-500" : ""}`} />
         <span className="truncate max-w-[64px]">{it.label}</span>
       </>
     );
