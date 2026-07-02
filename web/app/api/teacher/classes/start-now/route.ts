@@ -84,9 +84,10 @@ export async function POST(req: Request) {
         .eq("class_participants.student_id", studentId)
         .limit(1),
       sb.from("student_group_members")
-        .select("student_id, group:student_groups!inner(teacher_id)")
+        .select("student_id, group:student_groups!inner(teacher_id, active)")
         .eq("student_id", studentId)
         .eq("group.teacher_id", me.id)
+        .eq("group.active", true)
         .limit(1),
     ]);
     const owns = (classOwn.data?.length ?? 0) > 0 || (groupOwn.data?.length ?? 0) > 0;

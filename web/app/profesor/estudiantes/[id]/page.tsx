@@ -46,9 +46,10 @@ export default async function TeacherStudentDetail({
         .eq("classes.teacher_id", me.id)
         .limit(1),
       sb.from("student_group_members")
-        .select("student_id, group:student_groups!inner(teacher_id)")
+        .select("student_id, group:student_groups!inner(teacher_id, active)")
         .eq("student_id", studentId)
         .eq("group.teacher_id", me.id)
+        .eq("group.active", true)
         .limit(1),
     ]);
     const hasClass = (shared.data?.length ?? 0) > 0;

@@ -95,8 +95,9 @@ export async function POST(req: Request) {
       .select("class_participants!inner(student_id)")
       .eq("teacher_id", me.id),
     sb.from("student_group_members")
-      .select("student_id, group:student_groups!inner(teacher_id)")
-      .eq("group.teacher_id", me.id),
+      .select("student_id, group:student_groups!inner(teacher_id, active)")
+      .eq("group.teacher_id", me.id)
+      .eq("group.active", true),
   ]);
   const myStudentIds = new Set<string>();
   for (const r of (mineRows.data ?? []) as Array<{ class_participants: Array<{ student_id: string }> }>) {

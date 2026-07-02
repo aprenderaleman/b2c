@@ -40,32 +40,18 @@ export async function GET() {
 
   const sb = supabaseAdmin();
 
-  // (a) Students via past/future classes I teach.
-  // (b) Students via groups I'm the assigned teacher of.
-  const [viaClasses, viaGroups] = await Promise.all([
-    sb.from("classes")
-      .select(`
-        teacher_id,
-        class_participants!inner(
-          student_id,
-          students!inner(
-            id, current_level, subscription_status,
-            users!inner(email, full_name)
-          )
-        )
-      `)
-      .eq("teacher_id", me.id),
-    sb.from("student_group_members")
-      .select(`
-        student_id,
-        group:student_groups!inner(teacher_id),
-        students!inner(
-          id, current_level, subscription_status,
-          users!inner(email, full_name)
-        )
-      `)
-      .eq("group.teacher_id", me.id),
-  ]);
+  // Students via active groups I'm the assigned teacher of.
+  const { data: viaGroups } = await sb.from("student_group_members")
+    .select(`
+      student_id,
+      group:student_groups!inner(teacher_id, active),
+      students!inner(
+        id, current_level, subscription_status,
+        users!inner(email, full_name)
+      )
+    `)
+    .eq("group.teacher_id", me.id)
+    .eq("group.active", true);
 
   type StudentRow = {
     id: string; current_level: string; subscription_status: string;
@@ -101,10 +87,7 @@ export async function GET() {
     });
   };
 
-  for (const raw of (viaClasses.data ?? []) as ClassRow[]) {
-    for (const cp of raw.class_participants) ingestStudent(cp.students);
-  }
-  for (const raw of (viaGroups.data ?? []) as GroupRow[]) {
+  for (const raw of (viaGroups ?? []) as GroupRow[]) {
     ingestStudent(raw.students);
   }
 

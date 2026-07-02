@@ -29,25 +29,15 @@ export default async function TeacherStudentsPage() {
   }
 
   const sb = supabaseAdmin();
-  // Two sources: (1) past/future classes I teach, (2) students in a
-  // group I'm assigned to. Union so a brand-new student-group pairing
-  // shows up even before the first scheduled class.
-  const [viaClasses, viaGroups] = await Promise.all([
-    sb.from("class_participants")
-      .select(`
-        student_id,
-        students!inner(current_level, users!inner(full_name, email)),
-        classes!inner(teacher_id)
-      `)
-      .eq("classes.teacher_id", me.id),
-    sb.from("student_group_members")
-      .select(`
-        student_id,
-        students!inner(current_level, users!inner(full_name, email)),
-        group:student_groups!inner(teacher_id)
-      `)
-      .eq("group.teacher_id", me.id),
-  ]);
+  // Source of truth: students in an active group assigned to this teacher.
+  const { data: viaGroups } = await sb.from("student_group_members")
+    .select(`
+      student_id,
+      students!inner(current_level, users!inner(full_name, email)),
+      group:student_groups!inner(teacher_id, active)
+    `)
+    .eq("group.teacher_id", me.id)
+    .eq("group.active", true);
 
   type R = {
     student_id: string;
@@ -75,8 +65,7 @@ export default async function TeacherStudentsPage() {
       });
     }
   };
-  ingest((viaClasses.data ?? []) as R[]);
-  ingest((viaGroups.data   ?? []) as R[]);
+  ingest((viaGroups ?? []) as R[]);
   const list = Array.from(seen.values()).sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email));
 
   return (
