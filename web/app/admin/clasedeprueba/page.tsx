@@ -1,24 +1,35 @@
 import { listTrialClasses, partitionByTime } from "@/lib/trial-classes";
-import { TrialClassCard } from "@/components/TrialClassCard";
 import { auth } from "@/lib/auth";
+import { supabaseAdmin } from "@/lib/supabase";
+import { TrialHubList } from "@/app/profesor/clasedeprueba/TrialHubList";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Clases de prueba · Admin" };
 
-/**
- * Admin view of EVERY trial class in the system. Built so Gelfis can
- * eyeball who is showing up tomorrow without paging through the
- * generic /admin/clases list. Each row exposes a one-click WhatsApp
- * and email contact for the lead.
- *
- * Eliminar definitivo solo para superadmin (Gelfis 2026-06-23).
- * Admin regular ve Cancelar pero no Eliminar.
- */
 export default async function AdminTrialClassesPage() {
   const rows = await listTrialClasses();
   const { upcoming, past } = partitionByTime(rows);
   const session = await auth();
   const canDelete = (session?.user as { role?: string } | undefined)?.role === "superadmin";
+
+  const convertedUserIds = [
+    ...new Set(
+      rows
+        .map((r) => r.leadConvertedToUserId)
+        .filter((x): x is string => !!x),
+    ),
+  ];
+  const studentMap: Record<string, string> = {};
+  if (convertedUserIds.length > 0) {
+    const sb = supabaseAdmin();
+    const { data: students } = await sb
+      .from("students")
+      .select("id, user_id")
+      .in("user_id", convertedUserIds);
+    for (const s of students ?? []) {
+      studentMap[s.user_id] = s.id;
+    }
+  }
 
   return (
     <main className="space-y-5">
@@ -29,23 +40,20 @@ export default async function AdminTrialClassesPage() {
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           {upcoming.length} próxima{upcoming.length === 1 ? "" : "s"} ·{" "}
           {past.length} pasada{past.length === 1 ? "" : "s"}.
-          Solo aparecen las clases marcadas como <code className="text-xs">is_trial</code>.
         </p>
       </header>
 
-      {/* ── Next (Calendly-style hero) ── */}
       {upcoming.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-300 mb-3">
             Siguiente clase
           </h2>
           <div className="rounded-2xl ring-2 ring-emerald-400/60 dark:ring-emerald-500/40 shadow-md">
-            <TrialClassCard row={upcoming[0]} showLeadDetailLink canDelete={canDelete} />
+            <TrialHubList rows={[upcoming[0]]} studentMap={studentMap} isAdmin canDelete={canDelete} />
           </div>
         </section>
       )}
 
-      {/* ── Rest of upcoming ── */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-3">
           {upcoming.length > 1 ? "Siguientes" : "Próximas"}
@@ -53,15 +61,10 @@ export default async function AdminTrialClassesPage() {
         {upcoming.length <= 1 ? (
           <EmptyState text={upcoming.length === 0 ? "No hay clases de prueba agendadas." : "No hay más clases agendadas después de la siguiente."} />
         ) : (
-          <div className="grid gap-3">
-            {upcoming.slice(1).map((r) => (
-              <TrialClassCard key={r.classId} row={r} showLeadDetailLink canDelete={canDelete} />
-            ))}
-          </div>
+          <TrialHubList rows={upcoming.slice(1)} studentMap={studentMap} isAdmin canDelete={canDelete} />
         )}
       </section>
 
-      {/* ── Past ── */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-3">
           Historial
@@ -69,11 +72,7 @@ export default async function AdminTrialClassesPage() {
         {past.length === 0 ? (
           <EmptyState text="Aún no hay clases de prueba pasadas." />
         ) : (
-          <div className="grid gap-3">
-            {past.map((r) => (
-              <TrialClassCard key={r.classId} row={r} showLeadDetailLink canDelete={canDelete} />
-            ))}
-          </div>
+          <TrialHubList rows={past} studentMap={studentMap} isAdmin canDelete={canDelete} />
         )}
       </section>
     </main>

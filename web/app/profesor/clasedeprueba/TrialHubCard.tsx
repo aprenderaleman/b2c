@@ -7,7 +7,9 @@ import {
   type TrialClassRow,
 } from "@/lib/trial-classes";
 import { CancelTrialClassButton } from "@/components/CancelTrialClassButton";
+import { DeleteTrialClassButton } from "@/components/DeleteTrialClassButton";
 import { ConvertLeadModal } from "@/components/admin/ConvertLeadModal";
+import Link from "next/link";
 import { NotesField } from "./NotesField";
 import { PaymentLinkModal } from "./PaymentLinkModal";
 import { ScheduleClassModal } from "./ScheduleClassModal";
@@ -18,11 +20,15 @@ export function TrialHubCard({
   expanded,
   onToggle,
   studentId,
+  isAdmin = false,
+  canDelete = false,
 }: {
   row: TrialClassRow;
   expanded: boolean;
   onToggle: () => void;
   studentId: string | null;
+  isAdmin?: boolean;
+  canDelete?: boolean;
 }) {
   const router = useRouter();
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -81,19 +87,27 @@ export function TrialHubCard({
                   {row.leadGoal && <><span>·</span><span>{formatGoalEs(row.leadGoal)}</span></>}
                 </div>
               </div>
+
+              {isAdmin && row.leadEmail && (
+                <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  📧 <span className="font-mono">{row.leadEmail}</span>
+                </div>
+              )}
+              {isAdmin && row.leadWhatsapp && (
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  💬 <span className="font-mono">{row.leadWhatsapp}</span>
+                </div>
+              )}
+
+              {isAdmin && (
+                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  Profesor: <span className="text-slate-700 dark:text-slate-200 font-medium">{row.teacherName}</span>
+                </div>
+              )}
             </div>
 
             {/* Quick actions — always visible */}
-            <div className="flex flex-wrap gap-2 sm:flex-col sm:items-stretch sm:min-w-[140px]">
-              <a
-                href={aulaUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-semibold transition-colors"
-              >
-                🎥 Aula
-              </a>
-
+            <div className="flex flex-wrap gap-2 sm:flex-col sm:items-stretch sm:min-w-[160px]">
               {waDigits ? (
                 <a
                   href={`https://wa.me/${waDigits}`}
@@ -109,6 +123,41 @@ export function TrialHubCard({
                 </span>
               )}
 
+              {isAdmin && (
+                row.leadEmail ? (
+                  <a
+                    href={`mailto:${row.leadEmail}`}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white px-3.5 py-2 text-xs font-semibold shadow-sm transition-colors"
+                  >
+                    📧 Email
+                  </a>
+                ) : (
+                  <span className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 px-3.5 py-2 text-xs font-semibold cursor-not-allowed">
+                    📧 Sin email
+                  </span>
+                )
+              )}
+
+              <a
+                href={aulaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-semibold transition-colors"
+              >
+                🎥 Aula
+              </a>
+
+              {isAdmin && (
+                <a
+                  href={`/cp/${row.classId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 px-3.5 py-2 text-xs font-semibold transition-colors"
+                >
+                  ▶ Iniciar cp
+                </a>
+              )}
+
               <button
                 type="button"
                 onClick={onToggle}
@@ -121,13 +170,26 @@ export function TrialHubCard({
                 👤 {expanded ? "Cerrar" : "Ver Lead"}
               </button>
 
-              {/* Fix Gelfis 2026-06-23: profesor solo Cancela (preserva
-                  registro). Eliminar definitivo es exclusivo de superadmin
-                  desde /admin/clasedeprueba. */}
+              {isAdmin && row.leadId && (
+                <Link
+                  href={`/admin/leads/${row.leadId}`}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 px-3.5 py-2 text-xs font-semibold transition-colors"
+                >
+                  👤 Lead
+                </Link>
+              )}
+
               <CancelTrialClassButton
                 classId={row.classId}
                 scheduledAtIso={row.scheduledAt}
               />
+
+              {canDelete && (
+                <DeleteTrialClassButton
+                  classId={row.classId}
+                  scheduledAtIso={row.scheduledAt}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -252,8 +314,8 @@ export function TrialHubCard({
                 </span>
               )}
 
-              {/* Escalar a Admin */}
-              {row.leadId && (
+              {/* Escalar a Admin — solo profes, admin no se escala a sí mismo */}
+              {!isAdmin && row.leadId && (
                 <button
                   type="button"
                   onClick={() => setEscalateOpen(!escalateOpen)}

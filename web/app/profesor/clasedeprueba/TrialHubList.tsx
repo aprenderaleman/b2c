@@ -7,9 +7,13 @@ import { TrialHubCard } from "./TrialHubCard";
 export function TrialHubList({
   rows,
   studentMap,
+  isAdmin = false,
+  canDelete = false,
 }: {
   rows: TrialClassRow[];
   studentMap: Record<string, string>;
+  isAdmin?: boolean;
+  canDelete?: boolean;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -22,6 +26,8 @@ export function TrialHubList({
           expanded={expandedId === r.classId}
           onToggle={() => setExpandedId(expandedId === r.classId ? null : r.classId)}
           studentId={r.leadConvertedToUserId ? (studentMap[r.leadConvertedToUserId] ?? null) : null}
+          isAdmin={isAdmin}
+          canDelete={canDelete}
         />
       ))}
     </div>
