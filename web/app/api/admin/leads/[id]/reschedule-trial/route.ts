@@ -48,7 +48,24 @@ const Body = z.object({
   class_id:         z.string().uuid(),
   new_start_iso:    z.string().datetime(),
   duration_minutes: z.number().int().min(15).max(180).optional(),
+  // Optional teacher swap. Cuando se pasa, se reasigna la clase a ese
+  // teacher_id y el race-guard se ejecuta contra el NUEVO teacher (no
+  // el original). Añadido 2026-06-30 para casos "el profe no puede,
+  // agéndalo con Gelfis". La UI no lo expone aún.
+  new_teacher_id:   z.string().uuid().optional(),
 });
+
+/**
+ * Auth flexible: session admin/superadmin (UI) O CRON_SECRET (curl
+ * puntual para reagendados manuales). Añadido 2026-06-30.
+ */
+function isCronAuthd(req: Request): boolean {
+  const e = process.env.CRON_SECRET;
+  if (!e) return false;
+  const b = req.headers.get("authorization");
+  if (b && b.toLowerCase().startsWith("bearer ") && b.slice(7).trim() === e) return true;
+  return req.headers.get("x-cron-secret") === e;
+}
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -56,13 +73,16 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
-  const role = (session.user as { role?: string }).role;
-  if (role !== "admin" && role !== "superadmin") {
-    return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+  const cronAuthd = isCronAuthd(req);
+  const session   = cronAuthd ? null : await auth();
+  if (!cronAuthd) {
+    if (!session?.user) {
+      return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
+    }
+    const role = (session.user as { role?: string }).role;
+    if (role !== "admin" && role !== "superadmin") {
+      return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
+    }
   }
 
   const { id: leadId } = await params;
@@ -120,13 +140,16 @@ export async function POST(
   const duration = b.duration_minutes ?? c.duration_minutes ?? 30;
   const slotEnd  = new Date(newStart.getTime() + duration * 60_000);
   const slotPrev = new Date(newStart.getTime() - duration * 60_000);
+  // Si se pide cambio de profe, el race-guard aplica al NUEVO profe.
+  const targetTeacherId = b.new_teacher_id ?? c.teacher_id;
+  const teacherChanged  = !!b.new_teacher_id && b.new_teacher_id !== c.teacher_id;
 
   // 2) Race-guard: ¿alguien tomó el slot nuevo entre el check y este confirm?
   //    Excluimos la propia clase (estamos moviéndola).
   const { data: collisions } = await sb
     .from("classes")
     .select("id")
-    .eq("teacher_id", c.teacher_id)
+    .eq("teacher_id", targetTeacherId)
     .in("status", ["scheduled", "live"])
     .neq("id", c.id)
     .lt("scheduled_at", slotEnd.toISOString())
@@ -142,7 +165,7 @@ export async function POST(
     );
   }
 
-  // 3) UPDATE classes
+  // 3) UPDATE classes (opcional: reasigna teacher si new_teacher_id)
   const { error: updErr } = await sb
     .from("classes")
     .update({
@@ -151,6 +174,7 @@ export async function POST(
       // consultan notes_admin para idempotencia, así que basta con
       // limpiarlo para que re-disparen en el nuevo horario.
       notes_admin:  null,
+      ...(teacherChanged ? { teacher_id: targetTeacherId } : {}),
     })
     .eq("id", c.id);
   if (updErr) {
@@ -264,19 +288,23 @@ export async function POST(
   const waOk    = lr.whatsapp_normalized ? settledOk(results[lr.email ? 1 : 0]) : null;
 
   // 7) Timeline
+  const actor = cronAuthd ? "cron/curl" : (session?.user?.email ?? "admin");
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type:    "agent_note",
-    author:  "admin",
-    content: `📅 Clase de prueba reagendada a ${startDate} por ${session.user.email ?? "admin"}.`,
+    author:  cronAuthd ? "system" : "admin",
+    content: `📅 Clase de prueba reagendada a ${startDate}${teacherChanged ? ` (profe cambiado)` : ""} por ${actor}.`,
     metadata: {
-      kind:           "trial_rescheduled",
-      class_id:       c.id,
-      old_start_iso:  c.scheduled_at,
-      new_start_iso:  newStart.toISOString(),
-      gcal_patched:   gcalPatched,
-      email_sent:     emailOk,
-      wa_sent:        waOk,
+      kind:              "trial_rescheduled",
+      class_id:          c.id,
+      old_start_iso:     c.scheduled_at,
+      new_start_iso:     newStart.toISOString(),
+      old_teacher_id:    c.teacher_id,
+      new_teacher_id:    targetTeacherId,
+      teacher_changed:   teacherChanged,
+      gcal_patched:      gcalPatched,
+      email_sent:        emailOk,
+      wa_sent:           waOk,
     },
   });
 
