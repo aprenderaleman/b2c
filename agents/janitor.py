@@ -106,7 +106,17 @@ def _check_scheduler_freshness() -> None:
 def _check_evolution() -> None:
     base = os.environ.get("EVOLUTION_API_URL", "").rstrip("/")
     key  = os.environ.get("EVOLUTION_API_KEY", "")
-    inst = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    # Fuente de verdad: system_config.active_whatsapp_instance (el mismo
+    # valor que usa agent_3_sender._active_instance para enviar). Antes
+    # leíamos solo el env var EVOLUTION_INSTANCE_MAIN — al cambiar la
+    # instancia activa (v3 → v4) desde SQL, el health check seguía
+    # mirando la instancia vieja y disparaba banner falso positivo
+    # "Evolution close" (Gelfis 2026-07-01).
+    inst = (
+        get_config("active_whatsapp_instance")
+        or os.environ.get("EVOLUTION_INSTANCE_MAIN")
+        or "aprender-aleman-main"
+    )
     if not base or not key:
         return
 

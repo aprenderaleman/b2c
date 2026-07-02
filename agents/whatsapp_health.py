@@ -27,11 +27,22 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from agents.shared.db import get_conn
+from agents.shared.db import get_conn, get_config
 from agents.shared.leads import get_lead_by_phone
 from agents.shared.phone import normalize_phone
 
 log = logging.getLogger("whatsapp_health")
+
+
+def _active_instance() -> str:
+    """Instancia real actualmente activa (system_config), con fallback al env.
+    Mismo helper que agent_3_sender._active_instance para no divergir el
+    nombre de la instancia entre sender y health checks."""
+    return (
+        get_config("active_whatsapp_instance")
+        or os.environ.get("EVOLUTION_INSTANCE_MAIN")
+        or "aprender-aleman-main"
+    )
 
 # ─────────────────────────────────────────────────────────
 # Webhook self-heal
@@ -65,7 +76,7 @@ def _canonical_webhook_config() -> dict:
 
 
 def tick_webhook_self_heal() -> dict:
-    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    instance = _active_instance()
     webhook_url = os.environ.get("AGENTS_WEBHOOK_URL", "")
     if not webhook_url:
         log.info("[webhook_heal] AGENTS_WEBHOOK_URL not set — skipping.")
@@ -173,7 +184,7 @@ def tick_inbound_replay() -> dict:
     on `wa_message_id`). The previous timestamp ±90 s heuristic was loose
     and could re-process messages that the live webhook had already handled
     when two distinct messages arrived in the same minute."""
-    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    instance = _active_instance()
     cutoff = datetime.now(timezone.utc) - REPLAY_WINDOW
 
     try:
