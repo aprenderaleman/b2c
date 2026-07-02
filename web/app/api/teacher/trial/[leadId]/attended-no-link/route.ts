@@ -9,7 +9,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ leadId
 
   const { leadId } = await params;
 
-  try { await assertTeacherOwnsTrialLead(user.id, leadId); }
+  try { await assertTeacherOwnsTrialLead(user.id, leadId, user.role); }
   catch { return NextResponse.json({ error: "forbidden" }, { status: 403 }); }
 
   await markTrialAttendedNoLink(leadId);

@@ -5,11 +5,32 @@ import { supabaseAdmin } from "./supabase";
 export async function assertTeacherOwnsTrialLead(
   userId: string,
   leadId: string,
+  role?: string,
 ): Promise<{ teacherId: string; teacherName: string | null }> {
+  const sb = supabaseAdmin();
+
+  if (role === "admin" || role === "superadmin") {
+    const { data: cls } = await sb
+      .from("classes")
+      .select("teacher_id")
+      .eq("is_trial", true)
+      .eq("lead_id", leadId)
+      .limit(1)
+      .maybeSingle();
+    if (!cls) throw new Error("not_found");
+
+    const { data: userRow } = await sb
+      .from("users")
+      .select("full_name")
+      .eq("id", userId)
+      .maybeSingle();
+
+    return { teacherId: cls.teacher_id, teacherName: userRow?.full_name ?? null };
+  }
+
   const teacher = await getTeacherByUserId(userId);
   if (!teacher) throw new Error("no_teacher_profile");
 
-  const sb = supabaseAdmin();
   const { data } = await sb
     .from("classes")
     .select("id")

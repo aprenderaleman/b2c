@@ -16,7 +16,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
 
   const { leadId } = await params;
 
-  try { await assertTeacherOwnsTrialLead(user.id, leadId); }
+  try { await assertTeacherOwnsTrialLead(user.id, leadId, user.role); }
   catch { return NextResponse.json({ error: "forbidden" }, { status: 403 }); }
 
   let opts: AttendedOptions | undefined;

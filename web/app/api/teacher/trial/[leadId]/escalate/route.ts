@@ -15,7 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
 
   let teacherName: string;
   try {
-    const result = await assertTeacherOwnsTrialLead(user.id, leadId);
+    const result = await assertTeacherOwnsTrialLead(user.id, leadId, user.role);
     teacherName = result.teacherName ?? user.id;
   } catch {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
