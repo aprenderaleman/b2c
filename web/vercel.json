@@ -3,6 +3,10 @@
   "installCommand": "npm install --legacy-peer-deps",
   "crons": [
     {
+      "path": "/api/cron/clear-stale-critical",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "path": "/api/cron/class-reminders",
       "schedule": "*/10 * * * *"
     },
