@@ -166,39 +166,70 @@ export async function sendWhatsappText(
   }
   _lastWaSentAt = Date.now();
 
-  const baseUrl = process.env.AGENTS_BASE_URL?.replace(/\/$/, "");
-  const secret  = process.env.AGENTS_INTERNAL_SECRET;
-  if (!baseUrl || !secret) {
+  // Ruta directa a Evolution: usamos EVOLUTION_API_URL + instancia de
+  // BD (active_whatsapp_instance). Hasta 2026-07-02 pasábamos por el
+  // VPS Python (AGENTS_BASE_URL/internal/send-text) — el problema es
+  // que el VPS lee la instancia de una env var y quedó desincronizado
+  // tras rotar v2 → v3 → v4 por SQL, así que TODOS los envíos caían
+  // a v2 (cerrada). El VPS Python se mantiene solo para recibir
+  // webhooks entrantes (agent_4_conversation). Envíos directos.
+  const evoUrl = process.env.EVOLUTION_API_URL?.replace(/\/$/, "");
+  const evoKey = process.env.EVOLUTION_API_KEY;
+  if (!evoUrl || !evoKey) {
     console.warn(
-      "[whatsapp] AGENTS_BASE_URL / AGENTS_INTERNAL_SECRET missing — " +
+      "[whatsapp] EVOLUTION_API_URL / EVOLUTION_API_KEY missing — " +
       "message not sent. Would have sent to %s: %s",
       phoneE164,
       text.slice(0, 120),
     );
-    return { ok: false, reason: "missing_agent_env" };
+    return { ok: false, reason: "missing_evolution_env" };
+  }
+  // Resolver instancia activa (misma fuente que agent_3_sender en Python).
+  let instance: string;
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const sb = supabaseAdmin();
+    const { data } = await sb
+      .from("system_config")
+      .select("value")
+      .eq("key", "active_whatsapp_instance")
+      .maybeSingle();
+    instance = ((data as { value?: string } | null)?.value)
+      ?? process.env.EVOLUTION_INSTANCE_MAIN
+      ?? "aprender-aleman-main";
+  } catch {
+    instance = process.env.EVOLUTION_INSTANCE_MAIN ?? "aprender-aleman-main";
   }
 
+  // Formato Evolution v1.8: number (dígitos), options, textMessage.text
+  const digits = phoneE164.replace(/^\+/, "").replace(/\D/g, "");
+  const payload = {
+    number: digits,
+    options: { delay: 1200, presence: "composing", linkPreview: false },
+    textMessage: { text },
+  };
+
   try {
-    const res = await fetch(`${baseUrl}/internal/send-text`, {
+    const res = await fetch(`${evoUrl}/message/sendText/${instance}`, {
       method: "POST",
       headers: {
-        "Content-Type":        "application/json",
-        "X-Internal-Secret":   secret,
+        "apikey":       evoKey,
+        "Content-Type": "application/json; charset=utf-8",
       },
-      body: JSON.stringify({ phone: phoneE164, text }),
-      // 60s ceiling — long enough that a slow Evolution API call
-      // doesn't cause a false-negative `send_failed` timeline log
-      // when the message actually delivered. The caller's response
-      // path no longer waits on this (book-trial uses `after()`),
-      // so there's no UX pressure to fail fast.
+      body: JSON.stringify(payload),
+      // 60s ceiling — Evolution rara vez tarda más pero mantiene margen.
       signal: AbortSignal.timeout(60_000),
     });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       return { ok: false, reason: `http_${res.status}:${body.slice(0, 200)}` };
     }
-    const data = (await res.json().catch(() => ({}))) as { messageId?: string };
-    return { ok: true, messageId: data.messageId ?? null };
+    const data = (await res.json().catch(() => ({}))) as {
+      key?: { id?: string };
+      messageId?: string;
+    };
+    const messageId = data.key?.id ?? data.messageId ?? null;
+    return { ok: true, messageId };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : "unknown" };
   }
