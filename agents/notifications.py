@@ -509,7 +509,15 @@ def scan_evolution_health_and_alert() -> int:
     alertar Gelfis para que reescanee el QR (o mire los logs).
     """
     _ensure_table()
-    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    # Fuente de verdad: system_config.active_whatsapp_instance. Antes
+    # solo mirábamos el env var, que quedaba desincronizado cada vez
+    # que rotábamos la instancia por SQL (2026-07-02 v2 → v4).
+    from agents.shared.db import get_config
+    instance = (
+        get_config("active_whatsapp_instance")
+        or os.environ.get("EVOLUTION_INSTANCE_MAIN")
+        or "aprender-aleman-main"
+    )
     try:
         wa = WhatsAppService()
         state = wa.get_connection_state(instance)

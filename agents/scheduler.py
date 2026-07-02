@@ -336,7 +336,12 @@ def _drain_outbound_with_beat() -> None:
     avoid a hard dep at scheduler boot (so a missing API key doesn't kill
     the entire scheduler — janitor still runs)."""
     from agents.whatsapp_service import WhatsAppService
-    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    from agents.shared.db import get_config
+    instance = (
+        get_config("active_whatsapp_instance")
+        or os.environ.get("EVOLUTION_INSTANCE_MAIN")
+        or "aprender-aleman-main"
+    )
     wa = WhatsAppService()
     def _send(phone: str, body: str) -> str:
         # Pass kind=retry so the inner enqueue (if it fails again) tags

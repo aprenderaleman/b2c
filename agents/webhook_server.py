@@ -28,10 +28,24 @@ from fastapi import BackgroundTasks, FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from agents.agent_4_conversation import handle_incoming_message
-from agents.shared.db import get_conn
+from agents.shared.db import get_conn, get_config
 from agents.shared.leads import get_lead_by_phone, log_timeline
 from agents.shared.phone import normalize_phone
 from agents.whatsapp_service import WhatsAppError, WhatsAppService
+
+
+def _active_instance() -> str:
+    """Instancia real actualmente activa. Prioriza
+    system_config.active_whatsapp_instance (fuente de verdad — la misma
+    que usa agent_3_sender para enviar), con fallback al env var por
+    compat con bootstraps antiguos. Antes leíamos SOLO el env, y al
+    rotar la instancia por SQL (v3 → v4) los endpoints /internal/*
+    seguían golpeando la instancia vieja (2026-07-02)."""
+    return (
+        get_config("active_whatsapp_instance")
+        or os.environ.get("EVOLUTION_INSTANCE_MAIN")
+        or "aprender-aleman-main"
+    )
 
 try:
     from psycopg.errors import UniqueViolation       # psycopg v3
@@ -626,7 +640,7 @@ async def internal_send_text(request: Request):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"invalid_phone:{e}")
 
-    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    instance = _active_instance()
     wa = WhatsAppService()
 
     # ─── PAUSA GLOBAL ─────────────────────────────────────────────
@@ -787,7 +801,7 @@ async def internal_send_document(request: Request):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"invalid_phone:{e}")
 
-    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    instance = _active_instance()
     wa = WhatsAppService()
 
     try:
@@ -834,7 +848,7 @@ async def internal_check_numbers(request: Request):
     if len(phones) > 200:
         raise HTTPException(status_code=400, detail="too_many_phones_max_200")
 
-    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    instance = _active_instance()
     wa = WhatsAppService()
 
     results: dict[str, bool] = {}
@@ -869,7 +883,7 @@ async def internal_whatsapp_status(request: Request):
     if not provided or not hmac.compare_digest(provided, expected):
         raise HTTPException(status_code=401, detail="unauthorized")
 
-    instance = os.environ.get("EVOLUTION_INSTANCE_MAIN", "aprender-aleman-main")
+    instance = _active_instance()
     wa = WhatsAppService()
     state = "unknown"
     err   = None
