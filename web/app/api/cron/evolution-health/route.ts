@@ -49,26 +49,52 @@ async function run(req: Request) {
   // Diana 2026-06-16: pausa 04:41 UTC, Evolution sano <1h despues, pero
   // sistema bloqueado hasta 10:41 → lead perdio confirmacion WA).
   const pauseStatus = await getSystemPauseStatus();
+  const sb = supabaseAdmin();
 
-  // Consultamos el state vía el agents server (mismo endpoint que usa /admin/system).
-  // Si Evolution responde 'open' → todo bien. Si no o timeout → contar fallo.
-  const agentsBase = (process.env.AGENTS_BASE_URL ?? "").replace(/\/$/, "");
-  const secret     = process.env.AGENTS_INTERNAL_SECRET;
-  if (!agentsBase || !secret) {
-    return NextResponse.json({ error: "agents_env_missing" }, { status: 503 });
+  // Kill-switch del monitor mismo — sirve para operar en modo manual
+  // cuando el auto-pausado auto-genera problemas (2026-07-02: VPS
+  // Python quedó desincronizado con la instancia real; el monitor
+  // veía v2 close y auto-pausaba 6h cada 15 min).
+  {
+    const { data: killRow } = await sb
+      .from("system_config").select("value")
+      .eq("key", "evolution_health_monitor_disabled").maybeSingle();
+    const raw = (killRow as { value?: unknown } | null)?.value;
+    if (raw === true || raw === "true" || raw === "1") {
+      return NextResponse.json({ ok: true, skipped: "monitor_disabled" });
+    }
   }
+
+  // Consultamos Evolution DIRECTAMENTE (no via VPS Python). Antes
+  // pasábamos por /internal/whatsapp-status del VPS, pero si el VPS
+  // tiene la instancia desincronizada (env var vieja) el monitor veía
+  // false-positive close y auto-pausaba el sistema por 6h. Al ir
+  // directo a Evolution eliminamos ese punto de fallo. Instancia real:
+  // system_config.active_whatsapp_instance (misma fuente que sender).
+  const evoUrl = (process.env.EVOLUTION_API_URL ?? "").replace(/\/$/, "");
+  const evoKey = process.env.EVOLUTION_API_KEY;
+  if (!evoUrl || !evoKey) {
+    return NextResponse.json({ error: "evolution_env_missing" }, { status: 503 });
+  }
+  const { data: instRow } = await sb
+    .from("system_config").select("value")
+    .eq("key", "active_whatsapp_instance").maybeSingle();
+  const instance = ((instRow as { value?: string } | null)?.value)
+    ?? process.env.EVOLUTION_INSTANCE_MAIN ?? "aprender-aleman-main";
 
   let state: string = "unknown";
   let reason: string | null = null;
   try {
-    const res = await fetch(`${agentsBase}/internal/whatsapp-status`, {
+    const res = await fetch(`${evoUrl}/instance/connectionState/${instance}`, {
       method: "GET",
-      headers: { "X-Internal-Secret": secret },
+      headers: { apikey: evoKey },
       signal: AbortSignal.timeout(10_000),
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({} as Record<string, unknown>));
-      state = (data as { state?: string }).state ?? "unknown";
+      state = ((data as { instance?: { state?: string } }).instance?.state)
+           ?? (data as { state?: string }).state
+           ?? "unknown";
     } else {
       reason = `http_${res.status}`;
     }
@@ -76,7 +102,6 @@ async function run(req: Request) {
     reason = e instanceof Error ? e.message : "fetch_failed";
   }
 
-  const sb = supabaseAdmin();
   const { data: curRow } = await sb
     .from("system_config")
     .select("value")
