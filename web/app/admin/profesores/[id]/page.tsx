@@ -218,7 +218,7 @@ export default async function TeacherDetailPage({
             Clases de prueba
           </h2>
           <span className="text-xs text-slate-500 dark:text-slate-400">
-            Base 15 € por trial asistida · comisión 50/80/100/200 € al convertir
+            Comisión 75-250 € (único) / 30-75 € (cuotas) · bono ≥30% cierre
           </span>
         </div>
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-5">

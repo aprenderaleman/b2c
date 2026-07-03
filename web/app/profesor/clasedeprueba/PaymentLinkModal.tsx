@@ -19,6 +19,20 @@ export function PaymentLinkModal({
   const [nivel, setNivel]           = useState(defaultLevel || "");
   const [packId, setPackId]         = useState<PackId | "">("");
   const [paymentType, setPaymentType] = useState<PaymentType>("single");
+
+  const selectedPack = packId ? TRIAL_PACKS.find(p => p.id === packId) : null;
+  const paymentOptions: { v: PaymentType; label: string }[] = selectedPack
+    ? [
+        { v: "single",   label: selectedPack.labels.single },
+        { v: "flexible",  label: selectedPack.labels.flexible },
+        ...(selectedPack.labels.extended
+          ? [{ v: "extended" as const, label: selectedPack.labels.extended }]
+          : []),
+      ]
+    : [
+        { v: "single",   label: "Pago único" },
+        { v: "flexible",  label: "Flexible" },
+      ];
   const [error, setError]           = useState<string | null>(null);
   const [sent, setSent]             = useState(false);
   const [pending, startTransition]  = useTransition();
@@ -107,7 +121,11 @@ export function PaymentLinkModal({
             </label>
             <select
               value={packId}
-              onChange={(e) => setPackId(e.target.value as PackId)}
+              onChange={(e) => {
+                const newId = e.target.value as PackId;
+                setPackId(newId);
+                setPaymentType("single");
+              }}
               className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
               <option value="">— Selecciona —</option>
@@ -122,14 +140,11 @@ export function PaymentLinkModal({
           <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
             Tipo de pago
           </span>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {([
-              { v: "single" as const, label: "Pago unico" },
-              { v: "flexible" as const, label: "Flexible" },
-            ]).map(opt => (
+          <div className="mt-2 flex flex-col gap-2">
+            {paymentOptions.map(opt => (
               <label
                 key={opt.v}
-                className={`cursor-pointer rounded-lg border px-3 py-2 text-sm text-center ${
+                className={`cursor-pointer rounded-lg border px-3 py-2 text-sm ${
                   paymentType === opt.v
                     ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
                     : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"

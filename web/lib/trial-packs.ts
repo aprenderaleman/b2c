@@ -1,11 +1,12 @@
 /**
  * Catálogo de packs que Gelfis ofrece al lead tras la clase de prueba.
  *
- * Cada pack tiene DOS enlaces de Stripe:
- *   - urlSingle   → pago único
- *   - urlFlexible → pago flexible (mensualidades)
+ * Cada pack tiene 2-3 enlaces de Stripe:
+ *   - urlSingle    → pago único
+ *   - urlFlexible  → pago durante tu formación (mensualidades cortas)
+ *   - urlExtended  → financiación extendida (más cuotas, solo VIP e Inmersión)
  *
- * El admin elige el pack + tipo de pago en el modal "✓ Asistió" y
+ * El profe elige el pack + tipo de pago en el modal "Enviar enlace" y
  * el sistema le manda al lead el enlace correspondiente por WhatsApp.
  */
 
@@ -16,57 +17,93 @@ export type PackId =
   | "vip_express"
   | "inmersion_total";
 
-export type PaymentType = "single" | "flexible";
+export type PaymentType = "single" | "flexible" | "extended";
 
 export type Pack = {
   id:           PackId;
   name:         string;
   classes:      number;
+  priceCents:   number;
   bestFor:      string[];
   urlSingle:    string;
   urlFlexible:  string;
+  urlExtended?: string;
+  labels: {
+    single:    string;
+    flexible:  string;
+    extended?: string;
+  };
 };
 
 export const TRIAL_PACKS: Pack[] = [
   {
     id:    "basico",
-    name:  "Pack Básico · 1.280 € (o 460 € × 3)",
+    name:  "Pack Básico — 1.280 €",
     classes: 32,
+    priceCents: 128_000,
     bestFor: ["personal_growth", "travel"],
     urlSingle:   "https://buy.stripe.com/aFa8wIg9L0naa076L50co0b",
     urlFlexible: "https://buy.stripe.com/4gM9AMg9L0na3BJ4CX0co0c",
+    labels: {
+      single:   "Pago único (1.280 €)",
+      flexible: "Paga durante tu formación (460 € × 3)",
+    },
   },
   {
     id:    "intermedio",
-    name:  "Pack Intermedio · 1.920 € (o 530 € × 4)",
+    name:  "Pack Intermedio — 1.920 €",
     classes: 48,
+    priceCents: 192_000,
     bestFor: ["studies", "work"],
     urlSingle:   "https://buy.stripe.com/00w6oA8Hj8TG5JR8Td0co0d",
     urlFlexible: "https://buy.stripe.com/14AdR27Df3zmegn9Xh0co0e",
+    labels: {
+      single:   "Pago único (1.920 €)",
+      flexible: "Paga durante tu formación (530 € × 4)",
+    },
   },
   {
     id:    "avanzado",
-    name:  "Pack Avanzado · 2.400 € (o 540 € × 5)",
+    name:  "Pack Avanzado — 2.400 €",
     classes: 60,
+    priceCents: 240_000,
     bestFor: ["work", "exam"],
     urlSingle:   "https://buy.stripe.com/dRmaEQ2iV3zmb4b6L50co0f",
     urlFlexible: "https://buy.stripe.com/4gM8wIcXzc5S2xFd9t0co0g",
+    labels: {
+      single:   "Pago único (2.400 €)",
+      flexible: "Paga durante tu formación (540 € × 5)",
+    },
   },
   {
     id:    "vip_express",
-    name:  "Pack VIP Express · 2.690 € (o 500 € × 6)",
+    name:  "Pack VIP Express — 2.690 € ⭐",
     classes: 72,
+    priceCents: 269_000,
     bestFor: ["work", "already_in_dach", "exam"],
     urlSingle:   "https://buy.stripe.com/9B65kwg9Lfi4a07fhB0co0h",
     urlFlexible: "https://buy.stripe.com/00w7sE9Ln4Dqgovc5p0co0i",
+    urlExtended: "https://buy.stripe.com/cNidR26zb2viegnedx0co0l",
+    labels: {
+      single:   "Pago único (2.690 €)",
+      flexible: "Paga durante tu formación (500 € × 6)",
+      extended: "Financiación extendida (320 € × 10)",
+    },
   },
   {
     id:    "inmersion_total",
-    name:  "Pack Inmersión Total · 3.290 € (o 455 € × 8)",
+    name:  "Pack Inmersión Total — 3.290 € ⭐",
     classes: 100,
+    priceCents: 329_000,
     bestFor: ["work", "already_in_dach", "studies"],
     urlSingle:   "https://buy.stripe.com/3cI28kf5H8TG6NVfhB0co0j",
     urlFlexible: "https://buy.stripe.com/3cI9AMaPr6Lydcjd9t0co0k",
+    urlExtended: "https://buy.stripe.com/dRm00ccXz5Hugov6L50co0m",
+    labels: {
+      single:   "Pago único (3.290 €)",
+      flexible: "Paga durante tu formación (455 € × 8)",
+      extended: "Financiación extendida (330 € × 12)",
+    },
   },
 ];
 
@@ -75,7 +112,9 @@ export function getPack(id: PackId): Pack | null {
 }
 
 export function packUrl(pack: Pack, payment: PaymentType): string {
-  return payment === "single" ? pack.urlSingle : pack.urlFlexible;
+  if (payment === "extended" && pack.urlExtended) return pack.urlExtended;
+  if (payment === "flexible") return pack.urlFlexible;
+  return pack.urlSingle;
 }
 
 /**

@@ -394,11 +394,16 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
         `Stiv | Aprender-Aleman.de`,
       ].join("\n")
     : [
-        `¡Hola ${firstName}! 😊`,
+        `¡Hola, ${firstName}! 😊`,
         ``,
-        `Ha sido un placer tenerte hoy en la clase de prueba. Hoy demostraste que puedes. 💪`,
+        `Ha sido un placer tenerte hoy en la clase de prueba. ¡Hoy demostraste que puedes! 💪`,
         ``,
-        `Sé lo importante que es para ti aprender alemán. ¿Qué te frena para dar el paso hoy mismo?`,
+        `Aquí tienes el enlace para elegir el pack que más te encaje e inscribirte oficialmente:`,
+        `👉 https://aprender-aleman.de/inscripciones`,
+        ``,
+        `Desde el momento en que te inscribas recibirás toda la información de tus clases por correo.`,
+        ``,
+        `Quedo pendiente por si te surgen dudas 👨‍🏫`,
         ``,
         `Stiv | Aprender-Aleman.de`,
       ].join("\n");

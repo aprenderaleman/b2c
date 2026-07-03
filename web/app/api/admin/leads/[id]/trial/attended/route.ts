@@ -6,7 +6,7 @@ import { TRIAL_PACKS, type PackId, type PaymentType } from "@/lib/trial-packs";
 const VALID_PACKS = new Set<string>(TRIAL_PACKS.map(p => p.id));
 
 function isPaymentType(s: unknown): s is PaymentType {
-  return s === "single" || s === "flexible";
+  return s === "single" || s === "flexible" || s === "extended";
 }
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {

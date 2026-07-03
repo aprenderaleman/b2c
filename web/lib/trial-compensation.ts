@@ -42,8 +42,8 @@ export const PACK_COMMISSION_FLEXIBLE_CENTS: Record<string, number> = {
 /** Backwards-compatible lookup — uses single by default. */
 export const PACK_COMMISSION_CENTS: Record<string, number> = PACK_COMMISSION_SINGLE_CENTS;
 
-export function getCommissionCents(packId: string, paymentType: "single" | "flexible"): number {
-  const map = paymentType === "flexible" ? PACK_COMMISSION_FLEXIBLE_CENTS : PACK_COMMISSION_SINGLE_CENTS;
+export function getCommissionCents(packId: string, paymentType: "single" | "flexible" | "extended"): number {
+  const map = (paymentType === "flexible" || paymentType === "extended") ? PACK_COMMISSION_FLEXIBLE_CENTS : PACK_COMMISSION_SINGLE_CENTS;
   return map[packId] ?? 0;
 }
 
@@ -71,7 +71,7 @@ export async function payConversionCommission(args: {
   trialClassId: string;
   teacherId:    string;
   packId:       string;
-  paymentType?: "single" | "flexible";
+  paymentType?: "single" | "flexible" | "extended";
 }): Promise<number | null> {
   const amount = getCommissionCents(args.packId, args.paymentType ?? "single");
   if (!amount) {

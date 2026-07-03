@@ -137,7 +137,8 @@ export async function convertLeadToStudent(
         .maybeSingle();
       const meta = (leadMetaRow?.meta ?? {}) as Record<string, unknown>;
       const packId = typeof meta.last_offered_pack === "string" ? meta.last_offered_pack : null;
-      const paymentType = meta.last_offered_payment === "flexible" ? "flexible" as const : "single" as const;
+      const lop = meta.last_offered_payment;
+      const paymentType = (lop === "flexible" || lop === "extended") ? lop as "flexible" | "extended" : "single" as const;
       if (packId && getCommissionCents(packId, paymentType) > 0) {
         const paid = await payConversionCommission({
           trialClassId: trial.classId,
