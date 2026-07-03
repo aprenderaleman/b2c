@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getTeacherByUserId } from "@/lib/academy";
+import { resolveEffectiveUser } from "@/lib/impersonation";
 import { signRecordingUrl } from "@/lib/r2";
 
 export const runtime = "nodejs";
@@ -18,7 +19,12 @@ export async function GET(
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const teacher = await getTeacherByUserId((session.user as { id: string }).id);
+  const eff = await resolveEffectiveUser({
+    fallbackUserId: (session.user as { id: string }).id,
+    fallbackRole: role as "teacher" | "admin" | "superadmin",
+    expectRole: "teacher",
+  });
+  const teacher = await getTeacherByUserId(eff.userId);
   if (!teacher) return NextResponse.json({ error: "no_teacher_profile" }, { status: 404 });
 
   const { id: recordingId } = await params;

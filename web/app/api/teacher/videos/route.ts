@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getTeacherByUserId } from "@/lib/academy";
+import { resolveEffectiveUser } from "@/lib/impersonation";
 
 export const runtime = "nodejs";
 
@@ -19,7 +20,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const teacher = await getTeacherByUserId((session.user as { id: string }).id);
+  const eff = await resolveEffectiveUser({
+    fallbackUserId: (session.user as { id: string }).id,
+    fallbackRole: role as "teacher" | "admin" | "superadmin",
+    expectRole: "teacher",
+  });
+  const teacher = await getTeacherByUserId(eff.userId);
   if (!teacher) return NextResponse.json({ error: "no_teacher_profile" }, { status: 404 });
 
   let raw: unknown;
@@ -63,7 +69,12 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const teacher = await getTeacherByUserId((session.user as { id: string }).id);
+  const eff = await resolveEffectiveUser({
+    fallbackUserId: (session.user as { id: string }).id,
+    fallbackRole: role as "teacher" | "admin" | "superadmin",
+    expectRole: "teacher",
+  });
+  const teacher = await getTeacherByUserId(eff.userId);
   if (!teacher) return NextResponse.json({ error: "no_teacher_profile" }, { status: 404 });
 
   const sb = supabaseAdmin();
