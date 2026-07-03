@@ -18,6 +18,11 @@ export type TrialConfirmationVars = {
   confirmUrl:      string;
   rescheduleUrl:   string;
   language:        "es" | "de";
+  /** Depósito Stripe (2026-06-30). Si depositPaid=true, se muestra
+   *  bloque "plaza asegurada"; si false + depositUrl presente, se
+   *  incluye CTA "asegura tu plaza como prioritaria". */
+  depositPaid?:    boolean;
+  depositUrl?:     string | null;
 };
 
 export function renderTrialConfirmation(v: TrialConfirmationVars): RenderedEmail {
@@ -26,6 +31,18 @@ export function renderTrialConfirmation(v: TrialConfirmationVars): RenderedEmail
 
 function renderES(v: TrialConfirmationVars): RenderedEmail {
   const subject = `${v.leadName}, tu clase de prueba está agendada — ${v.startDate}`;
+  const depositBlock = v.depositPaid
+    ? `<div style="margin:22px 0;padding:16px;background:#d1fae5;border:2px solid #10b981;border-radius:14px;">
+         <p style="margin:0;font-weight:700;color:#065f46;">🔒 Plaza asegurada</p>
+         <p style="margin:6px 0 0 0;font-size:14px;color:#065f46;">Gracias por el depósito. Tus 10€ son crédito para tu pack. Tu profesor tiene tu reserva marcada como prioritaria.</p>
+       </div>`
+    : (v.depositUrl
+        ? `<div style="margin:22px 0;padding:16px;background:#fef3c7;border:1px solid #fbbf24;border-radius:14px;">
+             <p style="margin:0;font-weight:700;color:#92400e;">💡 Asegura tu plaza como prioritaria</p>
+             <p style="margin:6px 0 12px 0;font-size:14px;color:#92400e;">Con 10€ tu profesor prioriza tu reserva. Se convierten en <strong>10€ de crédito</strong> para tu pack.</p>
+             <div style="text-align:center;"><a href="${v.depositUrl}" style="display:inline-block;padding:10px 18px;background:#d97706;color:#fff;font-weight:600;border-radius:10px;text-decoration:none;font-size:14px;">Asegurar mi plaza — 10€ →</a></div>
+           </div>`
+        : "");
   const body = `
     ${h2(`¡Hola ${escapeHtml(v.leadName)}! Soy Stiv de Aprender-Aleman.de 👋`)}
     ${p(`Tu <strong>clase de prueba de alemán</strong> está agendada para:`)}
@@ -33,6 +50,7 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
       ["📅 Fecha",   escapeHtml(v.startDate)],
       ["⏱ Duración", `${v.durationMin} minutos`],
     ])}
+    ${depositBlock}
     ${p(`<strong>¿Me confirmas que asistirás?</strong> Un solo clic basta:`)}
     ${bigButton(v.confirmUrl, "✅ CONFIRMAR ASISTENCIA", "confirm")}
     ${bigButton(v.rescheduleUrl, "📅 CAMBIAR DE FECHA", "reschedule")}

@@ -33,14 +33,22 @@ type Window_ = Window & {
   gtag?: (...args: unknown[]) => void;
 };
 
-// Conversion de Google Ads — usamos UN único label para todo el funnel
-// porque la conversión real que importa es "trial reservado". Si en el
-// futuro Gelfis quiere conversiones separadas (lead vs schedule vs
-// attended), creamos labels nuevos en Google Ads UI y los seteamos
-// como env vars.
+// Conversion de Google Ads — la primaria "trial reservado" se dispara
+// desde /agendar/cuando ANTES del redirect a Stripe (Gelfis 2026-06-30).
+// Con el depósito opcional se movió aquí porque:
+//   - La clase queda agendada al confirmar datos (paguen o no).
+//   - Si esperamos a /confirmacion, perdemos las conversiones de leads
+//     que cierran el pago de Stripe sin volver a nuestro dominio.
+//   - El transaction_id=classId sigue garantizando dedup.
 //
 // El gtag base (AW-17724667323) ya se carga en app/layout.tsx.
 const GADS_CONVERSION_LABEL = "AW-17724667323/5fU7CKWqmLUcELvr44NC";
+
+// [PLACEHOLDER_GOOGLE_TAG] — reemplazar por el label real de la
+// conversión secundaria "depósito pagado" cuando esté creado en
+// Google Ads UI. Debe tener el mismo formato "AW-<ACCOUNT>/<LABEL>".
+const GADS_DEPOSIT_PAID_LABEL = process.env.NEXT_PUBLIC_GADS_DEPOSIT_LABEL
+  ?? "AW-17724667323/PLACEHOLDER_DEPOSIT_LABEL";
 
 /** Disparado cuando el lead completa el form (registro o trial booking).
  *
@@ -121,4 +129,44 @@ export function firePixelScheduleGoogle(args: { classId: string }) {
       transaction_id: args.classId,
     });
   } catch (e) { console.warn("[pixel] gtag conversion failed:", e); }
+}
+
+/**
+ * Conversión secundaria "depósito pagado" — se dispara en /confirmacion
+ * cuando el lead vuelve de Stripe con `?deposito=ok`. Es un evento
+ * distinto del "Schedule" primario porque señaliza a Smart Bidding
+ * intención más fuerte (dinero puesto sobre la mesa).
+ *
+ * transaction_id=classId sigue garantizando dedup: si el lead abre
+ * /confirmacion?deposito=ok varias veces (compartir link, refresh),
+ * Google Ads solo cuenta una vez.
+ *
+ * value=10 EUR = importe del depósito. Ajustar cuando el LTV real esté
+ * calculado.
+ *
+ * Espera opcional a un callback (event_callback) para que la promesa
+ * resuelva cuando gtag confirma el envío; útil cuando quieres redirigir
+ * inmediatamente después. Si gtag no está cargado, la promesa resuelve
+ * al instante.
+ */
+export function firePixelDepositPaid(args: {
+  classId: string;
+  onSent?: () => void;
+}): void {
+  if (typeof window === "undefined") { args.onSent?.(); return; }
+  const w = window as Window_;
+  let called = false;
+  const fire = () => { if (!called) { called = true; args.onSent?.(); } };
+  try {
+    w.gtag?.("event", "conversion", {
+      send_to: GADS_DEPOSIT_PAID_LABEL,
+      value:    10,
+      currency: "EUR",
+      transaction_id: args.classId,
+      event_callback: fire,
+    });
+  } catch (e) { console.warn("[pixel] gtag deposit_paid failed:", e); }
+  // Fallback: si gtag no llama al callback en 800ms (script bloqueado
+  // o no cargado), disparamos igual para no bloquear el flow del lead.
+  setTimeout(fire, 800);
 }

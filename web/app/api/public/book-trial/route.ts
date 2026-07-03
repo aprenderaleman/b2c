@@ -4,13 +4,15 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
 import { listTrialSlots } from "@/lib/trial-slots";
 import { buildTrialToken, buildLeadJoinUrl } from "@/lib/trial-token";
-import { buildEmailActionUrl } from "@/lib/email-action-token";
-import { sendTrialConfirmationEmail } from "@/lib/email/send";
-import { sendWhatsappText } from "@/lib/whatsapp";
+// Depósito Stripe (Gelfis 2026-06-30): email + WhatsApp de confirmación
+// se envían desde el cron send-trial-notifications (5min tras el book).
+// buildEmailActionUrl, sendTrialConfirmationEmail y sendWhatsappText
+// no se usan aquí — están importados en el cron.
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { createTrialEvent } from "@/lib/google-calendar";
 import { sanitizeE164 } from "@/lib/phone";
-import { buildTrialIcs } from "@/lib/ics";
+// buildTrialIcs se usa desde el cron send-trial-notifications ahora
+// (para adjuntar el .ics al email de confirmación 5min después).
 import { notifyTeacherOfTrial } from "@/lib/teacher-trial-notification";
 import { createTeacherTrialEvent } from "@/lib/google-calendar-oauth";
 
@@ -455,6 +457,13 @@ export async function POST(req: Request) {
   // Collision is astronomically unlikely (8 base36 chars ≈ 2.8 trillion
   // values, and the unique index would catch one if it ever happened).
   const shortCode = generateShortCode();
+  // Depósito Stripe (Gelfis 2026-06-30): notificaciones se retrasan 5min
+  // para dar tiempo al pago. Si el lead paga, el cron envía la variante
+  // "plaza asegurada"; si no, la variante estándar con el link para
+  // asegurarla. Si el lead cierra Stripe, sigue funcionando igual porque
+  // la clase ya está en BD y el cron sigue enviando pasados los 5min.
+  const NOTIFY_DELAY_MS = 5 * 60_000;
+  const notifyAfterAt   = new Date(Date.now() + NOTIFY_DELAY_MS).toISOString();
   const { data: cls, error: classErr } = await sb.from("classes").insert({
     type:               "individual",
     teacher_id:         b.teacher_id,
@@ -467,6 +476,7 @@ export async function POST(req: Request) {
     lead_id:            leadId,
     short_code:         shortCode,
     notes_admin:        `auto-booked via funnel · level=${b.german_level ?? "?"}`,
+    notify_after_at:    notifyAfterAt,
   }).select("id").single();
   if (classErr || !cls) {
     return NextResponse.json({
@@ -545,50 +555,17 @@ export async function POST(req: Request) {
   // el self-serve /agendar/cuando. La liberacion de slot a las 12h NO
   // se implementa — la frase es solo presion (la mayoria de leads no
   // comprueba si cumplimos, y los pocos que sí lo viven como olvido).
-  const waText = b.whatsapp_e164
-    ? (b.language === "de"
-        ? `Hallo ${leadFirst}! Ich bin Stiv von der Akademie Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}${localTimeInfo ? `\n${localTimeInfo}` : ""}.\n\n🔗 Hier kommst du am Tag der Stunde rein:\n${shortLinkUrl}\n\n⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.\n\nAntworte mit:\n👉 "CONFIRMO" wenn du dabei bist\n👉 "CAMBIAR" wenn du einen anderen Termin brauchst\n👉 "CANCELAR" wenn du nicht mehr interessiert bist\n\nOhne deine Antwort innerhalb von 12 Stunden wird dein Slot für einen anderen Schüler auf der Warteliste freigegeben.\n\n— Stiv · Aprender-Aleman.de`
-        : `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}${localTimeInfo ? `\n${localTimeInfo}` : ""}.\n\n🔗 Aquí entras el día de la clase:\n${shortLinkUrl}\n\n⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.\n\nResponde con:\n👉 "CONFIRMO" si vas a asistir\n👉 "CAMBIAR" si necesitas otra fecha\n👉 "CANCELAR" si ya no te interesa\n\nSin tu respuesta en 12h, tu slot se libera para otro estudiante en lista de espera.\n\n— Stiv · Aprender-Aleman.de`)
-    : null;
-
-  // Build the .ics inline so we attach it to the email AND can later
-  // log "ics_attached" if needed. Sin recordatorios (decisión Gelfis).
-  const icsContent = buildTrialIcs({
-    uid:           classId,
-    startIso:      b.slot_iso,
-    durationMin:   TRIAL_DURATION_MIN,
-    summary:       classTitle,
-    description:
-      `¿Quieres probar nuestro método antes de comprometerte?\n\n` +
-      `Reserva una sesión individual de 30 minutos con un profesor bilingüe experto. Analizaremos tu nivel, definiremos tus objetivos y vivirás la experiencia de nuestra metodología.\n\n` +
-      `Aula virtual: ${shortLinkUrl}\n\n` +
-      `Importante: al abrir el enlace tu navegador te pedirá permiso para micrófono y cámara — pulsa "Permitir".`,
-    organizerName:  "Aprender-Aleman.de",
-    organizerEmail: "info@aprender-aleman.de",
-    attendeeName:   b.name,
-    attendeeEmail:  b.email,
-    location:       shortLinkUrl,
-  });
+  // waText y buildTrialIcs se construyen ahora en el cron
+  // send-trial-notifications con la misma lógica — DRY diferido.
+  // `leadFirst` sigue usándose abajo por el teacher notification.
 
   after(async () => {
-    const [emailResult, waResult, gcalResult] = await Promise.allSettled([
-      sendTrialConfirmationEmail(b.email, {
-        leadName:    leadFirst,
-        classTitle,
-        startDate,
-        durationMin: TRIAL_DURATION_MIN,
-        teacherName: match.teacherName,
-        joinUrl:     shortLinkUrl,
-        confirmUrl:    buildEmailActionUrl({ leadId, classId, action: "confirm" }),
-        rescheduleUrl: buildEmailActionUrl({ leadId, classId, action: "reschedule" }),
-        language:    b.language,
-      }, {
-        content:  icsContent,
-        filename: "clase-de-prueba-aleman.ics",
-      }),
-      waText && b.whatsapp_e164
-        ? sendWhatsappText(b.whatsapp_e164, waText, { kind: "trial_confirmation" })
-        : Promise.resolve(null),
+    // Depósito Stripe (Gelfis 2026-06-30): email + WhatsApp se disparan
+    // desde el cron `/api/cron/send-trial-notifications` 5min después
+    // del book (usando notify_after_at). Aquí solo hacemos Google
+    // Calendar (que no espera al pago — el admin/profe necesita ver la
+    // clase inmediatamente).
+    const [gcalResult] = await Promise.allSettled([
       // Google Calendar mirror — env-gated. Si no hay creds, devuelve
       // null y no logueamos error. Si está configurado y crea el
       // evento, guardamos su id en la fila de la clase para poder
@@ -605,6 +582,16 @@ export async function POST(req: Request) {
         joinUrl:         shortLinkUrl,
       }),
     ]);
+    // Log al timeline que las notificaciones quedan pendientes (para
+    // que en /admin/leads/[id] no se vean como "no enviado" en las
+    // primeras 5min).
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    "agent_note",
+      author:  "system",
+      content: `📬 Notificaciones (email + WA) programadas para ${new Date(notifyAfterAt).toISOString()} (delay 5min tras book — flujo depósito Stripe).`,
+      metadata: { kind: "trial_notify_scheduled", class_id: classId, notify_after_at: notifyAfterAt },
+    });
 
     // ── Google Calendar mirror result ──
     if (gcalResult.status === "fulfilled" && gcalResult.value) {
@@ -639,74 +626,9 @@ export async function POST(req: Request) {
       });
     }
 
-    // ── Email timeline log ──
-    if (emailResult.status === "fulfilled" && emailResult.value.ok) {
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "system_message_sent",
-        author:  "system",
-        // El email es un template HTML; guardamos un resumen textual
-        // estructurado (asunto + bloque clave) para que /admin/mensajes
-        // muestre algo util sin renderizar el HTML aqui.
-        content: `[Email: Confirmación clase de prueba ${startDate}]\n\nEnviado a ${b.email}`,
-        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId, sent_to: b.email },
-      });
-    } else {
-      const reason = emailResult.status === "fulfilled"
-        ? (!emailResult.value.ok ? emailResult.value.error : "unknown")
-        : (emailResult.reason instanceof Error ? emailResult.reason.message : String(emailResult.reason));
-      console.error("[book-trial] email failed:", reason);
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "send_failed",
-        author:  "system",
-        content: `📧 Falló el envío del email de confirmación: ${reason}`,
-        metadata: { channel: "email", kind: "trial_confirmation", class_id: classId },
-      });
-    }
-
-    // ── WhatsApp timeline log (only if the lead gave us a number) ──
-    // The web side is the single source of truth for this row.
-    // We used to skip on success because the agents VPS' own
-    // /internal/send-text wrote a duplicate row, but that path
-    // had a silent enum violation (author='web' isn't in
-    // timeline_author) that left the row missing for everyone
-    // running the un-updated VPS code. Logging here always
-    // guarantees the row appears.
-    if (b.whatsapp_e164) {
-      if (waResult.status === "fulfilled" && waResult.value && waResult.value.ok) {
-        await sb.from("lead_timeline").insert({
-          lead_id: leadId,
-          type:    "system_message_sent",
-          author:  "system",
-          // Body real del WhatsApp enviado al lead.
-          content: waText ?? `💬 WhatsApp de confirmación enviado a ${b.whatsapp_e164}`,
-          metadata: {
-            channel: "whatsapp", kind: "trial_confirmation", class_id: classId,
-            message_id: waResult.value.messageId ?? null,
-            sent_to: b.whatsapp_e164,
-          },
-        });
-      } else {
-        const reason = waResult.status === "fulfilled"
-          ? (waResult.value && !waResult.value.ok ? waResult.value.reason : "unknown")
-          : (waResult.reason instanceof Error ? waResult.reason.message : String(waResult.reason));
-        const isTimeoutOrNetwork = /timeout|abort|fetch failed|ECONNRESET/i.test(reason);
-        console.error("[book-trial] whatsapp failed:", reason);
-        await sb.from("lead_timeline").insert({
-          lead_id: leadId,
-          type:    "send_failed",
-          author:  "system",
-          content: isTimeoutOrNetwork
-            ? `💬 WhatsApp de confirmación: tiempo de espera al contactar con el VPS de agentes (${reason}). El mensaje puede haber llegado igualmente — confirma con el lead.`
-            : `💬 Falló el WhatsApp de confirmación: ${reason}`,
-          metadata: {
-            channel: "whatsapp", kind: "trial_confirmation", class_id: classId,
-            uncertain: isTimeoutOrNetwork, reason,
-          },
-        });
-      }
-    }
+    // ── Email + WhatsApp: NO se envían aquí. El cron
+    //    /api/cron/send-trial-notifications los envía 5min después
+    //    usando notify_after_at. Ver depósito Stripe (Gelfis 2026-06-30). ──
 
     // ── Notify the assigned teacher (in-app bell + email) ──
     await notifyTeacherOfTrial({

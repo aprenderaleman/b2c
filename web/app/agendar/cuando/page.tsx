@@ -10,7 +10,7 @@ import { useBookingState } from "@/lib/booking-state";
 import { useLang } from "@/lib/lang-context";
 import { normalizePhone, resolvePhone } from "@/lib/phone";
 import { combineE164 } from "@/components/diagnostico/DiagnosticoFunnel";
-import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
+import { firePixelLead, firePixelSchedule, firePixelScheduleGoogle } from "@/lib/pixels";
 import { detectBrowserTimezone, detectCountryFromBrowser, effectiveLeadTimezone } from "@/lib/timezone-country";
 import { captureAttributionFromUrl, readAttribution, clearAttribution } from "@/lib/ads-attribution";
 
@@ -113,10 +113,24 @@ export default function StepCuando() {
   );
 }
 
+// [PLACEHOLDER_STRIPE_DEPOSITO_10] — link de Stripe Payment Link para
+// el depósito opcional de 10€. Configurar en Stripe Dashboard con:
+//   success_url = https://b2c.aprender-aleman.de/confirmacion?c={CLIENT_REFERENCE_ID}&t={TOKEN}&deposito=ok
+//   cancel_url  = https://b2c.aprender-aleman.de/confirmacion?c={CLIENT_REFERENCE_ID}&t={TOKEN}
+// Como Stripe Payment Links no permiten templating dinámico completo,
+// guardamos c+t en sessionStorage como fallback y /confirmacion los
+// recupera de allí si no vienen en la URL.
+const STRIPE_DEPOSIT_URL = (
+  process.env.NEXT_PUBLIC_STRIPE_DEPOSIT_URL
+  ?? "https://buy.stripe.com/PLACEHOLDER_STRIPE_DEPOSITO_10"
+);
+
 function StepCuandoInner() {
   const router = useRouter();
   const { lang } = useLang();
   const { state, update, hydrated } = useBookingState();
+  // Estado del paso intermedio "asegurando plaza" tras submit ok.
+  const [showDepositRedirect, setShowDepositRedirect] = useState<null | { classId: string; token: string }>(null);
 
   // Atribución desde URL (Gelfis 2026-06-15). La home `/` redirige aquí
   // tras paso 2 (nivel) con `?landing=socialmedia&motivo=X&level=Y`.
@@ -150,6 +164,23 @@ function StepCuandoInner() {
     setIllustration(showForm ? "formulario" : null);
     return () => setIllustration(null);
   }, [showForm, setIllustration]);
+
+  // Redirect a Stripe (depósito 10€) 1.5s tras el submit ok. Damos ese
+  // margen para que el beacon de gtag salga a Google Ads antes de que
+  // el navegador cambie de dominio.
+  useEffect(() => {
+    if (!showDepositRedirect) return;
+    const t = setTimeout(() => {
+      if (typeof window === "undefined") return;
+      // client_reference_id → Stripe lo puede reflejar en success_url
+      // vía template + webhook. Extra query params por si el Payment
+      // Link soporta pasarlos al success_url.
+      const sep = STRIPE_DEPOSIT_URL.includes("?") ? "&" : "?";
+      const url = `${STRIPE_DEPOSIT_URL}${sep}client_reference_id=${encodeURIComponent(showDepositRedirect.classId)}`;
+      window.location.href = url;
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [showDepositRedirect]);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
   // Modal de doble confirmación dual-TZ. Igual que el CalendarStep
@@ -286,11 +317,16 @@ function StepCuandoInner() {
           return;
         }
         if (state.lead_id) firePixelSchedule({ leadId: state.lead_id });
+        // Google Ads conversion PRIMARIA — antes del redirect a Stripe.
+        firePixelScheduleGoogle({ classId: json.classId });
         try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
-        if (typeof window !== "undefined") {
-          const params = new URLSearchParams({ c: json.classId, t: json.token });
-          window.location.href = `/confirmacion?${params.toString()}`;
-        }
+        try {
+          sessionStorage.setItem("b2c.trial_return", JSON.stringify({
+            c: json.classId, t: json.token, at: Date.now(),
+          }));
+        } catch { /* ignore */ }
+        setShowDepositRedirect({ classId: json.classId, token: json.token });
+        return;
       } catch (e) {
         console.error("[agendar/cuando] direct submit failed:", e);
         setSubmitErr("Error de conexión. Inténtalo de nuevo.");
@@ -387,15 +423,26 @@ function StepCuandoInner() {
         });
         firePixelSchedule({ leadId: json.leadId });
       }
+      // Google Ads conversion PRIMARIA — antes del redirect a Stripe.
+      // El transaction_id=classId garantiza dedup si el lead recarga.
+      // Depósito Stripe (Gelfis 2026-06-30): NO esperamos a /confirmacion
+      // porque muchos leads no vuelven de Stripe → perderíamos la señal.
+      firePixelScheduleGoogle({ classId: json.classId });
       try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
+      // Guarda c+t para que /confirmacion los recupere si Stripe no
+      // los preserva en success_url (fallback).
+      try {
+        sessionStorage.setItem("b2c.trial_return", JSON.stringify({
+          c: json.classId, t: json.token, at: Date.now(),
+        }));
+      } catch { /* ignore */ }
       // Atribución consumida → limpiar para que el próximo visitante
-      // no herede el gclid de este lead. /confirmacion dispara su
-      // propio gtag schedule conversion, no necesita la atribución.
+      // no herede el gclid de este lead.
       clearAttribution();
-      if (typeof window !== "undefined") {
-        const params = new URLSearchParams({ c: json.classId, t: json.token });
-        window.location.href = `/confirmacion?${params.toString()}`;
-      }
+      // Pantalla intermedia "asegurando plaza" — dura 1.5s (tiempo para
+      // que gtag beacon salga) y luego redirige al link de Stripe.
+      setShowDepositRedirect({ classId: json.classId, token: json.token });
+      return;
     } catch (e) {
       console.error("[agendar/cuando] inline submit failed:", e);
       setSubmitErr("Error de conexión. Inténtalo de nuevo.");
@@ -419,10 +466,51 @@ function StepCuandoInner() {
     return { day, time, berlinTime };
   })();
 
+  // Paso intermedio "asegurando plaza" — reemplaza todo el contenido
+  // del StepFrame durante 1.5s antes de redirigir a Stripe.
+  if (showDepositRedirect) {
+    return (
+      <StepFrame
+        title=""
+        subtitle=""
+      >
+        <div className="mt-4 space-y-5 animate-fade-in">
+          <div className="rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 p-5 flex items-start gap-3">
+            <div className="h-9 w-9 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 text-lg">✓</div>
+            <div>
+              <p className="text-[17px] font-bold text-slate-900 leading-tight">Clase agendada.</p>
+              <p className="mt-1 text-[14px] text-slate-600 leading-snug">
+                Estás casi listo. Un último paso para asegurar tu plaza.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5 space-y-3">
+            <p className="text-[13px] font-semibold uppercase tracking-wider text-emerald-700">
+              🔒 Asegura tu plaza con 10€
+            </p>
+            <ul className="space-y-1.5 text-[14.5px] text-slate-700">
+              <li className="flex items-start gap-2"><span className="text-emerald-600 mt-0.5">✓</span> Se convierten en <strong>10€ de crédito</strong> para tu pack</li>
+              <li className="flex items-start gap-2"><span className="text-emerald-600 mt-0.5">✓</span> Tu profesor <strong>prioriza tu reserva</strong></li>
+            </ul>
+            <div className="mt-3 flex items-center gap-2 text-[13px] text-slate-500">
+              <span className="inline-block h-4 w-4 rounded-full border-2 border-slate-300 border-t-transparent animate-spin" aria-hidden />
+              Redirigiendo al pago seguro…
+            </div>
+          </div>
+
+          <p className="text-center text-[12.5px] text-slate-500 leading-relaxed">
+            Si no puedes pagar ahora, no hay problema — tu clase queda agendada igualmente y recibirás la confirmación por email.
+          </p>
+        </div>
+      </StepFrame>
+    );
+  }
+
   return (
     <StepFrame
       title="Reserva tu Clase de Alemán"
-      subtitle="100% gratis · 30 min con profesor nativo · online · sin compromiso"
+      subtitle="30 min con profesor nativo · online · clase de prueba GRATIS"
     >
       {/* Loading skeleton */}
       {slots === null && !loadErr && (
@@ -681,6 +769,16 @@ function StepCuandoInner() {
                   </div>
                 )}
               </Field>
+
+              {/* ── Depósito 10€ (preview antes de submit) ── */}
+              <div className="rounded-2xl bg-emerald-50/70 ring-1 ring-emerald-200 p-4">
+                <p className="text-[12.5px] font-bold uppercase tracking-wider text-emerald-800">
+                  🔒 Tras confirmar: asegura tu plaza con 10€
+                </p>
+                <p className="mt-1 text-[13.5px] text-emerald-900/90 leading-relaxed">
+                  Se convierten en <strong>10€ de crédito</strong> para tu pack. Tu profesor <strong>prioriza tu reserva</strong>. La clase queda agendada aunque no pagues ahora.
+                </p>
+              </div>
 
               {/* ── Compromiso ── */}
               <label className="flex items-start gap-3 cursor-pointer select-none rounded-2xl bg-slate-50 hover:bg-slate-100/80 p-4 transition">

@@ -28,7 +28,7 @@ export default function Page() {
       bullets={[
         { icon: "🎥", text: <><strong>De ver a hablar</strong> — 30 min conversacionales, no otro video</> },
         { icon: "🗣", text: <>Profesor <strong>nativo bilingüe</strong> — te explica en español cuando te trabas</> },
-        { icon: "🎁", text: <><strong>Sin tarjeta, sin compromiso</strong> — si no te convence, no vuelves</> },
+        { icon: "🎁", text: <><strong>Clase de prueba GRATIS</strong> — si no te convence, no vuelves</> },
       ]}
       presetMotivo="particulares"
       landingIntent="youtube"

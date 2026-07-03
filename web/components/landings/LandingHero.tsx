@@ -70,7 +70,7 @@ export function LandingHero({
             Empezar ahora →
           </a>
           <p className="mt-2 text-[12px] text-slate-500">
-            Toma 60 segundos · Sin tarjeta · Sin compromiso
+            Toma 60 segundos · Sin compromiso
           </p>
         </div>
       </div>

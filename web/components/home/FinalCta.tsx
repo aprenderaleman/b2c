@@ -5,7 +5,7 @@ import { useLang } from "@/lib/lang-context";
 
 const COPY = {
   es: {
-    pill:    "100% gratis · 30 min · sin tarjeta",
+    pill:    "100% gratis · 30 min · profesor nativo",
     titlePre: "Empieza tu alemán ",
     titleAccent: "esta semana",
     sub:     "En 30 minutos un profesor nativo te evalúa el nivel, te arma un plan a medida y te dice exactamente cuánto vas a tardar en llegar a tu objetivo. Sin compromiso.",

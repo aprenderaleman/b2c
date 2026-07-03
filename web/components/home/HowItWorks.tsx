@@ -21,7 +21,7 @@ const COPY = {
     eyebrow: "En tres pasos",
     title:   "Así de fácil empieza tu alemán",
     steps: [
-      { n: "01", title: "Reserva tu prueba gratis", body: "Eliges día y hora en menos de un minuto. Sin tarjeta, sin compromiso." },
+      { n: "01", title: "Reserva tu prueba gratis", body: "Eliges día y hora en menos de un minuto. Sin compromiso." },
       { n: "02", title: "Conoce a tu profesor",    body: "30 minutos online: te evalúa el nivel y arma un plan a tu medida." },
       { n: "03", title: "Domina el alemán",         body: "Clases 1-a-1 + práctica guiada en SCHULE + diploma MCER al terminar." },
     ],

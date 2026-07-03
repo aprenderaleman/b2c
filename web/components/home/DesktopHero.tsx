@@ -24,7 +24,7 @@ const COPY = {
     pills: [
       { icon: "🎓", text: "Certificado MCER A1–C1, válido en la UE" },
       { icon: "🗣️", text: "Profesores nativos que hablan español" },
-      { icon: "💳", text: "Sin tarjeta · clase de prueba gratis" },
+      { icon: "🎁", text: "Clase de prueba gratis" },
       { icon: "🚀", text: "Plan a medida desde el primer día" },
     ],
     badge:      "100% gratis",
@@ -36,7 +36,7 @@ const COPY = {
     chooseToContinue: "Elige un horario para continuar",
     continueWith: (slotShort: string) => `Continuar · ${slotShort} →`,
     fineprint:  "Al continuar te pediremos nombre, email, nivel y WhatsApp.\nTarda menos de 2 minutos.",
-    reassurance: "✓ Sin tarjeta · ✓ Sin compromiso · ✓ Cancelable en 1 click",
+    reassurance: "✓ Sin compromiso · ✓ Cancelable en 1 click",
     loadErr:    "No pudimos cargar los horarios. Recarga la página.",
     noSlots:    "Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te avisamos en cuanto se abran horarios.",
   },
