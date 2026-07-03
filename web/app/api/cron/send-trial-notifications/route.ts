@@ -22,7 +22,7 @@ import { buildTrialIcs } from "@/lib/ics";
  * Variante del mensaje según deposit_paid_at:
  *   - Si pagado: variante "plaza asegurada" — sin CTA al depósito.
  *   - Si NO pagado: variante estándar + línea "asegura tu plaza como
- *     prioritaria" con [PLACEHOLDER_STRIPE_DEPOSITO_10].
+ *     prioritaria" con el link Stripe (STRIPE_DEPOSIT_URL).
  *
  * Auth: Bearer CRON_SECRET o X-Cron-Secret.
  */
@@ -32,11 +32,10 @@ export const dynamic  = "force-dynamic";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
-// [PLACEHOLDER_STRIPE_DEPOSITO_10] — reemplazar por el link del
-// Payment Link real de Stripe (10€ depósito). Se pega tal cual en los
-// mensajes al lead cuando aún no ha pagado.
+// Link del Payment Link real de Stripe (10€ depósito). Se pega tal cual
+// en los mensajes al lead cuando aún no ha pagado. Gelfis 2026-06-30.
 const STRIPE_DEPOSIT_URL = process.env.NEXT_PUBLIC_STRIPE_DEPOSIT_URL
-  ?? "https://buy.stripe.com/PLACEHOLDER_STRIPE_DEPOSITO_10";
+  ?? "https://buy.stripe.com/bJe6oAcXzd9W2xFedx0co0n?locale=es";
 
 function authorisedCronRequest(req: Request): boolean {
   const expected = process.env.CRON_SECRET;

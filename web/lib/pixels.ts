@@ -42,11 +42,13 @@ type Window_ = Window & {
 //   - El transaction_id=classId sigue garantizando dedup.
 //
 // El gtag base (AW-17724667323) ya se carga en app/layout.tsx.
-const GADS_CONVERSION_LABEL = "AW-17724667323/5fU7CKWqmLUcELvr44NC";
+// Label actualizado 2026-06-30 (Gelfis): nueva conversión con value=30€.
+const GADS_CONVERSION_LABEL = "AW-17724667323/YjyxCIjcqMocELvr44NC";
+const GADS_CONVERSION_VALUE = 30.0;
 
-// [PLACEHOLDER_GOOGLE_TAG] — reemplazar por el label real de la
-// conversión secundaria "depósito pagado" cuando esté creado en
-// Google Ads UI. Debe tener el mismo formato "AW-<ACCOUNT>/<LABEL>".
+// Label de la conversión secundaria "depósito pagado". Aún placeholder —
+// crear en Google Ads UI y setear NEXT_PUBLIC_GADS_DEPOSIT_LABEL en
+// Vercel env. Formato: "AW-<ACCOUNT>/<LABEL>".
 const GADS_DEPOSIT_PAID_LABEL = process.env.NEXT_PUBLIC_GADS_DEPOSIT_LABEL
   ?? "AW-17724667323/PLACEHOLDER_DEPOSIT_LABEL";
 
@@ -124,7 +126,7 @@ export function firePixelScheduleGoogle(args: { classId: string }) {
   try {
     w.gtag?.("event", "conversion", {
       send_to: GADS_CONVERSION_LABEL,
-      value:    5,
+      value:    GADS_CONVERSION_VALUE,
       currency: "EUR",
       transaction_id: args.classId,
     });

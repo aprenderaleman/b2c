@@ -6,12 +6,11 @@ import { IllustrationPanel } from "@/components/diagnostico/IllustrationPanel";
 import { BrandLogo } from "@/components/BrandLogo";
 import { DepositoOkTracker } from "@/components/confirmacion/DepositoOkTracker";
 
-// [PLACEHOLDER_STRIPE_DEPOSITO_10] — link Stripe para "aún no aseguré
-// mi plaza, quiero pagar ahora". Coincide con el usado en
-// /agendar/cuando + cron.
+// Link Stripe para "aún no aseguré mi plaza, quiero pagar ahora".
+// Coincide con el usado en /agendar/cuando + cron.
 const STRIPE_DEPOSIT_URL = (
   process.env.NEXT_PUBLIC_STRIPE_DEPOSIT_URL
-  ?? "https://buy.stripe.com/PLACEHOLDER_STRIPE_DEPOSITO_10"
+  ?? "https://buy.stripe.com/bJe6oAcXzd9W2xFedx0co0n?locale=es"
 );
 
 /**

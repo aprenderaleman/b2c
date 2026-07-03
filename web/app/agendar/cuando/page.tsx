@@ -113,16 +113,15 @@ export default function StepCuando() {
   );
 }
 
-// [PLACEHOLDER_STRIPE_DEPOSITO_10] — link de Stripe Payment Link para
-// el depósito opcional de 10€. Configurar en Stripe Dashboard con:
-//   success_url = https://b2c.aprender-aleman.de/confirmacion?c={CLIENT_REFERENCE_ID}&t={TOKEN}&deposito=ok
-//   cancel_url  = https://b2c.aprender-aleman.de/confirmacion?c={CLIENT_REFERENCE_ID}&t={TOKEN}
-// Como Stripe Payment Links no permiten templating dinámico completo,
-// guardamos c+t en sessionStorage como fallback y /confirmacion los
-// recupera de allí si no vienen en la URL.
+// Link Stripe Payment Link para el depósito opcional de 10€ (Gelfis
+// 2026-06-30). Configurar en Stripe Dashboard con:
+//   success_url = https://b2c.aprender-aleman.de/confirmacion?deposito=ok
+//   cancel_url  = https://b2c.aprender-aleman.de/confirmacion
+// Los params c+t se guardan en sessionStorage como fallback y
+// /confirmacion los recupera de allí si no vienen en la URL.
 const STRIPE_DEPOSIT_URL = (
   process.env.NEXT_PUBLIC_STRIPE_DEPOSIT_URL
-  ?? "https://buy.stripe.com/PLACEHOLDER_STRIPE_DEPOSITO_10"
+  ?? "https://buy.stripe.com/bJe6oAcXzd9W2xFedx0co0n?locale=es"
 );
 
 function StepCuandoInner() {

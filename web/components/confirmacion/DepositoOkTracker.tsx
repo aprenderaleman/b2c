@@ -11,9 +11,10 @@ import { firePixelDepositPaid } from "@/lib/pixels";
  *      classes.deposit_paid_at en BD. El cron send-trial-notifications
  *      leerá esta marca y enviará la variante "plaza asegurada".
  *
- *   2. firePixelDepositPaid — conversión secundaria de Google Ads
- *      (label [PLACEHOLDER_GOOGLE_TAG]). transaction_id=classId dedup
- *      contra refresh y share.
+ *   2. firePixelDepositPaid — conversión secundaria de Google Ads.
+ *      Label configurable vía NEXT_PUBLIC_GADS_DEPOSIT_LABEL (aún
+ *      pendiente de crear en Google Ads UI a fecha 2026-06-30).
+ *      transaction_id=classId dedup contra refresh y share.
  *
  * Es cliente porque necesitamos gtag (window). Se protege con un ref
  * anti-doble-ejecución (StrictMode + double-render en dev).
