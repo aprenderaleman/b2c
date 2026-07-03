@@ -146,7 +146,7 @@ export default async function ConfirmacionPage({
                       Plaza asegurada
                     </p>
                     <p className="mt-1.5 text-[14.5px] md:text-[15px] text-emerald-900 leading-snug">
-                      Gracias por el depósito. Tus 10€ son crédito para tu pack. Tu profesor tiene tu reserva marcada como prioritaria.
+                      Gracias por el depósito. Te devolveremos tus <strong>10€</strong> cuando asistas a la clase de prueba. Tu profesor/a tiene tu reserva marcada como prioritaria.
                     </p>
                   </div>
                 </div>
@@ -165,7 +165,7 @@ export default async function ConfirmacionPage({
                       ¿Aún no aseguraste tu plaza?
                     </p>
                     <p className="mt-1 text-[14px] text-amber-900/90 leading-snug">
-                      Con 10€ tu profesor prioriza tu reserva. Se convierten en crédito para tu pack.
+                      Con 10€ tu profesor/a prioriza tu reserva. <strong>Te devolvemos los 10€</strong> cuando asistas a la clase de prueba.
                     </p>
                     <a
                       href={STRIPE_DEPOSIT_URL}

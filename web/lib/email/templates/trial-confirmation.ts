@@ -34,12 +34,12 @@ function renderES(v: TrialConfirmationVars): RenderedEmail {
   const depositBlock = v.depositPaid
     ? `<div style="margin:22px 0;padding:16px;background:#d1fae5;border:2px solid #10b981;border-radius:14px;">
          <p style="margin:0;font-weight:700;color:#065f46;">🔒 Plaza asegurada</p>
-         <p style="margin:6px 0 0 0;font-size:14px;color:#065f46;">Gracias por el depósito. Tus 10€ son crédito para tu pack. Tu profesor tiene tu reserva marcada como prioritaria.</p>
+         <p style="margin:6px 0 0 0;font-size:14px;color:#065f46;">Gracias por el depósito. Te devolveremos tus <strong>10€</strong> cuando asistas a la clase de prueba. Tu profesor/a tiene tu reserva marcada como prioritaria.</p>
        </div>`
     : (v.depositUrl
         ? `<div style="margin:22px 0;padding:16px;background:#fef3c7;border:1px solid #fbbf24;border-radius:14px;">
              <p style="margin:0;font-weight:700;color:#92400e;">💡 Asegura tu plaza como prioritaria</p>
-             <p style="margin:6px 0 12px 0;font-size:14px;color:#92400e;">Con 10€ tu profesor prioriza tu reserva. Se convierten en <strong>10€ de crédito</strong> para tu pack.</p>
+             <p style="margin:6px 0 12px 0;font-size:14px;color:#92400e;">Con 10€ tu profesor/a prioriza tu reserva. <strong>Te devolvemos los 10€</strong> cuando asistas a la clase de prueba.</p>
              <div style="text-align:center;"><a href="${v.depositUrl}" style="display:inline-block;padding:10px 18px;background:#d97706;color:#fff;font-weight:600;border-radius:10px;text-decoration:none;font-size:14px;">Asegurar mi plaza — 10€ →</a></div>
            </div>`
         : "");

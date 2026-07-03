@@ -489,8 +489,8 @@ function StepCuandoInner() {
               🔒 Asegura tu plaza con 10€
             </p>
             <ul className="space-y-1.5 text-[14.5px] text-slate-700">
-              <li className="flex items-start gap-2"><span className="text-emerald-600 mt-0.5">✓</span> Se convierten en <strong>10€ de crédito</strong> para tu pack</li>
-              <li className="flex items-start gap-2"><span className="text-emerald-600 mt-0.5">✓</span> Tu profesor <strong>prioriza tu reserva</strong></li>
+              <li className="flex items-start gap-2"><span className="text-emerald-600 mt-0.5">✓</span> Te <strong>devolvemos los 10€</strong> cuando asistas a la clase de prueba</li>
+              <li className="flex items-start gap-2"><span className="text-emerald-600 mt-0.5">✓</span> Tu profesor/a <strong>prioriza tu reserva</strong></li>
             </ul>
             <div className="mt-3 flex items-center gap-2 text-[13px] text-slate-500">
               <span className="inline-block h-4 w-4 rounded-full border-2 border-slate-300 border-t-transparent animate-spin" aria-hidden />

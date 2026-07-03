@@ -180,8 +180,8 @@ async function run(req: Request) {
       const depositLine = paid
         ? "" // ya pagó, no repitas
         : (language === "de"
-            ? `\n\n💡 Sichere deinen Platz mit einer 10€-Anzahlung (wird 10€ Guthaben in deinem Paket): ${STRIPE_DEPOSIT_URL}`
-            : `\n\n💡 Asegura tu plaza como prioritaria con 10€ (se convierten en 10€ de crédito para tu pack): ${STRIPE_DEPOSIT_URL}`);
+            ? `\n\n💡 Sichere deinen Platz mit einer 10€-Anzahlung — wir erstatten dir die 10€ zurück, sobald du an der Probestunde teilnimmst: ${STRIPE_DEPOSIT_URL}`
+            : `\n\n💡 Asegura tu plaza con 10€ — te devolvemos los 10€ cuando asistas a la clase de prueba: ${STRIPE_DEPOSIT_URL}`);
       const paidLine = paid
         ? (language === "de"
             ? `\n\n✅ Deine Anzahlung ist eingegangen — dein Platz ist gesichert.`
