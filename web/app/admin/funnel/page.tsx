@@ -149,6 +149,7 @@ function buildFilterUrl(args: {
   status?:    string;
   has_trial?: "yes" | "no";
   cold_call?: "pending" | "done";
+  deposit?:   "paid" | "unpaid";
 }): string {
   return `/admin/funnel${qs({
     ...(args.period ? { period: args.period } : { days: args.days }),
@@ -157,6 +158,7 @@ function buildFilterUrl(args: {
     status:    args.status    || undefined,
     has_trial: args.has_trial,
     cold_call: args.cold_call,
+    deposit:   args.deposit,
   })}`;
 }
 
@@ -166,7 +168,7 @@ export default async function FunnelControlPage({
 }: {
   searchParams: Promise<{
     days?: string; country?: string; period?: string; q?: string;
-    status?: string; has_trial?: string; cold_call?: string; page?: string;
+    status?: string; has_trial?: string; cold_call?: string; deposit?: string; page?: string;
   }>;
 }) {
   await requireRole(["superadmin", "admin"]);
@@ -179,6 +181,8 @@ export default async function FunnelControlPage({
     sp.has_trial === "yes" || sp.has_trial === "no" ? sp.has_trial : undefined;
   const coldCallFilter: "pending" | "done" | undefined =
     sp.cold_call === "pending" || sp.cold_call === "done" ? sp.cold_call : undefined;
+  const depositFilter: "paid" | "unpaid" | undefined =
+    sp.deposit === "paid" || sp.deposit === "unpaid" ? sp.deposit : undefined;
 
   const pageNum = Math.max(1, Math.min(999, Number(sp.page ?? 1) || 1));
 
@@ -217,10 +221,31 @@ export default async function FunnelControlPage({
       status:       statusFilterCfg?.statuses,
       has_trial:    hasTrialFilter,
       cold_call:    coldCallFilter,
+      deposit:      depositFilter,
     }),
   ]);
   const leads = leadsResult.rows;
   const totalPages = Math.max(1, Math.ceil(leadsResult.total / PAGE_SIZE));
+
+  // Métricas del depósito 10€ Stripe (Gelfis 2026-06-30). Contamos
+  // leads con trial_scheduled_at en el rango y cuántos de ellos tienen
+  // depósito pagado. El % es sobre leads con trial (no sobre todos los
+  // leads) porque el depósito solo se ofrece a los que agendan.
+  const depositStats = await (async () => {
+    const { supabaseAdmin } = await import("@/lib/supabase");
+    const sb = supabaseAdmin();
+    const [{ count: totalTrials }, { count: paidTrials }] = await Promise.all([
+      sb.from("leads").select("*", { count: "exact", head: true })
+        .gte("created_at", createdSinceIso)
+        .not("trial_scheduled_at", "is", null),
+      sb.from("leads").select("*", { count: "exact", head: true })
+        .gte("created_at", createdSinceIso)
+        .not("deposit_paid_at", "is", null),
+    ]);
+    const t = totalTrials ?? 0;
+    const p = paidTrials ?? 0;
+    return { total: t, paid: p, ratePct: t > 0 ? (100 * p / t) : null };
+  })();
 
   // Enriquecemos cada lead con el nombre del profesor de su trial (si
   // tiene). Una sola query JOIN classes→teachers→users por todos los
@@ -402,6 +427,32 @@ export default async function FunnelControlPage({
         />
       </section>
 
+      {/* Mini-strip: depósito 10€ Stripe. Filtra la lista al hacer clic
+          para saltar directo al segmento (alta intención). */}
+      <section className="mt-3">
+        <Link
+          href={buildFilterUrl({
+            period: activePeriod, days: activeDays, country: activeCountry,
+            q: searchQuery, status: statusFilterKey,
+            has_trial: hasTrialFilter, cold_call: coldCallFilter,
+            deposit:   depositFilter === "paid" ? undefined : "paid",
+          })}
+          className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[12px] border transition ${
+            depositFilter === "paid"
+              ? "bg-emerald-500/25 text-emerald-100 border-emerald-500/40"
+              : "bg-white/5 text-white/80 border-white/10 hover:bg-white/10"
+          }`}
+          title="Filtrar solo leads con depósito pagado"
+        >
+          💎 <strong>{depositStats.paid}</strong> con depósito
+          {depositStats.ratePct !== null && (
+            <span className="text-white/55 tabular-nums">
+              · {depositStats.ratePct.toFixed(0)}% de {depositStats.total} trials agendados
+            </span>
+          )}
+        </Link>
+      </section>
+
       {/* ── Alertas automáticas (colapsable) ───────────────────── */}
       {data.alerts.length > 0 && (() => {
         const hi   = data.alerts.filter(a => a.severity === "high").length;
@@ -546,7 +597,7 @@ export default async function FunnelControlPage({
                 country: activeCountry || undefined,
                 status: statusFilterKey || undefined,
                 has_trial: hasTrialFilter,
-                cold_call: coldCallFilter,
+                cold_call: coldCallFilter, deposit: depositFilter,
               })}`}
               className="px-3 py-1.5 rounded-md text-sm border border-white/10 bg-white/5 text-white/70 hover:text-white hover:bg-white/10"
             >
@@ -566,7 +617,7 @@ export default async function FunnelControlPage({
                 href={buildFilterUrl({
                   period: activePeriod, days: activeDays, country: activeCountry,
                   q: searchQuery, status: active ? "" : f.key,
-                  has_trial: hasTrialFilter, cold_call: coldCallFilter,
+                  has_trial: hasTrialFilter, cold_call: coldCallFilter, deposit: depositFilter,
                 })}
                 className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
                   active
@@ -584,7 +635,7 @@ export default async function FunnelControlPage({
               period: activePeriod, days: activeDays, country: activeCountry,
               q: searchQuery, status: statusFilterKey,
               has_trial: hasTrialFilter === "yes" ? undefined : "yes",
-              cold_call: coldCallFilter,
+              cold_call: coldCallFilter, deposit: depositFilter,
             })}
             className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
               hasTrialFilter === "yes"
@@ -599,7 +650,7 @@ export default async function FunnelControlPage({
               period: activePeriod, days: activeDays, country: activeCountry,
               q: searchQuery, status: statusFilterKey,
               has_trial: hasTrialFilter === "no" ? undefined : "no",
-              cold_call: coldCallFilter,
+              cold_call: coldCallFilter, deposit: depositFilter,
             })}
             className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
               hasTrialFilter === "no"
@@ -616,6 +667,7 @@ export default async function FunnelControlPage({
               q: searchQuery, status: statusFilterKey,
               has_trial: hasTrialFilter,
               cold_call: coldCallFilter === "pending" ? undefined : "pending",
+              deposit:   depositFilter,
             })}
             className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
               coldCallFilter === "pending"
@@ -631,6 +683,7 @@ export default async function FunnelControlPage({
               q: searchQuery, status: statusFilterKey,
               has_trial: hasTrialFilter,
               cold_call: coldCallFilter === "done" ? undefined : "done",
+              deposit:   depositFilter,
             })}
             className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
               coldCallFilter === "done"
@@ -639,6 +692,37 @@ export default async function FunnelControlPage({
             }`}
           >
             ✓ cold-call hecha
+          </Link>
+          <span className="w-px bg-white/10 mx-1" aria-hidden />
+          <Link
+            href={buildFilterUrl({
+              period: activePeriod, days: activeDays, country: activeCountry,
+              q: searchQuery, status: statusFilterKey,
+              has_trial: hasTrialFilter, cold_call: coldCallFilter,
+              deposit:   depositFilter === "paid" ? undefined : "paid",
+            })}
+            className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+              depositFilter === "paid"
+                ? "bg-emerald-500/25 text-emerald-100 border-emerald-500/40"
+                : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            💎 con depósito
+          </Link>
+          <Link
+            href={buildFilterUrl({
+              period: activePeriod, days: activeDays, country: activeCountry,
+              q: searchQuery, status: statusFilterKey,
+              has_trial: hasTrialFilter, cold_call: coldCallFilter,
+              deposit:   depositFilter === "unpaid" ? undefined : "unpaid",
+            })}
+            className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+              depositFilter === "unpaid"
+                ? "bg-white/15 text-white border-white/20"
+                : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            ○ sin depósito
           </Link>
         </div>
 
@@ -740,7 +824,14 @@ export default async function FunnelControlPage({
                         </>
                       ) : <span className="text-white/30">—</span>}
                     </td>
-                    <td className="py-2 px-3"><StatusBadge status={l.status} /></td>
+                    <td className="py-2 px-3">
+                      <StatusBadge status={l.status} />
+                      {l.deposit_paid_at ? (
+                        <div className="mt-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold border border-emerald-500/40 bg-emerald-500/15 text-emerald-200" title={`Depósito 10€ pagado ${fmtRelative(l.deposit_paid_at)}`}>
+                          💎 depósito
+                        </div>
+                      ) : null}
+                    </td>
                     <td className="py-2 px-3">
                       <ColdCallPill leadId={l.id} coldCallDoneAt={l.cold_call_done_at} />
                     </td>
@@ -817,6 +908,11 @@ export default async function FunnelControlPage({
                     ) : <span className="text-white/30">sin trial</span>}
                   </div>
                   <div className="flex items-center gap-2">
+                    {l.deposit_paid_at && (
+                      <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9.5px] font-semibold border border-emerald-500/40 bg-emerald-500/15 text-emerald-200" title={`Depósito 10€ pagado ${fmtRelative(l.deposit_paid_at)}`}>
+                        💎
+                      </span>
+                    )}
                     <ColdCallPill leadId={l.id} coldCallDoneAt={l.cold_call_done_at} />
                     <StatusBadge status={l.status} />
                   </div>
@@ -843,7 +939,7 @@ export default async function FunnelControlPage({
                     q: searchQuery || undefined,
                     status: statusFilterKey || undefined,
                     has_trial: hasTrialFilter,
-                    cold_call: coldCallFilter,
+                    cold_call: coldCallFilter, deposit: depositFilter,
                     page: pageNum - 1,
                   })}`}
                   className="px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[12px]"
@@ -859,7 +955,7 @@ export default async function FunnelControlPage({
                     q: searchQuery || undefined,
                     status: statusFilterKey || undefined,
                     has_trial: hasTrialFilter,
-                    cold_call: coldCallFilter,
+                    cold_call: coldCallFilter, deposit: depositFilter,
                     page: pageNum + 1,
                   })}`}
                   className="px-3 py-1.5 rounded-md border border-white/10 bg-white/5 text-white/80 hover:text-white hover:bg-white/10 text-[12px]"

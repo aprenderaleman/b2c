@@ -50,18 +50,28 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "class_not_found" }, { status: 404 });
   }
 
-  // Idempotente: si ya está marcada, no re-actualiza.
+  const leadId = (cls as { lead_id: string }).lead_id;
+
+  // Idempotente: si ya está marcada, no re-actualiza (evita duplicar
+  // timeline entries y respeta la 1a marca como "hora del pago").
   if ((cls as { deposit_paid_at: string | null }).deposit_paid_at) {
     return NextResponse.json({ ok: true, alreadyPaid: true });
   }
 
   const paidAt = new Date().toISOString();
+  // Doble escritura: classes es source of truth, leads es denormalización
+  // para que /admin/funnel filtre + pinte sin necesidad de JOIN. Ambas
+  // van en el mismo tick — si una falla, la otra queda sin sincronizar
+  // (caso raro, resolvible con una re-marca manual desde /admin/leads).
   await sb.from("classes")
     .update({ deposit_paid_at: paidAt })
     .eq("id", classId);
+  await sb.from("leads")
+    .update({ deposit_paid_at: paidAt })
+    .eq("id", leadId);
 
   await sb.from("lead_timeline").insert({
-    lead_id: (cls as { lead_id: string }).lead_id,
+    lead_id: leadId,
     type:    "agent_note",
     author:  "system",
     content: `💳 Depósito 10€ marcado como pagado (self-reported via /confirmacion?deposito=ok).`,

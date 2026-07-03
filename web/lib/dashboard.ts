@@ -43,6 +43,10 @@ export type LeadRow = {
   // Source de verdad para la tasa de asistencia en /admin/ads.
   trial_attended_at: string | null;
   trial_absent_at:   string | null;
+  // Timestamp de depósito 10€ pagado (Stripe). Denormalización desde
+  // classes.deposit_paid_at — actualizado por /api/public/mark-deposit-paid
+  // cuando el lead vuelve a /confirmacion?deposito=ok. Migration 079.
+  deposit_paid_at:   string | null;
 };
 
 export type TimelineRow = {
@@ -146,6 +150,10 @@ export type LeadsFilter = {
   //   "pending" = aún no se ha hecho (cold_call_done_at IS NULL)
   //   "done"    = ya se hizo (cold_call_done_at IS NOT NULL)
   cold_call?: "pending" | "done";
+  // Filtro depósito 10€:
+  //   "paid"   = deposit_paid_at IS NOT NULL
+  //   "unpaid" = deposit_paid_at IS NULL
+  deposit?: "paid" | "unpaid";
   // Motivo inicial (paso 0 del funnel diagnóstico). Si se filtra,
   // solo devuelve leads cuyo motivo_inicial está en el set.
   motivo?: string[];
@@ -174,6 +182,8 @@ export async function getLeads(filter: LeadsFilter = {}): Promise<{ rows: LeadRo
   if (filter.has_trial === "no")   query = query.is("trial_scheduled_at", null);
   if (filter.cold_call === "pending") query = query.is("cold_call_done_at", null);
   if (filter.cold_call === "done")    query = query.not("cold_call_done_at", "is", null);
+  if (filter.deposit === "paid")      query = query.not("deposit_paid_at", "is", null);
+  if (filter.deposit === "unpaid")    query = query.is("deposit_paid_at", null);
   if (filter.motivo?.length)       query = query.in("motivo_inicial", filter.motivo);
   if (filter.createdSince)         query = query.gte("created_at", filter.createdSince);
   if (filter.q) {
