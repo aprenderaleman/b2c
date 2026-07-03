@@ -33,13 +33,6 @@ export function LandingHero({
                  border-b border-amber-100"
     >
       <div className="mx-auto max-w-3xl">
-        {/* Badge de recompensa — repetido aquí para coherencia con el
-            funnel + para reforzar la promesa antes incluso del H1. */}
-        <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/20 text-warm-foreground
-                        px-3 py-1 text-[12px] font-semibold mb-4">
-          <span aria-hidden>🎁</span>
-          <span>Termina el quiz y te llevas tu <strong>clase de prueba GRATIS</strong></span>
-        </div>
         <h1 className="text-[28px] sm:text-3xl md:text-[34px] lg:text-[40px]
                        font-extrabold tracking-tight text-slate-900 leading-tight">
           {h1}

@@ -772,10 +772,10 @@ function StepCuandoInner() {
               {/* ── Depósito 10€ (preview antes de submit) ── */}
               <div className="rounded-2xl bg-emerald-50/70 ring-1 ring-emerald-200 p-4">
                 <p className="text-[12.5px] font-bold uppercase tracking-wider text-emerald-800">
-                  🔒 Tras confirmar: asegura tu plaza con 10€
+                  🔒 Asegura tu plaza con 10€
                 </p>
                 <p className="mt-1 text-[13.5px] text-emerald-900/90 leading-relaxed">
-                  Se convierten en <strong>10€ de crédito</strong> para tu pack. Tu profesor <strong>prioriza tu reserva</strong>. La clase queda agendada aunque no pagues ahora.
+                  Te devolvemos tus <strong>10€</strong> cuando asistas a la clase de prueba, así tu profesor/a <strong>prioriza tu reserva</strong>.
                 </p>
               </div>
 

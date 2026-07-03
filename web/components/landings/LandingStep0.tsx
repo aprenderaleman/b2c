@@ -102,12 +102,6 @@ export function LandingStep0({
                          mx-auto max-w-xl w-full">
 
           {/* Badge de recompensa GRATIS */}
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-warm/20 text-warm-foreground
-                          px-3 py-1 text-[12px] font-semibold mb-3">
-            <span aria-hidden>🎁</span>
-            <span>Termina el quiz y te llevas tu <strong>clase de prueba GRATIS</strong></span>
-          </div>
-
           {/* H1 — keyword target server-rendered para SEO */}
           <h1 className="text-[26px] sm:text-[30px] md:text-[32px] lg:text-[38px]
                          font-extrabold tracking-tight text-slate-900 leading-tight">
