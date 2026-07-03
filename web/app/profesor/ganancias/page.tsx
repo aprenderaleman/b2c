@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { formatMonthEs, getTeacherEarningsSummary, moneyFromCents } from "@/lib/finance";
+import { RefreshEarningsButton } from "./refresh-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mis ganancias · Profesor" };
@@ -53,9 +54,12 @@ export default async function TeacherEarningsPage() {
         <Link href="/profesor" className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400">
           ← Volver al inicio
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-50">
-          Mis ganancias
-        </h1>
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
+            Mis ganancias
+          </h1>
+          <RefreshEarningsButton />
+        </div>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Tu progreso mes a mes en Aprender-Aleman.de
         </p>
