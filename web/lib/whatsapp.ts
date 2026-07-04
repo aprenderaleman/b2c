@@ -103,6 +103,7 @@ const ALLOWED_WA_KINDS = new Set([
   "trial_attended_initial",
   "trial_inscription_initial",
   "trial_absent_initial",
+  "trial_cancelled",
   "admin_manual",  // bypass para Gelfis desde endpoints admin
 ]);
 

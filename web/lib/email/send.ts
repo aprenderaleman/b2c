@@ -32,6 +32,10 @@ import {
   type TrialAbsentFollowupVars,
 } from "./templates/trial-absent-followup";
 import {
+  renderTrialCancelled,
+  type TrialCancelledVars,
+} from "./templates/trial-cancelled";
+import {
   renderClassLifecycle,
   type ClassLifecycleVars,
 } from "./templates/class-lifecycle";
@@ -494,6 +498,18 @@ export async function sendTrialAbsentFollowupEmail(
   vars: TrialAbsentFollowupVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderTrialAbsentFollowup(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Email cuando profesor / admin / superadmin cancela una clase de
+ * prueba. Botón principal lleva a /agendar/cuando para retomar.
+ */
+export async function sendTrialCancelledEmail(
+  to: string,
+  vars: TrialCancelledVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTrialCancelled(vars);
   return sendRaw(to, subject, html, text);
 }
 

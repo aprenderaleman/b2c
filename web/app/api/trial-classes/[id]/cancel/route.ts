@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
+import { sendWhatsappText } from "@/lib/whatsapp";
+import { sendTrialCancelledEmail } from "@/lib/email/send";
 
 /**
  * POST /api/trial-classes/{id}/cancel
@@ -10,7 +12,10 @@ import { supabaseAdmin } from "@/lib/supabase";
  * — mantiene historial completo y permite reportar/auditar. Solo el
  * superadmin puede eliminar definitivamente (endpoint /delete separado).
  *
- * NO envía mensaje al lead (decisión Gelfis 2026-06-23).
+ * ENVIA mensaje al lead — WhatsApp (kind trial_cancelled) + email
+ * con CTA a /agendar/cuando (Gelfis 2026-07-03). Aplica para
+ * teacher / admin / superadmin, y también si la clase ya estaba
+ * en el pasado.
  *
  * AUTHZ:
  *   - teacher → solo sus propias clases.
@@ -91,6 +96,72 @@ export async function POST(
     .eq("id", classId);
   if (updErr) {
     return NextResponse.json({ error: "cancel_failed", message: updErr.message }, { status: 500 });
+  }
+
+  // Notificación al lead (Gelfis 2026-07-03): WA + email con CTA a
+  // reagendar. Se envía para cualquier rol que cancele (teacher /
+  // admin / superadmin) y también si la clase ya estaba en el pasado.
+  if (c.lead_id) {
+    const { data: leadRow } = await sb
+      .from("leads")
+      .select("name, email, language, whatsapp_normalized")
+      .eq("id", c.lead_id)
+      .maybeSingle();
+    const lead = leadRow as {
+      name: string | null;
+      email: string | null;
+      language: "es" | "de" | null;
+      whatsapp_normalized: string | null;
+    } | null;
+    if (lead) {
+      const firstName = (lead.name || "").split(/\s+/)[0] || lead.name || "";
+      const lang: "es" | "de" = lead.language === "de" ? "de" : "es";
+      const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+      const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${c.lead_id}&from=trial_cancelled`;
+
+      if (lead.whatsapp_normalized) {
+        const waText = lang === "de"
+          ? `¡Hola, ${firstName}! 👋\n\nDeine Deutsch-Probestunde wurde storniert.\n\nWenn du weiterhin Deutsch lernen möchtest, kannst du hier in 3 Minuten eine neue Stunde buchen:\n\n👉 ${rescheduleUrl}\n\nSag mir Bescheid, sobald du fertig bist. 😊\n\nStiv | Aprender-Aleman.de`
+          : `¡Hola, ${firstName}! 👋\n\nTu clase de alemán de prueba ha sido cancelada.\n\nSi mantienes el interés en aprender alemán, puedes agendar una nueva aquí en solo 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando lo hayas hecho. 😊\n\nStiv | Aprender-Aleman.de`;
+        const waRes = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_cancelled" });
+        await sb.from("lead_timeline").insert({
+          lead_id: c.lead_id,
+          type:    waRes.ok ? "system_message_sent" : "send_failed",
+          author:  "system",
+          content: waRes.ok
+            ? `💬 WA cancelación enviado a ${lead.whatsapp_normalized}`
+            : `💬 Falló WA cancelación: ${waRes.reason ?? "unknown"}`,
+          metadata: {
+            kind:      "trial_cancelled",
+            channel:   "whatsapp",
+            class_id:  c.id,
+            cancelled_by_role: role,
+          },
+        });
+      }
+
+      if (lead.email) {
+        const emailRes = await sendTrialCancelledEmail(lead.email, {
+          leadName: firstName,
+          language: lang,
+          rescheduleUrl,
+        });
+        await sb.from("lead_timeline").insert({
+          lead_id: c.lead_id,
+          type:    emailRes.ok ? "system_message_sent" : "send_failed",
+          author:  "system",
+          content: emailRes.ok
+            ? `📧 Email cancelación enviado a ${lead.email}`
+            : `📧 Falló email cancelación: ${emailRes.error ?? "unknown"}`,
+          metadata: {
+            kind:      "trial_cancelled",
+            channel:   "email",
+            class_id:  c.id,
+            cancelled_by_role: role,
+          },
+        });
+      }
+    }
   }
 
   // Si el lead ya no tiene otra trial futura, rollback status.
