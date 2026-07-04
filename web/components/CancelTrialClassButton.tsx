@@ -36,7 +36,7 @@ export function CancelTrialClassButton({
       `¿Cancelar esta clase de prueba?\n\n` +
       `${niceDate} (Berlín)\n\n` +
       `La clase queda marcada como cancelada (no se elimina). ` +
-      `No se envía mensaje al lead.`
+      `Se avisa al lead por WhatsApp y email con un enlace para reagendar.`
     )) {
       return;
     }
