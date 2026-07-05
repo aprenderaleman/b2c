@@ -508,8 +508,20 @@ function StepCuandoInner() {
 
   return (
     <StepFrame
-      title="Selecciona fecha y hora para clase de Alemán"
-      subtitle="30 min con profesor nativo + diagnóstico de nivel + plan de estudios personalizado"
+      title={
+        showForm ? (
+          <>
+            <em className="italic">Fast geschafft!</em> <span className="text-slate-500 font-normal">(¡Ya casi!)</span> 🎉
+          </>
+        ) : (
+          "Selecciona fecha y hora para clase de Alemán"
+        )
+      }
+      subtitle={
+        showForm
+          ? "El alemán te abre las puertas a los mejores salarios y la mejor calidad de vida de Europa."
+          : "30 min con profesor nativo + diagnóstico de nivel + plan de estudios personalizado"
+      }
     >
       {/* Loading skeleton */}
       {slots === null && !loadErr && (

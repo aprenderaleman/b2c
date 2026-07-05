@@ -163,8 +163,10 @@ export function StepFrame({
   ctaLabel = "Continuar",
   loading = false,
 }: {
-  title:        string;
-  subtitle?:    string;
+  // ReactNode (no solo string) — permite <em>, <strong>, spans con
+  // clases y cualquier layout inline dentro del h1/p del header.
+  title:        React.ReactNode;
+  subtitle?:    React.ReactNode;
   children:     React.ReactNode;
   onContinue?:  () => void;
   canContinue?: boolean;
