@@ -14,6 +14,7 @@ import { sanitizeE164 } from "@/lib/phone";
 // buildTrialIcs se usa desde el cron send-trial-notifications ahora
 // (para adjuntar el .ics al email de confirmación 5min después).
 import { notifyTeacherOfTrial } from "@/lib/teacher-trial-notification";
+import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
 import { createTeacherTrialEvent } from "@/lib/google-calendar-oauth";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
@@ -212,6 +213,7 @@ export async function POST(req: Request) {
   const urgency = "asap";
 
   let leadId: string;
+  let isNewLead = false;
   if (existingLead) {
     const existing = existingLead as {
       id: string;
@@ -308,6 +310,7 @@ export async function POST(req: Request) {
         message: insErr?.message ?? "unknown",
       }, { status: 500 });
     }
+    isNewLead = true;
     // Atajo desde landing: registramos una entrada sintética en
     // lead_motivo_inicial para que el dashboard /admin/ads cuente
     // este lead en "Entradas paso 1" y la cadena del funnel no quede
@@ -639,6 +642,28 @@ export async function POST(req: Request) {
       goal:        goal,
       classId,
     }).catch(e => console.error("[book-trial] teacher notification failed:", e));
+
+    // ── Alerta interna a Gelfis SOLO si es lead nuevo (Gelfis
+    //    2026-07-06). Antes solo el paso 5 del diagnóstico disparaba
+    //    la alerta; los leads que entran directo por book-trial
+    //    quedaban invisibles. Los que reagendan (existentes) NO
+    //    generan alerta — solo cambios de fecha.
+    if (isNewLead && leadAlertsEnabled()) {
+      await notifyNewLeadUrgent({
+        id:                  leadId,
+        name:                b.name,
+        email:               b.email,
+        whatsapp_normalized: b.whatsapp_e164 ?? null,
+        language:            b.language,
+        country:             null,
+        motivo_inicial:      b.motivo_inicial ?? (b.landing_intent ? "direct" : null),
+        german_level:        b.german_level ?? null,
+        goal:                goal,
+        urgency:             urgency,
+        budget:              null,
+        diagnostico_answers: null,
+      }).catch(e => console.error("[book-trial] new-lead alert failed:", e));
+    }
 
     // ── Mirror event to teacher's personal Google Calendar (if connected) ──
     await createTeacherTrialEvent(b.teacher_id, {
