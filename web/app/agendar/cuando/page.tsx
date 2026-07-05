@@ -508,8 +508,8 @@ function StepCuandoInner() {
 
   return (
     <StepFrame
-      title="Reserva tu Clase de Alemán"
-      subtitle="30 min con profesor nativo · online · clase de prueba GRATIS"
+      title="Selecciona fecha y hora para clase de Alemán"
+      subtitle="30 min con profesor nativo + diagnóstico de nivel + plan de estudios personalizado"
     >
       {/* Loading skeleton */}
       {slots === null && !loadErr && (
