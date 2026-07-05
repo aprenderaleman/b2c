@@ -166,7 +166,7 @@ export function LandingStep0({
           </div>
 
           {/* Rating con 5 estrellas + +500 alumnos + verificado */}
-          <div className="mt-5 flex items-center gap-2 text-[13.5px] md:text-[14px] text-slate-700">
+          <div className="mt-5 flex items-center justify-center gap-2 text-[13.5px] md:text-[14px] text-slate-700">
             <span className="text-amber-500 leading-none tracking-tighter text-[15px]" aria-hidden>★★★★★</span>
             <span><strong>+500 alumnos</strong> nos valoran</span>
             <svg viewBox="0 0 20 20" className="h-4 w-4 text-emerald-600" aria-hidden>
