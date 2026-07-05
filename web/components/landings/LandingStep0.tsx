@@ -158,7 +158,7 @@ export function LandingStep0({
                          active:scale-[0.98] transition"
             >
               <span aria-hidden>🎁</span>
-              <span>Reservar mi Clase Gratis</span>
+              <span>Reservar Clase de Alemán</span>
             </Link>
             <p className="mt-2 text-center text-[11.5px] text-slate-600 leading-snug">
               ⏱️ Toma 60 segundos · 🤝 Sin compromiso
