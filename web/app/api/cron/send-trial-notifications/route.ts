@@ -174,22 +174,15 @@ async function run(req: Request) {
       });
     }
 
-    // WhatsApp
+    // WhatsApp T+0 — sin mención al depósito (Gelfis 2026-07-04: Stiv
+    // no habla del depósito en ningún canal). Bloque CONFIRMO/CAMBIAR
+    // que activa reschedule_flow.py de agents Python cuando llegue
+    // la respuesta.
     let waOk: boolean | null = null;
     if (lead.whatsapp_normalized) {
-      const depositLine = paid
-        ? "" // ya pagó, no repitas
-        : (language === "de"
-            ? `\n\n💡 Sichere deinen Platz mit einer 10€-Anzahlung — wir erstatten dir die 10€ zurück, sobald du an der Probestunde teilnimmst: ${STRIPE_DEPOSIT_URL}`
-            : `\n\n💡 Asegura tu plaza con 10€ — te devolvemos los 10€ cuando asistas a la clase de prueba: ${STRIPE_DEPOSIT_URL}`);
-      const paidLine = paid
-        ? (language === "de"
-            ? `\n\n✅ Deine Anzahlung ist eingegangen — dein Platz ist gesichert.`
-            : `\n\n✅ Depósito recibido — tu plaza está asegurada. ¡Nos vemos en clase!`)
-        : "";
       const waText = language === "de"
-        ? `Hallo ${leadFirst}! Ich bin Stiv von der Akademie Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\n🔗 Hier kommst du am Tag der Stunde rein:\n${joinUrl}${paidLine}${depositLine}\n\n— Stiv · Aprender-Aleman.de`
-        : `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}${paidLine}${depositLine}\n\n— Stiv · Aprender-Aleman.de`;
+        ? `Hallo ${leadFirst}! Ich bin Stiv von der Akademie Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\n🔗 Hier kommst du am Tag der Stunde rein:\n${joinUrl}\n\n⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.\n\nAntworte mit:\n👉 "CONFIRMO" wenn du dabei bist\n👉 "CAMBIAR" wenn du einen anderen Termin brauchst\n\nOhne deine Antwort innerhalb von 12h wird dein Slot für einen anderen Schüler auf der Warteliste freigegeben.\n\n— Stiv · Aprender-Aleman.de`
+        : `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\n⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.\n\nResponde con:\n👉 "CONFIRMO" si vas a asistir\n👉 "CAMBIAR" si necesitas otra fecha\n\nSin tu respuesta en 12h, tu slot se libera para otro estudiante en lista de espera.\n\n— Stiv · Aprender-Aleman.de`;
 
       const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
       waOk = r?.ok ?? false;
@@ -200,7 +193,7 @@ async function run(req: Request) {
         content: waOk
           ? waText
           : `💬 Falló el WhatsApp: ${(r as { reason?: string } | null)?.reason ?? "unknown"}`,
-        metadata: { channel: "whatsapp", kind: paid ? "trial_confirmation_paid" : "trial_confirmation", class_id: c.id, sent_to: lead.whatsapp_normalized },
+        metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: c.id, sent_to: lead.whatsapp_normalized },
       });
     }
 

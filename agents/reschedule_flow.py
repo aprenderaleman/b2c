@@ -175,40 +175,31 @@ def _get_active_trial(lead_id: str) -> dict | None:
 # ─────────────────────────────────────────────────────────
 
 def _msg_reschedule(language: str, name: str) -> str:
-    if language == "de":
-        return (
-            f"Hallo {name}! 👋\n\n"
-            "Kein Problem mit der Verschiebung. Buch dir einen neuen Termin "
-            f"hier: {_REBOOK_URL}\n\n"
-            "Sag mir Bescheid, wenn du gebucht hast.\n\n"
-            "— Stiv · Aprender-Aleman.de"
-        )
-    return (
-        f"¡Hola {name}! 👋\n\n"
-        "Sin problema con el cambio. Puedes elegir un nuevo horario "
-        f"aquí: {_REBOOK_URL}\n\n"
-        "Avísame cuando hayas reagendado.\n\n"
-        "— Stiv · Aprender-Aleman.de"
-    )
+    """CAMBIAR y CANCELAR comparten el mismo copy desde 2026-07-04.
+    Delegar a _msg_cancel evita divergencia entre los dos textos."""
+    return _msg_cancel(language, name)
 
 
 def _msg_cancel(language: str, name: str) -> str:
+    """Respuesta cuando el lead dice CAMBIAR o CANCELAR (Gelfis 2026-07-04:
+    ambos disparan la misma respuesta — llevamos al lead directo al
+    reagenda self-serve sin preguntar de qué se trata; el que no
+    quiera reagendar simplemente ignora)."""
     if language == "de":
         return (
             f"Hallo {name}! 👋\n\n"
-            "Möchtest du deine Probestunde komplett ABSAGEN, oder lieber "
-            "auf einen anderen Tag VERSCHIEBEN?\n\n"
-            f"Wenn du verschieben willst, kannst du hier einen neuen "
-            f"Termin wählen: {_REBOOK_URL}\n\n"
-            "Sag mir Bescheid, wenn du gebucht hast.\n\n"
+            "Kein Problem, ich helfe dir. Du kannst hier in 3 Minuten "
+            "einen neuen Termin auswählen:\n\n"
+            f"👉 {_REBOOK_URL}\n\n"
+            "Sag mir Bescheid, sobald du gebucht hast. 😊\n\n"
             "— Stiv · Aprender-Aleman.de"
         )
     return (
         f"¡Hola {name}! 👋\n\n"
-        "¿Quieres CANCELAR tu clase de prueba, o prefieres MOVERLA a otro día/hora?\n\n"
-        "Si prefieres reagendar, puedes hacerlo con este enlace en el horario "
-        f"que prefieras: {_REBOOK_URL}\n\n"
-        "Avísame cuando hayas reagendado por favor.\n\n"
+        "Sin problema, te ayudo. Puedes elegir un nuevo horario aquí "
+        "en 3 minutos:\n\n"
+        f"👉 {_REBOOK_URL}\n\n"
+        "Avísame cuando hayas reagendado. 😊\n\n"
         "— Stiv · Aprender-Aleman.de"
     )
 
