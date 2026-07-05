@@ -319,10 +319,15 @@ function StepCuandoInner() {
         // Google Ads conversion PRIMARIA — antes del redirect a Stripe.
         firePixelScheduleGoogle({ classId: json.classId });
         try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
+        // Guardamos en sessionStorage Y localStorage. Stripe puede
+        // rebobinar cross-tab/cross-process en algunos navegadores
+        // (iOS Safari privado, mobile in-app browsers) y sessionStorage
+        // se puede perder. localStorage sobrevive; /confirmacion limpia
+        // el rastro tras recuperarlo con éxito.
         try {
-          sessionStorage.setItem("b2c.trial_return", JSON.stringify({
-            c: json.classId, t: json.token, at: Date.now(),
-          }));
+          const payload = JSON.stringify({ c: json.classId, t: json.token, at: Date.now() });
+          sessionStorage.setItem("b2c.trial_return", payload);
+          localStorage.setItem("b2c.trial_return", payload);
         } catch { /* ignore */ }
         setShowDepositRedirect({ classId: json.classId, token: json.token });
         return;

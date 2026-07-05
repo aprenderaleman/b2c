@@ -35,6 +35,12 @@ export function DepositoOkTracker({ classId, token }: { classId: string; token: 
 
     // 2) Conversión secundaria Google Ads.
     firePixelDepositPaid({ classId });
+
+    // 3) Limpia rastro de storage (usado por StripeReturnRecovery). Aquí
+    //    es donde tiene sentido borrarlo: llegamos con éxito a la URL
+    //    completa. Si el lead recarga, no re-navegamos innecesariamente.
+    try { sessionStorage.removeItem("b2c.trial_return"); } catch { /* ignore */ }
+    try { localStorage.removeItem("b2c.trial_return");   } catch { /* ignore */ }
   }, [classId, token]);
 
   return null;

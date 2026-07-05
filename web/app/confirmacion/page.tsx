@@ -36,8 +36,19 @@ export default async function ConfirmacionPage({
   searchParams: Promise<Search>;
 }) {
   const { c: classId, t: token, deposito } = await searchParams;
-  if (!classId || !token) redirect("/");
   const depositoOk = deposito === "ok";
+  // Stripe (Gelfis 2026-07-04): success_url del Payment Link no puede
+  // templatear c+t dinámicos, así que solo llega ?deposito=ok. Si es
+  // ese caso, renderizamos el recovery client que lee c+t de
+  // localStorage/sessionStorage y re-navega a la URL completa. Sin ese
+  // fallback, el lead que paga cae a "/" tras Stripe.
+  if (!classId || !token) {
+    if (depositoOk) {
+      const { StripeReturnRecovery } = await import("@/components/confirmacion/StripeReturnRecovery");
+      return <StripeReturnRecovery />;
+    }
+    redirect("/");
+  }
 
   const payload = verifyTrialToken(token);
   if (!payload || payload.class_id !== classId) redirect("/");
