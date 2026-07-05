@@ -161,7 +161,7 @@ export function LandingStep0({
               <span>Reservar Clase de Alemán</span>
             </Link>
             <p className="mt-2 text-center text-[11.5px] text-slate-600 leading-snug">
-              ⏱️ Toma 60 segundos · 🤝 Sin compromiso
+              🤝 Reserva clase por solo 10€ reembolsables
             </p>
           </div>
 
