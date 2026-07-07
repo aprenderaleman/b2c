@@ -38,7 +38,7 @@ export type Pack = {
 export const TRIAL_PACKS: Pack[] = [
   {
     id:    "basico",
-    name:  "Pack Básico — 1.280 €",
+    name:  "Pack Básico",
     classes: 32,
     priceCents: 128_000,
     bestFor: ["personal_growth", "travel"],
@@ -51,7 +51,7 @@ export const TRIAL_PACKS: Pack[] = [
   },
   {
     id:    "intermedio",
-    name:  "Pack Intermedio — 1.920 €",
+    name:  "Pack Intermedio",
     classes: 48,
     priceCents: 192_000,
     bestFor: ["studies", "work"],
@@ -64,7 +64,7 @@ export const TRIAL_PACKS: Pack[] = [
   },
   {
     id:    "avanzado",
-    name:  "Pack Avanzado — 2.400 €",
+    name:  "Pack Avanzado",
     classes: 60,
     priceCents: 240_000,
     bestFor: ["work", "exam"],
@@ -77,7 +77,7 @@ export const TRIAL_PACKS: Pack[] = [
   },
   {
     id:    "vip_express",
-    name:  "Pack VIP Express — 2.690 € ⭐",
+    name:  "Pack VIP Express",
     classes: 72,
     priceCents: 269_000,
     bestFor: ["work", "already_in_dach", "exam"],
@@ -92,7 +92,7 @@ export const TRIAL_PACKS: Pack[] = [
   },
   {
     id:    "inmersion_total",
-    name:  "Pack Inmersión Total — 3.290 € ⭐",
+    name:  "Pack Inmersión Total",
     classes: 100,
     priceCents: 329_000,
     bestFor: ["work", "already_in_dach", "studies"],
