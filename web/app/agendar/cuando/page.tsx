@@ -156,8 +156,6 @@ function StepCuandoInner() {
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  // Tooltip explicativo del depósito (hover desktop / tap mobile).
-  const [showDepositInfo, setShowDepositInfo] = useState(false);
   // Cambia la ilustración del shell mientras el lead rellena el form
   // (antes era la misma del calendario, era confuso).
   const setIllustration = useSetIllustration();
@@ -486,28 +484,15 @@ function StepCuandoInner() {
             <div>
               <p className="text-[17px] font-bold text-slate-900 leading-tight">Clase agendada.</p>
               <p className="mt-1 text-[14px] text-slate-600 leading-snug">
-                Estás casi listo. Un último paso para asegurar tu plaza.
+                Un momento…
               </p>
             </div>
           </div>
 
-          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5 space-y-3">
-            <p className="text-[13px] font-semibold uppercase tracking-wider text-emerald-700">
-              🔒 Asegura tu plaza con 10€
-            </p>
-            <ul className="space-y-1.5 text-[14.5px] text-slate-700">
-              <li className="flex items-start gap-2"><span className="text-emerald-600 mt-0.5">✓</span> Te <strong>devolvemos los 10€</strong> cuando asistas a la clase de prueba</li>
-              <li className="flex items-start gap-2"><span className="text-emerald-600 mt-0.5">✓</span> Tu profesor/a <strong>prioriza tu reserva</strong></li>
-            </ul>
-            <div className="mt-3 flex items-center gap-2 text-[13px] text-slate-500">
-              <span className="inline-block h-4 w-4 rounded-full border-2 border-slate-300 border-t-transparent animate-spin" aria-hidden />
-              Redirigiendo al pago seguro…
-            </div>
+          <div className="flex items-center justify-center gap-2 text-[13px] text-slate-500 py-2">
+            <span className="inline-block h-4 w-4 rounded-full border-2 border-slate-300 border-t-transparent animate-spin" aria-hidden />
+            Preparando tu confirmación…
           </div>
-
-          <p className="text-center text-[12.5px] text-slate-500 leading-relaxed">
-            Si no puedes pagar ahora, no hay problema — tu clase queda agendada igualmente y recibirás la confirmación por email.
-          </p>
         </div>
       </StepFrame>
     );
@@ -788,59 +773,11 @@ function StepCuandoInner() {
                 )}
               </Field>
 
-              {/* ── Depósito 10€ (preview antes de submit) ──
-                  El icono ⓘ despliega el tooltip al pasar el mouse
-                  (desktop) o al tapear (mobile). Envuelve button+panel
-                  en un wrapper para que el mouseLeave se dispare solo
-                  al salir del conjunto — así el usuario puede mover el
-                  cursor sobre el panel sin que se cierre. */}
-              <div className="rounded-2xl bg-emerald-50/70 ring-1 ring-emerald-200 p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-[12.5px] font-bold uppercase tracking-wider text-emerald-800">
-                    🔒 Asegura tu plaza con 10€
-                  </p>
-                  <div
-                    className="relative shrink-0"
-                    onMouseEnter={() => setShowDepositInfo(true)}
-                    onMouseLeave={() => setShowDepositInfo(false)}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setShowDepositInfo(v => !v)}
-                      aria-label="Más información sobre el depósito"
-                      aria-expanded={showDepositInfo}
-                      className="w-5 h-5 flex items-center justify-center rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[12px] font-bold leading-none transition"
-                    >
-                      i
-                    </button>
-                    {showDepositInfo && (
-                      <div
-                        role="tooltip"
-                        className="absolute right-0 top-full mt-2 w-72 md:w-80 rounded-xl bg-white shadow-xl ring-1 ring-emerald-200 p-3.5 z-20 text-[12.5px] text-slate-700 leading-relaxed space-y-2 animate-fade-in"
-                      >
-                        <p className="font-semibold text-slate-900 text-[13px]">
-                          ¿Por qué pedimos un depósito?
-                        </p>
-                        <p>
-                          👨‍🏫 Tu profesor/a <strong>reserva ese tiempo solo para ti</strong> y prepara material adaptado a tu nivel. Los 10€ son una garantía de compromiso.
-                        </p>
-                        <p>
-                          ✅ Cuando <strong>asistes a la clase de prueba</strong> te devolvemos los 10€ íntegros.
-                        </p>
-                        <p>
-                          🎓 Si decides <strong>unirte a la academia</strong>, se descuentan del pack que elijas.
-                        </p>
-                        <p className="text-emerald-700 font-semibold pt-1">
-                          Sin riesgo para ti.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <p className="mt-1 text-[13.5px] text-emerald-900/90 leading-relaxed">
-                  Te devolvemos tus <strong>10€</strong> cuando asistas a la clase de prueba, así tu profesor/a <strong>prioriza tu reserva</strong>.
-                </p>
-              </div>
+              {/* Bloque "🔒 Asegura tu plaza con 10€" oculto por
+                  petición de Gelfis 2026-07-05. La lógica de redirect
+                  a Stripe tras submit sigue activa — solo se oculta la
+                  UI que explicaba el depósito al lead antes de enviar.
+                  Restaurar copiando el bloque del commit 2f870fc. */}
 
               {/* ── Compromiso ── */}
               <label className="flex items-start gap-3 cursor-pointer select-none rounded-2xl bg-slate-50 hover:bg-slate-100/80 p-4 transition">
