@@ -113,7 +113,10 @@ export async function notifyNewLeadUrgent(lead: LeadForAlert): Promise<{
   const waPreText       = (lead.language === "de")
     ? `Hallo ${firstName}, hier ist Stiv von Aprender-Aleman.de 👋 Wir haben deinen Probestunden-Antrag erhalten.`
     : `Hola ${firstName}, soy Stiv de Aprender-Aleman.de 👋 Acabo de ver que has empezado a agendar tu clase de prueba. ¿Tienes alguna pregunta?`;
-  const waLeadUrl = waDigits ? `https://wa.me/${waDigits}?text=${encodeURIComponent(waPreText)}` : null;
+  // Gmail/Outlook 2026 empezaron a bloquear el redirect wa.me → api.whatsapp.com
+  // (ERR_BLOCKED_BY_RESPONSE). web.whatsapp.com/send apunta directo sin pasar
+  // por api. En móvil sigue abriendo la app nativa.
+  const waLeadUrl = waDigits ? `https://web.whatsapp.com/send?phone=${waDigits}&text=${encodeURIComponent(waPreText)}` : null;
 
   // ── 1. WhatsApp a Gelfis ──────────────────────────────────
   const result: Awaited<ReturnType<typeof notifyNewLeadUrgent>> = {};

@@ -47,7 +47,10 @@ export function renderLeadNewUrgent(v: LeadNewUrgentVars): RenderedEmail {
   const waPreText = v.language === "de"
     ? `Hallo ${firstName}, hier ist Stiv von Aprender-Aleman.de 👋 Wir haben deinen Probestunden-Antrag erhalten. Hast du eine kurze Frage?`
     : `Hola ${firstName}, soy Stiv de Aprender-Aleman.de 👋 Acabo de ver que has empezado a agendar tu clase de prueba. ¿Tienes alguna pregunta?`;
-  const waUrl = `https://wa.me/${waDigits}?text=${encodeURIComponent(waPreText)}`;
+  // Antes: https://wa.me/{n}?text=... — Gmail/Outlook 2026 empezaron
+  // a bloquear el redirect wa.me → api.whatsapp.com (ERR_BLOCKED_BY_RESPONSE).
+  // web.whatsapp.com/send apunta directo sin pasar por api.
+  const waUrl = `https://web.whatsapp.com/send?phone=${waDigits}&text=${encodeURIComponent(waPreText)}`;
 
   const trialBlock = v.trialStartIso
     ? (() => {
