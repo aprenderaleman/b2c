@@ -21,7 +21,7 @@ from dataclasses import dataclass
 
 from agents.shared.claude_client import (
     BRAND_CONTEXT,
-    MODEL_SONNET,
+    MODEL_HAIKU,
     complete_text,
 )
 from agents.shared.leads import get_gelfis_notes, get_recent_timeline
@@ -234,7 +234,7 @@ Write the next follow-up message now, in {lead['language']}.
 """
 
     text, _ = complete_text(
-        model=MODEL_SONNET,
+        model=MODEL_HAIKU,
         system=_REENGAGEMENT_SYSTEM,
         user=user_prompt,
         max_tokens=400,
@@ -312,7 +312,7 @@ THE LEAD JUST WROTE
 Write the reply now, in {lead['language']}.
 """
     text, _ = complete_text(
-        model=MODEL_SONNET,
+        model=MODEL_HAIKU,
         system=_CONVERSATION_SYSTEM,
         user=user_prompt,
         max_tokens=400,
