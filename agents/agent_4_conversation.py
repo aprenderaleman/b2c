@@ -195,25 +195,35 @@ def _sig(lang: str) -> str:
 # ──────────────────────────────────────────────────────────
 
 
+_slots_cache: list[dict] = []
+_slots_cache_ts: float = 0.0
+_SLOTS_CACHE_TTL = 120  # seconds
+
+
 def _fetch_top_trial_slots(top: int = 3) -> list[dict]:
     """Hit the public /api/public/trial-slots endpoint and return the
-    first `top` results. We pick the public endpoint over a private
-    one because there's no point gating data the funnel already
-    exposes anonymously, and it keeps the agent → web wiring trivial.
-
-    Returns an empty list on any failure — caller handles the
-    "couldn't fetch" copy gracefully.
+    first `top` results, with a 120s in-memory cache to avoid
+    hammering the endpoint when multiple leads ask to book at once.
     """
+    import time
     import httpx
+
+    global _slots_cache, _slots_cache_ts
+    now = time.monotonic()
+    if _slots_cache and (now - _slots_cache_ts) < _SLOTS_CACHE_TTL:
+        return _slots_cache[:top]
+
     try:
         r = httpx.get(f"{WEB_BASE}/api/public/trial-slots", timeout=8.0)
         r.raise_for_status()
         data = r.json()
         slots = data.get("slots") or []
+        _slots_cache = slots
+        _slots_cache_ts = now
         return slots[:top]
     except Exception as e:  # noqa: BLE001
         log.warning("Failed to fetch trial slots: %s", e)
-        return []
+        return _slots_cache[:top] if _slots_cache else []
 
 
 def _format_slot_line(iso: str, lang: str) -> str:

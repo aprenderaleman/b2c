@@ -237,7 +237,7 @@ Write the next follow-up message now, in {lead['language']}.
         model=MODEL_HAIKU,
         system=_REENGAGEMENT_SYSTEM,
         user=user_prompt,
-        max_tokens=400,
+        max_tokens=250,
     )
     if not text:
         return None
@@ -315,7 +315,7 @@ Write the reply now, in {lead['language']}.
         model=MODEL_HAIKU,
         system=_CONVERSATION_SYSTEM,
         user=user_prompt,
-        max_tokens=400,
+        max_tokens=250,
     )
     if not text:
         return None

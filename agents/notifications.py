@@ -200,16 +200,23 @@ def _send(
         log.info("Suppressed duplicate %s notification (lead=%s)", kind, lead_id)
         return False
 
-    try:
-        wa = WhatsAppService()
-        instance = get_config("active_whatsapp_instance") or "aprender-aleman-main"
-        wa.send_text(instance, number, body)
-        _record(kind, lead_id, body, success=True)
-        return True
-    except WhatsAppError as e:
-        log.error("Failed to notify Gelfis (%s): %s", kind, e)
-        _record(kind, lead_id, body, success=False)
-        return False
+    import time
+    wa = WhatsAppService()
+    instance = get_config("active_whatsapp_instance") or "aprender-aleman-main"
+    last_err = None
+    for attempt in range(2):
+        try:
+            if attempt > 0:
+                time.sleep(3)
+            wa.send_text(instance, number, body)
+            _record(kind, lead_id, body, success=True)
+            return True
+        except WhatsAppError as e:
+            last_err = e
+            log.warning("Gelfis notification attempt %d failed (%s): %s", attempt + 1, kind, e)
+    log.error("Failed to notify Gelfis after 2 attempts (%s): %s", kind, last_err)
+    _record(kind, lead_id, body, success=False)
+    return False
 
 
 # ──────────────────────────────────────────────────────────

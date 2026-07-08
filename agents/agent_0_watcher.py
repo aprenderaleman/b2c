@@ -42,6 +42,10 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 
+# Circuit breaker: if N consecutive leads error out, stop the tick early
+# to avoid hammering a broken dependency (Supabase, Evolution, etc).
+CIRCUIT_BREAKER_THRESHOLD = 5
+
 
 PAUSED_STATUSES = (
     "needs_human",
@@ -151,8 +155,10 @@ def tick() -> None:
     log.info("Tick: %d lead(s) due.", len(leads))
 
     errors = 0
+    consecutive_errors = 0
     processed = 0
     wa: WhatsAppService | None = None
+    circuit_broken = False
 
     # Lazy imports — Agents 1/2 land in the next build steps.
     from agents.agent_1_writer import compose_message
@@ -160,11 +166,21 @@ def tick() -> None:
     from agents.agent_3_sender import send_approved
 
     for lead in leads:
+        if consecutive_errors >= CIRCUIT_BREAKER_THRESHOLD:
+            circuit_broken = True
+            log.error(
+                "Circuit breaker tripped after %d consecutive errors — "
+                "aborting tick with %d leads remaining.",
+                consecutive_errors, len(leads) - processed - errors,
+            )
+            break
+
         try:
             # 1. Compose via Agent 1.
             draft = compose_message(lead)
             if draft is None:
                 log.info("Lead %s: Agent 1 had nothing to send.", lead["id"])
+                consecutive_errors = 0
                 continue
 
             # 2. Review via Agent 2.
@@ -178,6 +194,7 @@ def tick() -> None:
                     content=f"Rejected draft: {review.reason}",
                     metadata={"draft": draft.text[:500]},
                 )
+                consecutive_errors = 0
                 continue
 
             # 3. Send via Agent 3.
@@ -185,10 +202,6 @@ def tick() -> None:
                 wa = WhatsAppService()
             is_new = lead["status"] == "new"
             is_reactivation = lead["status"] in POST_ENGAGEMENT_STATUSES
-            # Reactivaciones post-engagement: NO avanzar current_followup_number
-            # (no son parte de la cadena cold-outreach). Tras enviar, llamamos
-            # handle_reactivation_sent para incrementar reactivation_count y
-            # decidir si seguir o marcar cold.
             result = send_approved(
                 lead, draft.text,
                 is_new_conversation=is_new,
@@ -197,8 +210,10 @@ def tick() -> None:
             )
             if not result.success:
                 errors += 1
+                consecutive_errors += 1
                 continue
             processed += 1
+            consecutive_errors = 0
             if is_reactivation:
                 handle_reactivation_sent(
                     lead["id"],
@@ -207,6 +222,7 @@ def tick() -> None:
                 )
         except WhatsAppError as e:
             errors += 1
+            consecutive_errors += 1
             log.error("Lead %s: WhatsApp error — %s", lead["id"], e)
             log_timeline(
                 lead["id"], type="send_failed", author="agent_0",
@@ -214,18 +230,17 @@ def tick() -> None:
             )
         except Exception as e:  # noqa: BLE001
             errors += 1
+            consecutive_errors += 1
             log.exception("Lead %s: unexpected error", lead["id"])
             log_timeline(
                 lead["id"], type="agent_note", author="agent_0",
                 content=f"Unexpected error during tick: {type(e).__name__}: {e}",
             )
 
-    _finish_run(
-        run_id,
-        leads_processed=processed,
-        errors=errors,
-        note=f"due={len(leads)} processed={processed} errors={errors}",
-    )
+    note = f"due={len(leads)} processed={processed} errors={errors}"
+    if circuit_broken:
+        note += " CIRCUIT_BREAKER_TRIPPED"
+    _finish_run(run_id, leads_processed=processed, errors=errors, note=note)
 
 
 def main() -> int:
