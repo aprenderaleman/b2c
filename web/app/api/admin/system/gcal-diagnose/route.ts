@@ -77,10 +77,10 @@ export async function GET() {
   const clientEmail  = (parsed as { client_email?: string }).client_email;
   const privateKey   = (parsed as { private_key?: string }).private_key;
   const projectId    = (parsed as { project_id?: string }).project_id;
-  checks.sa_client_email   = clientEmail ? clientEmail : null;
-  checks.sa_has_private_key = Boolean(privateKey);
-  checks.sa_private_key_len = privateKey ? privateKey.length : 0;
-  checks.sa_project_id      = projectId ? projectId : null;
+  checks.has_sa_client_email = Boolean(clientEmail);
+  checks.sa_has_private_key  = Boolean(privateKey);
+  checks.sa_private_key_len  = privateKey ? privateKey.length : 0;
+  checks.has_sa_project_id   = Boolean(projectId);
 
   if (!clientEmail || !privateKey) {
     return NextResponse.json({

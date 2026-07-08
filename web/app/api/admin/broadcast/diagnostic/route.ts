@@ -39,9 +39,9 @@ export async function GET() {
       },
       smtp: {
         configured: hasSmtp,
-        host:       process.env.SMTP_HOST ?? null,
+        has_host:   Boolean(process.env.SMTP_HOST),
         port:       Number(process.env.SMTP_PORT ?? 465),
-        user:       process.env.SMTP_USER ?? null,
+        has_user:   Boolean(process.env.SMTP_USER),
         secure:     process.env.SMTP_SECURE ?? "(auto: true si puerto=465, si no false)",
       },
     },

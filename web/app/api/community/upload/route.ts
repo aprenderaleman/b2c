@@ -61,10 +61,15 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const userId = (session.user as { id: string }).id;
 
   const url = new URL(req.url);
   const path = url.searchParams.get("path");
   if (!path) return NextResponse.json({ error: "path required" }, { status: 400 });
+
+  if (!path.startsWith(`${userId}/`)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const sb = supabaseAdmin();
   const { data: signed, error: sgErr } = await sb.storage

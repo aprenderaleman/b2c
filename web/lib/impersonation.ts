@@ -23,7 +23,7 @@ import { cookies } from "next/headers";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 export const IMPERSONATE_COOKIE = "aa_impersonate";
-const IMPERSONATE_TTL_MS = 2 * 60 * 60 * 1000;   // 2h
+const IMPERSONATE_TTL_MS = 30 * 60 * 1000;   // 30min
 
 type ImpersonatePayload = {
   admin_id:      string;

@@ -76,8 +76,10 @@ function inlineToHtml(s: string): string {
   out = out.replace(/`([^`]+)`/g, (_m, c: string) =>
     `<code style="background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:0 4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;">${c}</code>`);
   // Links.
-  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, url: string) =>
-    `<a href="${url}" style="color:#ea580c;text-decoration:none;">${label}</a>`);
+  out = out.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, url: string) => {
+    if (/^(javascript|data|vbscript):/i.test(url)) return label;
+    return `<a href="${url}" style="color:#ea580c;text-decoration:none;">${label}</a>`;
+  });
   // Bold then italic (bold first so ** isn't parsed as two *).
   out = out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   out = out.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");

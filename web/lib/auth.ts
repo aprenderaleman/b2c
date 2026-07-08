@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
 import { supabaseAdmin } from "./supabase";
+import { checkRateLimit } from "./rate-limit";
 
 // Full config — this file is Node-only (bcrypt + supabase). Do NOT import
 // from middleware.
@@ -113,6 +114,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = String(creds?.email ?? "").trim().toLowerCase();
         const pw    = String(creds?.password ?? "");
         if (!email || !pw) return null;
+
+        const rl = await checkRateLimit({
+          scope: "login",
+          key: email,
+          max: 5,
+          windowMs: 15 * 60_000,
+        });
+        if (!rl.ok) return null;
+
         return verifyCredentials(email, pw);
       },
     }),
