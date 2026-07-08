@@ -3,6 +3,7 @@ import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
+import { RefreshRemainingButton } from "./refresh-remaining";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mis clases · Aprender-Aleman.de" };
@@ -85,11 +86,14 @@ export default async function StudentClassesPage() {
 
   return (
     <main className="space-y-5">
-      <header>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Mis clases</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {upcoming.length} próxima{upcoming.length === 1 ? "" : "s"} · {past.length} en el histórico
-        </p>
+      <header className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Mis clases</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {upcoming.length} próxima{upcoming.length === 1 ? "" : "s"} · {past.length} en el histórico
+          </p>
+        </div>
+        <RefreshRemainingButton initial={student.classes_remaining ?? null} />
       </header>
 
       <Block title="Próximas" rows={upcoming} empty="No tienes clases agendadas." />

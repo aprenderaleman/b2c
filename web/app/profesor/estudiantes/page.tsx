@@ -33,7 +33,7 @@ export default async function TeacherStudentsPage() {
   const { data: viaGroups } = await sb.from("student_group_members")
     .select(`
       student_id,
-      students!inner(current_level, users!inner(full_name, email)),
+      students!inner(current_level, classes_remaining, users!inner(full_name, email)),
       group:student_groups!inner(teacher_id, active)
     `)
     .eq("group.teacher_id", me.id)
@@ -43,14 +43,16 @@ export default async function TeacherStudentsPage() {
     student_id: string;
     students: {
       current_level: string;
+      classes_remaining: number | null;
       users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
     } | Array<{
       current_level: string;
+      classes_remaining: number | null;
       users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
     }>;
   };
 
-  const seen = new Map<string, { id: string; name: string | null; email: string; level: string }>();
+  const seen = new Map<string, { id: string; name: string | null; email: string; level: string; classesRemaining: number | null }>();
   const ingest = (rows: R[]) => {
     for (const r of rows) {
       if (seen.has(r.student_id)) continue;
@@ -62,6 +64,7 @@ export default async function TeacherStudentsPage() {
         name:  u?.full_name ?? null,
         email: u?.email ?? "",
         level: s.current_level,
+        classesRemaining: s.classes_remaining ?? null,
       });
     }
   };
@@ -96,7 +99,20 @@ export default async function TeacherStudentsPage() {
                     </div>
                     <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">{s.email}</div>
                   </div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{s.level}</span>
+                  <div className="flex items-center gap-3">
+                    {s.classesRemaining != null && (
+                      <span className={`text-xs font-medium tabular-nums ${
+                        s.classesRemaining <= 5
+                          ? "text-red-600 dark:text-red-400"
+                          : s.classesRemaining <= 15
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                      }`}>
+                        {s.classesRemaining} clase{s.classesRemaining === 1 ? "" : "s"}
+                      </span>
+                    )}
+                    <span className="text-xs text-slate-500 dark:text-slate-400">{s.level}</span>
+                  </div>
                 </Link>
               </li>
             ))}
