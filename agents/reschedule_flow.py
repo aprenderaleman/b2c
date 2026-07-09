@@ -170,6 +170,112 @@ def _get_active_trial(lead_id: str) -> dict | None:
     }
 
 
+def _cancel_class_and_notify_teacher(class_id: str, lead_id: str, lead_first_name: str) -> None:
+    """Auto-cancelación cuando el lead responde CANCELAR por WA.
+    Marca la clase como cancelled + notifica al profesor in-app con
+    un mensaje breve. NO envía email ni WA al profesor — solo campana.
+    Gelfis 2026-07-09.
+
+    Además hace rollback del status del lead a in_conversation si no
+    tiene otra clase de prueba futura (mismo comportamiento que el
+    endpoint /api/trial-classes/[id]/cancel del TS)."""
+    with get_conn() as conn, conn.cursor() as cur:
+        # 1. Traer datos de la clase antes de cancelarla
+        cur.execute(
+            """
+            SELECT c.status, c.scheduled_at, c.teacher_id,
+                   t.user_id AS teacher_user_id
+              FROM classes c
+              LEFT JOIN teachers t ON t.id = c.teacher_id
+             WHERE c.id = %s
+            """,
+            (class_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            log.warning("[cancel] class %s not found", class_id)
+            return
+        current_status, scheduled_at, teacher_id, teacher_user_id = row
+        if current_status == "cancelled":
+            log.info("[cancel] class %s already cancelled — skipping", class_id)
+            return
+
+        # 2. Cancelar la clase
+        cur.execute(
+            "UPDATE classes SET status='cancelled', updated_at=NOW() WHERE id=%s",
+            (class_id,),
+        )
+
+        # 3. Timeline: registro de la cancelación por lead
+        try:
+            when_txt = scheduled_at.strftime("%d/%m %H:%M") if scheduled_at else "?"
+        except Exception:                                       # noqa: BLE001
+            when_txt = "?"
+        cur.execute(
+            """
+            INSERT INTO lead_timeline (lead_id, type, author, content, metadata)
+            VALUES (%s, %s, %s, %s, %s::jsonb)
+            """,
+            (
+                lead_id,
+                "status_change",
+                "system",
+                f"🚫 Lead canceló la clase por WhatsApp (era {when_txt} Berlín)",
+                json.dumps({
+                    "class_id": class_id,
+                    "kind": "trial_cancelled_by_lead",
+                    "cancelled_by_role": "lead",
+                    "channel": "whatsapp",
+                }),
+            ),
+        )
+
+        # 4. Notificar al profesor in-app (campana). Solo si tenemos user_id.
+        if teacher_user_id:
+            title = f"{lead_first_name or 'El lead'} canceló su clase de prueba"
+            body  = f"Era {when_txt} Berlín. Puedes retomar tu tiempo."
+            cur.execute(
+                """
+                INSERT INTO notifications (user_id, type, title, body, link, class_id)
+                VALUES (%s, 'class_cancelled', %s, %s, %s, %s)
+                """,
+                (
+                    teacher_user_id,
+                    title,
+                    body,
+                    "/profesor/clasedeprueba",
+                    class_id,
+                ),
+            )
+
+        # 5. Rollback status del lead si no queda otra trial futura
+        cur.execute(
+            """
+            SELECT 1 FROM classes
+             WHERE lead_id=%s AND is_trial=TRUE AND status='scheduled'
+               AND scheduled_at > NOW() LIMIT 1
+            """,
+            (lead_id,),
+        )
+        has_other = cur.fetchone() is not None
+        if not has_other:
+            cur.execute(
+                """
+                UPDATE leads
+                   SET trial_scheduled_at = NULL,
+                       status = CASE
+                         WHEN status IN ('trial_scheduled','trial_reminded')
+                           THEN 'in_conversation'::lead_status
+                         ELSE status
+                       END
+                 WHERE id = %s
+                """,
+                (lead_id,),
+            )
+        conn.commit()
+    log.info("[cancel] class %s cancelled + teacher %s notified in-app", class_id, teacher_id)
+
+
 # ─────────────────────────────────────────────────────────
 # Templates breves (estilo Gelfis 2026-05-10)
 # ─────────────────────────────────────────────────────────
@@ -346,6 +452,16 @@ def _send_link(lead: dict, trial: dict, *, intent: str) -> bool:
 
     # kind="trial_reschedule_link" — pasa el kill switch en modo "partial".
     res = send_approved(lead, text, advance_followup=False, kind="trial_reschedule_link")
+
+    # Auto-cancelación cuando el intent es CANCELAR (Gelfis 2026-07-09):
+    # marcamos la clase como cancelada + notificamos al profesor in-app
+    # para que retome su tiempo. Para intent=reschedule esperamos 24h
+    # (el cron reschedule-followup cierra la clase si no rebookean).
+    if intent == "cancel":
+        try:
+            _cancel_class_and_notify_teacher(trial["id"], lead["id"], name)
+        except Exception:                                       # noqa: BLE001
+            log.exception("[cancel] failed to cancel class + notify teacher")
     if not res.success:
         log.warning("[reschedule] send blocked/failed for %s: %s", lead["id"], res.reason)
         return True   # no caemos al flujo normal aunque haya fallado el send
