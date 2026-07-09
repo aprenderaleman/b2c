@@ -306,7 +306,7 @@ function StepCuandoInner() {
         });
         const json = await res.json();
         if (!res.ok || !json.ok) {
-          setSubmitErr(json.error ?? "No pudimos confirmar tu clase. Inténtalo de nuevo.");
+          setSubmitErr(json.message ?? "No pudimos confirmar tu clase. Inténtalo de nuevo.");
           setSubmitting(false);
           return;
         }
@@ -408,7 +408,7 @@ function StepCuandoInner() {
             .then(d => setSlots(d.slots ?? []))
             .catch(() => { /* ignore */ });
         } else {
-          setSubmitErr(json.error ?? json.message ?? "No pudimos confirmar tu clase. Inténtalo de nuevo.");
+          setSubmitErr(json.message ?? "No pudimos confirmar tu clase. Inténtalo de nuevo.");
         }
         setSubmitting(false);
         return;
