@@ -16,7 +16,9 @@ export async function requireAdminApi(): Promise<
   const role = (session.user as { role?: string }).role;
   const id   = (session.user as { id?: string }).id;
   if (role !== "admin" && role !== "superadmin") {
-    return { ok: false, res: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
+    // Stale JWT (no role claim) or wrong role. User must sign out and back in.
+    const msg = role ? "forbidden" : "session_stale_sign_out_and_back_in";
+    return { ok: false, res: NextResponse.json({ error: msg }, { status: 403 }) };
   }
   if (!id) {
     return { ok: false, res: NextResponse.json({ error: "no_user_id" }, { status: 500 }) };
