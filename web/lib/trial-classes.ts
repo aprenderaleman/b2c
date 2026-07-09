@@ -34,6 +34,7 @@ export type TrialClassRow = {
   teacherName:        string;
   teacherEmail:       string;
   trialConfirmedAt:   string | null;
+  voiceNoteSentAt:    string | null;
 };
 
 /**
@@ -50,7 +51,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       teacher_id,
       teacher:teachers!inner(users!inner(full_name, email)),
       lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at),
-      script:trial_class_scripts(teacher_notes, final_outcome)
+      script:trial_class_scripts(teacher_notes, final_outcome, voice_note_sent_at)
     `)
     .eq("is_trial", true)
     .order("scheduled_at", { ascending: true });
@@ -98,9 +99,11 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
     script: {
       teacher_notes: string | null;
       final_outcome: string | null;
+      voice_note_sent_at: string | null;
     } | Array<{
       teacher_notes: string | null;
       final_outcome: string | null;
+      voice_note_sent_at: string | null;
     }> | null;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null =>
@@ -163,6 +166,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       teacherName:     tu?.full_name ?? tu?.email ?? "—",
       teacherEmail:    tu?.email ?? "",
       trialConfirmedAt: lead?.trial_confirmed_at ?? null,
+      voiceNoteSentAt:  script?.voice_note_sent_at ?? null,
     };
   });
 }

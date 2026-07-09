@@ -37,6 +37,8 @@ export function TrialHubCard({
   const [escalateOpen, setEscalateOpen] = useState(false);
   const [escalateMsg, setEscalateMsg] = useState("");
   const [escalating, setEscalating] = useState(false);
+  const [voiceNoteSent, setVoiceNoteSent] = useState<string | null>(row.voiceNoteSentAt);
+  const [togglingVoice, setTogglingVoice] = useState(false);
 
   const date = formatBerlinDate(row.scheduledAt);
   const time = formatBerlinTime(row.scheduledAt);
@@ -75,6 +77,31 @@ export function TrialHubCard({
                   <span className="text-[11px] font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30">
                     Convertido
                   </span>
+                )}
+                {row.status !== "cancelled" && (
+                  <VoiceNotePill
+                    sentAt={voiceNoteSent}
+                    loading={togglingVoice}
+                    readOnly={isAdmin}
+                    onToggle={async () => {
+                      if (!row.leadId || isAdmin) return;
+                      setTogglingVoice(true);
+                      try {
+                        const res = await fetch(`/api/teacher/trial/${row.leadId}/voice-note`, {
+                          method: "POST",
+                          headers: { "content-type": "application/json" },
+                          body: "{}",
+                        });
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        const json = await res.json();
+                        setVoiceNoteSent(json.voice_note_sent_at);
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : "Error");
+                      } finally {
+                        setTogglingVoice(false);
+                      }
+                    }}
+                  />
                 )}
               </div>
 
@@ -440,6 +467,54 @@ function StatusPill({ status }: { status: string }) {
     <span className={`text-[11px] font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 ${v.cls}`}>
       {v.label}
     </span>
+  );
+}
+
+function VoiceNotePill({
+  sentAt,
+  loading,
+  readOnly,
+  onToggle,
+}: {
+  sentAt: string | null;
+  loading: boolean;
+  readOnly: boolean;
+  onToggle: () => void;
+}) {
+  const sent = !!sentAt;
+  const title = sent
+    ? `Nota de voz enviada el ${new Date(sentAt!).toLocaleString("es-ES")}`
+    : "Nota de voz pendiente";
+
+  if (readOnly) {
+    return (
+      <span
+        className={`text-[11px] font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 ${
+          sent
+            ? "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-500/30"
+            : "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30"
+        }`}
+        title={title}
+      >
+        {sent ? "🎤 Nota enviada" : "🎤 Sin nota"}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={loading}
+      className={`text-[11px] font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 transition-colors disabled:opacity-50 ${
+        sent
+          ? "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-500/30 hover:bg-violet-100 dark:hover:bg-violet-500/20"
+          : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
+      }`}
+      title={title}
+    >
+      {loading ? "..." : sent ? "🎤 Nota enviada" : "🎤 Enviar nota"}
+    </button>
   );
 }
 
