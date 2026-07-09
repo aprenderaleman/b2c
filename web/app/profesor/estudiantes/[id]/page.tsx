@@ -8,6 +8,7 @@ import { NotesTimeline } from "@/components/teacher/NotesTimeline";
 import { ProgressBars } from "@/components/teacher/ProgressBars";
 import { StartNowButton } from "./StartNowButton";
 import { ScheduleButton } from "./ScheduleButton";
+import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
 
 export const dynamic = "force-dynamic";
 
@@ -36,9 +37,11 @@ export default async function TeacherStudentDetail({
   // (no classes yet), which is exactly the case "iniciar clase ahora"
   // exists for.
   let teacherId: string | null = null;
+  let teacherFullName: string | null = null;
   if (session.user.role === "teacher") {
     const me = await getTeacherByUserId(session.user.id);
     if (!me) redirect("/profesor");
+    teacherFullName = me.full_name;
     const sb = supabaseAdmin();
     const [shared, groupMembership] = await Promise.all([
       sb.from("class_participants")
@@ -94,6 +97,12 @@ export default async function TeacherStudentDetail({
               studentId={studentId}
               studentName={student.full_name ?? student.email}
             />
+            {student.classes_remaining === 0 && (
+              <IssueCertificateButton
+                studentId={studentId}
+                teacherName={teacherFullName ?? undefined}
+              />
+            )}
           </div>
         </div>
       </header>

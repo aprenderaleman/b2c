@@ -3,18 +3,26 @@ import { createNotification } from "./notifications";
 
 export type CertificateType =
   | "classes_50" | "classes_100"
-  | "level_a2" | "level_b1" | "level_b2" | "level_c1"
+  | "level_a1" | "level_a2" | "level_b1" | "level_b2" | "level_c1"
   | "exam_passed";
 
 export type CertificateRow = {
-  id:           string;
-  student_id:   string;
-  type:         CertificateType;
-  title:        string;
-  description:  string | null;
-  extra_label:  string | null;
-  issued_at:    string;
-  issued_by:    string | null;
+  id:            string;
+  student_id:    string;
+  type:          CertificateType;
+  title:         string;
+  description:   string | null;
+  extra_label:   string | null;
+  issued_at:     string;
+  issued_by:     string | null;
+  date_from:     string | null;
+  date_to:       string | null;
+  total_hours:   number | null;
+  teacher_name:  string | null;
+};
+
+const LEVEL_MAP: Record<string, string> = {
+  level_a1: "A1", level_a2: "A2", level_b1: "B1", level_b2: "B2", level_c1: "C1",
 };
 
 export function certificateTitle(type: CertificateType, extraLabel?: string | null): {
@@ -25,6 +33,8 @@ export function certificateTitle(type: CertificateType, extraLabel?: string | nu
       return { title: "50 clases completadas",  description: "Por haber completado 50 clases con asistencia en Aprender-Aleman.de" };
     case "classes_100":
       return { title: "100 clases completadas", description: "Por haber completado 100 clases con asistencia en Aprender-Aleman.de" };
+    case "level_a1":
+      return { title: "Nivel A1 alcanzado", description: "Principiante — comprensión básica del idioma alemán." };
     case "level_a2":
       return { title: "Nivel A2 alcanzado", description: "Demuestra competencia comunicativa en tareas cotidianas." };
     case "level_b1":
@@ -38,16 +48,12 @@ export function certificateTitle(type: CertificateType, extraLabel?: string | nu
   }
 }
 
-/**
- * Check milestone triggers for a student and auto-issue certificates if
- * they've crossed a threshold. Called after attendance is marked.
- *
- * Idempotent via the UNIQUE(student_id, type, extra_label) index.
- */
+export function certificateLevelLabel(type: CertificateType): string | null {
+  return LEVEL_MAP[type] ?? null;
+}
+
 export async function checkAndIssueAutoCertificates(studentId: string): Promise<CertificateType[]> {
   const sb = supabaseAdmin();
-
-  // How many classes has this student attended?
   const { count: attendedCount } = await sb
     .from("class_participants")
     .select("class_id", { count: "exact", head: true })
@@ -87,15 +93,12 @@ async function issueIfMissing(
     issued_by:   issuedBy,
   });
 
-  // Duplicate (23505) means the cert already existed — not an error, just
-  // the idempotent no-op we want.
   if (error) {
     if (/duplicate key|23505|already exists/i.test(error.message)) return false;
     console.error("certificate insert failed:", error.message);
     return false;
   }
 
-  // Notify the student.
   const { data: student } = await sb
     .from("students")
     .select("user_id")
@@ -115,15 +118,15 @@ async function issueIfMissing(
   return true;
 }
 
-/**
- * Admin-triggered certificate (e.g. "Exam passed — Goethe B2"). Bypasses
- * the auto-trigger thresholds.
- */
 export async function issueCertificateManually(args: {
-  studentId:  string;
-  type:       CertificateType;
-  extraLabel: string | null;
-  issuedBy:   string;
+  studentId:    string;
+  type:         CertificateType;
+  extraLabel:   string | null;
+  issuedBy:     string;
+  dateFrom?:    string | null;
+  dateTo?:      string | null;
+  totalHours?:  number | null;
+  teacherName?: string | null;
 }): Promise<CertificateRow | null> {
   const sb = supabaseAdmin();
   const meta = certificateTitle(args.type, args.extraLabel);
@@ -131,22 +134,25 @@ export async function issueCertificateManually(args: {
   const { data, error } = await sb
     .from("certificates")
     .insert({
-      student_id:  args.studentId,
-      type:        args.type,
-      title:       meta.title,
-      description: meta.description,
-      extra_label: args.extraLabel,
-      issued_by:   args.issuedBy,
+      student_id:   args.studentId,
+      type:         args.type,
+      title:        meta.title,
+      description:  meta.description,
+      extra_label:  args.extraLabel,
+      issued_by:    args.issuedBy,
+      date_from:    args.dateFrom ?? null,
+      date_to:      args.dateTo ?? null,
+      total_hours:  args.totalHours ?? null,
+      teacher_name: args.teacherName ?? null,
     })
-    .select("id, student_id, type, title, description, extra_label, issued_at, issued_by")
+    .select("id, student_id, type, title, description, extra_label, issued_at, issued_by, date_from, date_to, total_hours, teacher_name")
     .single();
 
   if (error) {
-    if (/duplicate key|23505/i.test(error.message)) return null;   // already have it
+    if (/duplicate key|23505/i.test(error.message)) return null;
     throw new Error(error.message);
   }
 
-  // Notify the student.
   const { data: student } = await sb
     .from("students")
     .select("user_id")
@@ -171,7 +177,7 @@ export async function listStudentCertificates(studentId: string): Promise<Certif
   const sb = supabaseAdmin();
   const { data } = await sb
     .from("certificates")
-    .select("id, student_id, type, title, description, extra_label, issued_at, issued_by")
+    .select("id, student_id, type, title, description, extra_label, issued_at, issued_by, date_from, date_to, total_hours, teacher_name")
     .eq("student_id", studentId)
     .order("issued_at", { ascending: false });
   return (data ?? []) as CertificateRow[];
@@ -181,7 +187,7 @@ export async function getCertificateById(id: string): Promise<CertificateRow | n
   const sb = supabaseAdmin();
   const { data } = await sb
     .from("certificates")
-    .select("id, student_id, type, title, description, extra_label, issued_at, issued_by")
+    .select("id, student_id, type, title, description, extra_label, issued_at, issued_by, date_from, date_to, total_hours, teacher_name")
     .eq("id", id)
     .maybeSingle();
   return (data as CertificateRow | null) ?? null;

@@ -3,14 +3,13 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { issueCertificateManually } from "@/lib/certificates";
 
-/**
- * POST /api/admin/students/[id]/certificates
- *
- * Admin-only: manually issue a certificate (e.g. "exam_passed — Goethe B2").
- */
 const Body = z.object({
-  type:       z.enum(["classes_50", "classes_100", "level_a2", "level_b1", "level_b2", "level_c1", "exam_passed"]),
-  extraLabel: z.string().trim().max(200).nullable().default(null),
+  type:        z.enum(["classes_50", "classes_100", "level_a1", "level_a2", "level_b1", "level_b2", "level_c1", "exam_passed"]),
+  extraLabel:  z.string().trim().max(200).nullable().default(null),
+  dateFrom:    z.string().nullable().default(null),
+  dateTo:      z.string().nullable().default(null),
+  totalHours:  z.number().int().positive().nullable().default(null),
+  teacherName: z.string().trim().max(200).nullable().default(null),
 });
 
 export async function POST(
@@ -21,7 +20,7 @@ export async function POST(
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const role = (session.user as { role: string }).role;
-  if (role !== "admin" && role !== "superadmin") {
+  if (role !== "admin" && role !== "superadmin" && role !== "teacher") {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -36,9 +35,13 @@ export async function POST(
   try {
     const cert = await issueCertificateManually({
       studentId,
-      type:       parsed.data.type,
-      extraLabel: parsed.data.extraLabel,
-      issuedBy:   (session.user as { id: string }).id,
+      type:        parsed.data.type,
+      extraLabel:  parsed.data.extraLabel,
+      issuedBy:    (session.user as { id: string }).id,
+      dateFrom:    parsed.data.dateFrom,
+      dateTo:      parsed.data.dateTo,
+      totalHours:  parsed.data.totalHours,
+      teacherName: parsed.data.teacherName,
     });
     if (!cert) {
       return NextResponse.json({ ok: true, duplicate: true });
