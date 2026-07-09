@@ -104,6 +104,9 @@ const ALLOWED_WA_KINDS = new Set([
   "trial_inscription_initial",
   "trial_absent_initial",
   "trial_cancelled",
+  // ACKs a respuestas del lead al T+0 (CONFIRMO/CAMBIAR/CANCELAR)
+  "trial_confirm_ack",
+  "trial_reschedule_link",
   "admin_manual",  // bypass para Gelfis desde endpoints admin
 ]);
 

@@ -83,6 +83,7 @@ def send_approved(
     is_new_conversation: bool = False,
     advance_followup: bool = True,
     wa: WhatsAppService | None = None,
+    kind: str = "manual",
 ) -> SendResult:
     """
     Send a message via WhatsApp.
@@ -141,7 +142,7 @@ def send_approved(
     permanent = False
     for attempt in range(_MAX_RETRIES):
         try:
-            msg_id = wa.send_text(instance, lead["whatsapp_normalized"], text)
+            msg_id = wa.send_text(instance, lead["whatsapp_normalized"], text, kind=kind, lead_id=lead["id"])
             _log_sent(lead["id"], instance, lead["whatsapp_normalized"], text, msg_id, attempt)
             if advance_followup:
                 _advance_lead_after_send(lead["id"])

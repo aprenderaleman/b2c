@@ -315,7 +315,9 @@ def _send_confirm_ack(lead: dict, trial: dict) -> bool:
     name = (lead.get("name") or "").split()[0] or (lead.get("name") or "")
 
     text = _msg_confirm_ack(lang, name)
-    res = send_approved(lead, text, advance_followup=False)
+    # kind="trial_confirm_ack" — pasa el kill switch en modo "partial"
+    # (whitelist). Sin esto el envío se silencia en modo restringido.
+    res = send_approved(lead, text, advance_followup=False, kind="trial_confirm_ack")
     if not res.success:
         log.warning("[confirm] ack send blocked/failed for %s: %s", lead["id"], res.reason)
         return True   # mantenemos control (no caemos al flujo normal)
@@ -342,7 +344,8 @@ def _send_link(lead: dict, trial: dict, *, intent: str) -> bool:
 
     text = _msg_cancel(lang, name) if intent == "cancel" else _msg_reschedule(lang, name)
 
-    res = send_approved(lead, text, advance_followup=False)
+    # kind="trial_reschedule_link" — pasa el kill switch en modo "partial".
+    res = send_approved(lead, text, advance_followup=False, kind="trial_reschedule_link")
     if not res.success:
         log.warning("[reschedule] send blocked/failed for %s: %s", lead["id"], res.reason)
         return True   # no caemos al flujo normal aunque haya fallado el send

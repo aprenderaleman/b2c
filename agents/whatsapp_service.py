@@ -223,6 +223,11 @@ class WhatsAppService:
         "trial_inscription_initial",
         "trial_absent_initial",
         "trial_cancelled",
+        # ACKs de respuesta cuando el lead escribe CONFIRMO/CAMBIAR/CANCELAR
+        # al T+0. Sin estos, Stiv NO responde a las respuestas del lead
+        # (Gelfis 2026-07-08: Hassan y Aisa quedaron sin ACK).
+        "trial_confirm_ack",
+        "trial_reschedule_link",
         "admin_manual",
     })
 
