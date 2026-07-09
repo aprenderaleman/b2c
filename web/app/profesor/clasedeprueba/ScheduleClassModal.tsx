@@ -30,7 +30,7 @@ type Slot = {
 const makeSlot = (): Slot => ({
   id: Math.random().toString(36).slice(2),
   dateTime: "",
-  duration: 30,
+  duration: 50,
   recurrence: "weekly",
   endDate: "",
 });
@@ -195,7 +195,7 @@ export function ScheduleClassModal({
                     onChange={(e) => updateSlot(s.id, { duration: Number(e.target.value) })}
                     className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400"
                   >
-                    {[30, 45, 60, 75, 90, 120].map(m => (
+                    {[30, 45, 50, 60, 75, 90, 120].map(m => (
                       <option key={m} value={m}>{m} min</option>
                     ))}
                   </select>

@@ -7,6 +7,7 @@ import { getStudentProgress, listNotesForStudent } from "@/lib/teacher-notes";
 import { NotesTimeline } from "@/components/teacher/NotesTimeline";
 import { ProgressBars } from "@/components/teacher/ProgressBars";
 import { StartNowButton } from "./StartNowButton";
+import { ScheduleButton } from "./ScheduleButton";
 
 export const dynamic = "force-dynamic";
 
@@ -84,8 +85,12 @@ export default async function TeacherStudentDetail({
               {student.goal && <><span>·</span><span>Meta: {student.goal}</span></>}
             </div>
           </div>
-          <div className="w-full sm:w-auto sm:min-w-[220px]">
+          <div className="w-full sm:w-auto sm:min-w-[220px] space-y-2">
             <StartNowButton
+              studentId={studentId}
+              studentName={student.full_name ?? student.email}
+            />
+            <ScheduleButton
               studentId={studentId}
               studentName={student.full_name ?? student.email}
             />
