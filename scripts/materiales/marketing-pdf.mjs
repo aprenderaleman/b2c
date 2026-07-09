@@ -489,6 +489,89 @@ function testimonialCard(t, accent = WARM) {
   });
 }
 
+// Pack Fluidez Total — tarjeta de detalle del programa estrella.
+// Solo se incluye en PDFs personalizados (con D.showPackFluidez=true).
+function packFluidezBox() {
+  const featureRow = (text) => new Paragraph({
+    spacing: { after: 80, line: 300 },
+    children: [
+      new TextRun({ text: "✓  ", bold: true, size: 22, color: WARM_DARK, font: "Calibri" }),
+      new TextRun({ text, size: 21, color: TEXT_DARK, font: "Calibri" }),
+    ],
+  });
+  return new Table({
+    width: { size: 9360, type: WidthType.DXA },
+    columnWidths: [9360],
+    rows: [new TableRow({ children: [new TableCell({
+      borders: noBorders,
+      shading: { fill: WARM_50, type: ShadingType.CLEAR },
+      margins: { top: 400, bottom: 400, left: 400, right: 400 },
+      width: { size: 9360, type: WidthType.DXA },
+      children: [
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 80 },
+          children: [new TextRun({
+            text: "NUESTRO PROGRAMA ESTRELLA",
+            bold: true, size: 18, color: WARM_DARK, font: "Calibri", characterSpacing: 200,
+          })],
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 100 },
+          children: [new TextRun({
+            text: "Pack Fluidez Total",
+            bold: true, size: 40, color: NAVY, font: "Cambria",
+          })],
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 240 },
+          children: [new TextRun({
+            text: "De cero a fluidez · 6 meses",
+            italics: true, size: 24, color: TEXT_MUTED, font: "Cambria",
+          })],
+        }),
+        featureRow("6 meses de formación inmersiva"),
+        featureRow("96 sesiones grupales en vivo"),
+        featureRow("Grupos pequeños (mínimo 4 alumnos)"),
+        featureRow("Profesores nativos que hablan español"),
+        featureRow("Diploma de finalización Aprender-Aleman.de"),
+        featureRow("Garantía de devolución"),
+        featureRow("Materiales incluidos"),
+        featureRow("Acceso a SCHULE"),
+        featureRow("Hans, profesor digital con IA"),
+        blank(200),
+        // Línea de precio destacado
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 60 },
+          children: [new TextRun({
+            text: "Ahorra 90 € con pago único",
+            bold: true, size: 20, color: SUCCESS, font: "Calibri",
+          })],
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 60 },
+          children: [
+            new TextRun({ text: "Pago único:  ", size: 22, color: TEXT_DARK, font: "Calibri" }),
+            new TextRun({ text: "1.890 €", bold: true, size: 32, color: NAVY, font: "Cambria" }),
+          ],
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({ text: "Mensual:  ", size: 22, color: TEXT_DARK, font: "Calibri" }),
+            new TextRun({ text: "330 €", bold: true, size: 26, color: NAVY, font: "Cambria" }),
+            new TextRun({ text: "  × 6 meses", size: 22, color: TEXT_MUTED, font: "Calibri" }),
+          ],
+        }),
+      ],
+    })]})],
+  });
+}
+
 // CTA box grande
 function ctaBox() {
   return new Table({
@@ -732,7 +815,7 @@ function buildDoc(D) {
     new Paragraph({ children: [new PageBreak()] }),
   );
 
-  // ─── PÁGINA 5: TESTIMONIOS + CTA ──────────────────────────
+  // ─── PÁGINA 5: TESTIMONIOS + (PACK opcional) + CTA ─────────
   children.push(
     eyebrow("Lo que dicen nuestros alumnos"),
     h1Serif("Esto no es teoría — funciona.", NAVY, 32),
@@ -743,8 +826,20 @@ function buildDoc(D) {
     blank(180),
     testimonialCard(D.testimonials[2]),
     blank(320),
-    ctaBox(),
   );
+  // PDFs personalizados (Cesar, etc) muestran el Pack Fluidez Total
+  // detallado antes del CTA — es la propuesta concreta de conversión.
+  if (D.showPackFluidez) {
+    children.push(
+      new Paragraph({ children: [new PageBreak()] }),
+      eyebrow("Cómo lo logramos contigo"),
+      h1Serif("El programa que te lleva ahí.", NAVY, 32),
+      blank(200),
+      packFluidezBox(),
+      blank(320),
+    );
+  }
+  children.push(ctaBox());
 
   return new Document({
     creator: "Aprender-Aleman.de",
@@ -1372,16 +1467,131 @@ const PDF7 = {
   ],
 };
 
+// ── PDF personalizado para César ────────────────────────────
+// Lead que acaba de hacer clase de prueba A1, ecuatoriano, quiere
+// trabajar en ciberseguridad en Alemania, su hermano ya vive allá.
+// Mismo formato 5-pp + testimonio nuevo del Pack Fluidez Total.
+const PDF_CESAR = {
+  level: "A1 · para César",
+  pdfNumber: 1,
+  totalPdfs: 1,
+  title: "Hola César — primeros pasos hacia Alemania",
+  // Subtitle + intro vacíos a petición de Gelfis (PDF más directo).
+  subtitle: "",
+  introText: "",
+  // Bandera para que buildDoc inserte la tarjeta del Pack Fluidez
+  // Total entre los testimonios y el CTA final (solo en este PDF).
+  showPackFluidez: true,
+
+  vocab: {
+    title: "Frases imprescindibles — tu hermano + tu trabajo",
+    items: [
+      { de: "Hey Bruder, was geht ab?",                          es: "Hey hermano, ¿qué pasa?  (informal, perfecto para tu hermano)" },
+      { de: "Ich lerne Deutsch und ich komme nach Deutschland!", es: "¡Estoy aprendiendo alemán y me voy a Alemania!" },
+      { de: "Ich heiße César und ich komme aus Ecuador.",        es: "Me llamo César y vengo de Ecuador." },
+      { de: "Ich suche Arbeit in Cybersicherheit.",              es: "Busco trabajo en ciberseguridad." },
+      { de: "Ich habe Erfahrung mit IT und Sicherheit.",         es: "Tengo experiencia en IT y seguridad." },
+      { de: "Ich spreche Spanisch, Englisch und ein bisschen Deutsch.", es: "Hablo español, inglés y un poco de alemán." },
+      { de: "Können Sie das wiederholen, bitte?",                es: "¿Puede repetir, por favor?  (en entrevistas)" },
+      { de: "Ich verstehe nicht. Können Sie langsamer sprechen?", es: "No entiendo. ¿Puede hablar más despacio?" },
+      { de: "Wann fängt die Arbeit an?",                          es: "¿Cuándo empieza el trabajo?" },
+      { de: "Wie viel verdient man hier?",                        es: "¿Cuánto se gana aquí?  (directo, los alemanes lo respetan)" },
+      { de: "Vielen Dank für das Gespräch!",                     es: "¡Muchas gracias por la conversación!  (al final de entrevista)" },
+      { de: "Bis bald, Bruder.",                                  es: "Hasta pronto, hermano." },
+    ],
+    truco: "En el sector tech alemán el inglés se mezcla con el alemán todo el tiempo: „Cybersicherheit“, „Pentesting“, „Firewall“ se dicen igual. No tengas miedo de soltar el término en inglés cuando no te salga la palabra alemana — todos lo hacen. „Bitte“ y „danke“ son tu pasaporte: úsalos hasta cuando no toque.",
+  },
+
+  grammar: {
+    title: "El verbo SIEMPRE en posición 2 — la regla de oro del alemán",
+    intro: "Si te aprendes UNA sola cosa de gramática alemana antes de aterrizar, que sea esta: el verbo conjugado va SIEMPRE en la 2ª posición de la frase. Eso significa que „ich“ no siempre va al principio. Cuando lo entiendas, el alemán deja de sonar caótico.",
+    table: [
+      ["Posición 1",       "Posición 2 (verbo)", "Posición 3+"],
+      ["Ich",              "komme",              "aus Ecuador."],
+      ["Ich",              "lerne",              "Deutsch."],
+      ["Morgen",           "fliege",             "ich nach Berlin."],
+      ["In Deutschland",   "arbeitet",           "mein Bruder."],
+      ["Heute",            "habe",               "ich ein Interview."],
+    ],
+    examples: [
+      "Ich heiße César.   →   Me llamo César.",
+      "Morgen komme ich nach Deutschland.   →   Mañana voy a Alemania.",
+      "Hier wohnt mein Bruder.   →   Aquí vive mi hermano.",
+      "In Berlin gibt es viel Arbeit.   →   En Berlín hay mucho trabajo.",
+    ],
+    claveEs:
+      "💡 Truco para que se te pegue: si arrancas la frase con „Morgen…“, „Heute…“, „In Deutschland…“ o cualquier palabra de tiempo/lugar, el VERBO viene INMEDIATAMENTE DESPUÉS y el „ich“ se va al tercer lugar. En español decimos „mañana yo voy“, pero en alemán es „mañana voy yo“ („morgen fliege ich“). Practícalo mandándole audios a tu hermano — al inicio te va a sonar invertido, en 2 semanas te sale solo.",
+  },
+
+  dialogue: {
+    title: "El primer audio a tu hermano — en alemán",
+    scenarioEs: "Imagina: terminas tu primera semana de clases. Le mandas a tu hermano un audio en alemán para sorprenderlo. Te aclaras la garganta, miras al teléfono y le das al botón rojo.",
+    lines: [
+      { s: "César",   t: "Hey Bruder, was geht ab?" },
+      { s: "Hermano", t: "Aleeerta, ¿estás hablando en alemán?? Du sprichst Deutsch! Wann kommst du?" },
+      { s: "César",   t: "Bald! Ich lerne Deutsch und ich komme nach Deutschland!" },
+      { s: "Hermano", t: "Geil! Was willst du dort machen?" },
+      { s: "César",   t: "Ich suche Arbeit in Cybersicherheit. Ich habe Erfahrung mit IT." },
+      { s: "Hermano", t: "Perfekt! Hier in Berlin gibt es viel Arbeit in IT. Komm einfach, ich helfe dir." },
+      { s: "César",   t: "Vielen Dank, Bruder. Bis bald!" },
+    ],
+  },
+
+  mistakes: [
+    {
+      wrong: "Ich bin 30 Jahre.",
+      right: "Ich bin 30 Jahre ALT.",
+      why:   "En alemán la edad lleva siempre „alt“ (literalmente: „tengo 30 años viejo“). Sin „alt“ suena raro. Es de los primeros errores que delatan a un principiante en una entrevista.",
+    },
+    {
+      wrong: "Ich komme VON Ecuador.",
+      right: "Ich komme AUS Ecuador.",
+      why:   "Para países, ciudades y continentes se usa „aus“, no „von“. „Von“ es para personas: „Das ist von meinem Bruder“ (esto es de mi hermano). Memoriza: AUS para lugar, VON para persona.",
+    },
+    {
+      wrong: "Mein Name César ist.",
+      right: "Mein Name IST César.",
+      why:   "Verbo en posición 2 — siempre. „Mein Name“ ocupa la posición 1 (es UN bloque), „ist“ va en la 2, „César“ va en la 3. Esta es la regla más violada por hispanohablantes; cuando la domines, suenas el doble de fluido.",
+    },
+  ],
+
+  testimonials: [
+    {
+      name: "María José Q.", city: "Frankfurt · Enfermera · 31 años",
+      levelStart: "A1", levelNow: "B1",
+      text: "Hice el Pack Fluidez Total en grupo y en 6 meses pasé de A1 a B1. Hoy trabajo de enfermera en un hospital en Frankfurt — el alemán me dio TODO. Sin esta academia no estaría aquí. Aprender en grupo me hizo perder el miedo a hablar: éramos 8, todos en el mismo punto, y reírnos juntos del Konjunktiv fue lo que me dio confianza. Si te dicen que el alemán es imposible, sí cuesta — pero con el grupo correcto se vuelve divertido.",
+    },
+    {
+      name: "Diego R.", city: "Berlín · DevOps · 29 años",
+      levelStart: "A0", levelNow: "B1",
+      text: "Llegué a Berlín con A0 y un contrato de DevOps que conseguí remoto desde Quito. En 7 meses con la academia pasé a B1 y ahora hago standups en alemán sin sudar. Vale cada euro.",
+    },
+    {
+      name: "Pablo R.", city: "Hamburgo · Soldador · 35 años",
+      levelStart: "A0", levelNow: "B1",
+      text: "Mi hermano vivía aquí desde hacía 3 años, yo llegué con A2 después de 5 meses. La primera vez que hablé con mi cuñada alemana entendió todo. Ahora soy yo el que se ríe del primer audio que le mandé.",
+    },
+  ],
+};
+
 // ── Generate ────────────────────────────────────────────────
 fs.mkdirSync(ROOT, { recursive: true });
-const ALL_PDFS = [PDF1, PDF2, PDF3, PDF4, PDF5, PDF6, PDF7];
+
+// CLI: `node marketing-pdf.mjs --only=CESAR` genera solo el de César.
+// Default sin args: genera los 7 PDFs marketing estándar.
+const onlyArg = process.argv.find(a => a.startsWith("--only="))?.split("=")[1];
+const ALL_PDFS = onlyArg === "CESAR"
+  ? [PDF_CESAR]
+  : [PDF1, PDF2, PDF3, PDF4, PDF5, PDF6, PDF7];
+
 for (const D of ALL_PDFS) {
   const doc = buildDoc(D);
   const buf = await Packer.toBuffer(doc);
   const safeTitle = D.title.replace(/\s+/g, "-").toLowerCase()
     .replace(/[^a-z0-9\-]/g, "");
-  const out = path.join(ROOT, `${D.level.replace(/\./g, "_")}-guia-${D.pdfNumber}-${safeTitle}.docx`);
+  const filePrefix = onlyArg === "CESAR" ? "Cesar-personal" : `${D.level.replace(/\./g, "_")}-guia-${D.pdfNumber}`;
+  const out = path.join(ROOT, `${filePrefix}-${safeTitle}.docx`);
   fs.writeFileSync(out, buf);
   console.log(`✔ ${path.basename(out)}  (${(buf.length / 1024).toFixed(1)} KB)`);
 }
-console.log("\nGenerados los 5 DOCX. Ahora convertir a PDF.");
+console.log("\n✓ Generado. Ahora convertir a PDF (Word COM).");

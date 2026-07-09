@@ -58,15 +58,15 @@ export async function POST(
     .from("students")
     .select(`
       id, user_id, current_level, goal, subscription_type, subscription_status,
-      schule_access, hans_access, active,
-      users!inner(full_name, email, phone, language_preference)
+      schule_access, hans_access,
+      users!inner(full_name, email, phone, language_preference, active)
     `)
     .eq("id", id)
     .maybeSingle();
   if (getErr || !cur) {
     return NextResponse.json({ error: "student_not_found" }, { status: 404 });
   }
-  type U = { full_name: string | null; email: string; phone: string | null; language_preference: "es"|"de" };
+  type U = { full_name: string | null; email: string; phone: string | null; language_preference: "es"|"de"; active: boolean };
   const usersField = (cur as unknown as { users: U | U[] }).users;
   const u: U = Array.isArray(usersField) ? usersField[0] : usersField;
 
@@ -96,14 +96,14 @@ export async function POST(
   setIf("user", "phone",               u.phone,               normalisedPhone);
   setIf("user", "language_preference", u.language_preference, b.language_preference);
 
-  const c = cur as { current_level: string; goal: string|null; subscription_type: string; subscription_status: string; schule_access: boolean; hans_access: boolean; active: boolean };
+  const c = cur as { current_level: string; goal: string|null; subscription_type: string; subscription_status: string; schule_access: boolean; hans_access: boolean };
   setIf("student", "current_level",       c.current_level,       b.current_level);
   setIf("student", "goal",                c.goal,                b.goal);
   setIf("student", "subscription_type",   c.subscription_type,   b.subscription_type);
   setIf("student", "subscription_status", c.subscription_status, b.subscription_status);
   setIf("student", "schule_access",       c.schule_access,       b.schule_access);
   setIf("student", "hans_access",         c.hans_access,         b.hans_access);
-  setIf("student", "active",              c.active,              b.active);
+  setIf("user",    "active",              u.active,              b.active);
 
   if (Object.keys(userPatch).length === 0 && Object.keys(studentPatch).length === 0) {
     return NextResponse.json({ ok: true, changed: false });

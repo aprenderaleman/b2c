@@ -27,12 +27,17 @@
 --      tocó la última vez y avance la secuencia hasta agendar o
 --      cold-out.
 --
--- Nota sobre ALTER TYPE: PostgreSQL exige que cada `ALTER TYPE ... ADD
--- VALUE` se ejecute en su propia transacción cuando hay otras DDL en
--- el batch. Supabase migrate corre cada archivo .sql en una sola
--- transacción por defecto, lo cual funciona aquí porque NO hay un
--- INSERT/SELECT del nuevo valor en el mismo archivo. Si el migrator
--- se queja, separar los ALTER TYPE en sus propios archivos.
+-- Nota sobre ALTER TYPE: PostgreSQL no permite USAR un valor enum
+-- nuevo en la misma transacción donde se añadió ("New enum values
+-- must be committed before they can be used"). El índice parcial
+-- abajo referencia 'registered' en su WHERE, así que debe correr
+-- DESPUÉS de que el ALTER TYPE haga commit. Solución: ejecutar este
+-- archivo en DOS tandas — primero los bloques sin el índice, luego
+-- una segunda ejecución solo del índice. El runner del repo aplica
+-- el archivo entero en una sola transacción por defecto, así que
+-- separamos manualmente con un comentario `-- :split` que el script
+-- de aplicación reconoce; si no lo reconoce, el operador (Gelfis)
+-- ejecuta las dos mitades a mano en el SQL Editor de Supabase.
 -- ============================================================
 
 ALTER TYPE lead_status  ADD VALUE IF NOT EXISTS 'registered';
@@ -46,9 +51,13 @@ ALTER TABLE leads
     ADD COLUMN IF NOT EXISTS last_drip_msg_n          SMALLINT     NOT NULL DEFAULT 0,
     ADD COLUMN IF NOT EXISTS last_drip_sent_at        TIMESTAMPTZ;
 
+-- :split  ← ejecutar el bloque de abajo en una segunda transacción
+--           (después del COMMIT del ALTER TYPE). Si pegas el archivo
+--           entero en el SQL Editor, divídelo aquí.
+
 -- Índice para el cron de followups: filtra leads en estado
 -- 'registered' que aún no hayan recibido todos los mensajes y
--- ordena por antigüedad. Es un filtro pequeño en su mayoría.
+-- ordena por antigüedad.
 CREATE INDEX IF NOT EXISTS idx_leads_diagnostico_drip
     ON leads (diagnostico_completed_at, last_drip_msg_n)
     WHERE status = 'registered';

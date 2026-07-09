@@ -179,6 +179,7 @@ export async function getEmpresaMetrics(
     adsSpend,
     googleAdsSpend,
     googleAdsConversions,
+    newClients,
   ] = await Promise.all([
     getTotalRevenue(from, to),
     getTotalRevenue(prevFrom, prevTo),
@@ -195,6 +196,7 @@ export async function getEmpresaMetrics(
     getAdsSpendFromExpenses(sb, from, to),
     getGoogleAdsSpend(sb, from, to),
     getGoogleAdsConversions(sb, from, to),
+    getNewClientsMetrics(sb, from, to),
   ]);
 
   // Inject Google Ads conversions into funnel for real conversion rate
@@ -219,20 +221,27 @@ export async function getEmpresaMetrics(
     ? (beneficioNetoCents / revenue.revenue_cents) * 100
     : 0;
 
+  // CPL = cost per deposit (Google Ads "conversions" are €10 deposits, not pack sales)
   const cplRealCents = googleAdsConversions > 0
     ? Math.round(adsSpendCents / googleAdsConversions)
     : (funnel.leads_total > 0 ? Math.round(adsSpendCents / funnel.leads_total) : 0);
-  const cacCents = funnel.conversions_real > 0
-    ? Math.round((adsSpendCents + fixedCostsCents + variableExpensesCents) / funnel.conversions_real)
+  // CAC = ads / new clients acquired (first Stripe payment in period)
+  const cacCents = newClients.new_clients > 0
+    ? Math.round(adsSpendCents / newClients.new_clients)
     : 0;
-  const ltvCacRatio = cacCents > 0 ? ltv / cacCents : 0;
-  const roas = adsSpendCents > 0 ? revenue.revenue_cents / adsSpendCents : 0;
+  // LTV = revenue from new clients / number of new clients
+  const ltvFromNewClients = newClients.new_clients > 0
+    ? Math.round(newClients.new_client_revenue_cents / newClients.new_clients)
+    : ltv;
+  const ltvCacRatio = cacCents > 0 ? ltvFromNewClients / cacCents : 0;
+  // ROAS = new client revenue / ads spend (excludes recurring pre-existing clients)
+  const roas = adsSpendCents > 0 ? newClients.new_client_revenue_cents / adsSpendCents : 0;
 
   const marketing: MarketingMetrics = {
     ads_spend_cents: adsSpendCents,
     cpl_real_cents: cplRealCents,
     cac_cents: cacCents,
-    ltv_cents: ltv,
+    ltv_cents: ltvFromNewClients,
     ltv_cac_ratio: ltvCacRatio,
     roas,
     has_ads_data: adsSpendCents > 0,
@@ -242,7 +251,7 @@ export async function getEmpresaMetrics(
 
   const daily = mergeDailyData(dailyLeads, dailyPayments, from, to);
 
-  const alerts = computeAlerts(margenNetoPct, cacCents, ltv, roas, funnel);
+  const alerts = computeAlerts(margenNetoPct, cacCents, ltvFromNewClients, roas, funnel);
 
   return {
     revenue_cents: revenue.revenue_cents,
@@ -263,7 +272,7 @@ export async function getEmpresaMetrics(
     period: { from: from.toISOString(), to: to.toISOString() },
     prev_revenue_cents: prevRevenue.revenue_cents,
     prev_neto_cents: prevNetoCents,
-    active_students: activeStudents,
+    active_students: newClients.total_unique_clients || activeStudents,
   };
 }
 
@@ -274,11 +283,13 @@ export async function getEmpresaMetrics(
 type SB = ReturnType<typeof supabaseAdmin>;
 
 async function getTeacherPayrollForRange(sb: SB, from: Date, to: Date): Promise<number> {
+  const fromDate = from.toISOString().slice(0, 10);
+  const toDate = to.toISOString().slice(0, 10);
   const { data } = await sb
-    .from("class_hours_log")
+    .from("teacher_earnings")
     .select("amount_cents")
-    .gte("created_at", from.toISOString())
-    .lte("created_at", to.toISOString());
+    .gte("month", fromDate)
+    .lte("month", toDate);
   return (data ?? []).reduce((s, r) => s + Number((r as { amount_cents: number }).amount_cents), 0);
 }
 
@@ -316,30 +327,26 @@ async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMet
       .gte("created_at", fromISO)
       .lte("created_at", toISO)
       .not("trial_scheduled_at", "is", null),
-    sb.from("lead_timeline")
-      .select("lead_id")
-      .eq("type", "status_change")
-      .ilike("content", "%attended trial%")
-      .gte("timestamp", fromISO)
-      .lte("timestamp", toISO),
     sb.from("leads")
       .select("id", { count: "exact", head: true })
-      .eq("status", "converted")
-      .or(`converted_at.gte.${fromISO},and(converted_at.is.null,created_at.gte.${fromISO})`)
-      .or(`converted_at.lte.${toISO},and(converted_at.is.null,created_at.lte.${toISO})`),
-    // Real conversions: unique students who paid in this period
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO)
+      .not("trial_attended_at", "is", null),
+    sb.from("leads")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO)
+      .or(`status.eq.converted,converted_at.not.is.null`),
     sb.from("payments")
       .select("student_id")
-      .eq("status", "paid")
+      .not("status", "eq", "refunded")
       .gte("paid_at", fromISO)
       .lte("paid_at", toISO),
   ]);
 
   const leadsTotal = leadsRes.count ?? 0;
   const trialsScheduled = trialsRes.count ?? 0;
-  const trialsAttended = new Set(
-    (attendedRes.data ?? []).map((r: { lead_id: string }) => r.lead_id),
-  ).size;
+  const trialsAttended = attendedRes.count ?? 0;
   const conversions = convertedRes.count ?? 0;
   const conversionsReal = new Set(
     (realPayersRes.data ?? []).map((r: { student_id: string }) => r.student_id),
@@ -383,7 +390,7 @@ async function getDailyPayments(
   const { data } = await sb
     .from("payments")
     .select("paid_at, amount_cents")
-    .eq("status", "paid")
+    .not("status", "eq", "refunded")
     .gte("paid_at", from.toISOString())
     .lte("paid_at", to.toISOString());
 
@@ -403,7 +410,7 @@ async function getRecentPayments(sb: SB, limit: number): Promise<RecentPayment[]
       id, amount_cents, currency, type, paid_at,
       student:students!inner(users!inner(full_name, email))
     `)
-    .eq("status", "paid")
+    .not("status", "eq", "refunded")
     .not("paid_at", "is", null)
     .order("paid_at", { ascending: false })
     .limit(limit);
@@ -437,7 +444,7 @@ async function getAverageLTV(sb: SB): Promise<number> {
   const { data } = await sb
     .from("payments")
     .select("student_id, amount_cents")
-    .eq("status", "paid");
+    .not("status", "eq", "refunded");
 
   if (!data || data.length === 0) return 0;
 
@@ -450,6 +457,62 @@ async function getAverageLTV(sb: SB): Promise<number> {
   return Math.round(
     students.reduce((s, sid) => s + byStudent[sid], 0) / students.length,
   );
+}
+
+/**
+ * Count new clients (first payment ever falls within range) and their revenue.
+ * CAC = ads / new_clients. LTV = new_client_revenue / new_clients.
+ */
+async function getNewClientsMetrics(sb: SB, from: Date, to: Date): Promise<{
+  new_clients: number;
+  new_client_revenue_cents: number;
+  total_unique_clients: number;
+}> {
+  const { data } = await sb
+    .from("payments")
+    .select("student_id, amount_cents, paid_at")
+    .not("status", "eq", "refunded")
+    .order("paid_at", { ascending: true });
+
+  if (!data || data.length === 0) return { new_clients: 0, new_client_revenue_cents: 0, total_unique_clients: 0 };
+
+  const fromISO = from.toISOString();
+  const toISO = to.toISOString();
+
+  // Find first payment per student
+  const firstPayment: Record<string, string> = {};
+  for (const r of data as Array<{ student_id: string; paid_at: string }>) {
+    if (!r.student_id || !r.paid_at) continue;
+    if (!firstPayment[r.student_id]) {
+      firstPayment[r.student_id] = r.paid_at;
+    }
+  }
+
+  // New clients = first payment within [from, to]
+  const newClientIds = new Set<string>();
+  for (const [sid, firstDate] of Object.entries(firstPayment)) {
+    if (firstDate >= fromISO && firstDate <= toISO) {
+      newClientIds.add(sid);
+    }
+  }
+
+  // Revenue from new clients in the period
+  let newClientRevenue = 0;
+  const clientsInPeriod = new Set<string>();
+  for (const r of data as Array<{ student_id: string; amount_cents: number; paid_at: string }>) {
+    if (!r.paid_at || r.paid_at < fromISO || r.paid_at > toISO) continue;
+    if (!r.student_id) continue;
+    clientsInPeriod.add(r.student_id);
+    if (newClientIds.has(r.student_id)) {
+      newClientRevenue += Number(r.amount_cents);
+    }
+  }
+
+  return {
+    new_clients: newClientIds.size,
+    new_client_revenue_cents: newClientRevenue,
+    total_unique_clients: clientsInPeriod.size,
+  };
 }
 
 async function getAdsSpendFromExpenses(sb: SB, from: Date, to: Date): Promise<number> {
@@ -490,7 +553,7 @@ export async function getRevenueByStudent(from: Date, to: Date): Promise<Student
   const { data } = await sb
     .from("payments")
     .select("amount_cents, type, paid_at, student:students!inner(users!inner(full_name))")
-    .eq("status", "paid")
+    .not("status", "eq", "refunded")
     .gte("paid_at", from.toISOString())
     .lte("paid_at", to.toISOString())
     .order("paid_at", { ascending: false });
@@ -515,47 +578,47 @@ export async function getTeacherPayrollBreakdown(from: Date, to: Date): Promise<
 
   const [earningsRes, classTypesRes] = await Promise.all([
     sb.from("teacher_earnings")
-      .select("amount_cents, classes_count, paid, teacher:teachers!inner(users!inner(full_name))")
+      .select("teacher_id, amount_cents, classes_count, paid, teacher:teachers!inner(users!inner(full_name))")
       .gte("month", fromDate)
       .lte("month", toDate),
-    sb.from("class_hours_log")
-      .select("teacher:teachers!inner(users!inner(full_name)), class:classes!inner(type)")
-      .gte("created_at", from.toISOString())
-      .lte("created_at", to.toISOString()),
+    sb.from("classes")
+      .select("teacher_id, type, teacher:teachers!inner(user_id)")
+      .eq("status", "completed")
+      .gte("scheduled_at", from.toISOString())
+      .lte("scheduled_at", to.toISOString()),
   ]);
 
   if (!earningsRes.data || earningsRes.data.length === 0) return [];
 
-  // Class type breakdown by teacher name
-  const typesByName = new Map<string, { group: number; individual: number }>();
+  // Class type breakdown by teacher_id
+  const typesById = new Map<string, { group: number; individual: number }>();
   for (const r of (classTypesRes.data ?? []) as any[]) {
-    const t = Array.isArray(r.teacher) ? r.teacher[0] : r.teacher;
-    const name = (Array.isArray(t?.users) ? t.users[0] : t?.users)?.full_name ?? "—";
-    const cls = Array.isArray(r.class) ? r.class[0] : r.class;
-    const type = cls?.type ?? "";
-    const existing = typesByName.get(name) ?? { group: 0, individual: 0 };
-    if (type === "group") existing.group++;
+    const tid = r.teacher_id;
+    if (!tid) continue;
+    const existing = typesById.get(tid) ?? { group: 0, individual: 0 };
+    if (r.type === "group") existing.group++;
     else existing.individual++;
-    typesByName.set(name, existing);
+    typesById.set(tid, existing);
   }
 
-  // Aggregate earnings by teacher name
-  const byTeacher = new Map<string, { total: number; classes: number; paid: boolean }>();
+  // Aggregate earnings by teacher
+  const byTeacher = new Map<string, { name: string; total: number; classes: number; paid: boolean }>();
   for (const r of earningsRes.data as any[]) {
     const t = Array.isArray(r.teacher) ? r.teacher[0] : r.teacher;
     const name = (Array.isArray(t?.users) ? t.users[0] : t?.users)?.full_name ?? "—";
-    const existing = byTeacher.get(name) ?? { total: 0, classes: 0, paid: true };
+    const tid = r.teacher_id ?? (t?.id ?? "");
+    const existing = byTeacher.get(tid) ?? { name, total: 0, classes: 0, paid: true };
     existing.total += Number(r.amount_cents);
     existing.classes += Number(r.classes_count ?? 0);
     if (!r.paid) existing.paid = false;
-    byTeacher.set(name, existing);
+    byTeacher.set(tid, existing);
   }
 
   return [...byTeacher.entries()]
-    .map(([teacher_name, info]) => {
-      const types = typesByName.get(teacher_name) ?? { group: 0, individual: 0 };
+    .map(([tid, info]) => {
+      const types = typesById.get(tid) ?? { group: 0, individual: 0 };
       return {
-        teacher_name,
+        teacher_name: info.name,
         total_cents: info.total,
         classes_count: info.classes,
         group_classes: types.group,
@@ -815,14 +878,14 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
     const [revenue, payroll, fixed, ads, leadsRes, convRes] = await Promise.all([
       sb.from("payments")
         .select("amount_cents, student_id, type, paid_at, student:students!inner(users!inner(full_name))")
-        .eq("status", "paid")
+        .not("status", "eq", "refunded")
         .gte("paid_at", fromISO)
         .lte("paid_at", toISO)
         .order("paid_at", { ascending: false }),
-      sb.from("class_hours_log")
+      sb.from("teacher_earnings")
         .select("amount_cents")
-        .gte("created_at", fromISO)
-        .lte("created_at", toISO),
+        .gte("month", fromDate)
+        .lte("month", toDate),
       sb.from("costes_fijos")
         .select("amount_cents")
         .eq("active", true)

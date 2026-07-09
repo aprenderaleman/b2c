@@ -41,7 +41,7 @@ const MEETINGS = [
 
 // Duration rule (business policy by Gelfis)
 function billedHours(minutes) {
-  if (minutes < 45)  return 0;
+  if (minutes < 15)  return 0;
   if (minutes <= 90) return 1;
   return 2;
 }

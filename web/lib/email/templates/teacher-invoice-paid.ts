@@ -19,6 +19,11 @@ export type TeacherInvoicePaidVars = {
   paymentReference: string | null; // bank txn id / memo, optional
   paymentMethod:    string | null; // teacher's stored payment method
   language:         "es" | "de";
+  // 'teacher' (default): saludo personal, "Hemos procesado tu pago".
+  // 'admin'  (copia para Gelfis): subject prefijado con [Copia], header
+  // que dice "Copia de archivo: pago a {teacherName}".
+  audience?:       "teacher" | "admin";
+  teacherName?:    string;         // requerido cuando audience='admin'
 };
 
 export function renderTeacherInvoicePaid(v: TeacherInvoicePaidVars): RenderedEmail {
@@ -26,7 +31,11 @@ export function renderTeacherInvoicePaid(v: TeacherInvoicePaidVars): RenderedEma
 }
 
 function renderES(v: TeacherInvoicePaidVars): RenderedEmail {
-  const subject = `Pago realizado: ${v.amount} (${v.monthLabel})`;
+  const isAdmin = v.audience === "admin";
+  const teacherLabel = v.teacherName ?? v.recipientName;
+  const subject = isAdmin
+    ? `[Copia archivo] Pago a ${teacherLabel}: ${v.amount} (${v.monthLabel})`
+    : `Pago realizado: ${v.amount} (${v.monthLabel})`;
 
   const kv: Array<[string, string]> = [
     ["Periodo",        escapeHtml(v.monthLabel)],
@@ -37,7 +46,12 @@ function renderES(v: TeacherInvoicePaidVars): RenderedEmail {
   if (v.paymentMethod)    kv.push(["Método de pago",  escapeHtml(v.paymentMethod)]);
   if (v.paymentReference) kv.push(["Referencia",      escapeHtml(v.paymentReference)]);
 
-  const body = `
+  const body = isAdmin ? `
+    ${h2(`Copia archivo — Pago a ${escapeHtml(teacherLabel)}`)}
+    ${p(`Esta es la copia para tu archivo del pago marcado como realizado a <strong>${escapeHtml(teacherLabel)}</strong> por las clases de <strong>${escapeHtml(v.monthLabel)}</strong>. La factura PDF está adjunta.`)}
+    ${kvBlock(kv)}
+    ${p(`<em style="color:#64748b;">— Aprender-Aleman.de · sistema de finanzas</em>`)}
+  ` : `
     ${h2(`¡Hola ${escapeHtml(v.recipientName)}!`)}
     ${p(`Hemos procesado tu pago correspondiente a <strong>${escapeHtml(v.monthLabel)}</strong>. Encontrarás la factura completa adjunta a este correo en formato PDF.`)}
     ${kvBlock(kv)}
@@ -45,9 +59,25 @@ function renderES(v: TeacherInvoicePaidVars): RenderedEmail {
     ${p(`Gracias por tu trabajo este mes.`)}
     ${p(`<em style="color:#64748b;">El equipo de Aprender-Aleman.de</em>`)}
   `;
-  const footerNote = `Recibes este correo porque marcamos como pagada tu nómina en la plataforma de Aprender-Aleman.de.`;
+  const footerNote = isAdmin
+    ? `Copia automática enviada al admin tras marcar la nómina como pagada en /admin/finanzas/profesores.`
+    : `Recibes este correo porque marcamos como pagada tu nómina en la plataforma de Aprender-Aleman.de.`;
 
-  const text = [
+  const text = isAdmin ? [
+    `[Copia archivo] Pago a ${teacherLabel}`,
+    ``,
+    `Pago marcado como realizado a ${teacherLabel} por las clases de ${v.monthLabel}.`,
+    `Factura PDF adjunta.`,
+    ``,
+    `Periodo: ${v.monthLabel}`,
+    `Importe: ${v.amount}`,
+    `Clases: ${v.classesCount}`,
+    `Horas: ${v.totalHours.toFixed(1)} h`,
+    v.paymentMethod    ? `Método: ${v.paymentMethod}`       : "",
+    v.paymentReference ? `Referencia: ${v.paymentReference}` : "",
+    ``,
+    `— Aprender-Aleman.de · sistema de finanzas`,
+  ].filter(Boolean).join("\n") : [
     `Hola ${v.recipientName}!`,
     ``,
     `Hemos procesado tu pago correspondiente a ${v.monthLabel}.`,
@@ -69,7 +99,11 @@ function renderES(v: TeacherInvoicePaidVars): RenderedEmail {
 }
 
 function renderDE(v: TeacherInvoicePaidVars): RenderedEmail {
-  const subject = `Zahlung erfolgt: ${v.amount} (${v.monthLabel})`;
+  const isAdmin = v.audience === "admin";
+  const teacherLabel = v.teacherName ?? v.recipientName;
+  const subject = isAdmin
+    ? `[Archivkopie] Zahlung an ${teacherLabel}: ${v.amount} (${v.monthLabel})`
+    : `Zahlung erfolgt: ${v.amount} (${v.monthLabel})`;
 
   const kv: Array<[string, string]> = [
     ["Zeitraum",        escapeHtml(v.monthLabel)],
@@ -80,7 +114,12 @@ function renderDE(v: TeacherInvoicePaidVars): RenderedEmail {
   if (v.paymentMethod)    kv.push(["Zahlungsmethode", escapeHtml(v.paymentMethod)]);
   if (v.paymentReference) kv.push(["Referenz",        escapeHtml(v.paymentReference)]);
 
-  const body = `
+  const body = isAdmin ? `
+    ${h2(`Archivkopie — Zahlung an ${escapeHtml(teacherLabel)}`)}
+    ${p(`Dies ist die Archivkopie der als bezahlt markierten Abrechnung an <strong>${escapeHtml(teacherLabel)}</strong> für <strong>${escapeHtml(v.monthLabel)}</strong>. Die Rechnung als PDF ist im Anhang.`)}
+    ${kvBlock(kv)}
+    ${p(`<em style="color:#64748b;">— Aprender-Aleman.de · Finanzsystem</em>`)}
+  ` : `
     ${h2(`Hallo ${escapeHtml(v.recipientName)}!`)}
     ${p(`Wir haben deine Zahlung für <strong>${escapeHtml(v.monthLabel)}</strong> bearbeitet. Die vollständige Rechnung findest du als PDF im Anhang dieser E-Mail.`)}
     ${kvBlock(kv)}
@@ -88,9 +127,25 @@ function renderDE(v: TeacherInvoicePaidVars): RenderedEmail {
     ${p(`Vielen Dank für deine Arbeit in diesem Monat.`)}
     ${p(`<em style="color:#64748b;">Dein Aprender-Aleman.de Team</em>`)}
   `;
-  const footerNote = `Du erhältst diese E-Mail, weil deine Abrechnung auf der Aprender-Aleman.de-Plattform als bezahlt markiert wurde.`;
+  const footerNote = isAdmin
+    ? `Automatische Kopie an den Admin nach Markierung der Abrechnung als bezahlt unter /admin/finanzas/profesores.`
+    : `Du erhältst diese E-Mail, weil deine Abrechnung auf der Aprender-Aleman.de-Plattform als bezahlt markiert wurde.`;
 
-  const text = [
+  const text = isAdmin ? [
+    `[Archivkopie] Zahlung an ${teacherLabel}`,
+    ``,
+    `Zahlung an ${teacherLabel} für ${v.monthLabel} als bezahlt markiert.`,
+    `Rechnung als PDF im Anhang.`,
+    ``,
+    `Zeitraum: ${v.monthLabel}`,
+    `Betrag: ${v.amount}`,
+    `Stunden: ${v.totalHours.toFixed(1)} h`,
+    `Einheiten: ${v.classesCount}`,
+    v.paymentMethod    ? `Methode: ${v.paymentMethod}`     : "",
+    v.paymentReference ? `Referenz: ${v.paymentReference}` : "",
+    ``,
+    `— Aprender-Aleman.de · Finanzsystem`,
+  ].filter(Boolean).join("\n") : [
     `Hallo ${v.recipientName}!`,
     ``,
     `Wir haben deine Zahlung für ${v.monthLabel} bearbeitet.`,

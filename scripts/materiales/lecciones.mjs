@@ -246,6 +246,37 @@ export const LECCIONES = [
       "Schreib deinen typischen Tag mit Uhrzeiten: „Um 7 Uhr stehe ich auf. Um halb acht frühstücke ich.“ Mindestens 6 Zeilen.",
     summary:
       "Achtung: „halb drei“ = 2:30, nicht 3:30! Im formellen Kontext (Bahn, Termine) wird die 24-Stunden-Form bevorzugt; im Alltag spricht man informell.",
+    grammarSpanishKey:
+      "⚠️ La trampa más común para hispanohablantes: «halb drei» NO significa las 3 y media, significa las DOS y media. En alemán la palabra «halb» (media) se cuenta hacia la SIGUIENTE hora. Regla: halb X = X − 0:30. Así: halb 8 = 7:30, halb 10 = 9:30.",
+    inPractice: {
+      title: "An der Rezeption im Hotel",
+      scenarioEs: "En la recepción de un hotel reservando un taxi para el aeropuerto.",
+      dialogue: [
+        { speaker: "Gast",          text: "Guten Morgen. Können Sie mir bitte ein Taxi bestellen?" },
+        { speaker: "Rezeptionist",  text: "Natürlich. Für wann?" },
+        { speaker: "Gast",          text: "Mein Flug geht um Viertel nach zwölf. Ich brauche das Taxi um halb elf." },
+        { speaker: "Rezeptionist",  text: "Also um 10:30 Uhr. Heute, am 14. Mai. Stimmt das so?" },
+        { speaker: "Gast",          text: "Genau. Vielen Dank!" },
+        { speaker: "Rezeptionist",  text: "Gern geschehen. Schönen Flug!" },
+      ],
+    },
+    commonMistakes: [
+      {
+        wrong: "Ich komme um halb drei. (querido decir 3:30)",
+        right: "Ich komme um halb vier. (= 3:30 verdadero)",
+        why:   "«halb» se refiere a la hora SIGUIENTE, no a la anterior. Si quieres decir 3:30, di «halb vier».",
+      },
+      {
+        wrong: "Heute ist der dreizehn Mai.",
+        right: "Heute ist der dreizehnte Mai.",
+        why:   "Las fechas usan números ORDINALES con terminación -te (1-19) o -ste (20+): der erste, der dritte, der zwanzigste.",
+      },
+      {
+        wrong: "Um zwei Uhr nachmittag.",
+        right: "Um zwei Uhr nachmittags.   /   Um vierzehn Uhr.",
+        why:   "El sufijo «-s» en «nachmittags / morgens / abends» es obligatorio. Alternativa formal: usar el formato 24 horas (14 Uhr) y evitar el sufijo.",
+      },
+    ],
     workbookExercises: [
       {
         title: "Übung 1 — Zahlen ausschreiben",
