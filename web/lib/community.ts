@@ -1,5 +1,8 @@
 import { supabaseAdmin } from "./supabase";
 
+const COMMUNITY_BUCKET = "comunidad";
+const SIGNED_URL_TTL = 60 * 60 * 24 * 7; // 7 days
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -70,14 +73,32 @@ export async function getFeed(
     .in("post_id", posts.map((p: { id: string }) => p.id));
   const likedSet = new Set((myLikes ?? []).map((l: { post_id: string }) => l.post_id));
 
+  // Regenerate signed URLs for posts with image_path so they never expire
+  const pathsToSign = posts
+    .filter((p: { image_path?: string | null }) => p.image_path)
+    .map((p: { image_path: string }) => p.image_path);
+
+  const freshUrls = new Map<string, string>();
+  if (pathsToSign.length > 0) {
+    const { data: signed } = await sb.storage
+      .from(COMMUNITY_BUCKET)
+      .createSignedUrls(pathsToSign, SIGNED_URL_TTL);
+    if (signed) {
+      for (const s of signed) {
+        if (s.signedUrl && s.path) freshUrls.set(s.path, s.signedUrl);
+      }
+    }
+  }
+
   return posts.map((p: Record<string, unknown>) => {
     const author = authorMap.get(p.author_id as string) as { full_name: string; role: string; avatar_url: string | null } | undefined;
+    const imgPath = p.image_path as string | null;
     return {
       id: p.id as string,
       author_id: p.author_id as string,
       content: p.content as string,
-      image_url: p.image_url as string | null,
-      image_path: p.image_path as string | null,
+      image_url: (imgPath && freshUrls.get(imgPath)) || (p.image_url as string | null),
+      image_path: imgPath,
       pinned: p.pinned as boolean,
       like_count: p.like_count as number,
       comment_count: p.comment_count as number,
