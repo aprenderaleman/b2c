@@ -82,6 +82,8 @@ _CANCEL_RE = re.compile(
 # que no haya negacion delante.
 _CONFIRM_RE = re.compile(
     r"\b(confirmo|confirmado|confirmada|confirmar|confirmacion|confirmación|"
+    # Typos comunes observados en producción (Ángela 2026-07-10: "CONFINMO"):
+    r"confinmo|confimo|confrimo|confrimo|comfirmo|comfimo|"
     r"alli\s+estare|allí\s+estaré|ahi\s+estare|ahí\s+estaré|"
     r"ahi\s+te\s+veo|ahí\s+te\s+veo|"
     r"voy\s+a\s+(ir|asistir|estar)|"
