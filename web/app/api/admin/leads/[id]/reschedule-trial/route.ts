@@ -114,6 +114,7 @@ export async function POST(
     .from("classes")
     .select("id, status, is_trial, scheduled_at, teacher_id, lead_id, duration_minutes, google_calendar_event_id, short_code")
     .eq("id", b.class_id)
+    .is("deleted_at", null) // soft-delete guard 2026-07-10
     .maybeSingle();
   if (clsErr || !cls) {
     return NextResponse.json({ ok: false, error: "class_not_found" }, { status: 404 });
@@ -149,6 +150,7 @@ export async function POST(
   const { data: collisions } = await sb
     .from("classes")
     .select("id")
+    .is("deleted_at", null) // soft-delete guard 2026-07-10
     .eq("teacher_id", targetTeacherId)
     .in("status", ["scheduled", "live"])
     .neq("id", c.id)

@@ -126,6 +126,7 @@ async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
     .from("classes")
     .select("teacher_id, scheduled_at")
     .eq("is_trial", true)
+    .is("deleted_at", null) // soft-delete guard 2026-07-10
     .in("status", ["scheduled", "live", "completed"])
     .in("teacher_id", teacherIds)
     .gte("scheduled_at", since30);
@@ -151,6 +152,7 @@ async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
       .eq("available", true),
     sb.from("classes")
       .select("teacher_id, scheduled_at, duration_minutes")
+      .is("deleted_at", null) // soft-delete guard 2026-07-10
       .in("teacher_id", teacherIds)
       .in("status", ["scheduled", "live"])
       .gte("scheduled_at", now.toISOString())

@@ -54,6 +54,10 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       script:trial_class_scripts(teacher_notes, final_outcome, voice_note_sent_at)
     `)
     .eq("is_trial", true)
+    // Filtro soft-delete (Gelfis 2026-07-10): las trials borradas por
+    // /admin/classes/[id]/permanent quedan con deleted_at seteado y no
+    // deben aparecer en /admin/clasedeprueba ni en /profesor/clasedeprueba.
+    .is("deleted_at", null)
     .order("scheduled_at", { ascending: true });
 
   if (teacherId) q = q.eq("teacher_id", teacherId);

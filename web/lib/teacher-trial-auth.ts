@@ -14,6 +14,7 @@ export async function assertTeacherOwnsTrialLead(
       .from("classes")
       .select("teacher_id")
       .eq("is_trial", true)
+      .is("deleted_at", null) // soft-delete guard 2026-07-10
       .eq("lead_id", leadId)
       .limit(1)
       .maybeSingle();

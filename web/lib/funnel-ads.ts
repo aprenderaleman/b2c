@@ -418,6 +418,39 @@ export async function getFunnelAdsData(
     });
   }
 
+  // ── Trials huérfanas (Gelfis 2026-07-10): leads con status='trial_scheduled'
+  // pero SIN fila en classes (fue borrada por accidente o falló al crearse).
+  // Este chequeo es el detector estructural del incidente Ismael+Celia:
+  // si vuelve a pasar, aparece aquí como alerta HIGH y podemos investigar
+  // antes de que el profe/lead se enteren. Solo trials futuras — las
+  // pasadas ya no tienen impacto operativo. ──
+  const { data: pendingTrials } = await sb
+    .from("leads")
+    .select("id, name, trial_scheduled_at")
+    .in("status", ["trial_scheduled", "trial_reminded"])
+    .not("trial_scheduled_at", "is", null)
+    .gte("trial_scheduled_at", new Date().toISOString());
+  if (pendingTrials && pendingTrials.length > 0) {
+    const leadIds = (pendingTrials as Array<{ id: string }>).map(r => r.id);
+    const { data: theirClasses } = await sb
+      .from("classes")
+      .select("lead_id")
+      .eq("is_trial", true)
+      .is("deleted_at", null)
+      .in("lead_id", leadIds);
+    const hasClass = new Set(((theirClasses ?? []) as Array<{ lead_id: string }>).map(r => r.lead_id));
+    const orphans = (pendingTrials as Array<{ id: string; name: string | null; trial_scheduled_at: string }>)
+      .filter(r => !hasClass.has(r.id));
+    if (orphans.length > 0) {
+      const sample = orphans.slice(0, 3).map(r => r.name ?? r.id.slice(0, 8)).join(", ");
+      alerts.push({
+        severity: "high",
+        title: `${orphans.length} lead(s) con trial huérfana`,
+        detail: `Leads con trial_scheduled_at pero sin fila en classes${orphans.length > 3 ? ` (ej: ${sample}…)` : `: ${sample}`}. La clase fue borrada o nunca se creó — el profe no la ve y el lead recibió confirmación con enlace roto. Recuperación: recreate class row con el mismo class_id preservado.`,
+      });
+    }
+  }
+
   // Motivos con conversión 0% — el motivo "particulares" llegó a 0%
   // en datos históricos, marcamos los que aún tengan ese patrón.
   for (const m of motivoBreakdown) {
