@@ -29,6 +29,7 @@ export const PACK_COMMISSION_SINGLE_CENTS: Record<string, number> = {
   avanzado:       15_000,    // 150€
   vip_express:    20_000,    // 200€
   inmersion_total:25_000,    // 250€
+  kids:            5_000,    //  50€
 };
 
 export const PACK_COMMISSION_FLEXIBLE_CENTS: Record<string, number> = {
@@ -37,6 +38,7 @@ export const PACK_COMMISSION_FLEXIBLE_CENTS: Record<string, number> = {
   avanzado:        5_000,    //  50€
   vip_express:     6_000,    //  60€
   inmersion_total: 7_500,    //  75€
+  kids:            2_000,    //  20€
 };
 
 /** Backwards-compatible lookup — uses single by default. */

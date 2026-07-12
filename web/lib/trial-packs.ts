@@ -15,7 +15,8 @@ export type PackId =
   | "intermedio"
   | "avanzado"
   | "vip_express"
-  | "inmersion_total";
+  | "inmersion_total"
+  | "kids";
 
 export type PaymentType = "single" | "flexible" | "extended";
 
@@ -103,6 +104,19 @@ export const TRIAL_PACKS: Pack[] = [
       single:   "Pago único (3.290 €)",
       flexible: "Paga durante tu formación (455 € × 8)",
       extended: "Financiación extendida (330 € × 12)",
+    },
+  },
+  {
+    id:    "kids",
+    name:  "Pack Kids",
+    classes: 24,
+    priceCents: 89_000,
+    bestFor: ["personal_growth"],
+    urlSingle:   "https://buy.stripe.com/4gMeV68Hj5Hu8W3d9t0co0o",
+    urlFlexible: "https://buy.stripe.com/3cIaEQ1eR5Hu7RZ5H10co0q",
+    labels: {
+      single:   "Pago único (890 €)",
+      flexible: "Paga durante tu formación (305 € × 3)",
     },
   },
 ];
