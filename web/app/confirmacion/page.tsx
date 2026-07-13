@@ -4,10 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { verifyTrialToken } from "@/lib/trial-token";
 import { IllustrationPanel } from "@/components/diagnostico/IllustrationPanel";
 import { BrandLogo } from "@/components/BrandLogo";
-
-// Depósito Stripe eliminado 2026-07-10 — se retiraron DepositoOkTracker,
-// STRIPE_DEPOSIT_URL, StripeReturnRecovery y los banners "plaza asegurada"
-// y "aún no aseguraste tu plaza".
+import { ConfirmacionPixel } from "@/components/confirmacion/ConfirmacionPixel";
 
 /**
  * GET /confirmacion?c={classId}&t={token}
@@ -89,6 +86,9 @@ export default async function ConfirmacionPage({
   return (
     <div className="min-h-[100dvh] bg-white text-slate-900"
          style={{ overscrollBehavior: "contain" }}>
+      {/* Google Ads conversion tracker — se dispara al montar, con
+          transaction_id=classId para dedup nativa. */}
+      <ConfirmacionPixel classId={classId} />
       <IllustrationPanel step="success">
         <div className="flex flex-col min-h-[100dvh]">
           {/* Header sticky — sólo brand + back a inicio, sin progress bar. */}

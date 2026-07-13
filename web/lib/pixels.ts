@@ -1,7 +1,7 @@
 /**
  * Wrappers no-op de los pixels publicitarios.
  *
- * Política de conversiones (Gelfis 2026-06-16) — UNA SOLA conversión a
+ * Política de conversiones (Gelfis 2026-07-10) — UNA SOLA conversión a
  * Google Ads por funnel, disparada al llegar a /confirmacion:
  *
  *   - Google Ads conversion → SOLO en /confirmacion vía
@@ -14,13 +14,15 @@
  *     Schedule) porque sus modelos de atribución se benefician de
  *     ver ambos pasos. firePixelLead emite Lead a Meta + TikTok
  *     (sin Google Ads). firePixelSchedule emite Schedule a Meta +
- *     TikTok.
+ *     TikTok. Ambos se disparan en el submit de /agendar/cuando.
  *
- * Antes (pre-2026-06-16) firePixelLead disparaba Google Ads en submit
- * Y firePixelScheduleGoogle volvía a disparar en /confirmacion con el
- * mismo label → doble-conteo (cada lead contaba 2×) → Google Ads veía
- * un CPA artificialmente bajo y Smart Bidding sobre-pujaba. Fix limpio:
- * solo /confirmacion dispara Google Ads.
+ * Historia:
+ *   - Pre-2026-06-30: Google Ads disparaba desde /confirmacion.
+ *   - 2026-06-30 (Stripe depósito): se movió a submit /agendar/cuando
+ *     para no perder conversiones si el lead no volvía de Stripe.
+ *   - 2026-07-10 (Stripe eliminado): vuelve a /confirmacion — señal
+ *     más limpia a Smart Bidding, solo cuenta si el lead llegó a la
+ *     thank-you page.
  *
  * Las llamadas son seguras de invocar siempre — si los pixels no están
  * configurados (env vacías), son no-ops gracias a los try/catch.
@@ -33,24 +35,10 @@ type Window_ = Window & {
   gtag?: (...args: unknown[]) => void;
 };
 
-// Conversion de Google Ads — la primaria "trial reservado" se dispara
-// desde /agendar/cuando ANTES del redirect a Stripe (Gelfis 2026-06-30).
-// Con el depósito opcional se movió aquí porque:
-//   - La clase queda agendada al confirmar datos (paguen o no).
-//   - Si esperamos a /confirmacion, perdemos las conversiones de leads
-//     que cierran el pago de Stripe sin volver a nuestro dominio.
-//   - El transaction_id=classId sigue garantizando dedup.
-//
-// El gtag base (AW-17724667323) ya se carga en app/layout.tsx.
-// Label actualizado 2026-06-30 (Gelfis): nueva conversión con value=30€.
+// Conversion label de Google Ads — el gtag base (AW-17724667323) ya se
+// carga en app/layout.tsx. Label + value seteados por Gelfis 2026-06-30.
 const GADS_CONVERSION_LABEL = "AW-17724667323/YjyxCIjcqMocELvr44NC";
 const GADS_CONVERSION_VALUE = 30.0;
-
-// Label de la conversión secundaria "depósito pagado". Aún placeholder —
-// crear en Google Ads UI y setear NEXT_PUBLIC_GADS_DEPOSIT_LABEL en
-// Vercel env. Formato: "AW-<ACCOUNT>/<LABEL>".
-const GADS_DEPOSIT_PAID_LABEL = process.env.NEXT_PUBLIC_GADS_DEPOSIT_LABEL
-  ?? "AW-17724667323/PLACEHOLDER_DEPOSIT_LABEL";
 
 /** Disparado cuando el lead completa el form (registro o trial booking).
  *
@@ -111,14 +99,10 @@ export function firePixelSchedule(args: { leadId: string }) {
  *
  *  Por qué SOLO aquí:
  *    - /confirmacion solo se alcanza tras book-trial exitoso → señal
- *      fuerte para Smart Bidding (reserva confirmada).
+ *      fuerte para Smart Bidding (reserva confirmada + lead visible).
  *    - transaction_id=classId garantiza dedup nativa de Google Ads —
  *      refresh, share del link, multi-tab, todo dedup.
  *    - Un solo evento por funnel = CPA real, no inflado.
- *
- *  value = 5 EUR refleja el valor esperado de un lead que llega a este
- *  punto (vs 2 EUR de un lead que solo registra). Ajusta cuando tengas
- *  datos de tu CLV real.
  */
 export function firePixelScheduleGoogle(args: { classId: string }) {
   if (typeof window === "undefined") return;
@@ -131,44 +115,4 @@ export function firePixelScheduleGoogle(args: { classId: string }) {
       transaction_id: args.classId,
     });
   } catch (e) { console.warn("[pixel] gtag conversion failed:", e); }
-}
-
-/**
- * Conversión secundaria "depósito pagado" — se dispara en /confirmacion
- * cuando el lead vuelve de Stripe con `?deposito=ok`. Es un evento
- * distinto del "Schedule" primario porque señaliza a Smart Bidding
- * intención más fuerte (dinero puesto sobre la mesa).
- *
- * transaction_id=classId sigue garantizando dedup: si el lead abre
- * /confirmacion?deposito=ok varias veces (compartir link, refresh),
- * Google Ads solo cuenta una vez.
- *
- * value=10 EUR = importe del depósito. Ajustar cuando el LTV real esté
- * calculado.
- *
- * Espera opcional a un callback (event_callback) para que la promesa
- * resuelva cuando gtag confirma el envío; útil cuando quieres redirigir
- * inmediatamente después. Si gtag no está cargado, la promesa resuelve
- * al instante.
- */
-export function firePixelDepositPaid(args: {
-  classId: string;
-  onSent?: () => void;
-}): void {
-  if (typeof window === "undefined") { args.onSent?.(); return; }
-  const w = window as Window_;
-  let called = false;
-  const fire = () => { if (!called) { called = true; args.onSent?.(); } };
-  try {
-    w.gtag?.("event", "conversion", {
-      send_to: GADS_DEPOSIT_PAID_LABEL,
-      value:    10,
-      currency: "EUR",
-      transaction_id: args.classId,
-      event_callback: fire,
-    });
-  } catch (e) { console.warn("[pixel] gtag deposit_paid failed:", e); }
-  // Fallback: si gtag no llama al callback en 800ms (script bloqueado
-  // o no cargado), disparamos igual para no bloquear el flow del lead.
-  setTimeout(fire, 800);
 }

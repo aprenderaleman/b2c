@@ -10,7 +10,7 @@ import { useBookingState } from "@/lib/booking-state";
 import { useLang } from "@/lib/lang-context";
 import { normalizePhone, resolvePhone } from "@/lib/phone";
 import { combineE164 } from "@/components/diagnostico/DiagnosticoFunnel";
-import { firePixelLead, firePixelSchedule, firePixelScheduleGoogle } from "@/lib/pixels";
+import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
 import { detectBrowserTimezone, detectCountryFromBrowser, effectiveLeadTimezone } from "@/lib/timezone-country";
 import { captureAttributionFromUrl, readAttribution, clearAttribution } from "@/lib/ads-attribution";
 
@@ -291,8 +291,9 @@ function StepCuandoInner() {
           return;
         }
         if (state.lead_id) firePixelSchedule({ leadId: state.lead_id });
-        // Google Ads conversion PRIMARIA — antes del redirect a Stripe.
-        firePixelScheduleGoogle({ classId: json.classId });
+        // Google Ads conversion se dispara en /confirmacion (Gelfis
+        // 2026-07-10): mejor señal a Smart Bidding — solo cuenta si el
+        // lead realmente llegó a la thank-you page.
         try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
         if (typeof window !== "undefined") {
           const params = new URLSearchParams({ c: json.classId, t: json.token });
@@ -395,9 +396,9 @@ function StepCuandoInner() {
         });
         firePixelSchedule({ leadId: json.leadId });
       }
-      // Google Ads conversion — se dispara AL confirmar datos con
-      // transaction_id=classId para dedup nativa (Gelfis 2026-06-30).
-      firePixelScheduleGoogle({ classId: json.classId });
+      // Google Ads conversion se dispara en /confirmacion (Gelfis
+      // 2026-07-10): solo cuenta si el lead realmente llegó a la
+      // thank-you page. Dedup nativa por transaction_id=classId.
       try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
       // Atribución consumida → limpiar para que el próximo visitante
       // no herede el gclid de este lead.
