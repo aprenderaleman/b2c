@@ -460,13 +460,11 @@ export async function POST(req: Request) {
   // Collision is astronomically unlikely (8 base36 chars ≈ 2.8 trillion
   // values, and the unique index would catch one if it ever happened).
   const shortCode = generateShortCode();
-  // Depósito Stripe (Gelfis 2026-06-30): notificaciones se retrasan 5min
-  // para dar tiempo al pago. Si el lead paga, el cron envía la variante
-  // "plaza asegurada"; si no, la variante estándar con el link para
-  // asegurarla. Si el lead cierra Stripe, sigue funcionando igual porque
-  // la clase ya está en BD y el cron sigue enviando pasados los 5min.
-  const NOTIFY_DELAY_MS = 5 * 60_000;
-  const notifyAfterAt   = new Date(Date.now() + NOTIFY_DELAY_MS).toISOString();
+  // Notificaciones inmediatas 2026-07-10 (depósito Stripe eliminado):
+  // notify_after_at=NOW() → cron send-trial-notifications las envía en
+  // el próximo tick (≤1 min de latencia). Antes había delay 5min para
+  // dar tiempo al pago del depósito, ya no aplica.
+  const notifyAfterAt = new Date().toISOString();
   const { data: cls, error: classErr } = await sb.from("classes").insert({
     type:               "individual",
     teacher_id:         b.teacher_id,

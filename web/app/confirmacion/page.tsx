@@ -4,14 +4,10 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { verifyTrialToken } from "@/lib/trial-token";
 import { IllustrationPanel } from "@/components/diagnostico/IllustrationPanel";
 import { BrandLogo } from "@/components/BrandLogo";
-import { DepositoOkTracker } from "@/components/confirmacion/DepositoOkTracker";
 
-// Link Stripe para "aún no aseguré mi plaza, quiero pagar ahora".
-// Coincide con el usado en /agendar/cuando + cron.
-const STRIPE_DEPOSIT_URL = (
-  process.env.NEXT_PUBLIC_STRIPE_DEPOSIT_URL
-  ?? "https://buy.stripe.com/bJe6oAcXzd9W2xFedx0co0n?locale=es"
-);
+// Depósito Stripe eliminado 2026-07-10 — se retiraron DepositoOkTracker,
+// STRIPE_DEPOSIT_URL, StripeReturnRecovery y los banners "plaza asegurada"
+// y "aún no aseguraste tu plaza".
 
 /**
  * GET /confirmacion?c={classId}&t={token}
@@ -28,27 +24,15 @@ const STRIPE_DEPOSIT_URL = (
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Search = { c?: string; t?: string; deposito?: string };
+type Search = { c?: string; t?: string };
 
 export default async function ConfirmacionPage({
   searchParams,
 }: {
   searchParams: Promise<Search>;
 }) {
-  const { c: classId, t: token, deposito } = await searchParams;
-  const depositoOk = deposito === "ok";
-  // Stripe (Gelfis 2026-07-04): success_url del Payment Link no puede
-  // templatear c+t dinámicos, así que solo llega ?deposito=ok. Si es
-  // ese caso, renderizamos el recovery client que lee c+t de
-  // localStorage/sessionStorage y re-navega a la URL completa. Sin ese
-  // fallback, el lead que paga cae a "/" tras Stripe.
-  if (!classId || !token) {
-    if (depositoOk) {
-      const { StripeReturnRecovery } = await import("@/components/confirmacion/StripeReturnRecovery");
-      return <StripeReturnRecovery />;
-    }
-    redirect("/");
-  }
+  const { c: classId, t: token } = await searchParams;
+  if (!classId || !token) redirect("/");
 
   const payload = verifyTrialToken(token);
   if (!payload || payload.class_id !== classId) redirect("/");
@@ -147,47 +131,7 @@ export default async function ConfirmacionPage({
               Un solo clic y tu profesor sabrá que vas a venir.
             </p>
 
-            {/* ✅ Plaza asegurada — solo si vuelve de Stripe con ?deposito=ok */}
-            {depositoOk && (
-              <div className="mt-5 rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-4 md:p-5">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl leading-none mt-0.5" aria-hidden>🔒</span>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-bold uppercase tracking-wider text-emerald-900">
-                      Plaza asegurada
-                    </p>
-                    <p className="mt-1.5 text-[14.5px] md:text-[15px] text-emerald-900 leading-snug">
-                      Gracias por el depósito. Te devolveremos tus <strong>10€</strong> cuando asistas a la clase de prueba. Tu profesor/a tiene tu reserva marcada como prioritaria.
-                    </p>
-                  </div>
-                </div>
-                {/* Dispara conversión secundaria + marca en BD (client). */}
-                <DepositoOkTracker classId={classId} token={token} />
-              </div>
-            )}
-
-            {/* 💡 Aún no aseguraste tu plaza — si NO vuelve con ?deposito=ok */}
-            {!depositoOk && (
-              <div className="mt-5 rounded-2xl bg-amber-50 ring-1 ring-amber-200 p-4 md:p-5">
-                <div className="flex items-start gap-3">
-                  <span className="text-xl leading-none mt-0.5" aria-hidden>💡</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] font-bold uppercase tracking-wider text-amber-900">
-                      ¿Aún no aseguraste tu plaza?
-                    </p>
-                    <p className="mt-1 text-[14px] text-amber-900/90 leading-snug">
-                      Con 10€ tu profesor/a prioriza tu reserva. <strong>Te devolvemos los 10€</strong> cuando asistas a la clase de prueba.
-                    </p>
-                    <a
-                      href={STRIPE_DEPOSIT_URL}
-                      className="mt-3 inline-flex items-center gap-1.5 h-9 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-[13px] font-semibold transition"
-                    >
-                      Asegurar mi plaza — 10€ →
-                    </a>
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Bloques de depósito eliminados 2026-07-10. */}
 
             {/* 📧 Bloque acción principal — confirmar por email */}
             <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 md:p-5">

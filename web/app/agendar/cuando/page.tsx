@@ -113,23 +113,14 @@ export default function StepCuando() {
   );
 }
 
-// Link Stripe Payment Link para el depósito opcional de 10€ (Gelfis
-// 2026-06-30). Configurar en Stripe Dashboard con:
-//   success_url = https://b2c.aprender-aleman.de/confirmacion?deposito=ok
-//   cancel_url  = https://b2c.aprender-aleman.de/confirmacion
-// Los params c+t se guardan en sessionStorage como fallback y
-// /confirmacion los recupera de allí si no vienen en la URL.
-const STRIPE_DEPOSIT_URL = (
-  process.env.NEXT_PUBLIC_STRIPE_DEPOSIT_URL
-  ?? "https://buy.stripe.com/bJe6oAcXzd9W2xFedx0co0n?locale=es"
-);
+// Depósito Stripe eliminado 2026-07-10 (Gelfis): el lead va directo
+// a /confirmacion tras submit sin paso intermedio. STRIPE_DEPOSIT_URL,
+// showDepositRedirect y la pantalla intermedia se retiraron.
 
 function StepCuandoInner() {
   const router = useRouter();
   const { lang } = useLang();
   const { state, update, hydrated } = useBookingState();
-  // Estado del paso intermedio "asegurando plaza" tras submit ok.
-  const [showDepositRedirect, setShowDepositRedirect] = useState<null | { classId: string; token: string }>(null);
 
   // Atribución desde URL (Gelfis 2026-06-15). La home `/` redirige aquí
   // tras paso 2 (nivel) con `?landing=socialmedia&motivo=X&level=Y`.
@@ -164,22 +155,6 @@ function StepCuandoInner() {
     return () => setIllustration(null);
   }, [showForm, setIllustration]);
 
-  // Redirect a Stripe (depósito 10€) 1.5s tras el submit ok. Damos ese
-  // margen para que el beacon de gtag salga a Google Ads antes de que
-  // el navegador cambie de dominio.
-  useEffect(() => {
-    if (!showDepositRedirect) return;
-    const t = setTimeout(() => {
-      if (typeof window === "undefined") return;
-      // client_reference_id → Stripe lo puede reflejar en success_url
-      // vía template + webhook. Extra query params por si el Payment
-      // Link soporta pasarlos al success_url.
-      const sep = STRIPE_DEPOSIT_URL.includes("?") ? "&" : "?";
-      const url = `${STRIPE_DEPOSIT_URL}${sep}client_reference_id=${encodeURIComponent(showDepositRedirect.classId)}`;
-      window.location.href = url;
-    }, 1500);
-    return () => clearTimeout(t);
-  }, [showDepositRedirect]);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr,  setSubmitErr]  = useState<string | null>(null);
   // Modal de doble confirmación dual-TZ. Igual que el CalendarStep
@@ -319,17 +294,10 @@ function StepCuandoInner() {
         // Google Ads conversion PRIMARIA — antes del redirect a Stripe.
         firePixelScheduleGoogle({ classId: json.classId });
         try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
-        // Guardamos en sessionStorage Y localStorage. Stripe puede
-        // rebobinar cross-tab/cross-process en algunos navegadores
-        // (iOS Safari privado, mobile in-app browsers) y sessionStorage
-        // se puede perder. localStorage sobrevive; /confirmacion limpia
-        // el rastro tras recuperarlo con éxito.
-        try {
-          const payload = JSON.stringify({ c: json.classId, t: json.token, at: Date.now() });
-          sessionStorage.setItem("b2c.trial_return", payload);
-          localStorage.setItem("b2c.trial_return", payload);
-        } catch { /* ignore */ }
-        setShowDepositRedirect({ classId: json.classId, token: json.token });
+        if (typeof window !== "undefined") {
+          const params = new URLSearchParams({ c: json.classId, t: json.token });
+          window.location.href = `/confirmacion?${params.toString()}`;
+        }
         return;
       } catch (e) {
         console.error("[agendar/cuando] direct submit failed:", e);
@@ -427,25 +395,19 @@ function StepCuandoInner() {
         });
         firePixelSchedule({ leadId: json.leadId });
       }
-      // Google Ads conversion PRIMARIA — antes del redirect a Stripe.
-      // El transaction_id=classId garantiza dedup si el lead recarga.
-      // Depósito Stripe (Gelfis 2026-06-30): NO esperamos a /confirmacion
-      // porque muchos leads no vuelven de Stripe → perderíamos la señal.
+      // Google Ads conversion — se dispara AL confirmar datos con
+      // transaction_id=classId para dedup nativa (Gelfis 2026-06-30).
       firePixelScheduleGoogle({ classId: json.classId });
       try { sessionStorage.removeItem("b2c.agendar.v1"); } catch { /* ignore */ }
-      // Guarda c+t para que /confirmacion los recupere si Stripe no
-      // los preserva en success_url (fallback).
-      try {
-        sessionStorage.setItem("b2c.trial_return", JSON.stringify({
-          c: json.classId, t: json.token, at: Date.now(),
-        }));
-      } catch { /* ignore */ }
       // Atribución consumida → limpiar para que el próximo visitante
       // no herede el gclid de este lead.
       clearAttribution();
-      // Pantalla intermedia "asegurando plaza" — dura 1.5s (tiempo para
-      // que gtag beacon salga) y luego redirige al link de Stripe.
-      setShowDepositRedirect({ classId: json.classId, token: json.token });
+      // Redirect directo a /confirmacion (sin paso Stripe intermedio
+      // desde 2026-07-10 — depósito eliminado).
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams({ c: json.classId, t: json.token });
+        window.location.href = `/confirmacion?${params.toString()}`;
+      }
       return;
     } catch (e) {
       console.error("[agendar/cuando] inline submit failed:", e);
@@ -470,33 +432,8 @@ function StepCuandoInner() {
     return { day, time, berlinTime };
   })();
 
-  // Paso intermedio "asegurando plaza" — reemplaza todo el contenido
-  // del StepFrame durante 1.5s antes de redirigir a Stripe.
-  if (showDepositRedirect) {
-    return (
-      <StepFrame
-        title=""
-        subtitle=""
-      >
-        <div className="mt-4 space-y-5 animate-fade-in">
-          <div className="rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 p-5 flex items-start gap-3">
-            <div className="h-9 w-9 rounded-full bg-emerald-500 text-white flex items-center justify-center shrink-0 text-lg">✓</div>
-            <div>
-              <p className="text-[17px] font-bold text-slate-900 leading-tight">Clase agendada.</p>
-              <p className="mt-1 text-[14px] text-slate-600 leading-snug">
-                Un momento…
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-center gap-2 text-[13px] text-slate-500 py-2">
-            <span className="inline-block h-4 w-4 rounded-full border-2 border-slate-300 border-t-transparent animate-spin" aria-hidden />
-            Preparando tu confirmación…
-          </div>
-        </div>
-      </StepFrame>
-    );
-  }
+  // Pantalla intermedia de depósito Stripe eliminada 2026-07-10:
+  // el submit ahora navega directo a /confirmacion.
 
   return (
     <StepFrame
