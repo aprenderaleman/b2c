@@ -102,7 +102,7 @@ export async function getLiveClassForStudent(
     .select(`
       class:classes!inner(
         id, title, status, started_at, scheduled_at,
-        teachers!inner(users!inner(full_name, email))
+        teachers(users(full_name, email))
       )
     `)
     .eq("student_id", studentId)
