@@ -229,13 +229,13 @@ export async function getClassesInRange(
       title, topic, status, livekit_room_id, is_trial, group_id,
       group:student_groups(name),
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
-      teacher:teachers!inner(
-        users!inner(email, full_name)
+      teacher:teachers(
+        users(email, full_name)
       ),
       class_participants(
         student_id, attended,
-        student:students!inner(
-          users!inner(email, full_name, phone)
+        student:students(
+          users(email, full_name, phone)
         )
       )
     `)
@@ -265,13 +265,13 @@ export async function getTeacherUpcomingClasses(
       title, topic, status, livekit_room_id, is_trial, group_id, lead_id,
       group:student_groups(name),
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
-      teacher:teachers!inner(
-        users!inner(email, full_name)
+      teacher:teachers(
+        users(email, full_name)
       ),
       class_participants(
         student_id, attended,
-        student:students!inner(
-          users!inner(email, full_name, phone)
+        student:students(
+          users(email, full_name, phone)
         )
       )
     `)
@@ -378,13 +378,13 @@ export async function getClassById(id: string): Promise<ClassWithPeople | null> 
       title, topic, status, livekit_room_id, is_trial, group_id,
       group:student_groups(name),
       started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
-      teacher:teachers!inner(
-        users!inner(email, full_name)
+      teacher:teachers(
+        users(email, full_name)
       ),
       class_participants(
         student_id, attended,
-        student:students!inner(
-          users!inner(email, full_name, phone)
+        student:students(
+          users(email, full_name, phone)
         )
       )
     `)

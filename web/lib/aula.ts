@@ -5,12 +5,8 @@
  *   - Only users listed in class_participants can join
  *   - Only the assigned teacher can be host
  *   - Room opens 15 min BEFORE scheduled start
- *   - Room closes EXACTLY at scheduled_at + duration_minutes (no grace)
+ *   - Room closes at scheduled_at + duration_minutes + 5 min grace
  *     → past that, the surface shows "Ver grabación →" instead.
- *
- * The "no grace" rule is intentional: Gelfis wants the class to feel
- * bounded. Once the clock runs out, the student is bounced to SCHULE
- * to keep the learning loop tight.
  */
 
 import { supabaseAdmin } from "./supabase";
@@ -45,10 +41,7 @@ export async function authorizeTrialAulaAccess(
 
   const scheduled = new Date(c.scheduled_at);
   const opensAt   = new Date(scheduled.getTime() - 15 * 60_000);
-  // Tight close: no grace minutes. Past closesAt the surface shows the
-  // recording link (or a "class ended" screen) instead of letting them
-  // back in.
-  const closesAt  = new Date(scheduled.getTime() + c.duration_minutes * 60_000);
+  const closesAt  = new Date(scheduled.getTime() + (c.duration_minutes + 5) * 60_000);
   return {
     ok:           true,
     role:         "participant",     // lead is never host
@@ -77,7 +70,7 @@ export async function authorizeAulaAccess(
     .select(`
       id, status, scheduled_at, duration_minutes, livekit_room_id,
       teacher_id,
-      teacher:teachers!inner(user_id)
+      teacher:teachers(user_id)
     `)
     .eq("id", classId)
     .maybeSingle();
@@ -89,8 +82,7 @@ export async function authorizeAulaAccess(
   const scheduled = new Date((cls as { scheduled_at: string }).scheduled_at);
   const duration  = (cls as { duration_minutes: number }).duration_minutes;
   const opensAt   = new Date(scheduled.getTime() - 15 * 60_000);
-  // Tight close at scheduled_at + duration_minutes (no grace).
-  const closesAt  = new Date(scheduled.getTime() + duration * 60_000);
+  const closesAt  = new Date(scheduled.getTime() + (duration + 5) * 60_000);
   const canEnterNow = now >= opensAt && now <= closesAt;
 
   const roomName = (cls as { livekit_room_id: string }).livekit_room_id;
@@ -129,11 +121,12 @@ export async function authorizeAulaAccess(
   if (role === "student") {
     const { data: match } = await sb
       .from("class_participants")
-      .select("class_id, students!inner(user_id)")
+      .select("class_id, students(user_id)")
       .eq("class_id", classId);
 
-    type Row = { class_id: string; students: { user_id: string } | Array<{ user_id: string }> };
+    type Row = { class_id: string; students: { user_id: string } | Array<{ user_id: string }> | null };
     const enrolled = ((match ?? []) as unknown as Row[]).some(r => {
+      if (!r.students) return false;
       const s = Array.isArray(r.students) ? r.students[0] : r.students;
       return s?.user_id === userId;
     });
@@ -172,7 +165,7 @@ export async function canViewRecording(
     .from("classes")
     .select(`
       id, is_trial,
-      teacher:teachers!inner(user_id),
+      teacher:teachers(user_id),
       class_participants(
         students(user_id)
       )
