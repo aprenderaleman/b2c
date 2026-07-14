@@ -104,10 +104,33 @@ function Field({
  * `useSearchParams()`, que en Next 15 fuerza un CSR bailout en
  * prerender y exige un boundary explícito (ver build error
  * "useSearchParams() should be wrapped in a suspense boundary").
+ *
+ * Fallback = skeleton visible (antes era `null` → panel derecho
+ * quedaba en BLANCO durante SSR/hidratación en navegadores lentos
+ * o con conexión mala. Gelfis reportó pantalla vacía el 2026-07-14).
  */
+function StepCuandoFallback() {
+  return (
+    <div className="px-5 pt-5">
+      <div className="h-8 w-3/4 bg-slate-100 rounded animate-pulse" />
+      <div className="mt-2 h-4 w-1/2 bg-slate-100 rounded animate-pulse" />
+      <div className="mt-5 flex gap-2 overflow-hidden">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="shrink-0 w-14 h-[68px] rounded-2xl bg-slate-100 animate-pulse" />
+        ))}
+      </div>
+      <div className="mt-4 space-y-2">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-14 rounded-2xl bg-slate-100 animate-pulse" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function StepCuando() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<StepCuandoFallback />}>
       <StepCuandoInner />
     </Suspense>
   );
