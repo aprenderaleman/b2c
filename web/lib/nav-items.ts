@@ -58,6 +58,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
   student: [
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
     { label: "Mis clases",   href: "/estudiante/clases",        icon: "calendarDays",   priority: 2 },
+    { label: "Apuntes",     href: "/estudiante/apuntes",       icon: "fileText",       priority: 2.3 },
     { label: "Comunidad",   href: "/comunidad",                 icon: "heart",          priority: 2.5 },
     { label: "Material",     href: "/estudiante/materiales",    icon: "bookOpen",       priority: 3 },
     { label: "Biblioteca",   href: "/estudiante/biblioteca",    icon: "folder",         priority: 3.3 },

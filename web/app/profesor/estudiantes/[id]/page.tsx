@@ -9,6 +9,7 @@ import { ProgressBars } from "@/components/teacher/ProgressBars";
 import { StartNowButton } from "./StartNowButton";
 import { ScheduleButton } from "./ScheduleButton";
 import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
+import { GroupDocButton } from "@/components/classes/GroupDocButton";
 
 export const dynamic = "force-dynamic";
 
@@ -106,6 +107,12 @@ export default async function TeacherStudentDetail({
           </div>
         </div>
       </header>
+
+      {student.document_url && (
+        <div className="flex">
+          <GroupDocButton documentUrl={student.document_url} label="Apuntes de clase" />
+        </div>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">

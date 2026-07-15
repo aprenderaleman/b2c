@@ -4,6 +4,7 @@ import { getStudentByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { classStatusEs, formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 import { RefreshRemainingButton } from "./refresh-remaining";
+import { GroupDocButton } from "@/components/classes/GroupDocButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mis clases · Aprender-Aleman.de" };
@@ -95,6 +96,12 @@ export default async function StudentClassesPage() {
         </div>
         <RefreshRemainingButton initial={student.classes_remaining ?? null} />
       </header>
+
+      {student.document_url && (
+        <div className="flex">
+          <GroupDocButton documentUrl={student.document_url} label="Mis apuntes de clase" />
+        </div>
+      )}
 
       <Block title="Próximas" rows={upcoming} empty="No tienes clases agendadas." />
       <Block title="Historial" rows={past}    empty="Aún no hay clases en tu histórico." />

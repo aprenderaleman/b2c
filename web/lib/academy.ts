@@ -29,6 +29,7 @@ export type StudentRow = {
   converted_at:          string;
   lead_id:               string | null;
   notes:                 string | null;
+  document_url:          string | null;
 };
 
 export type TeacherRow = {
@@ -121,7 +122,7 @@ export async function getStudentByUserId(userId: string): Promise<StudentRow | n
       id, user_id, lead_id, current_level, goal,
       subscription_type, subscription_status, classes_remaining,
       classes_per_month, monthly_price_cents, currency,
-      schule_access, hans_access, notes, converted_at,
+      schule_access, hans_access, notes, converted_at, document_url,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("user_id", userId)
@@ -154,6 +155,7 @@ export async function getStudentByUserId(userId: string): Promise<StudentRow | n
     converted_at:         data.converted_at as string,
     lead_id:              (data.lead_id as string | null) ?? null,
     notes:                (data.notes as string | null) ?? null,
+    document_url:         (data.document_url as string | null) ?? null,
   };
 }
 
@@ -186,7 +188,7 @@ export async function getStudents(
         id, user_id, lead_id, current_level, goal,
         subscription_type, subscription_status, classes_remaining,
         classes_per_month, monthly_price_cents, currency,
-        schule_access, hans_access, notes, converted_at,
+        schule_access, hans_access, notes, converted_at, document_url,
         users!inner(email, full_name, phone, language_preference, active)
       `,
       { count: "exact" },
@@ -246,6 +248,7 @@ export async function getStudents(
       converted_at:         r.converted_at as string,
       lead_id:              (r.lead_id as string | null) ?? null,
       notes:                (r.notes as string | null) ?? null,
+      document_url:         (r.document_url as string | null) ?? null,
     };
   });
 
@@ -265,7 +268,7 @@ export async function getStudentById(id: string): Promise<StudentRow | null> {
       id, user_id, lead_id, current_level, goal,
       subscription_type, subscription_status, classes_remaining,
       classes_per_month, monthly_price_cents, currency,
-      schule_access, hans_access, notes, converted_at,
+      schule_access, hans_access, notes, converted_at, document_url,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("id", id)
@@ -298,6 +301,7 @@ export async function getStudentById(id: string): Promise<StudentRow | null> {
     converted_at:         data.converted_at as string,
     lead_id:              (data.lead_id as string | null) ?? null,
     notes:                (data.notes as string | null) ?? null,
+    document_url:         (data.document_url as string | null) ?? null,
   };
 }
 

@@ -16,6 +16,7 @@ import { ProgressBars } from "@/components/teacher/ProgressBars";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getPendingReviewForStudent } from "@/lib/class-reviews";
 import { ClassReviewPrompt } from "@/components/student/ClassReviewPrompt";
+import { GroupDocButton } from "@/components/classes/GroupDocButton";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +92,12 @@ export default async function StudentHome() {
         />
       ) : (
         <EmptyNext />
+      )}
+
+      {student.document_url && (
+        <div className="flex">
+          <GroupDocButton documentUrl={student.document_url} label="Mis apuntes de clase" />
+        </div>
       )}
 
       {/* SCHULE + HANS — above the fold, before the streak and the class list */}
