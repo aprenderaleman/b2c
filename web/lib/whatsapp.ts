@@ -107,6 +107,8 @@ const ALLOWED_WA_KINDS = new Set([
   // ACKs a respuestas del lead al T+0 (CONFIRMO/CAMBIAR/CANCELAR)
   "trial_confirm_ack",
   "trial_reschedule_link",
+  // Welcome student al convertir lead → student
+  "welcome_student",
   "admin_manual",  // bypass para Gelfis desde endpoints admin
 ]);
 
