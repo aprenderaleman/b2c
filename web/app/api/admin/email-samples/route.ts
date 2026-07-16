@@ -62,11 +62,12 @@ export async function POST(req: Request) {
     packName: pack?.name ?? "Pack Intermedio",
   });
 
-  // 3) No asistió — botón a /agendar/cuando
+  // 3) No asistió — 2 botones SÍ/NO (nuevo absent-interest flow)
   results.absent = await sendTrialAbsentFollowupEmail(to, {
     leadName: "Omar (muestra)",
     language: "es",
-    rescheduleUrl: "https://b2c.aprender-aleman.de/agendar/cuando?lead=" + fakeLead + "&from=trial_absent",
+    interestYesUrl: buildEmailActionUrl({ leadId: fakeLead, classId: "absent", action: "absent-interest-yes" }),
+    interestNoUrl:  buildEmailActionUrl({ leadId: fakeLead, classId: "absent", action: "absent-interest-no" }),
   });
 
   // 4) Email de confirmación al agendar (nuevo, con botones)
