@@ -232,6 +232,10 @@ class WhatsAppService:
         # (Gelfis 2026-07-15: Ángela quedó sin welcome porque el kind
         # no estaba en la lista → kill switch la silenció).
         "welcome_student",
+        # Flujo absent-interest (Gelfis 2026-07-16): pregunta al lead
+        # ausente si sigue interesado antes de mandarle el link.
+        "trial_absent_interest_yes",   # respuesta SÍ → link a /agendar/cuando
+        "trial_absent_interest_close", # respuesta NO → cierre amable
         "admin_manual",
     })
 

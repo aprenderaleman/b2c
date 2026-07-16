@@ -114,6 +114,41 @@ def detect_confirm_intent(text: str) -> bool:
 
 
 # ─────────────────────────────────────────────────────────
+# Absent-interest detectors (Gelfis 2026-07-16)
+# Cuando el lead absent ha recibido el mensaje "¿sigues interesado?",
+# examinamos su siguiente respuesta para determinar SÍ / NO / unclear.
+# ─────────────────────────────────────────────────────────
+_INTEREST_YES_RE = re.compile(
+    r"\b(s[ií]|claro|dale|obvio|por\s+supuesto|quiero|"
+    r"m[aá]ndamelo|env[ií]amelo|manda|env[ií]a|env[ií]al[ao]|"
+    r"adelante|vamos|vale|ok|perfecto|genial|"
+    r"ja|jawohl|nat[uü]rlich|klar|gerne)\b",
+    re.IGNORECASE,
+)
+_INTEREST_NO_RE = re.compile(
+    r"\b(no|nope|nunca|"
+    r"ya\s+no|olvida|olvidalo|olvídalo|"
+    r"no\s+me\s+interesa|no\s+gracias|"
+    r"nein|kein\s+interesse)\b",
+    re.IGNORECASE,
+)
+
+
+def detect_absent_interest(text: str) -> str:
+    """Devuelve 'yes' | 'no' | 'unclear' para respuestas a la
+    pregunta ¿sigues teniendo interés?"""
+    t = (text or "").strip().lower()
+    if not t:
+        return "unclear"
+    # NO tiene prioridad — "no me interesa" tiene 'no' Y 'sí'-like tokens
+    if _INTEREST_NO_RE.search(t):
+        return "no"
+    if _INTEREST_YES_RE.search(t):
+        return "yes"
+    return "unclear"
+
+
+# ─────────────────────────────────────────────────────────
 # State
 # ─────────────────────────────────────────────────────────
 
@@ -390,6 +425,18 @@ def handle_inbound(lead: dict, text: str) -> bool:
     lead_id = lead["id"]
     state = _read_state(lead_id)
 
+    # Absent-interest flow (Gelfis 2026-07-16): el lead no asistió y
+    # le mandamos "¿sigues interesado?". Detectamos SÍ / NO en su
+    # respuesta ANTES del resto de intents.
+    if state and state.get("phase") == "AWAITING_ABSENT_INTEREST":
+        answer = detect_absent_interest(text)
+        if answer == "yes":
+            return _handle_absent_interest_yes(lead)
+        if answer == "no":
+            return _handle_absent_interest_no(lead)
+        # unclear → dejamos que agent_4 responda; el state se mantiene
+        return False
+
     if state is not None:
         # Ya enviamos el link. Si el lead dice "ya reagendé" / "gracias"
         # / etc., agent_4 lo manejará. No volvemos a saturar con el link.
@@ -409,6 +456,82 @@ def handle_inbound(lead: dict, text: str) -> bool:
     if is_confirm:
         return _send_confirm_ack(lead, trial)
     return _send_link(lead, trial, intent="cancel" if is_cancel else "reschedule")
+
+
+def _handle_absent_interest_yes(lead: dict) -> bool:
+    """Lead absent respondió que SÍ tiene interés → mandamos link."""
+    lang = lead.get("language") or "es"
+    name = (lead.get("name") or "").split()[0] or (lead.get("name") or "")
+    platform = os.environ.get("PLATFORM_URL", "https://b2c.aprender-aleman.de").rstrip("/")
+    url = f"{platform}/agendar/cuando?lead={lead['id']}&from=absent_interest_yes"
+    text = (
+        f"¡Genial {name}! 👋\n\n"
+        "Aquí tienes el enlace para reagendar en 3 minutos:\n\n"
+        f"👉 {url}\n\n"
+        "Avísame cuando lo hayas hecho. 😊\n\n"
+        "— Stiv · Aprender-Aleman.de"
+    ) if lang != "de" else (
+        f"Super {name}! 👋\n\n"
+        "Hier ist der Link zum Umbuchen (dauert 3 Min):\n\n"
+        f"👉 {url}\n\n"
+        "Sag mir Bescheid, sobald du gebucht hast. 😊\n\n"
+        "— Stiv · Aprender-Aleman.de"
+    )
+    res = send_approved(lead, text, advance_followup=False, kind="trial_absent_interest_yes")
+    if not res.success:
+        log.warning("[absent-interest-yes] send failed for %s: %s", lead["id"], res.reason)
+        return True
+    # Limpiar state — ya cumplió su rol
+    _write_state(lead["id"], None)
+    log_timeline(
+        lead["id"],
+        type="agent_note",
+        author="system",
+        content="✅ Lead absent confirmó interés → link enviado",
+        metadata={"kind": "absent_interest_yes"},
+    )
+    return True
+
+
+def _handle_absent_interest_no(lead: dict) -> bool:
+    """Lead absent respondió NO → mandamos cierre + marcamos lost."""
+    lang = lead.get("language") or "es"
+    name = (lead.get("name") or "").split()[0] or (lead.get("name") or "")
+    text = (
+        f"Entendido {name}. Si algún día cambias de opinión, aquí estamos. "
+        "¡Éxito con lo que decidas! 🍀\n\n"
+        "— Stiv · Aprender-Aleman.de"
+    ) if lang != "de" else (
+        f"Verstanden {name}. Falls du dich später umentscheidest, sind wir hier. "
+        "Viel Erfolg mit allem! 🍀\n\n"
+        "— Stiv · Aprender-Aleman.de"
+    )
+    res = send_approved(lead, text, advance_followup=False, kind="trial_absent_interest_close")
+    if not res.success:
+        log.warning("[absent-interest-no] send failed for %s: %s", lead["id"], res.reason)
+
+    # Marcar lost + limpiar state (sin importar si el cierre WA falló)
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE leads SET status='lost'::lead_status, "
+                "                 next_contact_date=NULL, "
+                "                 reschedule_state=NULL "
+                "WHERE id=%s",
+                (lead["id"],),
+            )
+            conn.commit()
+    except Exception:                                       # noqa: BLE001
+        log.exception("[absent-interest-no] could not mark lost")
+
+    log_timeline(
+        lead["id"],
+        type="status_change",
+        author="system",
+        content="🚫 Lead absent respondió 'no me interesa' → status=lost",
+        metadata={"kind": "absent_interest_no", "channel": "whatsapp"},
+    )
+    return True
 
 
 # ─────────────────────────────────────────────────────────

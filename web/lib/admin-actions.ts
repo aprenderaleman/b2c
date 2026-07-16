@@ -503,11 +503,26 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
   const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
   const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=trial_absent`;
 
+  // Gelfis 2026-07-16: nuevo flujo — NO enviamos link directo; primero
+  // preguntamos si sigue interesado. Si responde SÍ → link, si NO →
+  // cierre + lost. La detección de SÍ/NO la hace reschedule_flow.py
+  // (Python) usando el state AWAITING_ABSENT_INTEREST que seteamos aquí.
+  if (linfo?.whatsapp_normalized || linfo?.email) {
+    const nowIso = new Date().toISOString();
+    await sb.from("leads").update({
+      reschedule_state: {
+        phase: "AWAITING_ABSENT_INTEREST",
+        lead_id: leadId,
+        started_at: nowIso,
+      },
+    }).eq("id", leadId);
+  }
+
   if (linfo?.whatsapp_normalized) {
     const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
     const waText = linfo.language === "de"
-      ? `Hallo ${firstName}! 👋\n\nWir waren heute für deine Probestunde bereit, konnten dich aber nicht erreichen. Kein Stress — sowas passiert.\n\nWann passt es dir besser? Such dir einen neuen Termin aus:\n${rescheduleUrl}\n\nBis bald.\n— Stiv`
-      : `¡Hola ${firstName}! 👋\n\nHoy estábamos preparados para tu clase de prueba pero no pudimos conectarnos contigo. Sin problema — sé que pasan cosas.\n\n¿Cuándo te viene bien retomarla?\n${rescheduleUrl}\n\nEspero verte pronto.\n— Stiv`;
+      ? `Hallo ${firstName}! 👋\n\nWir waren heute für deine Probestunde bereit, konnten dich aber nicht erreichen. Kein Stress — sowas passiert.\n\nHast du weiterhin echtes Interesse daran, Deutsch zu lernen? 🇩🇪\n\nWenn du mir mit JA antwortest, schicke ich dir den Link zum Umbuchen. Wenn du lieber Schluss machst, sag NEIN und ich schreibe dir nicht mehr.\n\n— Stiv · Aprender-Aleman.de`
+      : `¡Hola ${firstName}! 👋\n\nHoy estábamos preparados para tu clase de prueba pero no pudimos conectarnos contigo. Sin problema — sé que pasan cosas.\n\n¿Sigues teniendo interés real en aprender alemán? 🇩🇪\n\nSi me dices que SÍ, te paso el enlace para que reagendemos y no perdamos la oportunidad. Si prefieres dejarlo aquí, dime NO y no te sigo escribiendo.\n\n— Stiv · Aprender-Aleman.de`;
     const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "trial_absent_initial" });
     if (waRes.ok) {
       await sb.from("lead_timeline").insert({
@@ -531,10 +546,16 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
   if (linfo?.email) {
     const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
     const langForEmail: "es" | "de" = linfo.language === "de" ? "de" : "es";
+    // Endpoints email-action nuevos — el token identifica al lead y
+    // dispara el flow SÍ (envía WA con link) / NO (cierra + lost).
+    const { buildEmailActionUrl } = await import("./email-action-token");
+    const interestYesUrl = buildEmailActionUrl({ leadId, classId: "absent", action: "absent-interest-yes" });
+    const interestNoUrl  = buildEmailActionUrl({ leadId, classId: "absent", action: "absent-interest-no" });
     const emailRes = await sendTrialAbsentFollowupEmail(linfo.email, {
       leadName: firstName,
       language: langForEmail,
-      rescheduleUrl,
+      interestYesUrl,
+      interestNoUrl,
     });
     if (emailRes.ok) {
       await sb.from("lead_timeline").insert({

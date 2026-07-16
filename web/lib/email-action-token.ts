@@ -8,7 +8,11 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export type EmailActionType = "confirm" | "reschedule";
+export type EmailActionType =
+  | "confirm"
+  | "reschedule"
+  | "absent-interest-yes"
+  | "absent-interest-no";
 
 export type EmailActionPayload = {
   lead_id:  string;
@@ -39,6 +43,13 @@ export function buildEmailActionToken(
   return encode({ lead_id: leadId, class_id: classId, action, exp: Date.now() + TTL_MS });
 }
 
+const _ALLOWED_ACTIONS: readonly EmailActionType[] = [
+  "confirm",
+  "reschedule",
+  "absent-interest-yes",
+  "absent-interest-no",
+];
+
 export function verifyEmailActionToken(raw: string): EmailActionPayload | null {
   const [body, sig] = raw.split(".");
   if (!body || !sig) return null;
@@ -49,7 +60,7 @@ export function verifyEmailActionToken(raw: string): EmailActionPayload | null {
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as EmailActionPayload;
     if (Date.now() > p.exp) return null;
-    if (p.action !== "confirm" && p.action !== "reschedule") return null;
+    if (!_ALLOWED_ACTIONS.includes(p.action)) return null;
     return p;
   } catch {
     return null;

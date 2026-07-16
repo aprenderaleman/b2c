@@ -109,6 +109,9 @@ const ALLOWED_WA_KINDS = new Set([
   "trial_reschedule_link",
   // Welcome student al convertir lead → student
   "welcome_student",
+  // Absent-interest: mandamos pregunta, si dice SÍ → link, si NO → cierre
+  "trial_absent_interest_yes",
+  "trial_absent_interest_close",
   "admin_manual",  // bypass para Gelfis desde endpoints admin
 ]);
 
