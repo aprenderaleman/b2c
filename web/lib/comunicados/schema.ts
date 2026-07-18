@@ -78,6 +78,9 @@ export const sendBodySchema = z.object({
   channels:         z.array(z.enum(["email", "whatsapp"])).min(1),
   attachments:      attachmentsArraySchema.optional().default([]),
   scheduled_at:     scheduledAtSchema,
+  /** Milliseconds to wait between each recipient. Values > 5 000 trigger
+   *  drip mode: the dispatch cron sends small batches per 5-min tick. */
+  pacing_ms:        z.number().int().min(250).max(300_000).optional().default(250),
 });
 
 /**

@@ -25,12 +25,16 @@ type LanguageChoice = "" | "es" | "de";
 type SendResponse = {
   ok:               boolean;
   queued?:          boolean;
+  drip?:            boolean;
+  pacing_ms?:       number;
   broadcast_id:     string | null;
   total_recipients?: number;
   ok_count?:        number;
   fail_count?:      number;
   results?:         SendResultRow[];
   scheduled_at?:    string;
+  dispatched?:      number;
+  remaining?:       number;
 };
 
 /**
@@ -52,6 +56,17 @@ const LEVELS: Level[] = ["A1", "A2", "B1", "B2", "C1"];
 
 /** 5 min slack — must match SCHEDULE_MIN_LEAD_MS on the server. */
 const SCHEDULE_MIN_LEAD_MS = 5 * 60 * 1000;
+
+/** Must match DRIP_PACING_THRESHOLD_MS in send.ts */
+const DRIP_PACING_THRESHOLD_MS = 5_000;
+
+const PACING_OPTIONS: { label: string; value: number }[] = [
+  { label: "Sin pausa (250 ms)",     value: 250    },
+  { label: "30 segundos",            value: 30_000  },
+  { label: "1 minuto",               value: 60_000  },
+  { label: "2 minutos (recomendado para WA)", value: 120_000 },
+  { label: "5 minutos",              value: 300_000 },
+];
 
 /**
  * Main composer. Builds an AudienceFilter + message, previews it,
@@ -90,10 +105,11 @@ export function ComunicadosForm({
   const [emailOn, setEmailOn]   = useState(initial.emailOn);
   const [whatsOn, setWhatsOn]   = useState(initial.whatsOn);
 
-  // --- Schedule ---
+  // --- Schedule & pacing ---
   const [scheduleMode, setScheduleMode] = useState<"now" | "schedule">(initial.scheduleMode);
   const [scheduledLocal, setScheduledLocal] = useState<string>(initial.scheduledLocal);
   const [scheduleErr, setScheduleErr]       = useState<string | null>(null);
+  const [pacingMs, setPacingMs]             = useState<number>(250);
 
   // --- Attachments (email-only) ---
   const [attachments, setAttachments] = useState<Attachment[]>(initial.attachments);
@@ -262,6 +278,7 @@ export function ComunicadosForm({
           message_markdown: markdown.trim(),
           channels,
           attachments,
+          pacing_ms:        pacingMs,
         };
         if (scheduledIso)  body.scheduled_at = scheduledIso;
         if (isEditing)     body.id = editing!.id;
@@ -564,15 +581,20 @@ export function ComunicadosForm({
         </label>
 
         <label className="block">
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            Cuerpo (markdown: **negrita**, *cursiva*, - listas, [texto](url))
-          </span>
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Cuerpo (markdown: **negrita**, *cursiva*, - listas, [texto](url))
+            </span>
+            <span className="text-[11px] text-slate-400 dark:text-slate-500 font-mono select-all">
+              {"{{nombre}}"} → primer nombre del destinatario
+            </span>
+          </div>
           <textarea
             rows={10}
             className="input-text mt-1"
             value={markdown}
             onChange={e => setMarkdown(e.target.value)}
-            placeholder={"Mañana la clase cambia de las 18h a las 19h por logística.\n\nAvísame si no puedes, por favor.\n\nGracias,\n— Gelfis"}
+            placeholder={"Hola {{nombre}},\n\nMañana la clase cambia de las 18h a las 19h.\n\nGracias,\n— Gelfis"}
           />
         </label>
 
@@ -709,6 +731,31 @@ export function ComunicadosForm({
           </p>
         )}
 
+        {/* Pacing dropdown */}
+        <label className="block">
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Pausa entre mensajes</span>
+          <select
+            className="input-text mt-1"
+            value={pacingMs}
+            onChange={e => setPacingMs(Number(e.target.value))}
+          >
+            {PACING_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        {pacingMs > DRIP_PACING_THRESHOLD_MS && (
+          <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 px-4 py-3 text-[12px] text-amber-900 dark:text-amber-200 space-y-1">
+            <div><strong>Modo drip activado.</strong> Los mensajes se enviarán por lotes a lo largo del tiempo vía cron (cada 5 min).</div>
+            {preview && preview.length > 0 && (
+              <div>
+                Con {preview.length} destinatarios y {pacingMs / 1000 >= 60 ? `${pacingMs / 60_000} min` : `${pacingMs / 1000} s`} de pausa,
+                el envío completo tardará aproximadamente <strong>{formatDuration(preview.length * pacingMs)}</strong>.
+              </div>
+            )}
+          </div>
+        )}
+
         {scheduleMode === "schedule" && (
           <div className="space-y-2">
             <label className="block">
@@ -789,8 +836,18 @@ export function ComunicadosForm({
 
         {sendResult && sendResult.queued && (
           <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/40 p-4 text-sm text-emerald-900 dark:text-emerald-200">
-            <strong>✓ {isEditing ? "Cambios guardados" : "Programado"}.</strong>{" "}
-            {sendResult.scheduled_at && <>Saldrá <strong>{formatScheduled(sendResult.scheduled_at)}</strong>.</>} Aparece en el historial abajo y puedes cancelarlo o editarlo hasta 5 min antes.
+            {sendResult.drip ? (
+              <>
+                <strong>✓ Enviando en modo drip.</strong> El primer lote ya está en cola.
+                El cron irá despachando un lote cada 5 min hasta completar todos los destinatarios.
+                Puedes ver el progreso en el historial abajo.
+              </>
+            ) : (
+              <>
+                <strong>✓ {isEditing ? "Cambios guardados" : "Programado"}.</strong>{" "}
+                {sendResult.scheduled_at && <>Saldrá <strong>{formatScheduled(sendResult.scheduled_at)}</strong>.</>} Aparece en el historial abajo y puedes cancelarlo o editarlo hasta 5 min antes.
+              </>
+            )}
           </div>
         )}
 
@@ -954,6 +1011,17 @@ function formatScheduled(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+/** Format a total milliseconds duration into a human-readable Spanish string. */
+function formatDuration(ms: number): string {
+  const totalSec = Math.ceil(ms / 1000);
+  if (totalSec < 60) return `${totalSec} segundos`;
+  const totalMin = Math.ceil(totalSec / 60);
+  if (totalMin < 60) return `${totalMin} minutos`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h} h ${m} min` : `${h} horas`;
 }
 
 function sendButtonLabel(

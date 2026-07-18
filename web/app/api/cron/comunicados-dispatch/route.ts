@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { resolveRecipients } from "@/lib/comunicados/audience";
-import { dispatchSequentially, summariseResults, loadAttachments } from "@/lib/comunicados/send";
+import { dispatchSequentially, summariseResults, loadAttachments, dripBatchSize, SEND_PACING_MS } from "@/lib/comunicados/send";
 import { audienceFilterSchema, attachmentsArraySchema } from "@/lib/comunicados/schema";
-import type { Attachment, AudienceFilter, Channel, SendResultRow } from "@/lib/comunicados/types";
+import type { Attachment, AudienceFilter, Channel, Recipient, SendResultRow } from "@/lib/comunicados/types";
 
 /**
  * GET/POST /api/cron/comunicados-dispatch
@@ -54,13 +54,14 @@ async function runDispatch(req: Request) {
 
   const sb = supabaseAdmin();
 
-  // 1. Find any due rows. We only need ids here — the claim step below
-  //    re-reads the full row atomically.
+  const now = new Date().toISOString();
+
+  // 1a. Find queued rows due for dispatch.
   const { data: due, error: findErr } = await sb
     .from("admin_broadcasts")
     .select("id")
     .eq("status", "queued")
-    .lte("scheduled_at", new Date().toISOString())
+    .lte("scheduled_at", now)
     .order("scheduled_at", { ascending: true })
     .limit(MAX_ROWS_PER_TICK);
 
@@ -68,95 +69,192 @@ async function runDispatch(req: Request) {
     return NextResponse.json({ error: "db_error", message: findErr.message }, { status: 500 });
   }
 
-  const processed: Array<{ id: string; ok: boolean; total: number; ok_count: number; fail_count: number; error?: string }> = [];
-
-  for (const { id } of due ?? []) {
-    // 2. Atomically claim — flip status from queued to sending. If a
-    //    parallel invocation already grabbed it, the .eq filter prevents
-    //    a second claim and we skip silently.
-    const { data: claimed, error: claimErr } = await sb
-      .from("admin_broadcasts")
-      .update({ status: "sending" })
-      .eq("id", id)
-      .eq("status", "queued")
-      .select("id, audience_filter, subject, message_markdown, channels, attachments")
-      .maybeSingle();
-    if (claimErr) {
-      processed.push({ id, ok: false, total: 0, ok_count: 0, fail_count: 0, error: `claim:${claimErr.message}` });
-      continue;
-    }
-    if (!claimed) {
-      // Someone else got it.
-      continue;
-    }
-
-    // 3. Validate the persisted filter shape — defensive, in case the row
-    //    was inserted by hand. If invalid, mark failed so it doesn't
-    //    re-loop on every cron tick.
-    const filterParsed = audienceFilterSchema.safeParse(claimed.audience_filter);
-    if (!filterParsed.success) {
-      await sb
+  // 1b. Find in-progress drip rows whose next batch window has opened.
+  //     next_batch_at <= now means the drip lock has expired.
+  const slotsLeft = MAX_ROWS_PER_TICK - (due ?? []).length;
+  const { data: drip } = slotsLeft > 0
+    ? await sb
         .from("admin_broadcasts")
-        .update({ status: "failed", results: [{ error: "invalid_audience_filter" }] })
-        .eq("id", id);
-      processed.push({ id, ok: false, total: 0, ok_count: 0, fail_count: 0, error: "invalid_audience_filter" });
-      continue;
+        .select("id")
+        .eq("status", "sending")
+        .lte("next_batch_at", now)
+        .order("next_batch_at", { ascending: true })
+        .limit(slotsLeft)
+    : { data: [] };
+
+  const allIds = [
+    ...((due ?? []).map(r => ({ id: r.id, mode: "queued" as const }))),
+    ...((drip ?? []).map(r => ({ id: r.id, mode: "drip"   as const }))),
+  ];
+
+  const processed: Array<{ id: string; ok: boolean; total: number; ok_count: number; fail_count: number; dispatched?: number; remaining?: number; error?: string }> = [];
+
+  for (const { id, mode } of allIds) {
+    if (mode === "queued") {
+      // 2a. Atomically claim queued → sending.
+      const { data: claimed, error: claimErr } = await sb
+        .from("admin_broadcasts")
+        .update({ status: "sending" })
+        .eq("id", id)
+        .eq("status", "queued")
+        .select("id, audience_filter, subject, message_markdown, channels, attachments, pacing_ms, dispatched_count, ok_count, fail_count")
+        .maybeSingle();
+      if (claimErr) { processed.push({ id, ok: false, total: 0, ok_count: 0, fail_count: 0, error: `claim:${claimErr.message}` }); continue; }
+      if (!claimed) continue; // race-claimed by another invocation
+
+      await processBroadcast(sb, claimed, processed);
+
+    } else {
+      // 2b. Atomically claim a drip row by pushing next_batch_at 10 min
+      //     into the future — this acts as a distributed lock so two
+      //     overlapping cron invocations don't double-dispatch.
+      const lockUntil = new Date(Date.now() + 10 * 60_000).toISOString();
+      const { data: claimed, error: claimErr } = await sb
+        .from("admin_broadcasts")
+        .update({ next_batch_at: lockUntil })
+        .eq("id", id)
+        .eq("status", "sending")
+        .lte("next_batch_at", now)
+        .select("id, audience_filter, subject, message_markdown, channels, attachments, pacing_ms, dispatched_count, total_recipients, ok_count, fail_count")
+        .maybeSingle();
+      if (claimErr) { processed.push({ id, ok: false, total: 0, ok_count: 0, fail_count: 0, error: `drip_claim:${claimErr.message}` }); continue; }
+      if (!claimed) continue;
+
+      await processBroadcast(sb, claimed, processed);
     }
-    const filter:   AudienceFilter = filterParsed.data;
-    const channels: Channel[]      = (claimed.channels ?? []).filter((c: string): c is Channel => c === "email" || c === "whatsapp");
-
-    // Defensive parse: a hand-crafted row (or pre-attachments row) might
-    // have null/missing/invalid attachments. Default to [] and skip
-    // anything that doesn't fit the schema instead of failing the send.
-    const attachmentsParsed = attachmentsArraySchema.safeParse(claimed.attachments ?? []);
-    const attachments: Attachment[] = attachmentsParsed.success ? attachmentsParsed.data : [];
-
-    // 4. Resolve fresh + send sequentially with pacing so we don't blow
-    //    past Resend's 5 req/s rate limit on big sends.
-    let results: SendResultRow[] = [];
-    let dispatchError: string | null = null;
-    try {
-      const recipients        = await resolveRecipients(filter);
-      const loadedAttachments = await loadAttachments(attachments);
-      results = await dispatchSequentially(
-        recipients, claimed.subject, claimed.message_markdown, channels, loadedAttachments,
-      );
-    } catch (e) {
-      dispatchError = e instanceof Error ? e.message : "unknown";
-    }
-
-    const { ok_count, fail_count } = summariseResults(results);
-    const final = dispatchError ? "failed" : (fail_count === 0 ? "sent" : "sent");
-    // ↑ We mark status='sent' even if some recipients failed — failures
-    //   are per-recipient and visible in `results`. 'failed' is reserved
-    //   for "couldn't even attempt the send" (e.g. invalid filter, throw).
-
-    await sb
-      .from("admin_broadcasts")
-      .update({
-        status:           final,
-        total_recipients: results.length,
-        ok_count,
-        fail_count,
-        results: dispatchError
-          ? [{ error: dispatchError, partial: results }]
-          : results,
-      })
-      .eq("id", id);
-
-    processed.push({
-      id,
-      ok: !dispatchError,
-      total: results.length,
-      ok_count,
-      fail_count,
-      error: dispatchError ?? undefined,
-    });
   }
 
   return NextResponse.json({
     ok: true,
     processed,
-    found: (due ?? []).length,
+    found: allIds.length,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// processBroadcast — shared by both queued→first-batch and drip→next-batch.
+// ---------------------------------------------------------------------------
+type ClaimedRow = {
+  id:               string;
+  audience_filter:  unknown;
+  subject:          string;
+  message_markdown: string;
+  channels:         string[];
+  attachments:      unknown;
+  pacing_ms:        number | null;
+  dispatched_count: number | null;
+  total_recipients?: number | null;
+  ok_count:         number | null;
+  fail_count:       number | null;
+};
+
+type ProcessedEntry = {
+  id: string; ok: boolean; total: number; ok_count: number; fail_count: number;
+  dispatched?: number; remaining?: number; error?: string;
+};
+
+async function processBroadcast(
+  sb:        ReturnType<typeof supabaseAdmin>,
+  claimed:   ClaimedRow,
+  processed: ProcessedEntry[],
+): Promise<void> {
+  const id = claimed.id;
+
+  const filterParsed = audienceFilterSchema.safeParse(claimed.audience_filter);
+  if (!filterParsed.success) {
+    await sb.from("admin_broadcasts")
+      .update({ status: "failed", results: [{ error: "invalid_audience_filter" }] })
+      .eq("id", id);
+    processed.push({ id, ok: false, total: 0, ok_count: 0, fail_count: 0, error: "invalid_audience_filter" });
+    return;
+  }
+  const filter:   AudienceFilter = filterParsed.data;
+  const channels: Channel[]      = (claimed.channels ?? []).filter(
+    (c: string): c is Channel => c === "email" || c === "whatsapp",
+  );
+
+  const attachmentsParsed = attachmentsArraySchema.safeParse(claimed.attachments ?? []);
+  const attachments: Attachment[] = attachmentsParsed.success ? attachmentsParsed.data : [];
+
+  const pacingMs    = claimed.pacing_ms    ?? SEND_PACING_MS;
+  const batchSize   = dripBatchSize(pacingMs);
+  const startOffset = claimed.dispatched_count ?? 0;
+  const prevOk      = claimed.ok_count    ?? 0;
+  const prevFail    = claimed.fail_count  ?? 0;
+
+  let recipients: Recipient[];
+  try {
+    recipients = await resolveRecipients(filter);
+  } catch (e) {
+    const error = e instanceof Error ? e.message : "resolve_failed";
+    await sb.from("admin_broadcasts")
+      .update({ status: "failed", results: [{ error }] })
+      .eq("id", id);
+    processed.push({ id, ok: false, total: 0, ok_count: 0, fail_count: 0, error });
+    return;
+  }
+
+  const loadedAttachments = await loadAttachments(attachments);
+
+  // Slice the batch to process this tick.
+  const batch = batchSize === Infinity
+    ? recipients.slice(startOffset)
+    : recipients.slice(startOffset, startOffset + batchSize);
+
+  let results: SendResultRow[] = [];
+  let dispatchError: string | null = null;
+  try {
+    results = await dispatchSequentially(
+      batch, claimed.subject, claimed.message_markdown, channels, loadedAttachments, pacingMs,
+    );
+  } catch (e) {
+    dispatchError = e instanceof Error ? e.message : "dispatch_failed";
+  }
+
+  const { ok_count: batchOk, fail_count: batchFail } = summariseResults(results);
+  const totalOk   = prevOk   + batchOk;
+  const totalFail = prevFail + batchFail;
+  const newDispatched = startOffset + results.length;
+  const isDone = !!dispatchError || batchSize === Infinity || newDispatched >= recipients.length;
+
+  if (isDone) {
+    await sb.from("admin_broadcasts")
+      .update({
+        status:           dispatchError ? "failed" : "sent",
+        total_recipients: recipients.length,
+        ok_count:         totalOk,
+        fail_count:       totalFail,
+        dispatched_count: newDispatched,
+        next_batch_at:    null,
+        results:          dispatchError
+          ? [{ error: dispatchError, partial: results }]
+          : results,
+      })
+      .eq("id", id);
+  } else {
+    // Drip: more batches remain. Reset next_batch_at to now so the next
+    // cron tick (5 min from now) will pick this row up immediately.
+    await sb.from("admin_broadcasts")
+      .update({
+        status:           "sending",
+        total_recipients: recipients.length,
+        ok_count:         totalOk,
+        fail_count:       totalFail,
+        dispatched_count: newDispatched,
+        next_batch_at:    new Date().toISOString(),
+        results,
+      })
+      .eq("id", id);
+  }
+
+  processed.push({
+    id,
+    ok:        !dispatchError,
+    total:     recipients.length,
+    ok_count:  totalOk,
+    fail_count: totalFail,
+    dispatched: newDispatched,
+    remaining:  Math.max(0, recipients.length - newDispatched),
+    error:      dispatchError ?? undefined,
   });
 }

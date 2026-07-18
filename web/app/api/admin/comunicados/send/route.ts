@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/comunicados/auth";
 import { sendBodySchema, SCHEDULE_MIN_LEAD_MS } from "@/lib/comunicados/schema";
 import { resolveRecipients } from "@/lib/comunicados/audience";
-import { dispatchSequentially, summariseResults, loadAttachments } from "@/lib/comunicados/send";
+import { dispatchSequentially, summariseResults, loadAttachments, DRIP_PACING_THRESHOLD_MS } from "@/lib/comunicados/send";
 import { supabaseAdmin } from "@/lib/supabase";
 
 /**
@@ -35,17 +35,24 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid_body", issues: parsed.error.issues }, { status: 400 });
   }
-  const { audience_filter, subject, message_markdown, channels, attachments, scheduled_at } = parsed.data;
+  const { audience_filter, subject, message_markdown, channels, attachments, scheduled_at, pacing_ms } = parsed.data;
 
-  // ---------- Branch: scheduled vs immediate ----------
-  if (scheduled_at) {
-    const when = new Date(scheduled_at).getTime();
-    const now  = Date.now();
-    if (when - now < SCHEDULE_MIN_LEAD_MS) {
-      return NextResponse.json(
-        { error: "scheduled_too_soon", min_lead_ms: SCHEDULE_MIN_LEAD_MS },
-        { status: 400 },
-      );
+  // ---------- Branch: scheduled OR high-pacing (drip) vs immediate ----------
+  // High pacing (> 5 s) is always queued so the serverless function never
+  // times out. The cron processes N recipients per 5-min tick where
+  // N = floor(4 min / pacing_ms), continuing across ticks until done.
+  const forceQueue = pacing_ms > DRIP_PACING_THRESHOLD_MS;
+
+  if (scheduled_at || forceQueue) {
+    if (scheduled_at) {
+      const when = new Date(scheduled_at).getTime();
+      const now  = Date.now();
+      if (when - now < SCHEDULE_MIN_LEAD_MS) {
+        return NextResponse.json(
+          { error: "scheduled_too_soon", min_lead_ms: SCHEDULE_MIN_LEAD_MS },
+          { status: 400 },
+        );
+      }
     }
 
     const sb = supabaseAdmin();
@@ -58,11 +65,12 @@ export async function POST(req: Request) {
         message_markdown,
         channels,
         attachments,
+        pacing_ms,
         total_recipients: 0,
         ok_count:         0,
         fail_count:       0,
         results:          [],
-        scheduled_at,
+        scheduled_at:     scheduled_at ?? new Date().toISOString(),
         status:           "queued",
       })
       .select("id")
@@ -74,18 +82,20 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok:           true,
       queued:       true,
+      drip:         forceQueue && !scheduled_at,
       broadcast_id: data?.id ?? null,
-      scheduled_at,
+      scheduled_at: scheduled_at ?? null,
+      pacing_ms,
     });
   }
 
-  // ---------- Immediate send ----------
+  // ---------- Immediate send (low pacing only) ----------
   const recipients        = await resolveRecipients(audience_filter);
   const loadedAttachments = await loadAttachments(attachments);
 
   // Sequential per-recipient with pacing — keeps us under Resend's 5 req/s.
   const results = await dispatchSequentially(
-    recipients, subject, message_markdown, channels, loadedAttachments,
+    recipients, subject, message_markdown, channels, loadedAttachments, pacing_ms,
   );
 
   const { ok_count, fail_count } = summariseResults(results);
@@ -104,6 +114,7 @@ export async function POST(req: Request) {
         message_markdown,
         channels,
         attachments,
+        pacing_ms,
         total_recipients: recipients.length,
         ok_count,
         fail_count,

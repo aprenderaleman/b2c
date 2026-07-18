@@ -41,7 +41,8 @@ export async function resolveRecipients(
     const { data } = await sb
       .from("teachers")
       .select("id, users!inner(id, full_name, email, phone, language_preference, active)")
-      .eq("users.active", true);
+      .eq("users.active", true)
+      .order("id", { ascending: true });
     return fromUserJoinRows(data, language);
   }
 
@@ -66,7 +67,8 @@ export async function resolveRecipients(
   let q = sb
     .from("students")
     .select("id, subscription_status, current_level, users!inner(id, full_name, email, phone, language_preference, active)")
-    .eq("users.active", true);
+    .eq("users.active", true)
+    .order("id", { ascending: true });
 
   if (status !== "all") q = q.eq("subscription_status", status);
   if (filter.kind === "level") q = q.eq("current_level", filter.level);
@@ -239,7 +241,8 @@ async function resolveLeads(
     .select("id, name, email, whatsapp_normalized, language, status, gdpr_accepted, converted_to_user_id")
     .eq("gdpr_accepted", true)
     .is("converted_to_user_id", null)
-    .in("status", rawStatuses);
+    .in("status", rawStatuses)
+    .order("id", { ascending: true });
 
   if (levels && levels.length > 0) q = q.in("german_level", levels);
   if (language) q = q.eq("language", language);

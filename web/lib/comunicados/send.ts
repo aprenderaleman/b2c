@@ -17,6 +17,44 @@ import type { Attachment, Channel, Recipient, SendResultRow } from "./types";
  */
 export const SEND_PACING_MS = 250;
 
+/**
+ * Below this threshold, a broadcast is sent synchronously in a single
+ * serverless invocation. Above it, the dispatch cron uses drip mode
+ * (processes a small batch per 5-min tick) so the function never times out.
+ * 5 000 ms gives comfortable headroom: even at 5 req/s pacing every
+ * serverless call completes in seconds, not minutes.
+ */
+export const DRIP_PACING_THRESHOLD_MS = 5_000;
+
+/**
+ * Milliseconds of cron-run budget reserved for a drip batch.
+ * The Vercel cron fires every 5 min; we leave 60 s of margin so the
+ * function can finish before the next tick.
+ */
+export const DRIP_BUDGET_MS = 4 * 60_000;   // 4 minutes
+
+/**
+ * How many recipients to include in one drip batch given a pacing value.
+ * Returns Infinity (= send all) when the pacing is below the drip threshold.
+ */
+export function dripBatchSize(pacingMs: number): number {
+  if (pacingMs <= DRIP_PACING_THRESHOLD_MS) return Infinity;
+  return Math.max(1, Math.floor(DRIP_BUDGET_MS / pacingMs));
+}
+
+/**
+ * Replace {{nombre}} / {{name}} in a markdown string with the recipient's
+ * first name. If the name is unknown the placeholder is removed silently
+ * so the message still reads naturally ("Hola ," is avoided by writing
+ * "Hola {{nombre}}," but the admin should craft the copy to handle that).
+ */
+export function personalizeMarkdown(markdown: string, name: string): string {
+  const firstName = (name || "").split(/\s+/)[0].trim();
+  return markdown
+    .replace(/\{\{nombre\}\}/gi, firstName)
+    .replace(/\{\{name\}\}/gi,   firstName);
+}
+
 /** Promise-based sleep used between recipient iterations to pace sends. */
 export function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -37,10 +75,11 @@ export async function dispatchSequentially(
   markdown:    string,
   channels:    Channel[],
   attachments: EmailAttachment[],
+  pacingMs:    number = SEND_PACING_MS,
 ): Promise<SendResultRow[]> {
   const out: SendResultRow[] = [];
   for (let i = 0; i < recipients.length; i++) {
-    if (i > 0) await sleep(SEND_PACING_MS);
+    if (i > 0) await sleep(pacingMs);
     const row = await sendToRecipient(recipients[i], subject, markdown, channels, attachments);
     out.push(row);
   }
@@ -93,6 +132,10 @@ export async function sendToRecipient(
   channels: Channel[],
   attachments: EmailAttachment[] = [],
 ): Promise<SendResultRow> {
+  // Resolve {{nombre}} / {{name}} before rendering so both email HTML and
+  // WhatsApp plain text carry the personalised copy.
+  const personalMd = personalizeMarkdown(markdown, r.name);
+
   const wantEmail    = channels.includes("email")    && r.channels_available.includes("email")    && !!r.email;
   const wantWhatsapp = channels.includes("whatsapp") && r.channels_available.includes("whatsapp") && !!r.phone;
 
@@ -108,7 +151,7 @@ export async function sendToRecipient(
   const jobs: Promise<void>[] = [];
 
   if (wantEmail) {
-    const { subject: s, html, text } = renderBroadcast(subject, markdown, r.name);
+    const { subject: s, html, text } = renderBroadcast(subject, personalMd, r.name);
     jobs.push(
       sendRaw(r.email!, s, html, text, attachments.length > 0 ? attachments : undefined)
         .then(res => {
@@ -123,7 +166,7 @@ export async function sendToRecipient(
   }
 
   if (wantWhatsapp) {
-    const text = renderWhatsappOnly(markdown, r.name);
+    const text = renderWhatsappOnly(personalMd, r.name);
     jobs.push(
       sendWhatsappText(r.phone!, text)
         .then(res => {
