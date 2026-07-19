@@ -80,15 +80,13 @@ export function firePixelLead(args: {
 
 /** Disparado al agendar la clase de prueba.
  *
- *  Meta + TikTok aquí; Google Ads va en firePixelScheduleGoogle desde
- *  /confirmacion para deduplicación robusta por classId.
+ *  Solo TikTok aquí. Meta Schedule se movió a /confirmacion con eventID
+ *  + CAPI dedup (2026-07-19). Google Ads va en firePixelScheduleGoogle
+ *  desde /confirmacion.
  */
 export function firePixelSchedule(args: { leadId: string }) {
   if (typeof window === "undefined") return;
   const w = window as Window_;
-  try {
-    w.fbq?.("track", "Schedule", { content_id: args.leadId });
-  } catch (e) { console.warn("[pixel] fbq Schedule failed:", e); }
   try {
     w.ttq?.track("Subscribe", { content_id: args.leadId });
   } catch (e) { console.warn("[pixel] ttq Subscribe failed:", e); }

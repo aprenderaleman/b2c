@@ -40,7 +40,7 @@ export default async function ConfirmacionPage({
     .select(`
       id, scheduled_at, duration_minutes, lead_id, is_trial, short_code,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads!inner(name)
+      lead:leads!inner(name, email, whatsapp_normalized)
     `)
     .eq("id", classId)
     .maybeSingle();
@@ -56,7 +56,8 @@ export default async function ConfirmacionPage({
                        Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } |
                             Array<{ full_name: string | null; email: string }> }>;
-    lead: { name: string | null } | Array<{ name: string | null }>;
+    lead: { name: string | null; email: string | null; whatsapp_normalized: string | null } |
+          Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null =>
     !x ? null : Array.isArray(x) ? x[0] ?? null : x;
@@ -65,7 +66,10 @@ export default async function ConfirmacionPage({
   const teacherWrap = flat(r.teacher);
   const tu = teacherWrap ? flat(teacherWrap.users) : null;
   const teacherName = tu?.full_name ?? tu?.email ?? "tu profesor/a";
-  const leadName    = flat(r.lead)?.name ?? "";
+  const leadFlat    = flat(r.lead);
+  const leadName    = leadFlat?.name ?? "";
+  const leadEmail   = leadFlat?.email ?? undefined;
+  const leadPhone   = leadFlat?.whatsapp_normalized ?? undefined;
   const firstName   = leadName.trim().split(/\s+/)[0] || "";
 
   const startDate = new Date(r.scheduled_at).toLocaleString("es-ES", {
@@ -88,7 +92,7 @@ export default async function ConfirmacionPage({
          style={{ overscrollBehavior: "contain" }}>
       {/* Google Ads conversion tracker — se dispara al montar, con
           transaction_id=classId para dedup nativa. */}
-      <ConfirmacionPixel classId={classId} />
+      <ConfirmacionPixel classId={classId} leadEmail={leadEmail} leadPhone={leadPhone} />
       <IllustrationPanel step="success">
         <div className="flex flex-col min-h-[100dvh]">
           {/* Header sticky — sólo brand + back a inicio, sin progress bar. */}

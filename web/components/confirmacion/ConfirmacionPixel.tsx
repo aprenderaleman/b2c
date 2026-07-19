@@ -4,27 +4,53 @@ import { useEffect, useRef } from "react";
 import { firePixelScheduleGoogle } from "@/lib/pixels";
 
 /**
- * Dispara la conversión Google Ads "trial reservado" cuando el lead
- * carga /confirmacion. Se movió aquí desde /agendar/cuando (2026-07-10)
- * para alinear con la práctica estándar de e-commerce: contar la
- * conversión en la thank-you page, no en el submit.
+ * Fires conversion events on /confirmacion mount:
+ *   - Google Ads conversion (transaction_id=classId for dedup)
+ *   - Meta Pixel "Schedule" (browser-side, with eventID for CAPI dedup)
+ *   - Meta CAPI "Schedule" (server-side, same eventID)
  *
- * Efecto colateral: si el lead completa el form pero el redirect a
- * /confirmacion falla (network hiccup, JS error), NO se cuenta la
- * conversión. Trade-off aceptado — es el 1% edge case, y garantizar
- * que /confirmacion cargó da una señal más limpia a Smart Bidding.
- *
- * transaction_id=classId sigue garantizando dedup nativa: refresh,
- * share del link, multi-tab → Google Ads solo cuenta 1x por classId.
- *
- * Ref-guard anti doble-ejecución en StrictMode + double-render dev.
+ * sessionStorage flag prevents double-fire on page reload.
  */
-export function ConfirmacionPixel({ classId }: { classId: string }) {
+export function ConfirmacionPixel({
+  classId,
+  leadEmail,
+  leadPhone,
+}: {
+  classId: string;
+  leadEmail?: string;
+  leadPhone?: string;
+}) {
   const fired = useRef(false);
   useEffect(() => {
     if (fired.current) return;
+    const storageKey = `aa_conv_${classId}`;
+    if (typeof window !== "undefined" && sessionStorage.getItem(storageKey)) return;
     fired.current = true;
+    if (typeof window !== "undefined") sessionStorage.setItem(storageKey, "1");
+
     firePixelScheduleGoogle({ classId });
-  }, [classId]);
+
+    const eventId = crypto.randomUUID();
+
+    // Meta Pixel browser-side Schedule with eventID
+    try {
+      const w = window as Window & { fbq?: (...args: unknown[]) => void };
+      w.fbq?.("track", "Schedule", {}, { eventID: eventId });
+    } catch (e) {
+      console.warn("[pixel] fbq Schedule failed:", e);
+    }
+
+    // Meta Conversions API server-side (same eventID for dedup)
+    fetch("/api/meta-capi", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        eventId,
+        email: leadEmail,
+        phone: leadPhone,
+        sourceUrl: window.location.href,
+      }),
+    }).catch(e => console.warn("[pixel] CAPI call failed:", e));
+  }, [classId, leadEmail, leadPhone]);
   return null;
 }
