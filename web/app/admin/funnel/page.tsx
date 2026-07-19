@@ -97,24 +97,32 @@ function daysFromPeriod(period: PeriodKey): number {
 
 // ── Mapa de atribución landing → label amigable + badge ───────────
 type LandingMeta = { label: string; sourceLabel: string; sourceIcon: string; sourceCls: string };
-const SRC_ADS     = "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-const SRC_SOCIAL  = "bg-purple-500/15  text-purple-300  border-purple-500/30";
-const SRC_DIRECT  = "bg-sky-500/15     text-sky-300     border-sky-500/30";
-const SRC_YOUTUBE = "bg-red-500/15     text-red-300     border-red-500/30";
-const SRC_OTHER   = "bg-white/5        text-white/60    border-white/10";
+const SRC_ADS       = "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+const SRC_SOCIAL    = "bg-purple-500/15  text-purple-300  border-purple-500/30";
+const SRC_DIRECT    = "bg-sky-500/15     text-sky-300     border-sky-500/30";
+const SRC_YOUTUBE   = "bg-red-500/15     text-red-300     border-red-500/30";
+const SRC_INSTAGRAM = "bg-pink-500/15    text-pink-300    border-pink-500/30";
+const SRC_TIKTOK    = "bg-slate-800      text-slate-100   border-slate-500/30";
+const SRC_FACEBOOK  = "bg-blue-500/15    text-blue-300    border-blue-500/30";
+const SRC_META_ADS  = "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30";
+const SRC_OTHER     = "bg-white/5        text-white/60    border-white/10";
 const LANDING_META: Record<string, LandingMeta> = {
-  "socialmedia":            { label: "Home (redes sociales)",       sourceLabel: "Social",  sourceIcon: "📱", sourceCls: SRC_SOCIAL  },
-  "home":                   { label: "Home (legacy)",               sourceLabel: "Social",  sourceIcon: "📱", sourceCls: SRC_SOCIAL  },
-  "curso-online":           { label: "Curso de alemán online",      sourceLabel: "Ads",     sourceIcon: "🟢", sourceCls: SRC_ADS     },
-  "particulares":           { label: "Clases particulares",         sourceLabel: "Ads",     sourceIcon: "🟢", sourceCls: SRC_ADS     },
-  "intensivo":              { label: "Curso intensivo",             sourceLabel: "Ads",     sourceIcon: "🟢", sourceCls: SRC_ADS     },
-  "certificado":            { label: "Certificado oficial",         sourceLabel: "Ads",     sourceIcon: "🟢", sourceCls: SRC_ADS     },
-  "b2-trabajar":            { label: "B2 para trabajar",            sourceLabel: "Ads",     sourceIcon: "🟢", sourceCls: SRC_ADS     },
-  "clases-aleman-ciudades": { label: "Clases por ciudades",         sourceLabel: "Ads",     sourceIcon: "🟢", sourceCls: SRC_ADS     },
-  "ciudades":               { label: "Clases por ciudades",         sourceLabel: "Ads",     sourceIcon: "🟢", sourceCls: SRC_ADS     },
-  "youtube":                { label: "YouTube (descripciones)",     sourceLabel: "YouTube", sourceIcon: "📺", sourceCls: SRC_YOUTUBE },
-  "agendar-directo":        { label: "Atajo CTA verde",             sourceLabel: "Directo", sourceIcon: "⚡", sourceCls: SRC_DIRECT  },
-  "(sin landing)":          { label: "(sin atribución)",            sourceLabel: "Otro",    sourceIcon: "❓", sourceCls: SRC_OTHER   },
+  "socialmedia":            { label: "Home (redes sociales)",       sourceLabel: "Social",   sourceIcon: "📱", sourceCls: SRC_SOCIAL    },
+  "home":                   { label: "Home (legacy)",               sourceLabel: "Social",   sourceIcon: "📱", sourceCls: SRC_SOCIAL    },
+  "curso-online":           { label: "Curso de alemán online",      sourceLabel: "Ads",      sourceIcon: "🟢", sourceCls: SRC_ADS       },
+  "particulares":           { label: "Clases particulares",         sourceLabel: "Ads",      sourceIcon: "🟢", sourceCls: SRC_ADS       },
+  "intensivo":              { label: "Curso intensivo",             sourceLabel: "Ads",      sourceIcon: "🟢", sourceCls: SRC_ADS       },
+  "certificado":            { label: "Certificado oficial",         sourceLabel: "Ads",      sourceIcon: "🟢", sourceCls: SRC_ADS       },
+  "b2-trabajar":            { label: "B2 para trabajar",            sourceLabel: "Ads",      sourceIcon: "🟢", sourceCls: SRC_ADS       },
+  "clases-aleman-ciudades": { label: "Clases por ciudades",         sourceLabel: "Ads",      sourceIcon: "🟢", sourceCls: SRC_ADS       },
+  "ciudades":               { label: "Clases por ciudades",         sourceLabel: "Ads",      sourceIcon: "🟢", sourceCls: SRC_ADS       },
+  "youtube":                { label: "YouTube (descripciones)",     sourceLabel: "YouTube",  sourceIcon: "📺", sourceCls: SRC_YOUTUBE   },
+  "instagram":              { label: "Instagram (bio + stories)",   sourceLabel: "Instagram",sourceIcon: "📸", sourceCls: SRC_INSTAGRAM },
+  "tiktok":                 { label: "TikTok (bio link)",           sourceLabel: "TikTok",   sourceIcon: "🎵", sourceCls: SRC_TIKTOK    },
+  "facebook":               { label: "Facebook (orgánico)",         sourceLabel: "Facebook", sourceIcon: "📘", sourceCls: SRC_FACEBOOK  },
+  "meta-ads":               { label: "Meta Ads (FB + IG pagado)",   sourceLabel: "Meta Ads", sourceIcon: "💰", sourceCls: SRC_META_ADS  },
+  "agendar-directo":        { label: "Atajo CTA verde",             sourceLabel: "Directo",  sourceIcon: "⚡", sourceCls: SRC_DIRECT    },
+  "(sin landing)":          { label: "(sin atribución)",            sourceLabel: "Otro",     sourceIcon: "❓", sourceCls: SRC_OTHER     },
 };
 
 const COUNTRY_NAMES: Record<string, string> = {
