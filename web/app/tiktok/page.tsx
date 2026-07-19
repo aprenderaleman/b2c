@@ -5,14 +5,14 @@ import { LandingStep0 } from "@/components/landings/LandingStep0";
  * Landing dedicada para tráfico ORGÁNICO de TikTok (bio link).
  * URL corta pegable: b2c.aprender-aleman.de/tiktok.
  *
- * noindex: landing de campaña. Suscriptores llegan directo desde TT.
- *
- * Atribución: landingIntent="tiktok" → badge negro 🎵 en /admin/funnel.
+ * Copy unificado con /facebook, /instagram y /meta-ads (Gelfis
+ * 2026-07-19). Solo cambia landingIntent para atribución en
+ * /admin/funnel (badge 🎵).
  */
 export const metadata: Metadata = {
-  title: "Del TikTok a hablar alemán de verdad — Aprender-Aleman.de",
+  title: "Aprende alemán con profesor nativo — Clase de prueba gratis · Aprender-Aleman.de",
   description:
-    "Aprende alemán con un profesor nativo que habla español. Primera clase 100% gratis, 30 min, sin compromiso.",
+    "Clases de alemán online 1 a 1 con profesor nativo que habla español. Primera clase 100% gratis, sin compromiso.",
   alternates: { canonical: "/tiktok" },
   robots: { index: false, follow: true },
 };
@@ -20,12 +20,12 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <LandingStep0
-      h1="Del scroll a hablar alemán 🇩🇪"
-      subtitle="Los TikToks te motivan, pero solo hablando 30 min con un profesor real se te queda algo. Prueba tu primera clase gratis, sin tarjeta ni compromiso."
+      h1="Aprende alemán con un profesor nativo que habla español"
+      subtitle="Clases 1 a 1 online, adaptadas a tu ritmo. Tu profesor prepara la clase pensando en ti. La primera es 100% gratis, sin compromiso ni tarjeta."
       bullets={[
-        { icon: "⚡", text: <><strong>30 min al grano</strong> — nada de intros largas, directo a hablar</> },
-        { icon: "🗣", text: <>Profesor <strong>nativo bilingüe</strong> — te explica en español si te trabas</> },
-        { icon: "🎁", text: <><strong>Clase de prueba GRATIS</strong> — si no te convence, no vuelves</> },
+        { icon: "🎯", text: <><strong>1 a 1</strong> — toda la clase es para ti, sin grupos que te frenen</> },
+        { icon: "🗣", text: <>Profesor <strong>nativo bilingüe</strong> — te explica en español cuando te trabas</> },
+        { icon: "🗓", text: <><strong>Sin horarios fijos</strong> — reservas cuando te va bien</> },
       ]}
       presetMotivo="particulares"
       landingIntent="tiktok"

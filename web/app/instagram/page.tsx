@@ -5,16 +5,14 @@ import { LandingStep0 } from "@/components/landings/LandingStep0";
  * Landing dedicada para tráfico ORGÁNICO de Instagram (bio + stories
  * + link in bio). URL corta pegable: b2c.aprender-aleman.de/instagram.
  *
- * noindex: landing de campaña, no compite en SEO con las de intención
- * comercial. Suscriptores llegan directo desde Instagram.
- *
- * Atribución: landingIntent="instagram" → leads.landing_intent
- * distingue orgánico IG en /admin/funnel (badge morado 📸).
+ * Copy unificado con /facebook, /tiktok y /meta-ads (Gelfis 2026-07-19)
+ * — mismo mensaje probado en todos los canales, solo cambia el
+ * landingIntent para desglosar atribución en /admin/funnel (badge 📸).
  */
 export const metadata: Metadata = {
-  title: "Nos viste en Instagram — Prueba una clase real gratis · Aprender-Aleman.de",
+  title: "Aprende alemán con profesor nativo — Clase de prueba gratis · Aprender-Aleman.de",
   description:
-    "Aprende alemán con un profesor nativo que habla español. Primera clase 100% gratis, 30 min, sin compromiso.",
+    "Clases de alemán online 1 a 1 con profesor nativo que habla español. Primera clase 100% gratis, sin compromiso.",
   alternates: { canonical: "/instagram" },
   robots: { index: false, follow: true },
 };
@@ -22,12 +20,12 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <LandingStep0
-      h1="Nos viste en Instagram, ahora hablemos alemán 🇩🇪"
-      subtitle="Los reels están bien para inspirarte, pero solo hablando con un profesor de verdad rompes la barrera. Primera clase 100% gratis, sin compromiso."
+      h1="Aprende alemán con un profesor nativo que habla español"
+      subtitle="Clases 1 a 1 online, adaptadas a tu ritmo. Tu profesor prepara la clase pensando en ti. La primera es 100% gratis, sin compromiso ni tarjeta."
       bullets={[
-        { icon: "🎯", text: <><strong>30 min conversacionales</strong> — no más scroll infinito, esta vez hablas tú</> },
+        { icon: "🎯", text: <><strong>1 a 1</strong> — toda la clase es para ti, sin grupos que te frenen</> },
         { icon: "🗣", text: <>Profesor <strong>nativo bilingüe</strong> — te explica en español cuando te trabas</> },
-        { icon: "🎁", text: <><strong>Clase de prueba GRATIS</strong> — si no te convence, no vuelves</> },
+        { icon: "🗓", text: <><strong>Sin horarios fijos</strong> — reservas cuando te va bien</> },
       ]}
       presetMotivo="particulares"
       landingIntent="instagram"

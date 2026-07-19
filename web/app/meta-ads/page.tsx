@@ -2,22 +2,18 @@ import type { Metadata } from "next";
 import { LandingStep0 } from "@/components/landings/LandingStep0";
 
 /**
- * Landing dedicada para tráfico PAGADO de Meta Ads (Facebook + Instagram
- * ads). URL corta pegable en el destination URL de cada creative:
- *   b2c.aprender-aleman.de/meta-ads
+ * Landing dedicada para tráfico PAGADO de Meta Ads (FB + IG ads).
+ * URL corta pegable: b2c.aprender-aleman.de/meta-ads.
  *
- * Separado de /instagram y /facebook (orgánicos) para que en
- * /admin/funnel puedas ver CPA real vs CVR orgánico sin mezclarlos.
- *
- * Copy más directo que orgánico: promesa clara + urgencia suave. El lead
- * pagado tiene menos contexto previo → tenemos que convencerlo rápido.
- *
- * Atribución: landingIntent="meta-ads" → badge magenta 💰.
+ * Copy unificado con /facebook, /instagram y /tiktok (Gelfis
+ * 2026-07-19) — un mismo mensaje en todos los canales; solo cambia
+ * landingIntent para desglosar paid vs orgánico en /admin/funnel
+ * (badge 💰).
  */
 export const metadata: Metadata = {
-  title: "Aprende alemán con profesor nativo — Clase gratis · Aprender-Aleman.de",
+  title: "Aprende alemán con profesor nativo — Clase de prueba gratis · Aprender-Aleman.de",
   description:
-    "Habla alemán en 3 meses con clases 1 a 1 online. Profesor nativo que habla español. Primera clase 100% gratis.",
+    "Clases de alemán online 1 a 1 con profesor nativo que habla español. Primera clase 100% gratis, sin compromiso.",
   alternates: { canonical: "/meta-ads" },
   robots: { index: false, follow: true },
 };
@@ -25,12 +21,12 @@ export const metadata: Metadata = {
 export default function Page() {
   return (
     <LandingStep0
-      h1="Habla alemán en 3 meses con clases 1 a 1"
-      subtitle="Prueba gratis nuestro método: 30 min con profesor nativo que habla español. Te evaluamos el nivel y te armamos un plan para llegar a tu objetivo. Sin tarjeta, sin compromiso."
+      h1="Aprende alemán con un profesor nativo que habla español"
+      subtitle="Clases 1 a 1 online, adaptadas a tu ritmo. Tu profesor prepara la clase pensando en ti. La primera es 100% gratis, sin compromiso ni tarjeta."
       bullets={[
-        { icon: "🎯", text: <><strong>Plan personalizado</strong> — sabrás exactamente qué hacer y en cuánto llegas</> },
+        { icon: "🎯", text: <><strong>1 a 1</strong> — toda la clase es para ti, sin grupos que te frenen</> },
         { icon: "🗣", text: <>Profesor <strong>nativo bilingüe</strong> — te explica en español cuando te trabas</> },
-        { icon: "🎁", text: <><strong>Clase 100% gratis</strong> — si no te convence, no vuelves. Sin tarjeta.</> },
+        { icon: "🗓", text: <><strong>Sin horarios fijos</strong> — reservas cuando te va bien</> },
       ]}
       presetMotivo="particulares"
       landingIntent="meta-ads"
