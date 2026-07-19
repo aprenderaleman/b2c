@@ -32,8 +32,19 @@ import {
   TELEMETRY_STARTS_AT,
 } from "@/lib/funnel-ads";
 import { getLeads } from "@/lib/dashboard";
+import {
+  getWaterfall,
+  getLandingComparator,
+  getDropoffSessions,
+  WATERFALL_STEPS,
+} from "@/lib/funnel-waterfall";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { ColdCallPill } from "@/components/admin/ColdCallPill";
+import {
+  FunnelWaterfall,
+  LandingComparator,
+  DropoffPanel,
+} from "@/components/admin/FunnelWaterfall";
 import { RefreshButton } from "../ads/RefreshButton";
 
 const PAGE_SIZE = 50;
@@ -175,6 +186,7 @@ export default async function FunnelControlPage({
   searchParams: Promise<{
     days?: string; country?: string; period?: string; q?: string;
     status?: string; has_trial?: string; cold_call?: string; page?: string;
+    wf_device?: string; wf_landing?: string; wf_drill?: string;
   }>;
 }) {
   await requireRole(["superadmin", "admin"]);
@@ -213,7 +225,21 @@ export default async function FunnelControlPage({
   // nuevos arriba). País NO se aplica a la lista todavía: el campo
   // existe pero pasos 1-2 no lo tienen; agregarlo introduciría ruido.
   const createdSinceIso = new Date(Date.now() - activeDays * 86_400_000).toISOString();
-  const [data, availableCountries, leadsResult] = await Promise.all([
+
+  // Waterfall (nueva instrumentación 2026-07-19): 3 params opcionales.
+  const wfDeviceRaw = (sp.wf_device ?? "").trim().toLowerCase();
+  const wfDevice: "all" | "mobile" | "desktop" =
+    wfDeviceRaw === "mobile" || wfDeviceRaw === "desktop" ? wfDeviceRaw : "all";
+  const wfLanding = typeof sp.wf_landing === "string" && sp.wf_landing.trim()
+    ? sp.wf_landing.trim().slice(0, 40) : undefined;
+  // wf_drill formato "stepFrom-stepTo" (ej. "12-13")
+  const drillMatch = typeof sp.wf_drill === "string"
+    ? sp.wf_drill.match(/^(\d+)-(\d+)$/) : null;
+  const drill = drillMatch
+    ? { stepFrom: Number(drillMatch[1]), stepTo: Number(drillMatch[2]) }
+    : null;
+
+  const [data, availableCountries, leadsResult, waterfall, landingComparator, dropoffs] = await Promise.all([
     getFunnelAdsData(activeDays, activeCountry || undefined),
     getAvailableCountries(activeDays),
     getLeads({
@@ -226,6 +252,21 @@ export default async function FunnelControlPage({
       has_trial:    hasTrialFilter,
       cold_call:    coldCallFilter,
     }),
+    getWaterfall({
+      days:          activeDays,
+      landingIntent: wfLanding,
+      device:        wfDevice === "all" ? undefined : wfDevice,
+    }),
+    getLandingComparator(activeDays),
+    drill
+      ? getDropoffSessions({
+          days:          activeDays,
+          stepFrom:      drill.stepFrom,
+          stepTo:        drill.stepTo,
+          landingIntent: wfLanding,
+          limit:         100,
+        })
+      : Promise.resolve([]),
   ]);
   const leads = leadsResult.rows;
   const totalPages = Math.max(1, Math.ceil(leadsResult.total / PAGE_SIZE));
@@ -443,6 +484,55 @@ export default async function FunnelControlPage({
               </div>
             </details>
           </section>
+        );
+      })()}
+
+      {/* ── Waterfall + comparador ────────────────────────────── */}
+      {(() => {
+        const currentUrl = `/admin/funnel${qs({
+          ...(activePeriod ? { period: activePeriod } : { days: activeDays }),
+          country:   activeCountry || undefined,
+          q:         searchQuery || undefined,
+          status:    statusFilterKey || undefined,
+          has_trial: hasTrialFilter,
+          cold_call: coldCallFilter,
+          wf_device: wfDevice === "all" ? undefined : wfDevice,
+          wf_landing: wfLanding,
+        })}`;
+        const closeDrillUrl = `/admin/funnel${qs({
+          ...(activePeriod ? { period: activePeriod } : { days: activeDays }),
+          country:   activeCountry || undefined,
+          q:         searchQuery || undefined,
+          status:    statusFilterKey || undefined,
+          has_trial: hasTrialFilter,
+          cold_call: coldCallFilter,
+          wf_device: wfDevice === "all" ? undefined : wfDevice,
+          wf_landing: wfLanding,
+        })}`;
+        const drillLabels = drill
+          ? {
+              from: WATERFALL_STEPS.find(s => s.code === drill.stepFrom)?.label ?? `step ${drill.stepFrom}`,
+              to:   WATERFALL_STEPS.find(s => s.code === drill.stepTo)?.label   ?? `step ${drill.stepTo}`,
+            }
+          : null;
+        return (
+          <>
+            <FunnelWaterfall
+              data={waterfall}
+              device={wfDevice}
+              currentUrl={currentUrl}
+              landingIntent={wfLanding}
+            />
+            {drill && drillLabels && (
+              <DropoffPanel
+                stepFromLabel={drillLabels.from}
+                stepToLabel={drillLabels.to}
+                sessions={dropoffs}
+                closeUrl={closeDrillUrl}
+              />
+            )}
+            <LandingComparator rows={landingComparator} />
+          </>
         );
       })()}
 
