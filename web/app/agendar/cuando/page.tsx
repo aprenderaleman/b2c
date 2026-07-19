@@ -13,6 +13,7 @@ import { combineE164 } from "@/components/diagnostico/DiagnosticoFunnel";
 import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
 import { detectBrowserTimezone, detectCountryFromBrowser, effectiveLeadTimezone } from "@/lib/timezone-country";
 import { captureAttributionFromUrl, readAttribution, clearAttribution } from "@/lib/ads-attribution";
+import { trackFunnel } from "@/lib/track-funnel";
 
 /**
  * Step 1 — slot picker. Mobile pattern: horizontal day strip + vertical
@@ -162,7 +163,11 @@ function StepCuandoInner() {
   // con ?gclid=... (Google Ads), lo persistimos para spread en book-trial.
   // Si vino redirigido desde /diagnostico o landing, ya está en sessionStorage
   // y captureAttributionFromUrl es idempotente (no pisa).
-  useEffect(() => { captureAttributionFromUrl(); }, []);
+  useEffect(() => {
+    captureAttributionFromUrl();
+    // Instrumentación funnel — llegada al slot picker.
+    trackFunnel("slot_page_view", { landingIntent: effectiveLanding });
+  }, [effectiveLanding]);
 
   const [slots,    setSlots]    = useState<SlotItem[] | null>(null);
   const [loadErr,  setLoadErr]  = useState<string | null>(null);
@@ -269,6 +274,8 @@ function StepCuandoInner() {
       teacher_id:   s.teacherId,
       teacher_name: s.teacherName,
     });
+    // Instrumentación funnel: slot elegido → form aparece.
+    trackFunnel("slot_picked", { landingIntent: effectiveLanding, answer: s.startIso });
     setSelectedSlot(s);
     setShowForm(false);
     setCheckingAvailability(true);
@@ -314,6 +321,8 @@ function StepCuandoInner() {
           return;
         }
         if (state.lead_id) firePixelSchedule({ leadId: state.lead_id });
+        // Instrumentación funnel (path diagnostico → auto-submit).
+        trackFunnel("submit_ok", { landingIntent: effectiveLanding, answer: json.classId });
         // Google Ads conversion se dispara en /confirmacion (Gelfis
         // 2026-07-10): mejor señal a Smart Bidding — solo cuenta si el
         // lead realmente llegó a la thank-you page.
@@ -336,6 +345,7 @@ function StepCuandoInner() {
     setTimeout(() => {
       setCheckingAvailability(false);
       setShowForm(true);
+      trackFunnel("form_opened", { landingIntent: effectiveLanding });
     }, 2200);
   };
 
@@ -360,10 +370,23 @@ function StepCuandoInner() {
   const phoneOk    = phoneInfo.state === "ok" || phoneInfo.state === "mismatch";
   const canSubmitForm = nameValid && emailValid && phoneOk && form.commitment && !!selectedSlot && !submitting;
 
+  // ── Instrumentación funnel — hitos idempotentes (trackFunnel dedupe
+  //    por session_id+step, así que estos useEffect son seguros). ──
+  useEffect(() => {
+    if (nameValid || emailValid) trackFunnel("field_typed", { landingIntent: effectiveLanding });
+  }, [nameValid, emailValid, effectiveLanding]);
+  useEffect(() => {
+    if (phoneInfo.state === "ok") trackFunnel("phone_valid", { landingIntent: effectiveLanding });
+  }, [phoneInfo.state, effectiveLanding]);
+  useEffect(() => {
+    if (form.commitment) trackFunnel("commitment_checked", { landingIntent: effectiveLanding });
+  }, [form.commitment, effectiveLanding]);
+
   const submitInlineForm = async () => {
     if (!selectedSlot || !canSubmitForm) return;
     setSubmitting(true);
     setSubmitErr(null);
+    trackFunnel("submit_attempt", { landingIntent: effectiveLanding });
     try {
       const cc = form.countryCode.startsWith("+") ? form.countryCode : `+${form.countryCode}`;
       const whatsapp_e164 = combineE164(form.countryCode, form.whatsapp);
@@ -419,6 +442,8 @@ function StepCuandoInner() {
         });
         firePixelSchedule({ leadId: json.leadId });
       }
+      // Instrumentación funnel — book-trial ok = lead creado.
+      trackFunnel("submit_ok", { landingIntent: effectiveLanding, answer: json.classId });
       // Google Ads conversion se dispara en /confirmacion (Gelfis
       // 2026-07-10): solo cuenta si el lead realmente llegó a la
       // thank-you page. Dedup nativa por transaction_id=classId.
@@ -530,7 +555,7 @@ function StepCuandoInner() {
               <MobileDayStrip
                 daysWithSlots={daysWithSlots}
                 selectedDay={selectedDay}
-                onSelect={setDay}
+                onSelect={(d) => { trackFunnel("day_picked", { landingIntent: effectiveLanding, answer: d }); setDay(d); }}
                 lightMode
                 displayTimezone={displayTz}
               />

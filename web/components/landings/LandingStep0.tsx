@@ -18,6 +18,7 @@ import { useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
 import { captureAttributionFromUrl } from "@/lib/ads-attribution";
+import { trackFunnel } from "@/lib/track-funnel";
 import type { MotivoId } from "@/components/diagnostico/DiagnosticoFunnel";
 
 /** Bullet de ventaja con icono propio (Gelfis 2026-06-14: TODAS las
@@ -53,7 +54,11 @@ export function LandingStep0({
 
   // Captura de gclid/utm al aterrizar en la landing. Sobrevive en
   // sessionStorage para que /agendar/cuando lo recupere al confirmar.
-  useEffect(() => { captureAttributionFromUrl(); }, []);
+  useEffect(() => {
+    captureAttributionFromUrl();
+    // Instrumentación funnel (Gelfis 2026-07-19): landing_view + slug.
+    trackFunnel("landing_view", { landingIntent });
+  }, [landingIntent]);
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-white"
@@ -150,6 +155,7 @@ export function LandingStep0({
             </p>
             <Link
               href={`/agendar/cuando?landing=${encodeURIComponent(landingIntent)}${presetMotivo ? `&motivo=${encodeURIComponent(presetMotivo)}` : ""}`}
+              onClick={() => trackFunnel("cta_click", { landingIntent })}
               className="mt-4 inline-flex items-center justify-center gap-2 w-full
                          h-12 md:h-13 lg:h-14 rounded-2xl
                          bg-emerald-600 hover:bg-emerald-700 text-white
