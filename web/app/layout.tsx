@@ -55,7 +55,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', '${GOOGLE_ADS_ID}');
+            // Enhanced Conversions habilitadas (Gelfis 2026-07-19) —
+            // Google usa email/phone hasheado que pasamos en el evento
+            // 'conversion' para recuperar ~30% de conversiones sin gclid.
+            gtag('config', '${GOOGLE_ADS_ID}', {
+              allow_enhanced_conversions: true
+            });
           `}
         </Script>
         {/* Meta Pixel + TikTok Pixel — solo se inyectan si las envs

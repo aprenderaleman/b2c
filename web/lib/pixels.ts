@@ -102,10 +102,26 @@ export function firePixelSchedule(args: { leadId: string }) {
  *      refresh, share del link, multi-tab, todo dedup.
  *    - Un solo evento por funnel = CPA real, no inflado.
  */
-export function firePixelScheduleGoogle(args: { classId: string }) {
+export function firePixelScheduleGoogle(args: {
+  classId: string;
+  /** Enhanced Conversions (Gelfis 2026-07-19): email plaintext. Google
+   *  lo hashea + matchea con la identidad Google del usuario para
+   *  recuperar conversiones sin gclid (~30% de recuperación típica). */
+  email?:  string;
+  phone?:  string;
+}) {
   if (typeof window === "undefined") return;
   const w = window as Window_;
+  // set() con user_data ANTES del event('conversion') es la forma
+  // documentada por Google para Enhanced Conversions con gtag directo
+  // (sin GTM). Google se encarga del hashing SHA-256 client-side.
   try {
+    if (args.email || args.phone) {
+      w.gtag?.("set", "user_data", {
+        email:       args.email?.trim().toLowerCase() || undefined,
+        phone_number: args.phone?.replace(/\D/g, "") || undefined,
+      });
+    }
     w.gtag?.("event", "conversion", {
       send_to: GADS_CONVERSION_LABEL,
       value:    GADS_CONVERSION_VALUE,

@@ -28,7 +28,9 @@ export function ConfirmacionPixel({
     fired.current = true;
     if (typeof window !== "undefined") sessionStorage.setItem(storageKey, "1");
 
-    firePixelScheduleGoogle({ classId });
+    // Enhanced Conversions: email + phone en el mismo evento
+    // (dedup nativo por transaction_id=classId).
+    firePixelScheduleGoogle({ classId, email: leadEmail, phone: leadPhone });
 
     const eventId = crypto.randomUUID();
 
