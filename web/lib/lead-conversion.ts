@@ -20,7 +20,9 @@ export const ConvertBody = z.object({
   email:             z.string().trim().toLowerCase().email(),
   fullName:          z.string().trim().min(2).max(120),
   phone:             z.string().trim().min(5).max(30).nullable(),
-  language:          z.enum(["es", "de"]).default("es"),
+  // Gelfis 2026-07-20: TODO en español. Aceptamos el campo por
+  // compat con paneles admin viejos, pero lo pisamos a "es".
+  language:          z.enum(["es", "de"]).default("es").transform(() => "es" as const),
   currentLevel:      z.enum(["A0", "A1", "A2", "B1", "B2", "C1", "C2"]),
   goal:              z.string().trim().max(300).nullable().default(null),
   subscriptionType:  z.enum(["single_classes", "package", "monthly_subscription", "combined"]),

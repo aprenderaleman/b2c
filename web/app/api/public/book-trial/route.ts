@@ -73,7 +73,9 @@ const Body = z.object({
     "A1.1", "A1.2", "A2.1", "A2.2", "A1-A2", "B2+",
   ]).nullable().optional(),
   goal:           z.string().trim().max(60).nullable().optional(),
-  language:       z.enum(["es", "de"]).default("es"),
+  // Gelfis 2026-07-20: TODO en español. Aceptamos el campo para no
+  // romper el frontend viejo pero lo pisamos por defecto a "es" abajo.
+  language:       z.enum(["es", "de"]).default("es").transform(() => "es" as const),
   slot_iso:       z.string().datetime(),
   teacher_id:     z.string().uuid(),
   // Atribución a landing (Gelfis 2026-06-15). Lo manda /agendar/cuando
