@@ -108,10 +108,14 @@ export async function POST(req: Request) {
   // The rare legit case of a family booking two trials in the same
   // hour from one IP still works (cap is 5).
   const ip = ipFromHeaders(req);
+  // Cap configurable vía env para poder subirlo temporalmente durante
+  // diagnóstico (Meta CAPI, etc.) sin cambios de código. Default 5/h/IP
+  // protege Postgres+Resend en operación normal.
+  const rlMax = Math.max(1, Number(process.env.BOOK_TRIAL_RATE_LIMIT_MAX ?? 5));
   const rl = await checkRateLimit({
     scope:    "book_trial",
     key:      ip,
-    max:      5,
+    max:      rlMax,
     windowMs: 60 * 60_000,
   });
   if (!rl.ok) {
