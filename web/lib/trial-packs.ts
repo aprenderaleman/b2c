@@ -14,7 +14,6 @@ export type PackId =
   | "basico"
   | "intermedio"
   | "avanzado"
-  | "vip_express"
   | "inmersion_total"
   | "kids";
 
@@ -77,33 +76,18 @@ export const TRIAL_PACKS: Pack[] = [
     },
   },
   {
-    id:    "vip_express",
-    name:  "Pack VIP Express",
-    classes: 72,
-    priceCents: 269_000,
-    bestFor: ["work", "already_in_dach", "exam"],
-    urlSingle:   "https://buy.stripe.com/9B65kwg9Lfi4a07fhB0co0h",
-    urlFlexible: "https://buy.stripe.com/00w7sE9Ln4Dqgovc5p0co0i",
-    urlExtended: "https://buy.stripe.com/cNidR26zb2viegnedx0co0l",
-    labels: {
-      single:   "Pago único (2.690 €)",
-      flexible: "Paga durante tu formación (500 € × 6)",
-      extended: "Financiación extendida (320 € × 10)",
-    },
-  },
-  {
     id:    "inmersion_total",
     name:  "Pack Inmersión Total",
     classes: 100,
-    priceCents: 329_000,
+    priceCents: 299_000,
     bestFor: ["work", "already_in_dach", "studies"],
-    urlSingle:   "https://buy.stripe.com/3cI28kf5H8TG6NVfhB0co0j",
-    urlFlexible: "https://buy.stripe.com/3cI9AMaPr6Lydcjd9t0co0k",
-    urlExtended: "https://buy.stripe.com/dRm00ccXz5Hugov6L50co0m",
+    urlSingle:   "https://buy.stripe.com/dRmcMYe1Dd9W8W35H10co0r",
+    urlFlexible: "https://buy.stripe.com/14AcMYbTv0na3BJd9t0co0s",
+    urlExtended: "https://buy.stripe.com/bJe6oAg9L1re3BJ8Td0co0t",
     labels: {
-      single:   "Pago único (3.290 €)",
-      flexible: "Paga durante tu formación (455 € × 8)",
-      extended: "Financiación extendida (330 € × 12)",
+      single:   "Pago único (2.990 €)",
+      flexible: "Paga durante tu formación (415 € × 8)",
+      extended: "Financiación extendida (275 € × 12)",
     },
   },
   {
@@ -153,13 +137,13 @@ export function recommendPacks(
   goal:     LearningGoal,
 ): [PackId, PackId] {
   if (schedule === "changing") {
-    return ["avanzado", "vip_express"];
+    return ["avanzado", "inmersion_total"];
   }
   // fixed schedule
   if (goal === "one_level") {
     return ["basico", "intermedio"];
   }
-  return ["avanzado", "vip_express"];
+  return ["avanzado", "inmersion_total"];
 }
 
 /** Override por env var (PACK_URL_<PACKID>_<SINGLE|FLEXIBLE>) — sin redeploy. */
