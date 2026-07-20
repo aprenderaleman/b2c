@@ -1,16 +1,39 @@
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 
-const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "";
-const ACCESS_TOKEN = process.env.META_CAPI_TOKEN ?? "";
-const TEST_EVENT_CODE = process.env.META_TEST_EVENT_CODE || undefined;
+// Envs leídas en cada request (no top-level) para que un cambio en
+// .env.local se recoja sin reiniciar el dev server — importante para
+// diagnóstico de META_TEST_EVENT_CODE.
+function getEnv() {
+  return {
+    PIXEL_ID:        process.env.NEXT_PUBLIC_META_PIXEL_ID ?? "",
+    ACCESS_TOKEN:    process.env.META_CAPI_TOKEN ?? "",
+    TEST_EVENT_CODE: process.env.META_TEST_EVENT_CODE || undefined,
+  };
+}
 
 function sha256(val: string): string {
   return createHash("sha256").update(val.trim().toLowerCase()).digest("hex");
 }
 
+// Ofusca el token en logs: primeros 6 + últimos 4.
+function tokenTag(t: string): string {
+  if (t.length < 12) return "***";
+  return `${t.slice(0, 6)}…${t.slice(-4)} (len=${t.length})`;
+}
+
 export async function POST(req: Request) {
+  const { PIXEL_ID, ACCESS_TOKEN, TEST_EVENT_CODE } = getEnv();
+
+  console.log("[meta-capi] request received", {
+    pixel_id:         PIXEL_ID || "(missing)",
+    token:            ACCESS_TOKEN ? tokenTag(ACCESS_TOKEN) : "(missing)",
+    test_event_code:  TEST_EVENT_CODE ?? "(not set — events go to REAL bucket)",
+    node_env:         process.env.NODE_ENV,
+  });
+
   if (!ACCESS_TOKEN || !PIXEL_ID) {
+    console.error("[meta-capi] not_configured — envs missing");
     return NextResponse.json({ ok: false, reason: "not_configured" }, { status: 503 });
   }
 
@@ -62,18 +85,47 @@ export async function POST(req: Request) {
     payload.test_event_code = TEST_EVENT_CODE;
   }
 
-  const url = `https://graph.facebook.com/v21.0/${PIXEL_ID}/events?access_token=${ACCESS_TOKEN}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
+  // Log del payload que se envía a Meta — todo lo sensible ya está
+  // hasheado (em/ph). Útil para verificar test_event_code en el root.
+  console.log("[meta-capi] payload →", JSON.stringify(payload, null, 2));
 
-  const result = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    console.error("[meta-capi] error:", res.status, result);
-    return NextResponse.json({ ok: false, meta: result }, { status: 502 });
+  const url = `https://graph.facebook.com/v21.0/${PIXEL_ID}/events?access_token=${ACCESS_TOKEN}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (fetchErr) {
+    // Errores de red (DNS, timeout, TLS) — NO se capturaban antes.
+    console.error("[meta-capi] fetch to graph.facebook.com FAILED:", fetchErr);
+    return NextResponse.json({
+      ok: false,
+      reason: "network_error",
+      detail: String(fetchErr),
+    }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, events_received: (result as { events_received?: number }).events_received });
+  const rawText = await res.text();
+  let result: unknown = {};
+  try { result = JSON.parse(rawText); } catch { /* deja el raw */ }
+
+  console.log("[meta-capi] response ←", {
+    status:      res.status,
+    ok:          res.ok,
+    body:        result,
+    raw_if_json_fail: typeof result === "object" && Object.keys(result as object).length === 0 ? rawText : undefined,
+  });
+
+  if (!res.ok) {
+    return NextResponse.json({ ok: false, meta_status: res.status, meta: result }, { status: 502 });
+  }
+
+  return NextResponse.json({
+    ok: true,
+    events_received: (result as { events_received?: number }).events_received,
+    fbtrace_id:      (result as { fbtrace_id?: string }).fbtrace_id,
+    test_mode:       !!TEST_EVENT_CODE,
+  });
 }
