@@ -462,31 +462,26 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
 
 export async function markTrialAbsent(leadId: string): Promise<void> {
   const sb = supabaseAdmin();
-  // Politica Gelfis 2026-06-15: primer follow-up 60 min después de
-  // marcar "no asistio" (en vez de inmediato). Da margen al lead que
-  // quizá tuvo un problema técnico de último minuto y aparece tarde,
-  // y evita parecer agobiantes mandando justo después de la hora a la
-  // que NO se presento.
-  //
-  // El cron tick_absent_followups corre cada hora; por eso el envio
-  // REAL puede caer entre +60 y +120 min. Si necesitamos precision
-  // exacta (~+60 min ±5), bajar el cron a cada 5 min — change pequeño
-  // en agents/scheduler.py.
-  const nextContact = new Date(Date.now() + 60 * 60_000).toISOString();
+  // Fix Gelfis 2026-07-21: NO seteamos next_contact_date. El cron
+  // Python tick_absent_followups (agent_5_guardian.py) usa ese campo
+  // para disparar la cadena legacy D+1/D+3/D+5/D+7, y esos mensajes
+  // DUPLICAN el WA/email que ya mandamos aquí abajo (nuevo flow
+  // absent-interest con botones SÍ/NO). Sin next_contact_date, el
+  // cron nunca detecta al lead y no hay duplicado.
   await sb
     .from("leads")
     .update({
       status: "trial_absent",
       // Fuente de verdad para la métrica de asistencia (migration 063).
       trial_absent_at: new Date().toISOString(),
-      next_contact_date: nextContact,
+      next_contact_date: null,
     })
     .eq("id", leadId);
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type: "status_change",
     author: "gelfis",
-    content: "Lead did not attend trial — first absent follow-up scheduled for T+60min.",
+    content: "Lead did not attend trial — absent-interest flow initiated (SÍ/NO).",
   });
 
   // Email "no te vimos hoy" + WA inmediato con botón a /agendar/cuando.
