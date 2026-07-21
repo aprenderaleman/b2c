@@ -234,9 +234,9 @@ export async function convertLeadToStudent(
   const waPhone = body.phone ?? lead.whatsapp_normalized;
   if (waPhone) {
     const firstName = body.fullName.split(/\s+/)[0] || body.fullName;
-    const waText = body.language === "de"
-      ? `Willkommen an der Akademie, ${firstName}! 🎉\n\nChecke deine E-Mails — wir haben dir deine Zugangsdaten zur Plattform geschickt.\nWährend wir deine erste Stunde vorbereiten, kannst du schon auf SCHULE starten. Los geht's!`
-      : `¡Bienvenido a la Academia, ${firstName}! 🎉\n\nRevisa tu email — te enviamos tus accesos a la plataforma.\nMientras preparamos tu primera clase, ya puedes entrar a SCHULE para empezar a practicar. ¡Vamos!`;
+    // body.language forzado a "es" en el schema (línea 25) — texto ES
+    // directo. Ternaria antigua rompía tsc porque nunca elige el 'de'.
+    const waText = `¡Bienvenido a la Academia, ${firstName}! 🎉\n\nRevisa tu email — te enviamos tus accesos a la plataforma.\nMientras preparamos tu primera clase, ya puedes entrar a SCHULE para empezar a practicar. ¡Vamos!`;
 
     const waResult = await sendWhatsappText(waPhone, waText, { kind: "welcome_student" });
     if (!waResult.ok) {
