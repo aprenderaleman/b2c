@@ -60,6 +60,9 @@ export function LandingStep0({
     trackFunnel("landing_view", { landingIntent });
   }, [landingIntent]);
 
+  // Href único (evita duplicar la URL entre el CTA inline y el sticky).
+  const ctaHref = `/agendar/cuando?landing=${encodeURIComponent(landingIntent)}${presetMotivo ? `&motivo=${encodeURIComponent(presetMotivo)}` : ""}`;
+
   return (
     <div className="min-h-[100dvh] flex flex-col bg-white"
          style={{ overscrollBehavior: "contain" }}>
@@ -104,7 +107,8 @@ export function LandingStep0({
       <section className="flex-1 md:w-1/2 flex flex-col">
 
         <main className="flex-1 px-5 md:px-8 lg:px-10 py-6 md:py-10
-                         mx-auto max-w-xl w-full">
+                         mx-auto max-w-xl w-full
+                         pb-28 md:pb-10">
 
           {/* Badge de recompensa GRATIS */}
           {/* H1 — keyword target server-rendered para SEO */}
@@ -154,7 +158,7 @@ export function LandingStep0({
               nivel y un plan diseñado para ti.
             </p>
             <Link
-              href={`/agendar/cuando?landing=${encodeURIComponent(landingIntent)}${presetMotivo ? `&motivo=${encodeURIComponent(presetMotivo)}` : ""}`}
+              href={ctaHref}
               onClick={() => trackFunnel("cta_click", { landingIntent })}
               className="mt-4 inline-flex items-center justify-center gap-2 w-full
                          h-12 md:h-13 lg:h-14 rounded-2xl
@@ -183,9 +187,33 @@ export function LandingStep0({
           </div>
         </main>
 
-        {/* Sticky bottom CTA eliminado (Gelfis 2026-06-15). El CTA verde
-            inline arriba es el único punto de entrada al funnel. */}
       </section>
+      </div>
+
+      {/* ═══ Sticky bottom CTA — SOLO MOBILE (Gelfis 2026-07-21,
+            reintroducido). Flotante para maximizar clicks sin que el
+            usuario tenga que scrollear al inline. Respeta safe-area del
+            iPhone. En desktop queda oculto (el inline ya es visible
+            arriba del fold). ═══ */}
+      <div
+        className="md:hidden fixed inset-x-0 bottom-0 z-50
+                   bg-white/95 backdrop-blur border-t border-slate-200
+                   px-4 pt-3"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
+      >
+        <Link
+          href={ctaHref}
+          onClick={() => trackFunnel("cta_click", { landingIntent })}
+          className="inline-flex items-center justify-center gap-2 w-full
+                     h-12 rounded-2xl
+                     bg-emerald-600 hover:bg-emerald-700 text-white
+                     text-[15px] font-bold
+                     shadow-lg shadow-emerald-600/30
+                     active:scale-[0.98] transition"
+        >
+          <span aria-hidden>🎁</span>
+          <span>Reservar Clase de Alemán</span>
+        </Link>
       </div>
     </div>
   );
