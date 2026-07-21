@@ -148,10 +148,11 @@ export function LandingStep0({
             })}
           </ul>
 
-          {/* CTA principal — único botón de la landing tras eliminar
-              el "Empezar ahora" sticky (Gelfis 2026-06-15). Lleva
-              directo a /agendar/cuando con propuesta de valor encima. */}
-          <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 md:p-5">
+          {/* CTA principal — visible SOLO en desktop (hidden md:block).
+              En mobile el único CTA es el sticky bottom (Gelfis
+              2026-07-21) para no duplicar botones. Card pastel con
+              propuesta de valor + botón + microcopy. */}
+          <div className="hidden md:block mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-4 md:p-5">
             <p className="text-[14px] md:text-[15px] text-slate-700 leading-relaxed">
               Antes de invertir en cualquier curso, vívelo. Una clase real
               con un profesor nativo, una conversación honesta sobre tu
@@ -199,7 +200,7 @@ export function LandingStep0({
         className="md:hidden fixed inset-x-0 bottom-0 z-50
                    bg-white/95 backdrop-blur border-t border-slate-200
                    px-4 pt-3"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)" }}
       >
         <Link
           href={ctaHref}
