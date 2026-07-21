@@ -286,6 +286,14 @@
   40%           { opacity: 1; }
 }
 
+/* Bounce del hint "👇 Clickea aquí" sobre el sticky CTA de las
+   landings (LandingStep0). Rebote sutil para llamar la atención sin
+   distraer. */
+@keyframes ctaBounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
+}
+
 /* Elementos que se animan deben tener su origen de transformación
    centrado o en el punto natural (p.ej. estrella desde el centro,
    barras desde abajo). Helper de transform-box para los <g> SVG. */

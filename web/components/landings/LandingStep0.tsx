@@ -202,6 +202,19 @@ export function LandingStep0({
                    px-4 pt-3"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)" }}
       >
+        {/* Hint animado sobre el botón (Gelfis 2026-07-21) — pequeña
+            etiqueta con 👇 que rebota para dirigir la mirada al CTA. */}
+        <div className="flex justify-center mb-1.5" aria-hidden>
+          <span
+            className="inline-flex items-center gap-1
+                       bg-emerald-600 text-white
+                       text-[11px] font-bold uppercase tracking-wide
+                       px-2.5 py-0.5 rounded-full shadow"
+            style={{ animation: "ctaBounce 1.4s ease-in-out infinite" }}
+          >
+            👇 Clickea aquí
+          </span>
+        </div>
         <Link
           href={ctaHref}
           onClick={() => trackFunnel("cta_click", { landingIntent })}
