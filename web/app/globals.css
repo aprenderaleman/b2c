@@ -286,12 +286,20 @@
   40%           { opacity: 1; }
 }
 
-/* Bounce del hint "👇 Clickea aquí" sobre el sticky CTA de las
-   landings (LandingStep0). Rebote sutil para llamar la atención sin
-   distraer. */
-@keyframes ctaBounce {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-4px); }
+/* Affordance visual del sticky CTA de las landings (LandingStep0)
+   — sin texto "clickea aquí". Combo:
+     - ctaPulseRing: aro emerald que se expande y desvanece detrás del
+       botón, señal universal de "aquí se hace click".
+     - ctaArrowNudge: la flecha → se desplaza ligeramente a la derecha
+       para reforzar la affordance de "avanzar/pulsar". */
+@keyframes ctaPulseRing {
+  0%   { transform: scale(1);    opacity: 0.55; }
+  70%  { transform: scale(1.06); opacity: 0;    }
+  100% { transform: scale(1.06); opacity: 0;    }
+}
+@keyframes ctaArrowNudge {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(4px); }
 }
 
 /* Elementos que se animan deben tener su origen de transformación

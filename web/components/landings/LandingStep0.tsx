@@ -202,32 +202,35 @@ export function LandingStep0({
                    px-4 pt-3"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 24px)" }}
       >
-        {/* Hint animado sobre el botón (Gelfis 2026-07-21) — pequeña
-            etiqueta con 👇 que rebota para dirigir la mirada al CTA. */}
-        <div className="flex justify-center mb-1.5" aria-hidden>
+        {/* Botón sticky con "pulse ring" (Gelfis 2026-07-21): un aro
+            emerald late detrás del botón — señal universal de "aquí se
+            hace click" sin necesidad de texto explícito. La flecha →
+            hace un pequeño loop lateral para reforzar la affordance. */}
+        <div className="relative">
           <span
-            className="inline-flex items-center gap-1
-                       bg-emerald-600 text-white
-                       text-[11px] font-bold uppercase tracking-wide
-                       px-2.5 py-0.5 rounded-full shadow"
-            style={{ animation: "ctaBounce 1.4s ease-in-out infinite" }}
+            aria-hidden
+            className="absolute inset-0 rounded-2xl bg-emerald-500/40 pointer-events-none"
+            style={{ animation: "ctaPulseRing 1.8s ease-out infinite" }}
+          />
+          <Link
+            href={ctaHref}
+            onClick={() => trackFunnel("cta_click", { landingIntent })}
+            className="relative inline-flex items-center justify-center gap-2 w-full
+                       h-12 rounded-2xl
+                       bg-emerald-600 hover:bg-emerald-700 text-white
+                       text-[15px] font-bold
+                       shadow-lg shadow-emerald-600/30
+                       active:scale-[0.98] transition"
           >
-            👇 Clickea aquí
-          </span>
+            <span aria-hidden>🎁</span>
+            <span>Reservar Clase de Alemán</span>
+            <span
+              aria-hidden
+              className="text-[17px] leading-none"
+              style={{ animation: "ctaArrowNudge 1.4s ease-in-out infinite" }}
+            >→</span>
+          </Link>
         </div>
-        <Link
-          href={ctaHref}
-          onClick={() => trackFunnel("cta_click", { landingIntent })}
-          className="inline-flex items-center justify-center gap-2 w-full
-                     h-12 rounded-2xl
-                     bg-emerald-600 hover:bg-emerald-700 text-white
-                     text-[15px] font-bold
-                     shadow-lg shadow-emerald-600/30
-                     active:scale-[0.98] transition"
-        >
-          <span aria-hidden>🎁</span>
-          <span>Reservar Clase de Alemán</span>
-        </Link>
       </div>
     </div>
   );
