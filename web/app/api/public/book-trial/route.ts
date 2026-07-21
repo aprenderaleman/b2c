@@ -518,14 +518,16 @@ export async function POST(req: Request) {
     .update({ trial_zoom_link: shortLinkUrl })
     .eq("id", leadId);
 
-  const startDate = new Date(b.slot_iso).toLocaleString(b.language === "de" ? "de-DE" : "es-ES", {
+  // b.language forzado a "es" en el schema (commit 0d56d81) — dejo el
+  // literal directo en vez de la ternaria que ya nunca elige el 'de'.
+  const startDate = new Date(b.slot_iso).toLocaleString("es-ES", {
     timeZone: "Europe/Berlin",
     weekday:  "long",
     day:      "numeric",
     month:    "long",
     hour:     "2-digit",
     minute:   "2-digit",
-  }) + (b.language === "de" ? " (Berlin)" : " (Berlín)");
+  }) + " (Berlín)";
 
   // Hora local para leads fuera de zona europea — caso Alison 2026-06-16:
   // agendo 12:00 Berlin sin darse cuenta que en Colombia son 05:00 AM.
