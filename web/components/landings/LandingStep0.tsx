@@ -30,14 +30,22 @@ export type LandingStep0Props = {
   h1:       string;
   /** Subtítulo conversacional bajo el H1. */
   subtitle: string;
-  /** Bullets específicos de la landing — 2-4 idealmente. Cada uno trae
-   *  su propio emoji/icon en `icon` para que ninguno quede con check
-   *  genérico. Acepta string suelto (legacy) por retro-compat. */
+  /** Bullets específicos de la landing. Por defecto la lista se
+   *  prepende con los 2 fijos (🏠 desde casa, 🗺️ DACH). Si el caller
+   *  pasa `bulletsMode: "replace"`, la lista se usa tal cual (para
+   *  landings paid que reordenan los mensajes). */
   bullets:  Array<LandingBullet | ReactNode>;
+  bulletsMode?: "prepend" | "replace";
   /** Preset del motivo (si la intención de la landing es inequívoca). */
   presetMotivo?: MotivoId | null;
   /** Slug de la landing — se propaga a tracking. */
   landingIntent: string;
+  /** Texto del botón CTA. Default: "Reservar Clase de Alemán". */
+  ctaLabel?: string;
+  /** Sección opcional entre los bullets y el bloque amber. Usado por
+   *  landings paid para insertar prueba social sin bloatear el
+   *  componente. Se muestra tanto en desktop como en mobile. */
+  afterBullets?: ReactNode;
 };
 
 function isBullet(b: unknown): b is LandingBullet {
@@ -45,7 +53,10 @@ function isBullet(b: unknown): b is LandingBullet {
 }
 
 export function LandingStep0({
-  h1, subtitle, bullets, presetMotivo = null, landingIntent,
+  h1, subtitle, bullets, bulletsMode = "prepend",
+  presetMotivo = null, landingIntent,
+  ctaLabel = "Reservar Clase de Alemán",
+  afterBullets = null,
 }: LandingStep0Props) {
   // El CTA verde dirige a /agendar/cuando?landing={slug}&motivo={x}
   // para preservar atribución (Gelfis 2026-06-15). /agendar/cuando
@@ -122,20 +133,26 @@ export function LandingStep0({
             {subtitle}
           </p>
 
-          {/* Ventajas genéricas (mismas en las 6 landings) — todas con
-              icono propio (Gelfis 2026-06-14: no más check ✓ genérico). */}
+          {/* Ventajas — todas con icono propio (Gelfis 2026-06-14: no
+              más check ✓ genérico). En modo "prepend" añadimos los 2
+              fijos (desde casa, DACH); en "replace" solo se usan los
+              del caller (para reordenar mensaje en landings paid). */}
           <ul className="mt-5 space-y-2 md:space-y-2.5">
-            <li className="flex items-start gap-2.5 text-[14.5px] md:text-[15px] text-slate-700">
-              <span className="text-[18px] leading-tight shrink-0" aria-hidden>🏠</span>
-              <span><strong>Aprende alemán desde casa</strong> con profesor nativo que habla español</span>
-            </li>
-            <li className="flex items-start gap-2.5 text-[14.5px] md:text-[15px] text-slate-700">
-              {/* Antes 🇩🇪 (regional indicator) — no renderiza bien
-                  en Windows sin font de banderas. 🗺️ funciona en
-                  todas las plataformas y representa "destinos DACH". */}
-              <span className="text-[18px] leading-tight shrink-0" aria-hidden>🗺️</span>
-              <span><strong>Prepárate para trabajar o vivir</strong> en Alemania, Suiza o Austria</span>
-            </li>
+            {bulletsMode === "prepend" && (
+              <>
+                <li className="flex items-start gap-2.5 text-[14.5px] md:text-[15px] text-slate-700">
+                  <span className="text-[18px] leading-tight shrink-0" aria-hidden>🏠</span>
+                  <span><strong>Aprende alemán desde casa</strong> con profesor nativo que habla español</span>
+                </li>
+                <li className="flex items-start gap-2.5 text-[14.5px] md:text-[15px] text-slate-700">
+                  {/* Antes 🇩🇪 (regional indicator) — no renderiza bien
+                      en Windows sin font de banderas. 🗺️ funciona en
+                      todas las plataformas y representa "destinos DACH". */}
+                  <span className="text-[18px] leading-tight shrink-0" aria-hidden>🗺️</span>
+                  <span><strong>Prepárate para trabajar o vivir</strong> en Alemania, Suiza o Austria</span>
+                </li>
+              </>
+            )}
             {bullets.map((b, i) => {
               const icon = isBullet(b) ? b.icon : "✨";
               const text = isBullet(b) ? b.text : b;
@@ -147,6 +164,10 @@ export function LandingStep0({
               );
             })}
           </ul>
+
+          {/* Sección opcional (prueba social, testimonios, etc.) que
+              landings paid inyectan entre bullets y bloque de cierre. */}
+          {afterBullets}
 
           {/* CTA principal — visible SOLO en desktop (hidden md:block).
               En mobile el único CTA es el sticky bottom (Gelfis
@@ -169,7 +190,7 @@ export function LandingStep0({
                          active:scale-[0.98] transition"
             >
               <span aria-hidden>🎁</span>
-              <span>Reservar Clase de Alemán</span>
+              <span>{ctaLabel}</span>
             </Link>
             <p className="mt-2 text-center text-[11.5px] text-slate-600 leading-snug">
               Sin tarjeta — Agenda tu Clase gratis
@@ -223,7 +244,7 @@ export function LandingStep0({
                        active:scale-[0.98] transition"
           >
             <span aria-hidden>🎁</span>
-            <span>Reservar Clase de Alemán</span>
+            <span>{ctaLabel}</span>
             <span
               aria-hidden
               className="text-[17px] leading-none"
