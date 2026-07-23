@@ -39,6 +39,7 @@ export function TrialHubCard({
   const [escalating, setEscalating] = useState(false);
   const [voiceNoteSent, setVoiceNoteSent] = useState<string | null>(row.voiceNoteSentAt);
   const [togglingVoice, setTogglingVoice] = useState(false);
+  const [reschedulingSend, setReschedulingSend] = useState(false);
 
   const date = formatBerlinDate(row.scheduledAt);
   const time = formatBerlinTime(row.scheduledAt);
@@ -311,6 +312,43 @@ export function TrialHubCard({
                     className="text-xs font-semibold rounded-full border border-amber-300 dark:border-amber-500/40 bg-amber-100 dark:bg-amber-500/15 px-3 py-1.5 text-amber-800 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-500/25"
                   >
                     ✗ No asistio
+                  </button>
+
+                  {/* Reagendar — envía por WA el link /agendar/cuando
+                      al lead. NO cambia estado ni cancela; útil cuando
+                      el lead avisa antes que no puede en el horario. */}
+                  <button
+                    type="button"
+                    disabled={reschedulingSend || !row.leadWhatsapp}
+                    title={row.leadWhatsapp ? "Enviar por WhatsApp el link para reagendar" : "Lead sin WhatsApp — no se puede enviar"}
+                    onClick={async () => {
+                      if (!row.leadId) return;
+                      if (!confirm(
+                        "Enviar por WhatsApp el link para reagendar.\n\n" +
+                        "El lead recibe: 'Con gusto puedes reagendar tu clase de prueba con este enlace, solo tardarás 3 minutos. Avísame cuando hayas elegido tu nuevo horario.'\n\n" +
+                        "NO cancela ni cambia el estado — solo envía el mensaje.\n\n" +
+                        "¿Continuar?"
+                      )) return;
+                      setReschedulingSend(true);
+                      try {
+                        const res = await fetch(`/api/teacher/trial/${row.leadId}/send-reschedule-link`, {
+                          method: "POST",
+                          headers: { "content-type": "application/json" },
+                          body: "{}",
+                        });
+                        const json = await res.json().catch(() => ({}));
+                        if (!res.ok) throw new Error(json.reason ?? `HTTP ${res.status}`);
+                        alert("💬 Mensaje de reagendar enviado.");
+                        router.refresh();
+                      } catch (err) {
+                        alert(err instanceof Error ? err.message : "Error");
+                      } finally {
+                        setReschedulingSend(false);
+                      }
+                    }}
+                    className="text-xs font-semibold rounded-full border border-sky-300 dark:border-sky-500/40 bg-sky-100 dark:bg-sky-500/15 px-3 py-1.5 text-sky-800 dark:text-sky-200 hover:bg-sky-200 dark:hover:bg-sky-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {reschedulingSend ? "Enviando..." : "📅 Reagendar"}
                   </button>
                 </>
               )}

@@ -571,3 +571,47 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     }
   }
 }
+
+/**
+ * Enviar por WhatsApp el link de reagendar a un lead que TODAVÍA tiene
+ * su trial programada (no marcada como absent aún). Uso típico: el
+ * profe pide reagendar antes de la clase porque el lead avisa que no
+ * puede — evita marcar absent y disparar todo el flow de recuperación.
+ *
+ * NO cambia el estado del lead ni cancela la clase — solo envía el
+ * mensaje. El profe cancela después manualmente cuando el lead
+ * confirme el nuevo horario.
+ *
+ * Whitelisted en whatsapp.ts como "trial_reschedule_link".
+ * Returns { ok, reason? } — el caller decide qué hacer con el fallo.
+ */
+export async function sendRescheduleLinkMessage(
+  leadId: string,
+): Promise<{ ok: boolean; reason?: string }> {
+  const sb = supabaseAdmin();
+  const { data: leadInfo } = await sb
+    .from("leads")
+    .select("name, whatsapp_normalized")
+    .eq("id", leadId)
+    .maybeSingle();
+  const linfo = leadInfo as { name: string | null; whatsapp_normalized: string | null } | null;
+  if (!linfo?.whatsapp_normalized) return { ok: false, reason: "no_whatsapp" };
+
+  const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
+  const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+  const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=teacher_reschedule`;
+
+  const waText = `¡Hola ${firstName}! 👋\n\nCon gusto puedes reagendar tu clase de prueba con este enlace, solo tardarás 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu nuevo horario. 😊\n\n— Stiv · Aprender-Aleman.de`;
+
+  const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "trial_reschedule_link" });
+  await sb.from("lead_timeline").insert({
+    lead_id: leadId,
+    type:    waRes.ok ? "system_message_sent" : "send_failed",
+    author:  "gelfis",
+    content: waRes.ok
+      ? `💬 Link reagendar enviado a ${linfo.whatsapp_normalized} (acción del profesor)`
+      : `💬 Falló envío del link reagendar: ${waRes.reason ?? "unknown"}`,
+    metadata: { kind: "trial_reschedule_link", channel: "whatsapp" },
+  });
+  return waRes.ok ? { ok: true } : { ok: false, reason: waRes.reason ?? "send_failed" };
+}
