@@ -85,12 +85,6 @@ export default async function ConfirmacionPage({
     minute:   "2-digit",
   });
 
-  // Magic-link corto (matches what salió por email/WhatsApp). Fallback
-  // al URL largo si el class no tiene short_code (pre-migration 036).
-  const magicLinkUrl = r.short_code
-    ? `/c/${r.short_code}`
-    : `/trial/${classId}?t=${encodeURIComponent(token)}`;
-
   return (
     <div className="min-h-[100dvh] bg-white text-slate-900"
          style={{ overscrollBehavior: "contain" }}>
@@ -169,36 +163,20 @@ export default async function ConfirmacionPage({
               ¡Todo listo{firstName ? `, ${firstName}` : ""}!
             </h1>
             <p className="mt-2.5 text-[15px] md:text-[16px] text-slate-600 leading-relaxed">
-              Tu clase de prueba con <strong className="text-slate-900">{teacherName}</strong> está reservada.
+              Tu clase de prueba con el/la profesor/a <strong className="text-slate-900">{teacherName}</strong> está reservada, <strong className="text-slate-900">revisa tu correo electrónico</strong>, ahí te enviamos toda la información para unirte a tu clase de alemán.
             </p>
 
-            {/* Summary card — hero de la info que importa (fecha/hora
-                grande primero, luego duración). Diseño de "ticket". */}
-            <div className="mt-5 rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
-              <div className="bg-gradient-to-br from-slate-50 to-white px-5 py-4 border-b border-slate-100">
-                <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Cuándo
-                </p>
-                <p className="mt-1 text-[18px] md:text-[20px] font-bold text-slate-900 capitalize leading-snug">
-                  {startDate}
-                </p>
-                <p className="mt-0.5 text-[11.5px] text-slate-500">
-                  Hora de Berlín · {r.duration_minutes ?? 30} min
-                </p>
-              </div>
-              <a
-                href={magicLinkUrl}
-                className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-slate-50 active:bg-slate-100 transition"
-              >
-                <span className="text-[13.5px] font-semibold text-slate-800">
-                  🎥 Guardar enlace del aula
-                </span>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
-                     className="text-slate-400" aria-hidden>
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </a>
+            {/* Summary card — info clave (fecha/hora + duración). */}
+            <div className="mt-5 rounded-2xl bg-gradient-to-br from-slate-50 to-white border border-slate-200 shadow-sm px-5 py-4">
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                Cuándo
+              </p>
+              <p className="mt-1 text-[18px] md:text-[20px] font-bold text-slate-900 capitalize leading-snug">
+                {startDate}
+              </p>
+              <p className="mt-0.5 text-[11.5px] text-slate-500">
+                Hora de Berlín · {r.duration_minutes ?? 30} min
+              </p>
             </div>
 
             {/* ═══ Reserva Prioritaria — CTA para upgrade opcional.
@@ -220,9 +198,6 @@ export default async function ConfirmacionPage({
                 <div className="mt-4">
                   <PriorityUpgradeButton classId={classId} token={token} />
                 </div>
-                <p className="mt-2 text-center text-[11.5px] text-slate-600 leading-snug">
-                  Opcional — tu clase ya está reservada igualmente.
-                </p>
               </section>
             )}
 
