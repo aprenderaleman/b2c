@@ -324,9 +324,12 @@ export function TrialHubCard({
                     onClick={async () => {
                       if (!row.leadId) return;
                       if (!confirm(
-                        "Enviar por WhatsApp el link para reagendar.\n\n" +
-                        "El lead recibe: 'Con gusto puedes reagendar tu clase de prueba con este enlace, solo tardarás 3 minutos. Avísame cuando hayas elegido tu nuevo horario.'\n\n" +
-                        "NO cancela ni cambia el estado — solo envía el mensaje.\n\n" +
+                        "REAGENDAR clase de prueba.\n\n" +
+                        "Esto va a:\n" +
+                        "  • Cancelar la clase actual del lead.\n" +
+                        "  • Enviar por WhatsApp el link a /agendar/cuando.\n" +
+                        "  • Cambiar el estado del lead a 'Reagendando'.\n\n" +
+                        "Cuando el lead elija nuevo horario, vuelve a 'Clase agendada' automáticamente.\n\n" +
                         "¿Continuar?"
                       )) return;
                       setReschedulingSend(true);

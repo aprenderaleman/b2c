@@ -1,0 +1,11 @@
+-- Nuevo valor `rescheduling` en lead_status (2026-07-24).
+--
+-- Se setea cuando el profesor pulsa "📅 Reagendar" en /clasedeprueba:
+-- cancelamos la clase actual, mandamos link de reagendar por WA y
+-- dejamos el lead en este estado limbo hasta que elija nuevo horario.
+-- Al pasar por /agendar/cuando → book-trial vuelve a
+-- status='trial_scheduled' automáticamente (mismo path que un lead
+-- nuevo eligiendo horario).
+--
+-- Precedente: migration 055 añadió 'trial_attended' con el mismo patrón.
+ALTER TYPE lead_status ADD VALUE IF NOT EXISTS 'rescheduling' AFTER 'trial_scheduled';

@@ -573,14 +573,16 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
 }
 
 /**
- * Enviar por WhatsApp el link de reagendar a un lead que TODAVÍA tiene
- * su trial programada (no marcada como absent aún). Uso típico: el
- * profe pide reagendar antes de la clase porque el lead avisa que no
- * puede — evita marcar absent y disparar todo el flow de recuperación.
+ * Reagendar iniciado por el profesor desde /clasedeprueba (2026-07-24):
  *
- * NO cambia el estado del lead ni cancela la clase — solo envía el
- * mensaje. El profe cancela después manualmente cuando el lead
- * confirme el nuevo horario.
+ *   1. Cancela la clase de prueba scheduled/futura del lead (silencioso
+ *      — sin enviar el mensaje de cancelación del endpoint standard, lo
+ *      hacemos con un WA combinado abajo).
+ *   2. Envía por WhatsApp un mensaje: cancelé tu clase, elige uno nuevo
+ *      aquí <link>.
+ *   3. Setea lead.status='rescheduling' — estado limbo hasta que el
+ *      lead pase por /agendar/cuando (book-trial vuelve a
+ *      status='trial_scheduled' automático).
  *
  * Whitelisted en whatsapp.ts como "trial_reschedule_link".
  * Returns { ok, reason? } — el caller decide qué hacer con el fallo.
@@ -597,11 +599,47 @@ export async function sendRescheduleLinkMessage(
   const linfo = leadInfo as { name: string | null; whatsapp_normalized: string | null } | null;
   if (!linfo?.whatsapp_normalized) return { ok: false, reason: "no_whatsapp" };
 
+  // Cancelar la clase de prueba activa (futura) del lead — si existe.
+  // Silencioso (sin mandar el WA cancel standard); el mensaje combinado
+  // de abajo cubre la comunicación.
+  const nowIso = new Date().toISOString();
+  const { data: currentTrial } = await sb
+    .from("classes")
+    .select("id, scheduled_at")
+    .eq("lead_id", leadId)
+    .eq("is_trial", true)
+    .eq("status", "scheduled")
+    .gte("scheduled_at", nowIso)
+    .order("scheduled_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const trial = currentTrial as { id: string; scheduled_at: string } | null;
+  if (trial) {
+    await sb.from("classes")
+      .update({ status: "cancelled", updated_at: nowIso })
+      .eq("id", trial.id);
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    "status_change",
+      author:  "teacher",
+      content: `🚫 Clase de prueba cancelada por reagendamiento del profesor (${new Date(trial.scheduled_at).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })} Berlín)`,
+      metadata: { class_id: trial.id, kind: "trial_cancelled_for_reschedule" },
+    });
+  }
+
+  // Setear status → rescheduling (nuevo enum value migration 087).
+  // book-trial devuelve a 'trial_scheduled' cuando el lead reagenda.
+  await sb.from("leads").update({
+    status:             "rescheduling",
+    trial_scheduled_at: null,
+    next_contact_date:  null,
+  }).eq("id", leadId);
+
   const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
   const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
   const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=teacher_reschedule`;
 
-  const waText = `¡Hola ${firstName}! 👋\n\nCon gusto puedes reagendar tu clase de prueba con este enlace, solo tardarás 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu nuevo horario. 😊\n\n— Stiv · Aprender-Aleman.de`;
+  const waText = `¡Hola ${firstName}! 👋\n\nHe cancelado tu clase de prueba actual. Puedes elegir un nuevo horario con este enlace, tardarás solo 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu nuevo horario. 😊\n\n— Stiv · Aprender-Aleman.de`;
 
   const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "trial_reschedule_link" });
   await sb.from("lead_timeline").insert({
@@ -609,7 +647,7 @@ export async function sendRescheduleLinkMessage(
     type:    waRes.ok ? "system_message_sent" : "send_failed",
     author:  "gelfis",
     content: waRes.ok
-      ? `💬 Link reagendar enviado a ${linfo.whatsapp_normalized} (acción del profesor)`
+      ? `💬 Reagendamiento enviado a ${linfo.whatsapp_normalized} — lead pasa a 'rescheduling'`
       : `💬 Falló envío del link reagendar: ${waRes.reason ?? "unknown"}`,
     metadata: { kind: "trial_reschedule_link", channel: "whatsapp" },
   });
