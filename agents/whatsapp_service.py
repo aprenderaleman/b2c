@@ -228,6 +228,9 @@ class WhatsAppService:
         # (Gelfis 2026-07-08: Hassan y Aisa quedaron sin ACK).
         "trial_confirm_ack",
         "trial_reschedule_link",
+        # Follow-ups del reagendamiento iniciado por el profesor
+        "trial_teacher_reschedule_fu1",  # +8h sin rebook
+        "trial_teacher_reschedule_fu2",  # +24h sin rebook (último)
         # WhatsApp de bienvenida al convertir un lead en estudiante
         # (Gelfis 2026-07-15: Ángela quedó sin welcome porque el kind
         # no estaba en la lista → kill switch la silenció).

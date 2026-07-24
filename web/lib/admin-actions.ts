@@ -629,10 +629,22 @@ export async function sendRescheduleLinkMessage(
 
   // Setear status → rescheduling (nuevo enum value migration 087).
   // book-trial devuelve a 'trial_scheduled' cuando el lead reagenda.
+  //
+  // reschedule_state: source='teacher' + link_sent_at para que el cron
+  // teacher-reschedule-followup dispare FU1 (+8h) y FU2 (+24h).
+  const linkSentAt = new Date().toISOString();
   await sb.from("leads").update({
     status:             "rescheduling",
     trial_scheduled_at: null,
     next_contact_date:  null,
+    reschedule_state: {
+      phase:            "AWAITING_TEACHER_REBOOK",
+      source:           "teacher",
+      link_sent_at:     linkSentAt,
+      started_at:       linkSentAt,
+      followup1_sent_at: null,
+      followup2_sent_at: null,
+    },
   }).eq("id", leadId);
 
   const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
