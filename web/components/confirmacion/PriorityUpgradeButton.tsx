@@ -47,7 +47,12 @@ export function PriorityUpgradeButton({
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.url) {
-        throw new Error(json.error ?? `HTTP ${res.status}`);
+        const parts = [
+          json.error ?? `HTTP ${res.status}`,
+          json.detail && `— ${json.detail}`,
+          json.code && `(${json.code})`,
+        ].filter(Boolean);
+        throw new Error(parts.join(" "));
       }
       window.location.href = json.url;
     } catch (e) {

@@ -104,32 +104,61 @@ export async function POST(req: Request) {
         },
       }];
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    payment_method_types: ["card"],
-    customer_email: lead.email ?? undefined,
-    line_items: lineItems,
-    success_url: successUrl,
-    cancel_url:  cancelUrl,
-    metadata: {
-      type:     "trial_deposit",
-      lead_id:  leadId,
-      class_id: classId,
-    },
-    // También en payment_intent para que llegue al webhook cuando el
-    // evento sea payment_intent.succeeded en vez de checkout.completed.
-    payment_intent_data: {
+  console.log("[deposit-checkout] creating session", {
+    lead_id:  leadId,
+    class_id: classId,
+    priceId:  priceId ?? "(inline price_data)",
+    success:  successUrl,
+  });
+
+  let session;
+  try {
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      customer_email: lead.email ?? undefined,
+      line_items: lineItems,
+      success_url: successUrl,
+      cancel_url:  cancelUrl,
       metadata: {
         type:     "trial_deposit",
         lead_id:  leadId,
         class_id: classId,
       },
-    },
-  });
+      // También en payment_intent para que llegue al webhook cuando el
+      // evento sea payment_intent.succeeded en vez de checkout.completed.
+      payment_intent_data: {
+        metadata: {
+          type:     "trial_deposit",
+          lead_id:  leadId,
+          class_id: classId,
+        },
+      },
+    });
+  } catch (err) {
+    // Errores típicos de Stripe: Price ID inválido / recurring en modo
+    // payment, secret key mal cargada, cuenta desactivada, etc. Los
+    // logueamos con detalle para poder diagnosticar desde Vercel Logs.
+    const e = err as { type?: string; code?: string; message?: string; raw?: { message?: string } };
+    console.error("[deposit-checkout] Stripe error:", {
+      type:    e.type,
+      code:    e.code,
+      message: e.message,
+      raw:     e.raw?.message,
+    });
+    return NextResponse.json({
+      ok:     false,
+      error:  "stripe_error",
+      detail: e.message ?? "unknown",
+      code:   e.code,
+      type:   e.type,
+    }, { status: 502 });
+  }
 
   if (!session.url) {
     return NextResponse.json({ error: "no_checkout_url" }, { status: 502 });
   }
 
+  console.log("[deposit-checkout] session created", { id: session.id, url_head: session.url.slice(0, 60) });
   return NextResponse.json({ ok: true, url: session.url });
 }
