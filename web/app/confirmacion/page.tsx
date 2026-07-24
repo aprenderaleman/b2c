@@ -133,6 +133,31 @@ export default async function ConfirmacionPage({
           </header>
 
           <main className="flex-1 mx-auto w-full max-w-xl px-5 md:px-8 pt-6 md:pt-12 lg:pt-16 pb-12 md:pb-16">
+            {/* ═══ Banner de prioridad — hero celebratorio (Gelfis
+                2026-07-24). Cuando el lead ya pagó (o acaba de volver
+                de Stripe), este banner es lo PRIMERO que ve, arriba
+                del H1. Cuando no ha pagado, no se muestra y la sección
+                normal "Mejora a Reserva Prioritaria" aparece bajo el
+                H1 con el botón. ═══ */}
+            {(priorityActive || depositoOk) && (
+              <div className="rounded-2xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 via-emerald-100 to-teal-50 p-5 md:p-6 shadow-lg shadow-emerald-500/15 mb-6">
+                <div className="flex items-center gap-3 md:gap-4">
+                  <span className="text-4xl md:text-5xl leading-none shrink-0" aria-hidden>🌟</span>
+                  <div className="min-w-0">
+                    <p className="text-[11px] md:text-[12px] font-bold uppercase tracking-[0.14em] text-emerald-800">
+                      Reserva Prioritaria
+                    </p>
+                    <p className="mt-0.5 text-[20px] md:text-[24px] font-extrabold text-emerald-900 leading-tight">
+                      ¡Prioridad activada!
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 text-[14.5px] md:text-[15.5px] text-emerald-900 leading-snug">
+                  Tu plaza está asegurada con prioridad. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.
+                </p>
+              </div>
+            )}
+
             {/* Eyebrow + título principal */}
             <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-emerald-700">
               ✓ Reserva confirmada
@@ -149,28 +174,11 @@ export default async function ConfirmacionPage({
               Un solo clic y tu profesor sabrá que vas a venir.
             </p>
 
-            {/* ═══ Reserva Prioritaria (opcional) ═══
-                Gelfis 2026-07-24: reposicionado arriba del fold, justo
-                bajo el título y descripción, para maximizar visibilidad
-                y conversión. La clase YA está agendada — este bloque
-                es un upgrade puro. No aparece si el lead ya pagó
-                (priorityActive). Si acaba de volver de Stripe con
-                ?deposito=ok, mostramos success pill en su lugar. */}
-            {priorityActive || depositoOk ? (
-              <div className="mt-6 rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-4 md:p-5">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl leading-none mt-0.5" aria-hidden>🌟</span>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-bold uppercase tracking-wider text-emerald-900">
-                      Prioridad activada
-                    </p>
-                    <p className="mt-1.5 text-[14.5px] md:text-[15px] text-emerald-900 leading-snug">
-                      Tu plaza está asegurada con prioridad. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
+            {/* ═══ Reserva Prioritaria — CTA para upgrade opcional.
+                Solo se muestra cuando el lead NO ha pagado aún; el
+                estado "activada" se muestra como banner celebratorio
+                arriba del H1 (ver bloque anterior). ═══ */}
+            {!(priorityActive || depositoOk) && (
               <section className="mt-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 md:p-5">
                 <h2 className="text-[16px] md:text-[17px] font-bold text-slate-900 flex items-center gap-2">
                   <span aria-hidden>🌟</span> Mejora a Reserva Prioritaria
