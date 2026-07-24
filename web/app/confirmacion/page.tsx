@@ -5,6 +5,8 @@ import { verifyTrialToken } from "@/lib/trial-token";
 import { IllustrationPanel } from "@/components/diagnostico/IllustrationPanel";
 import { BrandLogo } from "@/components/BrandLogo";
 import { ConfirmacionPixel } from "@/components/confirmacion/ConfirmacionPixel";
+import { ConfirmacionDepositPurchase } from "@/components/confirmacion/ConfirmacionDepositPurchase";
+import { PriorityUpgradeButton } from "@/components/confirmacion/PriorityUpgradeButton";
 
 /**
  * GET /confirmacion?c={classId}&t={token}
@@ -21,15 +23,16 @@ import { ConfirmacionPixel } from "@/components/confirmacion/ConfirmacionPixel";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Search = { c?: string; t?: string };
+type Search = { c?: string; t?: string; deposito?: string };
 
 export default async function ConfirmacionPage({
   searchParams,
 }: {
   searchParams: Promise<Search>;
 }) {
-  const { c: classId, t: token } = await searchParams;
+  const { c: classId, t: token, deposito } = await searchParams;
   if (!classId || !token) redirect("/");
+  const depositoOk = deposito === "ok";
 
   const payload = verifyTrialToken(token);
   if (!payload || payload.class_id !== classId) redirect("/");
@@ -40,7 +43,7 @@ export default async function ConfirmacionPage({
     .select(`
       id, scheduled_at, duration_minutes, lead_id, is_trial, short_code,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads!inner(name, email, whatsapp_normalized)
+      lead:leads!inner(name, email, whatsapp_normalized, reserva_prioritaria)
     `)
     .eq("id", classId)
     .maybeSingle();
@@ -56,8 +59,8 @@ export default async function ConfirmacionPage({
                        Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } |
                             Array<{ full_name: string | null; email: string }> }>;
-    lead: { name: string | null; email: string | null; whatsapp_normalized: string | null } |
-          Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null }>;
+    lead: { name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null } |
+          Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null =>
     !x ? null : Array.isArray(x) ? x[0] ?? null : x;
@@ -71,6 +74,7 @@ export default async function ConfirmacionPage({
   const leadEmail   = leadFlat?.email ?? undefined;
   const leadPhone   = leadFlat?.whatsapp_normalized ?? undefined;
   const firstName   = leadName.trim().split(/\s+/)[0] || "";
+  const priorityActive = leadFlat?.reserva_prioritaria === true;
 
   const startDate = new Date(r.scheduled_at).toLocaleString("es-ES", {
     timeZone: "Europe/Berlin",
@@ -93,6 +97,16 @@ export default async function ConfirmacionPage({
       {/* Google Ads conversion tracker — se dispara al montar, con
           transaction_id=classId para dedup nativa. */}
       <ConfirmacionPixel classId={classId} leadEmail={leadEmail} leadPhone={leadPhone} />
+      {/* Reserva Prioritaria: si volvemos de Stripe con ?deposito=ok,
+          dispara Purchase por los 3 canales (Google + fbq + CAPI).
+          NO se solapa con ConfirmacionPixel — cada uno tiene su propio
+          eventID y sessionStorage guard. */}
+      <ConfirmacionDepositPurchase
+        classId={classId}
+        leadEmail={leadEmail}
+        leadPhone={leadPhone}
+        active={depositoOk}
+      />
       <IllustrationPanel step="success">
         <div className="flex flex-col min-h-[100dvh]">
           {/* Header sticky — sólo brand + back a inicio, sin progress bar. */}
@@ -175,6 +189,42 @@ export default async function ConfirmacionPage({
               <SummaryRow k="Profesor"  v={teacherName} />
               <SummaryRow k="Duración"  v={`${r.duration_minutes ?? 30} minutos`} />
             </div>
+
+            {/* ═══ Reserva Prioritaria (opcional) ═══
+                Gelfis 2026-07-24. La clase YA está agendada — este
+                bloque es un upgrade puro. No aparece si el lead ya
+                pagó (priorityActive). Si acaba de volver de Stripe
+                con ?deposito=ok, mostramos success pill en su lugar. */}
+            {priorityActive || depositoOk ? (
+              <div className="mt-6 rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-4 md:p-5">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl leading-none mt-0.5" aria-hidden>🌟</span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold uppercase tracking-wider text-emerald-900">
+                      Prioridad activada
+                    </p>
+                    <p className="mt-1.5 text-[14.5px] md:text-[15px] text-emerald-900 leading-snug">
+                      Tu plaza está asegurada con prioridad. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <section className="mt-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 md:p-5">
+                <h2 className="text-[16px] md:text-[17px] font-bold text-slate-900 flex items-center gap-2">
+                  <span aria-hidden>🌟</span> Mejora a Reserva Prioritaria
+                </h2>
+                <p className="mt-2 text-[14px] md:text-[15px] text-slate-700 leading-relaxed">
+                  Tu profesor preparará la clase <strong>adaptada a tu objetivo</strong> y tu plaza queda asegurada con prioridad. Además, tus <strong>10€ se descuentan de tu pack</strong> si decides continuar.
+                </p>
+                <div className="mt-4">
+                  <PriorityUpgradeButton classId={classId} token={token} />
+                </div>
+                <p className="mt-2 text-center text-[11.5px] text-slate-600 leading-snug">
+                  Opcional — tu clase ya está reservada igualmente.
+                </p>
+              </section>
+            )}
 
             {/* CTA principal — al catálogo de cursos */}
             <div className="mt-8">

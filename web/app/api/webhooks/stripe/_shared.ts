@@ -46,6 +46,39 @@ async function handleCheckoutCompleted(
     ? session.payment_intent
     : (session.payment_intent as Stripe.PaymentIntent | null)?.id ?? null;
 
+  // === Rama Reserva Prioritaria (2026-07-24) — depósito 10€ sobre un
+  // LEAD (no student todavía). Marcamos flag + timeline y salimos antes
+  // de tocar `payments` (esa tabla exige student_id). Los 10€ se
+  // contabilizarán cuando el lead convierta a pack.
+  if (session.metadata?.type === "trial_deposit") {
+    const leadId  = session.metadata.lead_id;
+    const classId = session.metadata.class_id;
+    if (!leadId) {
+      console.warn("[stripe-webhook] trial_deposit sin lead_id en metadata", session.id);
+      return;
+    }
+    await sb.from("leads").update({
+      reserva_prioritaria:              true,
+      reserva_prioritaria_paid_at:      new Date().toISOString(),
+      reserva_prioritaria_amount_cents: amountTotal || 1000,
+    }).eq("id", leadId);
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    "status_change",
+      author:  "gelfis",
+      content: `💳 Reserva Prioritaria pagada — ${(amountTotal / 100).toFixed(2)}${currency} (session ${session.id}, class ${classId ?? "?"})`,
+      metadata: {
+        kind:                "priority_reserve_paid",
+        stripe_session_id:   session.id,
+        stripe_payment_intent_id: paymentIntentId,
+        amount_cents:        amountTotal,
+        currency,
+        account,
+      },
+    });
+    return;
+  }
+
   if (!customerEmail || amountTotal === 0) return;
 
   // Check if payment already exists (by payment_intent_id)
@@ -95,6 +128,38 @@ async function handlePaymentIntentSucceeded(
   account: "us" | "de",
 ): Promise<void> {
   const sb = supabaseAdmin();
+
+  // Reserva Prioritaria (fallback si checkout.session.completed no llegó
+  // primero). Idempotencia vía leads.reserva_prioritaria (ya se marcó).
+  if (pi.metadata?.type === "trial_deposit") {
+    const leadId = pi.metadata.lead_id;
+    if (!leadId) return;
+    const { data: alreadyPaid } = await sb
+      .from("leads")
+      .select("reserva_prioritaria")
+      .eq("id", leadId)
+      .maybeSingle();
+    if ((alreadyPaid as { reserva_prioritaria?: boolean } | null)?.reserva_prioritaria) return;
+    await sb.from("leads").update({
+      reserva_prioritaria:              true,
+      reserva_prioritaria_paid_at:      new Date().toISOString(),
+      reserva_prioritaria_amount_cents: pi.amount || 1000,
+    }).eq("id", leadId);
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    "status_change",
+      author:  "gelfis",
+      content: `💳 Reserva Prioritaria pagada (payment_intent fallback) — ${(pi.amount / 100).toFixed(2)}${(pi.currency ?? "eur").toUpperCase()} (pi ${pi.id})`,
+      metadata: {
+        kind:                     "priority_reserve_paid",
+        stripe_payment_intent_id: pi.id,
+        amount_cents:             pi.amount,
+        currency:                 (pi.currency ?? "eur").toUpperCase(),
+        account,
+      },
+    });
+    return;
+  }
 
   // Skip if already handled via checkout.session.completed
   const { data: dup } = await sb

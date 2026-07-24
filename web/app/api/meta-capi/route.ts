@@ -42,6 +42,15 @@ export async function POST(req: Request) {
     email?: string;
     phone?: string;
     sourceUrl?: string;
+    // 2026-07-24: soporte multi-evento. Default Schedule por compat con
+    // ConfirmacionPixel legacy. Purchase se usa para "Reserva Prioritaria".
+    eventName?: "Schedule" | "Purchase";
+    value?: number;
+    currency?: string;
+    // fbc/fbp override — si el cliente pasa los cookie values, los
+    // usamos; si no, los leemos del Cookie header.
+    fbc?: string;
+    fbp?: string;
   };
   try {
     body = await req.json();
@@ -53,10 +62,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "missing_eventId" }, { status: 400 });
   }
 
+  const eventName = body.eventName === "Purchase" ? "Purchase" : "Schedule";
+
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
           ?? req.headers.get("x-real-ip")
           ?? "";
   const ua = req.headers.get("user-agent") ?? "";
+
+  // Extrae _fbc y _fbp del Cookie header (Meta los mantiene automáticamente
+  // cuando fbq('init') corre en el navegador con fbclid en la URL).
+  // Sobreviven al roundtrip por Stripe porque el redirect vuelve al
+  // mismo origen y los cookies son 1st-party. Attribution paid ⇒
+  // depende de que fbc esté presente aquí.
+  const cookieHeader = req.headers.get("cookie") ?? "";
+  const fbcFromCookie = /(?:^|;\s*)_fbc=([^;]+)/.exec(cookieHeader)?.[1];
+  const fbpFromCookie = /(?:^|;\s*)_fbp=([^;]+)/.exec(cookieHeader)?.[1];
+  const fbc = body.fbc || (fbcFromCookie ? decodeURIComponent(fbcFromCookie) : undefined);
+  const fbp = body.fbp || (fbpFromCookie ? decodeURIComponent(fbpFromCookie) : undefined);
 
   const userData: Record<string, string> = {
     client_user_agent: ua,
@@ -67,19 +89,27 @@ export async function POST(req: Request) {
     const digits = body.phone.replace(/\D/g, "");
     if (digits.length >= 8) userData.ph = sha256(digits);
   }
+  if (fbc) userData.fbc = fbc;
+  if (fbp) userData.fbp = fbp;
 
-  const payload: Record<string, unknown> = {
-    data: [
-      {
-        event_name: "Schedule",
-        event_time: Math.floor(Date.now() / 1000),
-        event_id: body.eventId,
-        event_source_url: body.sourceUrl ?? `${process.env.NEXT_PUBLIC_SITE_URL}/confirmacion`,
-        action_source: "website",
-        user_data: userData,
-      },
-    ],
+  const eventPayload: Record<string, unknown> = {
+    event_name: eventName,
+    event_time: Math.floor(Date.now() / 1000),
+    event_id: body.eventId,
+    event_source_url: body.sourceUrl ?? `${process.env.NEXT_PUBLIC_SITE_URL}/confirmacion`,
+    action_source: "website",
+    user_data: userData,
   };
+  if (eventName === "Purchase") {
+    // Meta EXIGE value + currency para Purchase. Sin ellos, el evento
+    // se recibe pero no cuenta como conversión en optimización.
+    eventPayload.custom_data = {
+      value:    typeof body.value === "number" ? body.value : 10,
+      currency: body.currency || "EUR",
+    };
+  }
+
+  const payload: Record<string, unknown> = { data: [eventPayload] };
 
   if (TEST_EVENT_CODE) {
     payload.test_event_code = TEST_EVENT_CODE;
