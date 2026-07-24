@@ -16,6 +16,7 @@ import { sanitizeE164 } from "@/lib/phone";
 import { notifyTeacherOfTrial } from "@/lib/teacher-trial-notification";
 import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
 import { createTeacherTrialEvent } from "@/lib/google-calendar-oauth";
+import { sendRaw } from "@/lib/email/send";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
 function generateShortCode(): string {
@@ -575,31 +576,23 @@ export async function POST(req: Request) {
   // `leadFirst` sigue usándose abajo por el teacher notification.
 
   after(async () => {
-    // Depósito Stripe (Gelfis 2026-06-30): email + WhatsApp se disparan
-    // desde el cron `/api/cron/send-trial-notifications` 5min después
-    // del book (usando notify_after_at). Aquí solo hacemos Google
-    // Calendar (que no espera al pago — el admin/profe necesita ver la
-    // clase inmediatamente).
-    const [gcalResult] = await Promise.allSettled([
-      // Google Calendar mirror — env-gated. Si no hay creds, devuelve
-      // null y no logueamos error. Si está configurado y crea el
-      // evento, guardamos su id en la fila de la clase para poder
-      // eliminarlo cuando se cancele.
-      createTrialEvent({
-        leadName:        b.name,
-        teacherName:     match.teacherName,
-        startIso:        b.slot_iso,
-        durationMinutes: TRIAL_DURATION_MIN,
-        leadEmail:       b.email,
-        leadWhatsapp:    b.whatsapp_e164 ?? null,
-        germanLevel:     b.german_level ?? null,
-        goal:            goal,
-        joinUrl:         shortLinkUrl,
-      }),
-    ]);
-    // Log al timeline que las notificaciones quedan pendientes (para
-    // que en /admin/leads/[id] no se vean como "no enviado" en las
-    // primeras 5min).
+    // Only mirror to the SA-managed admin calendar when the assigned
+    // teacher IS Gelfis. Other teachers get events only in their own
+    // OAuth-connected calendar (createTeacherTrialEvent below).
+    const adminEmailLc = (process.env.ADMIN_EMAIL ?? "").toLowerCase();
+    let isAdminTeacher = false;
+    if (adminEmailLc) {
+      const { data: tRow } = await sb
+        .from("teachers")
+        .select("users(email)")
+        .eq("id", b.teacher_id)
+        .maybeSingle();
+      type TRow = { users: { email: string } | Array<{ email: string }> | null };
+      const u = (tRow as TRow | null)?.users;
+      const tEmail = (Array.isArray(u) ? u[0]?.email : u?.email) ?? "";
+      isAdminTeacher = tEmail.toLowerCase() === adminEmailLc;
+    }
+
     await sb.from("lead_timeline").insert({
       lead_id: leadId,
       type:    "agent_note",
@@ -608,42 +601,47 @@ export async function POST(req: Request) {
       metadata: { kind: "trial_notify_scheduled", class_id: classId, notify_after_at: notifyAfterAt },
     });
 
-    // ── Google Calendar mirror result ──
-    if (gcalResult.status === "fulfilled" && gcalResult.value) {
-      await sb.from("classes")
-        .update({ google_calendar_event_id: gcalResult.value.eventId })
-        .eq("id", classId);
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "agent_note",
-        author:  "system",
-        content: `📅 Evento creado en Google Calendar (${gcalResult.value.eventId.slice(0, 12)}…)`,
-        metadata: { kind: "google_calendar_event", event_id: gcalResult.value.eventId, class_id: classId },
-      });
-    } else {
-      // (gcalResult.status === "rejected") O (fulfilled con value=null).
-      // El segundo caso ocurre cuando createTrialEvent capturó un error
-      // en su try/catch interno y devolvió null silenciosamente. Hasta
-      // ahora se perdía: el admin no veía la clase en su agenda y no
-      // tenía pista de por qué. Caso real Alice Redfern 2026-05-08.
-      // Ahora logueamos al timeline para que aparezca en /admin/leads/[id]
-      // y dispare el banner de salud del sistema.
-      const reason = gcalResult.status === "rejected"
-        ? (gcalResult.reason instanceof Error ? gcalResult.reason.message : String(gcalResult.reason))
-        : "createTrialEvent_returned_null";
-      console.error("[book-trial] google calendar create failed:", reason);
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "send_failed",
-        author:  "system",
-        content: `📅 Falló crear evento en Google Calendar — la clase NO aparecerá en el calendario hasta que un admin la cree manualmente`,
-        metadata: { kind: "google_calendar_failed", class_id: classId, reason },
-      });
-    }
+    // ── SA Calendar mirror — solo para trials asignados a Gelfis ──
+    if (isAdminTeacher) {
+      const [gcalResult] = await Promise.allSettled([
+        createTrialEvent({
+          leadName:        b.name,
+          teacherName:     match.teacherName,
+          startIso:        b.slot_iso,
+          durationMinutes: TRIAL_DURATION_MIN,
+          leadEmail:       b.email,
+          leadWhatsapp:    b.whatsapp_e164 ?? null,
+          germanLevel:     b.german_level ?? null,
+          goal:            goal,
+          joinUrl:         shortLinkUrl,
+        }),
+      ]);
 
-    // ── Email + WhatsApp: NO se envían aquí. El cron
-    //    /api/cron/send-trial-notifications los envía 5min después
-    //    usando notify_after_at. Ver depósito Stripe (Gelfis 2026-06-30). ──
+      if (gcalResult.status === "fulfilled" && gcalResult.value) {
+        await sb.from("classes")
+          .update({ google_calendar_event_id: gcalResult.value.eventId })
+          .eq("id", classId);
+        await sb.from("lead_timeline").insert({
+          lead_id: leadId,
+          type:    "agent_note",
+          author:  "system",
+          content: `📅 Evento creado en Google Calendar (${gcalResult.value.eventId.slice(0, 12)}…)`,
+          metadata: { kind: "google_calendar_event", event_id: gcalResult.value.eventId, class_id: classId },
+        });
+      } else {
+        const reason = gcalResult.status === "rejected"
+          ? (gcalResult.reason instanceof Error ? gcalResult.reason.message : String(gcalResult.reason))
+          : "createTrialEvent_returned_null";
+        console.error("[book-trial] google calendar create failed:", reason);
+        await sb.from("lead_timeline").insert({
+          lead_id: leadId,
+          type:    "send_failed",
+          author:  "system",
+          content: `📅 Falló crear evento en Google Calendar — la clase NO aparecerá en el calendario hasta que un admin la cree manualmente`,
+          metadata: { kind: "google_calendar_failed", class_id: classId, reason },
+        });
+      }
+    }
 
     // ── Notify the assigned teacher (in-app bell + email) ──
     await notifyTeacherOfTrial({
@@ -689,6 +687,48 @@ export async function POST(req: Request) {
       goal:            goal,
       joinUrl:         shortLinkUrl,
     }).catch(e => console.error("[book-trial] teacher gcal event failed:", e));
+
+    // ── Email notification to admin for EVERY new trial ──
+    const trialAlertEmail = (process.env.NEW_LEAD_ALERT_EMAIL ?? "").trim();
+    if (trialAlertEmail) {
+      const trialDate = new Date(b.slot_iso).toLocaleString("es-ES", {
+        timeZone: "Europe/Berlin",
+        weekday: "long", day: "numeric", month: "long",
+        hour: "2-digit", minute: "2-digit",
+      });
+      await sendRaw(
+        trialAlertEmail,
+        `📅 Nueva Clase de Prueba — ${leadFirst} con ${teacherFirst}`,
+        [
+          `<div style="font-family:sans-serif;max-width:520px">`,
+          `<h2 style="color:#1e293b">📅 Nueva Clase de Prueba Agendada</h2>`,
+          `<table style="border-collapse:collapse;width:100%">`,
+          `<tr><td style="padding:6px 12px;font-weight:bold;color:#64748b">Lead</td><td style="padding:6px 12px">${b.name}</td></tr>`,
+          `<tr><td style="padding:6px 12px;font-weight:bold;color:#64748b">Email</td><td style="padding:6px 12px">${b.email}</td></tr>`,
+          `<tr><td style="padding:6px 12px;font-weight:bold;color:#64748b">WhatsApp</td><td style="padding:6px 12px">${b.whatsapp_e164 ?? "—"}</td></tr>`,
+          `<tr><td style="padding:6px 12px;font-weight:bold;color:#64748b">Profesor/a</td><td style="padding:6px 12px">${match.teacherName}</td></tr>`,
+          `<tr><td style="padding:6px 12px;font-weight:bold;color:#64748b">Fecha</td><td style="padding:6px 12px">${trialDate} (Berlín)</td></tr>`,
+          b.german_level ? `<tr><td style="padding:6px 12px;font-weight:bold;color:#64748b">Nivel</td><td style="padding:6px 12px">${b.german_level}</td></tr>` : "",
+          b.goal ? `<tr><td style="padding:6px 12px;font-weight:bold;color:#64748b">Objetivo</td><td style="padding:6px 12px">${b.goal}</td></tr>` : "",
+          `</table>`,
+          `<p style="margin-top:16px"><a href="${PLATFORM_URL}/admin/leads/${leadId}" style="color:#2563eb">Ver perfil del lead →</a></p>`,
+          `</div>`,
+        ].join("\n"),
+        [
+          `Nueva Clase de Prueba Agendada`,
+          ``,
+          `Lead: ${b.name}`,
+          `Email: ${b.email}`,
+          `WhatsApp: ${b.whatsapp_e164 ?? "—"}`,
+          `Profesor/a: ${match.teacherName}`,
+          `Fecha: ${trialDate} (Berlín)`,
+          b.german_level ? `Nivel: ${b.german_level}` : "",
+          b.goal ? `Objetivo: ${b.goal}` : "",
+          ``,
+          `Ver perfil: ${PLATFORM_URL}/admin/leads/${leadId}`,
+        ].filter(Boolean).join("\n"),
+      ).catch(e => console.error("[book-trial] admin trial alert email failed:", e));
+    }
   });
 
   return NextResponse.json({
