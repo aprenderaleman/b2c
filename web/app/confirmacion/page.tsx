@@ -132,15 +132,15 @@ export default async function ConfirmacionPage({
             </div>
           </header>
 
-          <main className="flex-1 mx-auto w-full max-w-xl px-5 md:px-8 pt-6 md:pt-12 lg:pt-16 pb-12 md:pb-16">
+          <main className="flex-1 mx-auto w-full max-w-lg px-5 md:px-8 pt-6 md:pt-12 pb-10 md:pb-16">
             {/* ═══ Banner de prioridad — hero celebratorio (Gelfis
                 2026-07-24). Cuando el lead ya pagó (o acaba de volver
                 de Stripe), este banner es lo PRIMERO que ve, arriba
                 del H1. Cuando no ha pagado, no se muestra y la sección
                 normal "Mejora a Reserva Prioritaria" aparece bajo el
-                H1 con el botón. ═══ */}
+                summary con el botón. ═══ */}
             {(priorityActive || depositoOk) && (
-              <div className="rounded-2xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 via-emerald-100 to-teal-50 p-5 md:p-6 shadow-lg shadow-emerald-500/15 mb-6">
+              <div className="rounded-2xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 via-emerald-100 to-teal-50 p-4 md:p-5 shadow-lg shadow-emerald-500/15 mb-5">
                 <div className="flex items-center gap-3 md:gap-4">
                   <span className="text-4xl md:text-5xl leading-none shrink-0" aria-hidden>🌟</span>
                   <div className="min-w-0">
@@ -152,27 +152,51 @@ export default async function ConfirmacionPage({
                     </p>
                   </div>
                 </div>
-                <p className="mt-3 text-[14.5px] md:text-[15.5px] text-emerald-900 leading-snug">
-                  Tu plaza está asegurada con prioridad. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.
+                <p className="mt-2.5 text-[14px] md:text-[15px] text-emerald-900 leading-snug">
+                  Tu plaza está asegurada. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.
                 </p>
               </div>
             )}
 
-            {/* Eyebrow + título principal */}
-            <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+            {/* Eyebrow + H1 + subtítulo minimal */}
+            <p className="text-[11.5px] md:text-[12px] font-bold uppercase tracking-[0.18em] text-emerald-700">
               ✓ Reserva confirmada
             </p>
-            <h1 className="mt-2 text-[28px] sm:text-3xl md:text-4xl lg:text-[40px] font-extrabold tracking-tight text-slate-900 leading-tight">
-              ¡Casi listo{firstName ? `, ${firstName}` : ""}!
+            <h1 className="mt-1.5 text-[26px] sm:text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
+              ¡Todo listo{firstName ? `, ${firstName}` : ""}!
             </h1>
-            <p className="mt-3 text-[22px] sm:text-2xl md:text-3xl font-extrabold tracking-tight text-slate-900">
-              Revisa tu correo electrónico.
+            <p className="mt-2.5 text-[15px] md:text-[16px] text-slate-600 leading-relaxed">
+              Tu clase de prueba con <strong className="text-slate-900">{teacherName}</strong> está reservada.
             </p>
-            <p className="mt-3 text-[15px] md:text-base text-slate-600 leading-relaxed">
-              Revisa tu <strong>correo electrónico</strong> ahora — te acabamos
-              de enviar un email con el botón <strong>«Confirmar asistencia»</strong>.
-              Un solo clic y tu profesor sabrá que vas a venir.
-            </p>
+
+            {/* Summary card — hero de la info que importa (fecha/hora
+                grande primero, luego duración). Diseño de "ticket". */}
+            <div className="mt-5 rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+              <div className="bg-gradient-to-br from-slate-50 to-white px-5 py-4 border-b border-slate-100">
+                <p className="text-[10.5px] font-bold uppercase tracking-[0.14em] text-slate-500">
+                  Cuándo
+                </p>
+                <p className="mt-1 text-[18px] md:text-[20px] font-bold text-slate-900 capitalize leading-snug">
+                  {startDate}
+                </p>
+                <p className="mt-0.5 text-[11.5px] text-slate-500">
+                  Hora de Berlín · {r.duration_minutes ?? 30} min
+                </p>
+              </div>
+              <a
+                href={magicLinkUrl}
+                className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-slate-50 active:bg-slate-100 transition"
+              >
+                <span className="text-[13.5px] font-semibold text-slate-800">
+                  🎥 Guardar enlace del aula
+                </span>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+                     className="text-slate-400" aria-hidden>
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </a>
+            </div>
 
             {/* ═══ Reserva Prioritaria — CTA para upgrade opcional.
                 Solo se muestra cuando el lead NO ha pagado aún; el
@@ -195,96 +219,11 @@ export default async function ConfirmacionPage({
               </section>
             )}
 
-            {/* 📧 Bloque acción principal — confirmar por email */}
-            <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 md:p-5">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl leading-none mt-0.5" aria-hidden>📧</span>
-                <div className="min-w-0">
-                  <p className="text-[13px] font-bold uppercase tracking-wider text-emerald-900">
-                    Abre tu email y haz clic en «Confirmar»
-                  </p>
-                  <p className="mt-1.5 text-[14.5px] md:text-[15px] text-emerald-900 leading-snug">
-                    Si no lo ves en la bandeja de entrada, revisa <strong>Promociones</strong> o <strong>Spam</strong>. Puede tardar hasta 5 minutos en llegar.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* 💎 Bloque "valor 30 €" — refuerzo de asistencia. Va antes
-                del summary para que sea lo primero que vea el lead. */}
-            <div className="mt-6 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 md:p-5">
-              <div className="flex items-start gap-3">
-                <span className="text-2xl leading-none mt-0.5" aria-hidden>💎</span>
-                <div className="min-w-0">
-                  <p className="text-[12px] font-bold uppercase tracking-wider text-amber-900">
-                    Tu clase tiene valor de 30 €
-                  </p>
-                  <p className="mt-1.5 text-[14.5px] md:text-[15px] text-amber-900 leading-snug">
-                    Te la regalamos por asistir. Te esperamos
-                    el <strong className="capitalize">{startDate}</strong>.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Booking summary card — datos clave de la reserva */}
-            <div className="mt-4 rounded-2xl bg-white border border-slate-200 shadow-sm p-5 md:p-6 space-y-3">
-              <SummaryRow k="Fecha"     v={startDate} cap />
-              <SummaryRow k="Profesor"  v={teacherName} />
-              <SummaryRow k="Duración"  v={`${r.duration_minutes ?? 30} minutos`} />
-            </div>
-
-            {/* CTA principal — al catálogo de cursos */}
-            <div className="mt-8">
-              <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-slate-500">
-                Mientras esperas tu clase
-              </p>
-              <h2 className="mt-2 text-[20px] md:text-[24px] font-bold text-slate-900 leading-snug">
-                Conoce nuestros cursos y tarifas
-              </h2>
-              <p className="mt-2 text-[14px] md:text-[15px] text-slate-600 leading-relaxed">
-                Visita nuestra web para ver todos los detalles, niveles y precios
-                de los packs disponibles.
-              </p>
-              <a
-                href="https://www.aprender-aleman.de/es/cursos"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex items-center gap-2 h-12 md:h-14 px-6 rounded-2xl
-                           bg-warm text-warm-foreground font-semibold text-[15px] md:text-base
-                           shadow-lg shadow-warm/20 hover:shadow-warm/30 active:scale-[0.98] transition"
-              >
-                Ver cursos y precios
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <line x1="5" y1="12" x2="19" y2="12"/>
-                  <polyline points="12 5 19 12 12 19"/>
-                </svg>
-              </a>
-            </div>
-
-            {/* Acciones secundarias — guardar link + ir al inicio */}
-            <div className="mt-10 pt-6 border-t border-slate-100">
-              <a
-                href={magicLinkUrl}
-                className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:text-warm transition-colors underline-offset-4 hover:underline"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                  <polyline points="17 21 17 13 7 13 7 21" />
-                  <polyline points="7 3 7 8 15 8" />
-                </svg>
-                Guardar enlace de la clase
-              </a>
-              <p className="mt-2 text-xs text-slate-500 leading-snug">
-                El aula abre 15 minutos antes. Recibirás recordatorios por
-                WhatsApp y email antes de la clase.
-              </p>
-
+            {/* Volver al inicio — subtle, no primary action */}
+            <div className="mt-10 text-center">
               <Link
                 href="/"
-                className="mt-6 inline-block text-sm text-slate-500 hover:text-slate-900 transition-colors"
+                className="text-sm text-slate-400 hover:text-slate-700 transition-colors"
               >
                 ← Volver al inicio
               </Link>
