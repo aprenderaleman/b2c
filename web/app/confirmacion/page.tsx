@@ -144,8 +144,11 @@ export default async function ConfirmacionPage({
                 <div className="flex items-center gap-3 md:gap-4">
                   <span className="text-4xl md:text-5xl leading-none shrink-0" aria-hidden>🌟</span>
                   <div className="min-w-0">
-                    <p className="text-[11px] md:text-[12px] font-bold uppercase tracking-[0.14em] text-emerald-800">
+                    <p className="text-[11px] md:text-[12px] font-bold uppercase tracking-[0.14em] text-emerald-800 flex items-center gap-1.5">
                       Reserva Prioritaria
+                      <span className="inline-flex items-center rounded-full bg-amber-400 text-amber-950 px-1.5 py-0.5 text-[9.5px] font-extrabold tracking-wider shadow-sm">
+                        VIP
+                      </span>
                     </p>
                     <p className="mt-0.5 text-[20px] md:text-[24px] font-extrabold text-emerald-900 leading-tight">
                       ¡Prioridad activada!
@@ -204,8 +207,12 @@ export default async function ConfirmacionPage({
                 arriba del H1 (ver bloque anterior). ═══ */}
             {!(priorityActive || depositoOk) && (
               <section className="mt-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 md:p-5">
-                <h2 className="text-[16px] md:text-[17px] font-bold text-slate-900 flex items-center gap-2">
-                  <span aria-hidden>🌟</span> Mejora a Reserva Prioritaria
+                <h2 className="text-[16px] md:text-[17px] font-bold text-slate-900 flex items-center gap-2 flex-wrap">
+                  <span aria-hidden>🌟</span>
+                  <span>Mejora a Reserva Prioritaria</span>
+                  <span className="inline-flex items-center rounded-full bg-amber-400 text-amber-950 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider shadow-sm">
+                    VIP
+                  </span>
                 </h2>
                 <p className="mt-2 text-[14px] md:text-[15px] text-slate-700 leading-relaxed">
                   Tu profesor preparará la clase <strong>adaptada a tu objetivo</strong> y tu plaza queda asegurada con prioridad. Además, tus <strong>10€ se descuentan de tu pack</strong> si decides continuar.
