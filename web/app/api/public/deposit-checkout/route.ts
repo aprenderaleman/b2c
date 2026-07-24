@@ -29,6 +29,26 @@ export const dynamic = "force-dynamic";
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 export async function POST(req: Request) {
+  try {
+    return await handle(req);
+  } catch (err) {
+    // Cualquier throw sync/async (stripeUS() sin env, supabaseAdmin() sin
+    // env, verifyTrialToken sin NEXTAUTH_SECRET, supabase query errors,
+    // etc.) cae aquí en vez del 500 opaco de Next.js.
+    const e = err as { message?: string; stack?: string };
+    console.error("[deposit-checkout] UNHANDLED ERROR:", {
+      message: e.message,
+      stack:   e.stack?.split("\n").slice(0, 4).join(" | "),
+    });
+    return NextResponse.json({
+      ok:     false,
+      error:  "server_error",
+      detail: e.message ?? "unknown",
+    }, { status: 502 });
+  }
+}
+
+async function handle(req: Request) {
   let body: {
     classId?: string;
     token?:   string;
