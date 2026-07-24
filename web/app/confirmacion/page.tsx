@@ -149,7 +149,43 @@ export default async function ConfirmacionPage({
               Un solo clic y tu profesor sabrá que vas a venir.
             </p>
 
-            {/* Bloques de depósito eliminados 2026-07-10. */}
+            {/* ═══ Reserva Prioritaria (opcional) ═══
+                Gelfis 2026-07-24: reposicionado arriba del fold, justo
+                bajo el título y descripción, para maximizar visibilidad
+                y conversión. La clase YA está agendada — este bloque
+                es un upgrade puro. No aparece si el lead ya pagó
+                (priorityActive). Si acaba de volver de Stripe con
+                ?deposito=ok, mostramos success pill en su lugar. */}
+            {priorityActive || depositoOk ? (
+              <div className="mt-6 rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-4 md:p-5">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl leading-none mt-0.5" aria-hidden>🌟</span>
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold uppercase tracking-wider text-emerald-900">
+                      Prioridad activada
+                    </p>
+                    <p className="mt-1.5 text-[14.5px] md:text-[15px] text-emerald-900 leading-snug">
+                      Tu plaza está asegurada con prioridad. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <section className="mt-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 md:p-5">
+                <h2 className="text-[16px] md:text-[17px] font-bold text-slate-900 flex items-center gap-2">
+                  <span aria-hidden>🌟</span> Mejora a Reserva Prioritaria
+                </h2>
+                <p className="mt-2 text-[14px] md:text-[15px] text-slate-700 leading-relaxed">
+                  Tu profesor preparará la clase <strong>adaptada a tu objetivo</strong> y tu plaza queda asegurada con prioridad. Además, tus <strong>10€ se descuentan de tu pack</strong> si decides continuar.
+                </p>
+                <div className="mt-4">
+                  <PriorityUpgradeButton classId={classId} token={token} />
+                </div>
+                <p className="mt-2 text-center text-[11.5px] text-slate-600 leading-snug">
+                  Opcional — tu clase ya está reservada igualmente.
+                </p>
+              </section>
+            )}
 
             {/* 📧 Bloque acción principal — confirmar por email */}
             <div className="mt-5 rounded-2xl border-2 border-emerald-300 bg-emerald-50 p-4 md:p-5">
@@ -189,42 +225,6 @@ export default async function ConfirmacionPage({
               <SummaryRow k="Profesor"  v={teacherName} />
               <SummaryRow k="Duración"  v={`${r.duration_minutes ?? 30} minutos`} />
             </div>
-
-            {/* ═══ Reserva Prioritaria (opcional) ═══
-                Gelfis 2026-07-24. La clase YA está agendada — este
-                bloque es un upgrade puro. No aparece si el lead ya
-                pagó (priorityActive). Si acaba de volver de Stripe
-                con ?deposito=ok, mostramos success pill en su lugar. */}
-            {priorityActive || depositoOk ? (
-              <div className="mt-6 rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-4 md:p-5">
-                <div className="flex items-start gap-3">
-                  <span className="text-2xl leading-none mt-0.5" aria-hidden>🌟</span>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-bold uppercase tracking-wider text-emerald-900">
-                      Prioridad activada
-                    </p>
-                    <p className="mt-1.5 text-[14.5px] md:text-[15px] text-emerald-900 leading-snug">
-                      Tu plaza está asegurada con prioridad. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <section className="mt-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 md:p-5">
-                <h2 className="text-[16px] md:text-[17px] font-bold text-slate-900 flex items-center gap-2">
-                  <span aria-hidden>🌟</span> Mejora a Reserva Prioritaria
-                </h2>
-                <p className="mt-2 text-[14px] md:text-[15px] text-slate-700 leading-relaxed">
-                  Tu profesor preparará la clase <strong>adaptada a tu objetivo</strong> y tu plaza queda asegurada con prioridad. Además, tus <strong>10€ se descuentan de tu pack</strong> si decides continuar.
-                </p>
-                <div className="mt-4">
-                  <PriorityUpgradeButton classId={classId} token={token} />
-                </div>
-                <p className="mt-2 text-center text-[11.5px] text-slate-600 leading-snug">
-                  Opcional — tu clase ya está reservada igualmente.
-                </p>
-              </section>
-            )}
 
             {/* CTA principal — al catálogo de cursos */}
             <div className="mt-8">
