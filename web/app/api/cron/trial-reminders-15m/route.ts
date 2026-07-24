@@ -54,7 +54,7 @@ async function run(req: Request) {
     .from("classes")
     .select(`
       id, scheduled_at, duration_minutes, notes_admin, short_code,
-      lead:leads!inner(id, name, language, email, whatsapp_normalized, ai_paused_until)
+      lead:leads!inner(id, name, language, email, whatsapp_normalized, ai_paused_until, status, reschedule_state)
     `)
     .eq("is_trial", true)
     .eq("status", "scheduled")
@@ -63,8 +63,8 @@ async function run(req: Request) {
 
   type Row = {
     id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null; short_code: string | null;
-    lead: { id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null } |
-          Array<{ id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null }>;
+    lead: { id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null; status: string | null; reschedule_state: { phase?: string } | null } |
+          Array<{ id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null; status: string | null; reschedule_state: { phase?: string } | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null => !x ? null : Array.isArray(x) ? x[0] ?? null : x;
 
@@ -77,6 +77,9 @@ async function run(req: Request) {
 
     const lead = flat(r.lead);
     if (!lead) { skipped++; continue; }
+
+    if (lead.status === "converted") { skipped++; continue; }
+    if (lead.reschedule_state?.phase?.startsWith("AWAITING_")) { skipped++; continue; }
 
     if (lead.ai_paused_until) {
       const until = new Date(lead.ai_paused_until).getTime();
@@ -102,7 +105,7 @@ async function run(req: Request) {
       const waText = lead.language === "de"
         ? `⏰ 15 Minuten bis zu deiner Stunde.\n\nJetzt beitreten: ${joinUrl}`
         : `⏰ 15 minutos para tu clase.\n\nÚnete ahora: ${joinUrl}`;
-      const res = await sendWhatsappText(lead.whatsapp_normalized, waText);
+      const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_15m" });
       if (res.ok) { sentWa++; waDelivered = true; }
       else { failed++; console.error(`[trial-reminders-15m] WA failed for ${r.id}: ${res.reason}`); }
     }

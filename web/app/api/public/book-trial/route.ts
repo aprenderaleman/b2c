@@ -397,8 +397,14 @@ export async function POST(req: Request) {
       const { error: rescheduleErr } = await sb
         .from("classes")
         .update({
-          scheduled_at: requestedSlotIso,
-          notes_admin:  null,
+          scheduled_at:    requestedSlotIso,
+          notes_admin:     null,
+          // Fix Gelfis 2026-07-24: sin resetear notified_at el cron
+          // send-trial-notifications no re-envía la confirmación con
+          // la nueva hora (filtra notified_at IS NULL), y el lead se
+          // presenta al link muerto de la hora vieja.
+          notified_at:     null,
+          notify_after_at: new Date().toISOString(),
         })
         .eq("id", ex.id);
       if (rescheduleErr) {

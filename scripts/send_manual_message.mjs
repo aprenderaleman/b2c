@@ -125,8 +125,31 @@ Stiv, Aprender-Aleman.de`;
 const text = lead.language === "de" ? textDe : textEs;
 console.log("\n── Message to send ──\n" + text + "\n──");
 
-// ── Send via Evolution API ──────────────────────────────────
+// ── Chequeos de seguridad (audit 2026-07-24) ────────────────
+// Este script bypasseaba el kill switch + blocklist. Ahora consulta
+// system_config.whatsapp_disabled y aborta si está "full" o "partial".
+// Y bloquea números en HARDCODED_BLOCKLIST (Gelfis personal).
 const toNumber = lead.whatsapp_normalized.replace(/\D/g, "");
+
+const HARDCODED_BLOCKLIST = new Set(["491607530948"]);
+if (HARDCODED_BLOCKLIST.has(toNumber)) {
+  console.error(`ABORT: ${toNumber} está en HARDCODED_BLOCKLIST (Gelfis personal).`);
+  await db.end();
+  process.exit(4);
+}
+
+const cfg = await db.query(
+  `SELECT value FROM system_config WHERE key = 'whatsapp_disabled' LIMIT 1`,
+);
+const killMode = cfg.rows[0]?.value ?? "off";
+if (killMode === "full" || killMode === "partial") {
+  console.error(`ABORT: kill switch WhatsApp en modo "${killMode}". Este script bypasea la whitelist — abortando.`);
+  console.error(`Para desbloquear temporalmente: UPDATE system_config SET value='off' WHERE key='whatsapp_disabled';`);
+  await db.end();
+  process.exit(5);
+}
+
+// ── Send via Evolution API ──────────────────────────────────
 const payload = {
   number: toNumber,
   options: { delay: 1200, presence: "composing", linkPreview: false },

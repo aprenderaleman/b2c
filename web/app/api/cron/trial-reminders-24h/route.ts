@@ -53,7 +53,7 @@ async function run(req: Request) {
     .select(`
       id, scheduled_at, duration_minutes, notes_admin, short_code,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads!inner(id, name, language, email, whatsapp_normalized, ai_paused_until)
+      lead:leads!inner(id, name, language, email, whatsapp_normalized, ai_paused_until, status, reschedule_state)
     `)
     .eq("is_trial", true)
     .eq("status", "scheduled")
@@ -64,8 +64,8 @@ async function run(req: Request) {
     id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null; short_code: string | null;
     teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
-    lead: { id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null } |
-          Array<{ id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null }>;
+    lead: { id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null; status: string | null; reschedule_state: { phase?: string } | null } |
+          Array<{ id: string; name: string; language: "es" | "de"; email: string | null; whatsapp_normalized: string | null; ai_paused_until: string | null; status: string | null; reschedule_state: { phase?: string } | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null => !x ? null : Array.isArray(x) ? x[0] ?? null : x;
 
@@ -78,6 +78,10 @@ async function run(req: Request) {
     const tu = teacherWrap ? flat(teacherWrap.users) : null;
 
     if (!lead) { skipped++; continue; }
+
+    // Fix Gelfis 2026-07-24: zombies (lead converted o con reagendamiento pendiente).
+    if (lead.status === "converted") { skipped++; continue; }
+    if (lead.reschedule_state?.phase?.startsWith("AWAITING_")) { skipped++; continue; }
 
     // Honra ai_paused_until ("Tomo yo desde aquí" del admin) para que las
     // automatizaciones no escriban al lead mientras Gelfis lo gestiona.
@@ -149,7 +153,7 @@ async function run(req: Request) {
       const waText = lead.language === "de"
         ? `RECORDATORIO:\n\nHallo ${leadFirst}!\nMorgen ${dayLabel} um ${timeLabel} ist deine Deutsch-Stunde.\n\n🔗 Hier kommst du rein:\n${leadJoinUrl}`
         : `RECORDATORIO:\n\n¡Hola ${leadFirst}!\nMañana ${dayLabel} a las ${timeLabel} es tu clase de alemán.\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}`;
-      const wa = await sendWhatsappText(lead.whatsapp_normalized, waText);
+      const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_24h" });
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
       else console.error(`[trial-reminders-24h] lead WA failed for ${r.id}: ${wa.reason}`);
     }

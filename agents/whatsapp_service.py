@@ -219,6 +219,10 @@ class WhatsAppService:
     _ALLOWED_KINDS_PARTIAL = frozenset({
         "trial_confirmation",
         "trial_reminder_2h",
+        "trial_reminder_24h",
+        "trial_reminder_15m",
+        "trial_reminder_morning",
+        "trial_reminder_30m",  # scheduler.py _notify_trials_30min
         "trial_attended_initial",
         "trial_inscription_initial",
         "trial_absent_initial",

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { markTrialAbsent } from "@/lib/admin-actions";
 
 /**
  * GET/POST /api/cron/trial-auto-absent
@@ -84,37 +85,24 @@ async function run(req: Request) {
   }
 
   const ids = rows.map(r => r.id);
-  const now = new Date().toISOString();
 
-  // Update masivo — un solo round-trip. Los timestamps quedan idénticos
-  // para todos los marcados en este run, lo que facilita auditoría.
-  const { error: updErr } = await sb
-    .from("leads")
-    .update({
-      status:          "trial_absent",
-      trial_absent_at: now,
-      // No tocamos next_contact_date — markTrialAbsent (manual) lo pone
-      // a +60min, pero aquí ya pasaron >24h, no tiene sentido. Si el
-      // operador quiere follow-up tiene que hacerlo manualmente.
-    })
-    .in("id", ids);
-
-  if (updErr) {
-    console.error("[cron/trial-auto-absent] update failed:", updErr);
-    return NextResponse.json({ error: "update_failed", detail: updErr.message }, { status: 500 });
+  // Fix Gelfis 2026-07-24: en vez de un UPDATE masivo silencioso que
+  // dejaba huérfano el flow absent-interest, iteramos y llamamos a
+  // markTrialAbsent por cada lead — misma ruta que el botón del
+  // profesor. Envía WA + email con SÍ/NO y setea AWAITING_ABSENT_INTEREST.
+  //
+  // Riesgo mitigado: en runs normales aquí caen 0-5 leads del día
+  // anterior, no un burst. sendWhatsappText tiene rate-limit 15s.
+  let succeeded = 0, failed = 0;
+  for (const id of ids) {
+    try {
+      await markTrialAbsent(id);
+      succeeded++;
+    } catch (e) {
+      failed++;
+      console.error(`[cron/trial-auto-absent] markTrialAbsent failed for ${id}:`, e);
+    }
   }
 
-  // Timeline entries para auditoría — un insert masivo. El contenido
-  // mantiene la string "did not attend trial" por compat con cualquier
-  // consumer histórico que aún haga ilike (aunque ya no debería).
-  await sb.from("lead_timeline").insert(
-    ids.map(id => ({
-      lead_id: id,
-      type:    "status_change",
-      author:  "cron:trial-auto-absent",
-      content: `Lead did not attend trial — auto-marked absent after ${GRACE_HOURS}h grace window with no manual disposition.`,
-    })),
-  );
-
-  return NextResponse.json({ ok: true, marked: ids.length, scanned: rows.length });
+  return NextResponse.json({ ok: true, marked: succeeded, failed, scanned: rows.length });
 }

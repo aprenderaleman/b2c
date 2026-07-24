@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -222,6 +222,7 @@ def _notify_trials_30min() -> None:
                 l.name            AS lead_name,
                 l.language        AS lead_language,
                 l.whatsapp_normalized AS lead_whatsapp,
+                l.ai_paused_until AS lead_ai_paused_until,
                 tu.full_name      AS teacher_name,
                 tu.email          AS teacher_email,
                 tu.phone          AS teacher_whatsapp
@@ -232,6 +233,12 @@ def _notify_trials_30min() -> None:
              WHERE c.is_trial = TRUE
                AND c.status   = 'scheduled'
                AND c.scheduled_at BETWEEN %s AND %s
+               -- Fix Gelfis 2026-07-24: zombies. Lead converted (no cancelamos
+               -- la trial al convertir) o con reagendamiento pendiente (bot
+               -- CAMBIAR/CANCELAR o profe Reagendar → clase sigue scheduled).
+               AND l.status <> 'converted'
+               AND (l.reschedule_state IS NULL
+                    OR NOT (l.reschedule_state->>'phase' LIKE 'AWAITING_%%'))
             """,
             (lo, hi),
         )
@@ -240,6 +247,11 @@ def _notify_trials_30min() -> None:
     wa: WhatsAppService | None = None
     for r in rows:
         if (r.get("notes_admin") or "").find(_PRE_CLASS_30M_TAG) >= 0:
+            continue
+        # Respeta ai_paused_until ("Tomo yo desde aquí" del admin) —
+        # los crons TS ya lo hacen, este no lo hacía (bug audit 2026-07-24).
+        paused_until = r.get("lead_ai_paused_until")
+        if paused_until and paused_until > datetime.now(timezone.utc):
             continue
 
         scheduled_at = r["scheduled_at"]
@@ -291,7 +303,13 @@ def _notify_trials_30min() -> None:
         # Send to lead (only if they gave a number)
         if r.get("lead_whatsapp"):
             try:
-                wa.send_text(r["lead_whatsapp"], lead_text)
+                wa.send_text(
+                    lead_first or "lead",
+                    r["lead_whatsapp"],
+                    lead_text,
+                    kind="trial_reminder_30m",
+                    lead_id=r["lead_id"],
+                )
                 log_timeline(
                     r["lead_id"], type="trial_reminder", author="agent_5",
                     content="30-min pre-class WhatsApp sent to lead.",
@@ -302,7 +320,12 @@ def _notify_trials_30min() -> None:
         # Send to teacher
         if r.get("teacher_whatsapp"):
             try:
-                wa.send_text(r["teacher_whatsapp"], teacher_text)
+                wa.send_text(
+                    teacher_first or "teacher",
+                    r["teacher_whatsapp"],
+                    teacher_text,
+                    kind="trial_reminder_30m",
+                )
             except WhatsAppError as e:
                 log.warning("30-min teacher reminder failed for class %s: %s", r["class_id"], e)
 

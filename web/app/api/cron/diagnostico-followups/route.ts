@@ -401,7 +401,7 @@ async function runCron(req: Request) {
     };
     const sendWADoc: typeof sendWhatsappDocument = async (phone, url, fileName, opts) => {
       if (forceEmailOnly) return { ok: false, reason: "force_email_only" };
-      return sendWADoc(phone, url, fileName, opts);
+      return sendWhatsappDocument(phone, url, fileName, opts);
     };
 
     const firstName = lead.name.split(/\s+/)[0] || lead.name;

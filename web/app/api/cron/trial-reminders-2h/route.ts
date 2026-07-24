@@ -59,7 +59,7 @@ async function run(req: Request) {
     .from("classes")
     .select(`
       id, scheduled_at, duration_minutes, notes_admin, short_code,
-      lead:leads!inner(id, name, language, whatsapp_normalized, ai_paused_until)
+      lead:leads!inner(id, name, language, whatsapp_normalized, ai_paused_until, status, reschedule_state)
     `)
     .eq("is_trial", true)
     .eq("status", "scheduled")
@@ -68,8 +68,8 @@ async function run(req: Request) {
 
   type Row = {
     id: string; scheduled_at: string; duration_minutes: number; notes_admin: string | null; short_code: string | null;
-    lead: { id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null; ai_paused_until: string | null } |
-          Array<{ id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null; ai_paused_until: string | null }>;
+    lead: { id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null; ai_paused_until: string | null; status: string | null; reschedule_state: { phase?: string } | null } |
+          Array<{ id: string; name: string; language: "es" | "de"; whatsapp_normalized: string | null; ai_paused_until: string | null; status: string | null; reschedule_state: { phase?: string } | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null => !x ? null : Array.isArray(x) ? x[0] ?? null : x;
 
@@ -82,6 +82,12 @@ async function run(req: Request) {
 
     const lead = flat(r.lead);
     if (!lead || !lead.whatsapp_normalized) { skipped++; continue; }
+
+    // Fix Gelfis 2026-07-24: zombies. Lead ya converted (no cancelamos
+    // la trial futura al convertir) o lead que pidió reagendar por bot
+    // (reschedule_state.phase=AWAITING_*, la clase sigue scheduled).
+    if (lead.status === "converted") { skipped++; continue; }
+    if (lead.reschedule_state?.phase?.startsWith("AWAITING_")) { skipped++; continue; }
 
     // "Tomo yo desde aquí": admin pausó toda automatización para este lead.
     if (lead.ai_paused_until) {

@@ -108,6 +108,20 @@ async function run(req: Request) {
     const c = rawCls;
     const lead = flat(c.lead);
     if (!lead) continue;
+
+    // Lock atómico: reservamos la clase marcando notified_at ANTES
+    // de mandar. Si el UPDATE no retorna fila, otro tick del cron la
+    // agarró primero. Fix Gelfis 2026-07-24: con 20 rows y gap 15s
+    // entre WA, el tick tarda ~5 min y el siguiente tick reenviaba
+    // confirmación + email al mismo lead. Ahora es idempotente.
+    const { data: reserved } = await sb.from("classes")
+      .update({ notified_at: new Date().toISOString() })
+      .eq("id", c.id)
+      .is("notified_at", null)
+      .select("id")
+      .maybeSingle();
+    if (!reserved) continue;
+
     const teacherWrap = flat(c.teacher);
     const tu = teacherWrap ? flat(teacherWrap.users) : null;
     const teacherName = tu?.full_name ?? tu?.email ?? "tu profesor/a";
@@ -197,11 +211,7 @@ async function run(req: Request) {
       });
     }
 
-    // Marcar notified idempotentemente
-    await sb.from("classes")
-      .update({ notified_at: new Date().toISOString() })
-      .eq("id", c.id);
-
+    // notified_at ya marcado atómicamente al inicio del bucle.
     results.push({ classId: c.id, email: emailOk, wa: waOk, paid });
   }
 
