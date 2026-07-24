@@ -303,7 +303,10 @@ export function TrialHubCard({
                           headers: { "content-type": "application/json" },
                           body: "{}",
                         });
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        if (!res.ok) {
+                          const j = await res.json().catch(() => ({}));
+                          throw new Error(`${j.error ?? `HTTP ${res.status}`}${j.detail ? ` — ${j.detail}` : ""}`);
+                        }
                         router.refresh();
                       } catch (err) {
                         alert(err instanceof Error ? err.message : "Error");

@@ -5,12 +5,25 @@ import { markTrialAbsent } from "@/lib/admin-actions";
 export async function POST(_req: Request, { params }: { params: Promise<{ leadId: string }> }) {
   let user;
   try { user = await requireTeacherSession(); }
-  catch { return NextResponse.json({ error: "unauthorized" }, { status: 401 }); }
+  catch (err) {
+    return NextResponse.json({
+      error:  "unauthorized",
+      detail: err instanceof Error ? err.message : String(err),
+    }, { status: 401 });
+  }
 
   const { leadId } = await params;
 
   try { await assertTeacherOwnsTrialLead(user.id, leadId, user.role); }
-  catch { return NextResponse.json({ error: "forbidden" }, { status: 403 }); }
+  catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    console.warn(`[absent] ownership check failed: user=${user.id} role=${user.role} lead=${leadId} → ${detail}`);
+    return NextResponse.json({
+      error:  "forbidden",
+      detail,
+      user_role: user.role,
+    }, { status: 403 });
+  }
 
   await markTrialAbsent(leadId);
   return NextResponse.json({ ok: true });
