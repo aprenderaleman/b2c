@@ -577,20 +577,19 @@ export async function POST(req: Request) {
 
   after(async () => {
     // Only mirror to the SA-managed admin calendar when the assigned
-    // teacher IS Gelfis. Other teachers get events only in their own
-    // OAuth-connected calendar (createTeacherTrialEvent below).
-    const adminEmailLc = (process.env.ADMIN_EMAIL ?? "").toLowerCase();
+    // teacher IS Gelfis (superadmin). Other teachers get events only
+    // in their personal OAuth-connected calendar.
     let isAdminTeacher = false;
-    if (adminEmailLc) {
+    {
       const { data: tRow } = await sb
         .from("teachers")
-        .select("users(email)")
+        .select("users(role)")
         .eq("id", b.teacher_id)
         .maybeSingle();
-      type TRow = { users: { email: string } | Array<{ email: string }> | null };
+      type TRow = { users: { role: string } | Array<{ role: string }> | null };
       const u = (tRow as TRow | null)?.users;
-      const tEmail = (Array.isArray(u) ? u[0]?.email : u?.email) ?? "";
-      isAdminTeacher = tEmail.toLowerCase() === adminEmailLc;
+      const role = (Array.isArray(u) ? u[0]?.role : u?.role) ?? "";
+      isAdminTeacher = role === "superadmin";
     }
 
     await sb.from("lead_timeline").insert({
