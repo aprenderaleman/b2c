@@ -289,6 +289,15 @@ export function TrialHubCard({
                     💳 Enviar enlace de inscripción
                   </button>
 
+                  <a
+                    href="https://www.aprender-aleman.de/inscripciones"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-semibold rounded-full border border-blue-300 dark:border-blue-500/40 bg-blue-100 dark:bg-blue-500/15 px-3 py-1.5 text-blue-800 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-500/25 inline-block text-center"
+                  >
+                    🌐 Pagina Web
+                  </a>
+
                   <button
                     type="button"
                     onClick={async () => {
