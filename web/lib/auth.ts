@@ -8,7 +8,7 @@ import { checkRateLimit } from "./rate-limit";
 // Full config — this file is Node-only (bcrypt + supabase). Do NOT import
 // from middleware.
 
-type Role = "superadmin" | "admin" | "teacher" | "student";
+type Role = "superadmin" | "admin" | "teacher" | "student" | "closer";
 
 type UserRow = {
   id: string;

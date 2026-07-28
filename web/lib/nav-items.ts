@@ -37,7 +37,7 @@ export type NavIconKey =
   | "trendingUp"
   | "heart";
 
-export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" | "teacher" | "student", NavItem[]> = {
+export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student" | "closer"> | "admin" | "teacher" | "student" | "closer", NavItem[]> = {
   superadmin: adminItems(),
   admin:      adminItems(),
   teacher: [
@@ -64,6 +64,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student"> | "admin" 
     { label: "Tareas",       href: "/estudiante/tareas",        icon: "fileText",       priority: 4 },
     { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
   ],
+  closer: closerItems(),
 };
 
 function adminItems(): NavItem[] {
@@ -85,6 +86,18 @@ function adminItems(): NavItem[] {
     { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
     { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
+    { label: "Closers",     href: "/admin/closers",     icon: "userCheck",     priority: 9.5 },
+    { label: "Aprobaciones",href: "/admin/aprobaciones", icon: "wallet",       priority: 9.6 },
+    { label: "Config CRM",  href: "/admin/config/cadencia", icon: "barChart3", priority: 9.7 },
+  ];
+}
+
+function closerItems(): NavItem[] {
+  return [
+    { label: "Hoy",         href: "/closer",         icon: "home",       priority: 1 },
+    { label: "Mis leads",   href: "/closer/leads",   icon: "users",      priority: 2 },
+    { label: "Mis numeros", href: "/closer/numeros",  icon: "trendingUp", priority: 3 },
+    { label: "Perfil",      href: "/closer/perfil",  icon: "userCircle", priority: 4 },
   ];
 }
 

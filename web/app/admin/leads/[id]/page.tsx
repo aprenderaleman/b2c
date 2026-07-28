@@ -8,6 +8,7 @@ import { LeadActions } from "@/components/admin/LeadActions";
 import { ColdCallToggle } from "@/components/admin/ColdCallToggle";
 import { WaQuickActions } from "@/components/admin/WaQuickActions";
 import { RescheduleTrialButton } from "./RescheduleTrialButton";
+import { AssignCloserButton } from "./AssignCloserButton";
 
 export const dynamic = "force-dynamic";
 
@@ -154,22 +155,30 @@ export default async function LeadDetail({
               </div>
             )}
           </div>
-          <LeadActions
-            lead={{
-              id:                   lead.id,
-              name:                 lead.name ?? "",
-              email:                lead.email ?? null,
-              phone:                lead.whatsapp_normalized ?? "",
-              language:             (lead.language as "es" | "de") ?? "es",
-              german_level:         lead.german_level ?? "",
-              goal:                 lead.goal ?? null,
-              status:               lead.status,
-              converted_to_user_id: (lead as { converted_to_user_id?: string | null }).converted_to_user_id ?? null,
-              student_id:           studentId,
-              ai_paused_until:      (lead as { ai_paused_until?: string | null }).ai_paused_until ?? null,
-              has_trial:            (trialRows ?? []).length > 0,
-            }}
-          />
+          <div className="flex flex-col gap-2 items-end">
+            <LeadActions
+              lead={{
+                id:                   lead.id,
+                name:                 lead.name ?? "",
+                email:                lead.email ?? null,
+                phone:                lead.whatsapp_normalized ?? "",
+                language:             (lead.language as "es" | "de") ?? "es",
+                german_level:         lead.german_level ?? "",
+                goal:                 lead.goal ?? null,
+                status:               lead.status,
+                converted_to_user_id: (lead as { converted_to_user_id?: string | null }).converted_to_user_id ?? null,
+                student_id:           studentId,
+                ai_paused_until:      (lead as { ai_paused_until?: string | null }).ai_paused_until ?? null,
+                has_trial:            (trialRows ?? []).length > 0,
+              }}
+            />
+            {lead.status !== "converted" && (
+              <AssignCloserButton
+                leadId={lead.id}
+                currentCloserId={(lead as { closer_id?: string | null }).closer_id ?? null}
+              />
+            )}
+          </div>
         </div>
       </header>
 

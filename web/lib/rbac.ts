@@ -15,7 +15,7 @@ import { redirect } from "next/navigation";
 import { auth } from "./auth";
 import { getImpersonation } from "./impersonation";
 
-export type Role = "superadmin" | "admin" | "teacher" | "student";
+export type Role = "superadmin" | "admin" | "teacher" | "student" | "closer";
 
 export type AuthedSession = {
   user: {
@@ -36,6 +36,7 @@ export function defaultPathForRole(role: Role): string {
     case "admin":   return "/admin";
     case "teacher": return "/profesor";
     case "student": return "/estudiante";
+    case "closer":  return "/closer";
   }
 }
 

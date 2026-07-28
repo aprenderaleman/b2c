@@ -83,6 +83,18 @@ import {
   renderTrialAssignedTeacher,
   type TrialAssignedTeacherVars,
 } from "./templates/trial-assigned-teacher";
+import {
+  renderCloserDailyDigest,
+  type CloserDailyDigestVars,
+} from "./templates/closer-daily-digest";
+import {
+  renderVentaPendiente,
+  type VentaPendienteVars,
+} from "./templates/venta-pendiente";
+import {
+  renderRankChange,
+  type RankChangeVars,
+} from "./templates/rank-change";
 
 export type SendResult =
   | { ok: true; id: string | null }
@@ -718,5 +730,29 @@ export async function sendPackLowBalanceEmail(
   vars: PackLowBalanceVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderPackLowBalance(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+export async function sendCloserDailyDigestEmail(
+  to: string,
+  vars: CloserDailyDigestVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderCloserDailyDigest(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+export async function sendVentaPendienteEmail(
+  to: string,
+  vars: VentaPendienteVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderVentaPendiente(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+export async function sendRankChangeEmail(
+  to: string,
+  vars: RankChangeVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderRankChange(vars);
   return sendRaw(to, subject, html, text);
 }

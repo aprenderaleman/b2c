@@ -150,7 +150,7 @@ export async function authorizeAulaAccess(
 export async function canViewRecording(
   recordingId: string,
   userId:      string,
-  role:        "superadmin" | "admin" | "teacher" | "student",
+  role:        string,
 ): Promise<{ ok: true; classId: string } | { ok: false }> {
   const sb = supabaseAdmin();
   const { data: rec } = await sb

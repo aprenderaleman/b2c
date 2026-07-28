@@ -10,6 +10,7 @@ import { CancelTrialClassButton } from "@/components/CancelTrialClassButton";
 import { DeleteTrialClassButton } from "@/components/DeleteTrialClassButton";
 import { ConvertLeadModal } from "@/components/admin/ConvertLeadModal";
 import Link from "next/link";
+import { MarkSaleModal } from "@/components/closer/MarkSaleModal";
 import { NotesField } from "./NotesField";
 import { PaymentLinkModal } from "./PaymentLinkModal";
 import { ScheduleClassModal } from "./ScheduleClassModal";
@@ -34,6 +35,7 @@ export function TrialHubCard({
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [markSaleOpen, setMarkSaleOpen] = useState(false);
   const [escalateOpen, setEscalateOpen] = useState(false);
   const [escalateMsg, setEscalateMsg] = useState("");
   const [escalating, setEscalating] = useState(false);
@@ -369,6 +371,16 @@ export function TrialHubCard({
                 </button>
               )}
 
+              {!isConverted && row.leadId && (
+                <button
+                  type="button"
+                  onClick={() => setMarkSaleOpen(true)}
+                  className="text-xs font-semibold rounded-full border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-1.5 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20"
+                >
+                  💰 Marcar como vendido
+                </button>
+              )}
+
               {isConverted && studentId && (
                 <button
                   type="button"
@@ -472,6 +484,14 @@ export function TrialHubCard({
           open={convertOpen}
           onClose={() => setConvertOpen(false)}
           convertEndpoint={`/api/teacher/trial/${row.leadId}/convert`}
+        />
+      )}
+
+      {markSaleOpen && row.leadId && (
+        <MarkSaleModal
+          leadId={row.leadId}
+          onClose={() => setMarkSaleOpen(false)}
+          endpoint={`/api/teacher/trial/${row.leadId}/mark-sale`}
         />
       )}
 
