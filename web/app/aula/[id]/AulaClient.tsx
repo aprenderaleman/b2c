@@ -59,12 +59,44 @@ type Props = {
  *   - "Terminar clase para todos" in the top bar → disconnects
  *     everyone and marks the class as completed.
  */
+/**
+ * Detección de in-app WebViews (WhatsApp, Instagram, Facebook, TikTok,
+ * Gmail app…) — sobre todo en iOS. Estos WebViews NO soportan WebRTC
+ * (o lo hacen roto), así que si el lead abre el link desde ahí, ninguna
+ * corrección de PreJoin/handoff sirve: hay que sacarlo a Safari/Chrome.
+ *
+ * UA fingerprints:
+ *   - WhatsApp iOS: "WhatsApp/24.x.x.x"
+ *   - Instagram:    "Instagram xx.x.x.x"
+ *   - Facebook:     "FBAN/…" o "FBAV/…" o "FB_IAB/…"
+ *   - TikTok:       "musical_ly" o "Bytedance"
+ *   - Gmail app:    "GSA/…"
+ */
+function isInAppWebView(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent;
+  return /WhatsApp|Instagram|FBAN|FBAV|FB_IAB|musical_ly|Bytedance|GSA/i.test(ua);
+}
+
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent);
+}
+
 export function AulaClient(p: Props) {
   const [token, setToken]         = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [error, setError]         = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [chatOpen,  setChatOpen]  = useState(false);
+  const [webViewBlocker, setWebViewBlocker] = useState(false);
+
+  // Detección WebView tras hidratación (SSR-safe). Se muestra un
+  // interstitial que pide abrir en Safari/Chrome antes de intentar
+  // cualquier getUserMedia — en iOS WhatsApp/IG WebView no hay WebRTC.
+  useEffect(() => {
+    if (isInAppWebView()) setWebViewBlocker(true);
+  }, []);
 
   // PreJoin screen — el usuario ve preview de su cámara, mide nivel
   // del micro, escoge dispositivos y decide entrar con cam/mic on/off
@@ -115,6 +147,7 @@ export function AulaClient(p: Props) {
     setRoomReady(false);
   };
 
+  if (webViewBlocker) return <WebViewBlockerScreen classTitle={p.classTitle} onIgnore={() => setWebViewBlocker(false)} />;
   if (error) return <ErrorScreen reason={error} backHref={p.backHref} onRetry={retry} />;
   if (!token || !serverUrl) return <LoadingScreen classTitle={p.classTitle} />;
 
@@ -1012,6 +1045,76 @@ function ErrorScreen({ reason, backHref, onRetry }: {
             Volver
           </Link>
         </div>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * Interstitial cuando detectamos in-app WebView (WhatsApp/IG/FB/Gmail
+ * app). WebRTC no funciona ahí — sacamos al lead a Safari/Chrome ANTES
+ * de que ni siquiera intente PreJoin, para no darle un error críptico
+ * de LiveKit tras 30 s de spinner.
+ */
+function WebViewBlockerScreen({
+  classTitle, onIgnore,
+}: { classTitle: string; onIgnore: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const currentUrl = typeof window !== "undefined" ? window.location.href : "";
+  const iOS = isIOS();
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(currentUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // Fallback: prompt en pantalla para copiar manual
+      window.prompt("Copia el enlace y pégalo en Safari/Chrome:", currentUrl);
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-5">
+      <div className="max-w-md w-full text-center">
+        <div className="text-5xl mb-4" aria-hidden>🌐</div>
+        <h1 className="text-xl font-semibold">Abre en tu navegador</h1>
+        <p className="mt-2 text-sm text-slate-400 leading-relaxed">
+          Estás usando el navegador integrado de una app (WhatsApp, Instagram, Gmail…). No soporta videollamadas.
+        </p>
+        <p className="mt-3 text-sm text-slate-300 leading-relaxed">
+          <strong>Copia el enlace y ábrelo en {iOS ? "Safari" : "Chrome"}</strong> para unirte a tu clase.
+        </p>
+
+        <div className="mt-6 space-y-2">
+          <button
+            type="button"
+            onClick={copyLink}
+            className="w-full inline-flex items-center justify-center gap-2 h-11 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm active:scale-[0.98] transition"
+          >
+            {copied ? "✓ Copiado" : "📋 Copiar enlace"}
+          </button>
+          {iOS && (
+            <p className="text-[11.5px] text-slate-500 leading-snug pt-1">
+              iPhone: pulsa <strong>·••</strong> arriba a la derecha → <strong>&ldquo;Abrir en Safari&rdquo;</strong>. O pega el enlace copiado en Safari.
+            </p>
+          )}
+          {!iOS && (
+            <p className="text-[11.5px] text-slate-500 leading-snug pt-1">
+              Android: pulsa el menú <strong>·••</strong> → <strong>&ldquo;Abrir en navegador&rdquo;</strong>. O pega el enlace copiado en Chrome.
+            </p>
+          )}
+        </div>
+
+        <p className="mt-5 text-[11px] text-slate-600">{classTitle}</p>
+
+        <button
+          type="button"
+          onClick={onIgnore}
+          className="mt-5 text-[11.5px] text-slate-500 underline underline-offset-4 hover:text-slate-300"
+        >
+          Continuar de todos modos (puede no funcionar)
+        </button>
       </div>
     </main>
   );

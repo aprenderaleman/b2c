@@ -28,20 +28,29 @@ export async function authorizeTrialAulaAccess(
   const sb = supabaseAdmin();
   const { data: cls } = await sb
     .from("classes")
-    .select("id, status, scheduled_at, duration_minutes, livekit_room_id, is_trial, lead_id")
+    .select("id, status, scheduled_at, duration_minutes, livekit_room_id, is_trial, lead_id, deleted_at")
     .eq("id", classId)
     .maybeSingle();
   if (!cls) return { ok: false, reason: "not_found" };
   const c = cls as {
     status: string; scheduled_at: string; duration_minutes: number;
     livekit_room_id: string; is_trial: boolean; lead_id: string | null;
+    deleted_at: string | null;
   };
+  // Soft-delete guard: si un admin eliminó la clase, tratarla como
+  // cancelada. Sin este check el lead entraba a un aula sin profe.
+  if (c.deleted_at !== null)             return { ok: false, reason: "cancelled" };
   if (c.status === "cancelled")          return { ok: false, reason: "cancelled" };
   if (!c.is_trial || c.lead_id !== leadId) return { ok: false, reason: "not_authorized" };
 
+  // Trials: ventana más amplia que clases regulares — 15 min antes,
+  // 20 min de grace tras terminar (Gelfis 2026-07-28: hemos perdido
+  // varios leads que llegaban 6-10 min tarde por problemas de red /
+  // permisos y el aula ya estaba cerrada). Las clases regulares
+  // (authorizeAulaAccess) mantienen los +5 originales.
   const scheduled = new Date(c.scheduled_at);
   const opensAt   = new Date(scheduled.getTime() - 15 * 60_000);
-  const closesAt  = new Date(scheduled.getTime() + (c.duration_minutes + 5) * 60_000);
+  const closesAt  = new Date(scheduled.getTime() + (c.duration_minutes + 20) * 60_000);
   return {
     ok:           true,
     role:         "participant",     // lead is never host
