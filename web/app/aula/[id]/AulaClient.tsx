@@ -77,6 +77,13 @@ export function AulaClient(p: Props) {
   // controles UI al usuario, así que el probe se elimina.
   const [userChoices, setUserChoices] = useState<LocalUserChoices | null>(null);
   const [mediaWarning, setMediaWarning] = useState<string | null>(null);
+  // "handoff": tras submit del PreJoin, esperamos ~400 ms antes de
+  // montar LiveKitRoom. iOS Safari sólo permite UN getUserMedia por
+  // origen a la vez, y si Room intenta pedir cámara/mic mientras
+  // PreJoin aún los tiene, LiveKit aborta con "Client initiated
+  // disconnect". El pequeño gap deja que el cleanup de PreJoin
+  // libere las tracks antes de que Room las pida (Leana 2026-07-28).
+  const [roomReady, setRoomReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,7 +106,16 @@ export function AulaClient(p: Props) {
     return () => { cancelled = true; };
   }, [p.classId]);
 
-  if (error) return <ErrorScreen reason={error} backHref={p.backHref} />;
+  // Retry: limpia estados y deja que useEffect vuelva a pedir token.
+  const retry = () => {
+    setError(null);
+    setToken(null);
+    setServerUrl(null);
+    setUserChoices(null);
+    setRoomReady(false);
+  };
+
+  if (error) return <ErrorScreen reason={error} backHref={p.backHref} onRetry={retry} />;
   if (!token || !serverUrl) return <LoadingScreen classTitle={p.classTitle} />;
 
   // Pre-join: el usuario verifica cámara/mic + escoge dispositivos
@@ -122,6 +138,18 @@ export function AulaClient(p: Props) {
     );
   }
 
+  // Handoff: PreJoin ya desmontó (esta rama ni siquiera pasó a
+  // renderizarlo), pero necesitamos ~400 ms para que iOS libere
+  // el getUserMedia antes de que LiveKitRoom lo pida.
+  if (!roomReady) {
+    return (
+      <>
+        <HandoffScreen classTitle={p.classTitle} />
+        <HandoffTimer onReady={() => setRoomReady(true)} />
+      </>
+    );
+  }
+
   // Mapeamos las elecciones del usuario en PreJoin → opciones de
   // captura de LiveKit. Si el usuario seleccionó un device específico,
   // pasamos `{ deviceId: ... }`; si no, pasamos `true`/`false`.
@@ -141,7 +169,17 @@ export function AulaClient(p: Props) {
         video={videoCapture}
         audio={audioCapture}
         data-lk-theme="default"
-        onError={(e) => setError(e.message)}
+        onError={(e) => {
+          // Log completo para diagnóstico (aparece en Vercel client
+          // logs vía Sentry si está montado, o al menos en la consola
+          // del navegador — pídele al usuario un screenshot).
+          console.error("[aula/livekit] onError:", {
+            name:    (e as Error).name,
+            message: (e as Error).message,
+            stack:   (e as Error).stack?.split("\n").slice(0, 4).join(" | "),
+          });
+          setError((e as Error).message);
+        }}
         onMediaDeviceFailure={(failure) => {
           // Runtime permission denial or missing device mid-connect — keep
           // the user in the room as a listener instead of dropping them.
@@ -926,21 +964,81 @@ function AulaPreJoin({
   );
 }
 
-function ErrorScreen({ reason, backHref }: { reason: string; backHref: string }) {
+function ErrorScreen({ reason, backHref, onRetry }: {
+  reason: string; backHref: string; onRetry?: () => void;
+}) {
+  // "Client initiated disconnect" es un error de LiveKit típico
+  // cuando la conexión se aborta en pleno handshake — casi siempre
+  // porque el navegador (iOS Safari) tenía la cámara/mic ocupada
+  // desde el PreJoin. Con el handoff de 400 ms lo mitigamos, pero
+  // si vuelve a pasar guiamos al usuario a reintentar o cambiar de
+  // red antes que se rinda.
+  const isClientDisconnect = /client initiated disconnect/i.test(reason);
+  const isMediaError       = /permission|notallowed|notfound|constraint/i.test(reason);
+
   const label =
     reason === "not_configured"        ? "La sala de video aún no está configurada en el servidor." :
     reason === "too_early_or_too_late" ? "El aula no está abierta ahora." :
     reason === "not_authorized"        ? "No tienes acceso a esta clase." :
     reason === "cancelled"             ? "Esta clase fue cancelada." :
+    isClientDisconnect                 ? "La conexión se interrumpió antes de completarse. Suele pasar en iPhone si la app estuvo en segundo plano o si el navegador tardó en soltar la cámara. Pulsa 'Reintentar'." :
+    isMediaError                       ? "No pudimos usar la cámara o el micrófono. Comprueba los permisos y reintenta." :
                                          `No se pudo conectar (${reason}).`;
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-5">
       <div className="max-w-md w-full text-center">
         <div className="text-5xl mb-4" aria-hidden>⚠️</div>
         <h1 className="text-xl font-semibold">Error al entrar al aula</h1>
-        <p className="mt-2 text-sm text-slate-400">{label}</p>
-        <Link href={backHref} className="btn-primary mt-6 inline-flex">Volver</Link>
+        <p className="mt-2 text-sm text-slate-400 leading-relaxed">{label}</p>
+        <div className="mt-6 flex items-center justify-center gap-2 flex-wrap">
+          {onRetry && (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="btn-primary inline-flex"
+            >
+              Reintentar
+            </button>
+          )}
+          <Link
+            href={backHref}
+            className={`inline-flex px-4 py-2 rounded-2xl font-semibold text-sm transition ${
+              onRetry
+                ? "border border-slate-700 text-slate-300 hover:bg-slate-800"
+                : "btn-primary"
+            }`}
+          >
+            Volver
+          </Link>
+        </div>
       </div>
     </main>
   );
+}
+
+/** Pantalla de transición entre PreJoin y LiveKitRoom — evita
+ *  parpadeo negro mientras iOS suelta la cámara. */
+function HandoffScreen({ classTitle }: { classTitle: string }) {
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-5">
+      <div className="text-center">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/10">
+          <div className="h-5 w-5 rounded-full border-2 border-slate-300 border-t-transparent animate-spin" />
+        </div>
+        <p className="mt-3 text-sm text-slate-300 font-semibold">Conectando…</p>
+        <p className="mt-1 text-[11.5px] text-slate-500">{classTitle}</p>
+      </div>
+    </main>
+  );
+}
+
+/** Timer no-visual — separado para poder ponerlo dentro/fuera del árbol
+ *  sin re-crearlo. */
+function HandoffTimer({ onReady }: { onReady: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onReady, 400);
+    return () => clearTimeout(t);
+  }, [onReady]);
+  return null;
 }
