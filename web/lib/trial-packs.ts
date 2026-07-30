@@ -1,27 +1,35 @@
 /**
- * Catálogo de packs que Gelfis ofrece al lead tras la clase de prueba.
+ * Catálogo de packs / planes que el profesor ofrece al lead tras la
+ * clase de prueba.
  *
- * Cada pack tiene 2-3 enlaces de Stripe:
- *   - urlSingle    → pago único
- *   - urlFlexible  → pago durante tu formación (mensualidades cortas)
- *   - urlExtended  → financiación extendida (más cuotas, solo VIP e Inmersión)
+ * Dos categorías:
+ *   1. Suscripciones mensuales (ritmo) — pago recurrente mensual.
+ *   2. Pagos únicos por meta — un solo pago, objetivo concreto.
  *
- * El profe elige el pack + tipo de pago en el modal "Enviar enlace" y
- * el sistema le manda al lead el enlace correspondiente por WhatsApp.
+ * Cada entrada tiene un solo enlace de Stripe (url).
+ * El profe elige el plan en el modal "Enviar enlace" y el sistema le
+ * manda al lead el enlace correspondiente por WhatsApp / email.
  */
 
 export type PackId =
-  | "basico"
-  | "intermedio"
-  | "avanzado"
-  | "inmersion_total"
+  | "estandar"
+  | "intensivo"
+  | "vip_express"
+  | "a1_a2"
+  | "b1"
+  | "b2"
+  | "c1"
+  | "fluidez_total"
   | "kids";
 
 export type PaymentType = "single" | "flexible" | "extended";
 
+export type PackCategory = "monthly" | "goal" | "other";
+
 export type Pack = {
   id:           PackId;
   name:         string;
+  category:     PackCategory;
   classes:      number;
   priceCents:   number;
   bestFor:      string[];
@@ -36,63 +44,125 @@ export type Pack = {
 };
 
 export const TRIAL_PACKS: Pack[] = [
+  // ── Suscripciones mensuales ────────────────────────────────────────
   {
-    id:    "basico",
-    name:  "Pack Básico",
-    classes: 32,
-    priceCents: 128_000,
+    id:    "estandar",
+    name:  "⭐ Estándar (8 clases/mes) — 320 €/mes",
+    category: "monthly",
+    classes: 8,
+    priceCents: 32_000,
     bestFor: ["personal_growth", "travel"],
-    urlSingle:   "https://buy.stripe.com/aFa8wIg9L0naa076L50co0b",
-    urlFlexible: "https://buy.stripe.com/4gM9AMg9L0na3BJ4CX0co0c",
+    urlSingle:   "https://buy.stripe.com/bJeeV6e1D4Dqc8fd9t0co0v",
+    urlFlexible: "https://buy.stripe.com/bJeeV6e1D4Dqc8fd9t0co0v",
     labels: {
-      single:   "Pago único (1.280 €)",
-      flexible: "Paga durante tu formación (460 € × 3)",
+      single:   "320 €/mes",
+      flexible: "320 €/mes",
     },
   },
   {
-    id:    "intermedio",
-    name:  "Pack Intermedio",
-    classes: 48,
-    priceCents: 192_000,
+    id:    "intensivo",
+    name:  "🚀 Intensivo (12 clases/mes) — 450 €/mes",
+    category: "monthly",
+    classes: 12,
+    priceCents: 45_000,
+    bestFor: ["work", "studies"],
+    urlSingle:   "https://buy.stripe.com/6oUcMY9Ln5Hu2xFb1l0co0w",
+    urlFlexible: "https://buy.stripe.com/6oUcMY9Ln5Hu2xFb1l0co0w",
+    labels: {
+      single:   "450 €/mes",
+      flexible: "450 €/mes",
+    },
+  },
+  {
+    id:    "vip_express",
+    name:  "👑 VIP Express (16 clases/mes) — 690 €/mes",
+    category: "monthly",
+    classes: 16,
+    priceCents: 69_000,
+    bestFor: ["work", "already_in_dach", "exam"],
+    urlSingle:   "https://buy.stripe.com/bJe6oA8Hj5Hu4FN2uP0co0x",
+    urlFlexible: "https://buy.stripe.com/bJe6oA8Hj5Hu4FN2uP0co0x",
+    labels: {
+      single:   "690 €/mes",
+      flexible: "690 €/mes",
+    },
+  },
+  // ── Pagos únicos por meta ──────────────────────────────────────────
+  {
+    id:    "a1_a2",
+    name:  "A1-A2 Arranque Alemania — 1.180 €",
+    category: "goal",
+    classes: 0,
+    priceCents: 118_000,
+    bestFor: ["personal_growth", "travel"],
+    urlSingle:   "https://buy.stripe.com/aFa00caPrb1Odcj1qL0co0y",
+    urlFlexible: "https://buy.stripe.com/aFa00caPrb1Odcj1qL0co0y",
+    labels: {
+      single:   "Pago único (1.180 €)",
+      flexible: "Pago único (1.180 €)",
+    },
+  },
+  {
+    id:    "b1",
+    name:  "B1 Tu B1 Garantizado — 1.720 €",
+    category: "goal",
+    classes: 0,
+    priceCents: 172_000,
     bestFor: ["studies", "work"],
-    urlSingle:   "https://buy.stripe.com/00w6oA8Hj8TG5JR8Td0co0d",
-    urlFlexible: "https://buy.stripe.com/14AdR27Df3zmegn9Xh0co0e",
+    urlSingle:   "https://buy.stripe.com/00w28kf5H7PCa078Td0co0z",
+    urlFlexible: "https://buy.stripe.com/00w28kf5H7PCa078Td0co0z",
     labels: {
-      single:   "Pago único (1.920 €)",
-      flexible: "Paga durante tu formación (530 € × 4)",
+      single:   "Pago único (1.720 €)",
+      flexible: "Pago único (1.720 €)",
     },
   },
   {
-    id:    "avanzado",
-    name:  "Pack Avanzado",
-    classes: 60,
-    priceCents: 240_000,
+    id:    "b2",
+    name:  "B2 Nivel Avanzado — 1.720 €",
+    category: "goal",
+    classes: 0,
+    priceCents: 172_000,
     bestFor: ["work", "exam"],
-    urlSingle:   "https://buy.stripe.com/dRmaEQ2iV3zmb4b6L50co0f",
-    urlFlexible: "https://buy.stripe.com/4gM8wIcXzc5S2xFd9t0co0g",
+    urlSingle:   "https://buy.stripe.com/28EdR2g9L5Hua075H10co0A",
+    urlFlexible: "https://buy.stripe.com/28EdR2g9L5Hua075H10co0A",
     labels: {
-      single:   "Pago único (2.400 €)",
-      flexible: "Paga durante tu formación (540 € × 5)",
+      single:   "Pago único (1.720 €)",
+      flexible: "Pago único (1.720 €)",
     },
   },
   {
-    id:    "inmersion_total",
-    name:  "Pack Inmersión Total",
-    classes: 100,
+    id:    "c1",
+    name:  "C1 Nivel Profesional — 2.100 €",
+    category: "goal",
+    classes: 0,
+    priceCents: 210_000,
+    bestFor: ["work", "already_in_dach"],
+    urlSingle:   "https://buy.stripe.com/6oU8wI6zb8TG4FN6L50co0B",
+    urlFlexible: "https://buy.stripe.com/6oU8wI6zb8TG4FN6L50co0B",
+    labels: {
+      single:   "Pago único (2.100 €)",
+      flexible: "Pago único (2.100 €)",
+    },
+  },
+  {
+    id:    "fluidez_total",
+    name:  "Fluidez Total (A0→B1) — 2.990 €",
+    category: "goal",
+    classes: 0,
     priceCents: 299_000,
     bestFor: ["work", "already_in_dach", "studies"],
     urlSingle:   "https://buy.stripe.com/dRmcMYe1Dd9W8W35H10co0r",
-    urlFlexible: "https://buy.stripe.com/14AcMYbTv0na3BJd9t0co0s",
-    urlExtended: "https://buy.stripe.com/bJe6oAg9L1re3BJ8Td0co0t",
+    urlFlexible: "https://buy.stripe.com/dRmcMYe1Dd9W8W35H10co0r",
     labels: {
       single:   "Pago único (2.990 €)",
-      flexible: "Paga durante tu formación (415 € × 8)",
-      extended: "Financiación extendida (275 € × 12)",
+      flexible: "Pago único (2.990 €)",
     },
   },
+  // ── Otros ──────────────────────────────────────────────────────────
   {
     id:    "kids",
-    name:  "Pack Kids",
+    name:  "Pack Kids — 890 €",
+    category: "other",
     classes: 24,
     priceCents: 89_000,
     bestFor: ["personal_growth"],
@@ -115,20 +185,6 @@ export function packUrl(pack: Pack, payment: PaymentType): string {
   return pack.urlSingle;
 }
 
-/**
- * Recomienda 2 packs para presentar al lead en el wizard /cp,
- * basado en sus respuestas a los filtros del Paso 4:
- *
- *   - horarios "changing" → siempre 2 packs INDIVIDUALES (grupales
- *     requieren compromiso de horario fijo).
- *   - horarios "fixed" + 1 nivel → Pack Inicio + VIP Express
- *     (grupal económico vs individual rápido).
- *   - horarios "fixed" + confianza al hablar → Pack Fluidez Total +
- *     VIP Individuales (grupal completo vs individual premium).
- *
- * Decisión Gelfis 2026-06-08: siempre 2 packs para que el lead "elija"
- * y se sienta dueño de la decisión (mejor cierre que 1 sola opción).
- */
 export type ScheduleType = "fixed" | "changing";
 export type LearningGoal = "one_level" | "confidence";
 
@@ -137,13 +193,12 @@ export function recommendPacks(
   goal:     LearningGoal,
 ): [PackId, PackId] {
   if (schedule === "changing") {
-    return ["avanzado", "inmersion_total"];
+    return ["intensivo", "vip_express"];
   }
-  // fixed schedule
   if (goal === "one_level") {
-    return ["basico", "intermedio"];
+    return ["estandar", "a1_a2"];
   }
-  return ["avanzado", "inmersion_total"];
+  return ["intensivo", "fluidez_total"];
 }
 
 /** Override por env var (PACK_URL_<PACKID>_<SINGLE|FLEXIBLE>) — sin redeploy. */

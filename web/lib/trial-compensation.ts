@@ -24,18 +24,26 @@
 import { supabaseAdmin } from "./supabase";
 
 export const PACK_COMMISSION_SINGLE_CENTS: Record<string, number> = {
-  basico:          7_500,    //  75€
-  intermedio:     10_000,    // 100€
-  avanzado:       15_000,    // 150€
-  inmersion_total:25_000,    // 250€
+  estandar:        7_500,    //  75€
+  intensivo:      10_000,    // 100€
+  vip_express:    15_000,    // 150€
+  a1_a2:           7_500,    //  75€
+  b1:             10_000,    // 100€
+  b2:             10_000,    // 100€
+  c1:             15_000,    // 150€
+  fluidez_total:  25_000,    // 250€
   kids:            5_000,    //  50€
 };
 
 export const PACK_COMMISSION_FLEXIBLE_CENTS: Record<string, number> = {
-  basico:          3_000,    //  30€
-  intermedio:      4_000,    //  40€
-  avanzado:        5_000,    //  50€
-  inmersion_total: 7_500,    //  75€
+  estandar:        7_500,    //  75€
+  intensivo:      10_000,    // 100€
+  vip_express:    15_000,    // 150€
+  a1_a2:           7_500,    //  75€
+  b1:             10_000,    // 100€
+  b2:             10_000,    // 100€
+  c1:             15_000,    // 150€
+  fluidez_total:  25_000,    // 250€
   kids:            2_000,    //  20€
 };
 

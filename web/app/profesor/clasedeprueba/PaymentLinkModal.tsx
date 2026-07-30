@@ -129,40 +129,54 @@ export function PaymentLinkModal({
               className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
               <option value="">— Selecciona —</option>
-              {TRIAL_PACKS.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
+              <optgroup label="Suscripciones mensuales">
+                {TRIAL_PACKS.filter(p => p.category === "monthly").map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Pagos únicos por meta">
+                {TRIAL_PACKS.filter(p => p.category === "goal").map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Otros">
+                {TRIAL_PACKS.filter(p => p.category === "other").map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </optgroup>
             </select>
           </div>
         </div>
 
-        <div>
-          <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Tipo de pago
-          </span>
-          <div className="mt-2 flex flex-col gap-2">
-            {paymentOptions.map(opt => (
-              <label
-                key={opt.v}
-                className={`cursor-pointer rounded-lg border px-3 py-2 text-sm ${
-                  paymentType === opt.v
-                    ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
-                    : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="paymentType"
-                  value={opt.v}
-                  checked={paymentType === opt.v}
-                  onChange={() => setPaymentType(opt.v)}
-                  className="sr-only"
-                />
-                {opt.label}
-              </label>
-            ))}
+        {selectedPack && selectedPack.urlSingle !== selectedPack.urlFlexible && (
+          <div>
+            <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Tipo de pago
+            </span>
+            <div className="mt-2 flex flex-col gap-2">
+              {paymentOptions.map(opt => (
+                <label
+                  key={opt.v}
+                  className={`cursor-pointer rounded-lg border px-3 py-2 text-sm ${
+                    paymentType === opt.v
+                      ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+                      : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="paymentType"
+                    value={opt.v}
+                    checked={paymentType === opt.v}
+                    onChange={() => setPaymentType(opt.v)}
+                    className="sr-only"
+                  />
+                  {opt.label}
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {error && (
           <div className="rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">

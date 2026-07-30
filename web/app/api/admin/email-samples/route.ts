@@ -53,13 +53,13 @@ export async function POST(req: Request) {
   });
 
   // 2) Asistió CON enlace de pago — Pack Intermedio flexible
-  const pack = getPack("intermedio");
-  const stripeUrl = getPackUrlWithOverride("intermedio", "flexible");
+  const pack = getPack("estandar");
+  const stripeUrl = getPackUrlWithOverride("estandar", "single");
   results.attended_with_pack = await sendTrialAttendedFollowupEmail(to, {
     leadName: "Carlos (muestra)",
     language: "es",
     ctaUrl: stripeUrl,
-    packName: pack?.name ?? "Pack Intermedio",
+    packName: pack?.name ?? "Estándar",
   });
 
   // 3) No asistió — 2 botones SÍ/NO (nuevo absent-interest flow)
