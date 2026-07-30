@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { TRIAL_PACKS, type PackId, type PaymentType } from "@/lib/trial-packs";
+import {
+  RITMOS, ONE_TIME_PACKS, KIDS_PACK, buildSubscriptionUrl,
+  type RitmoId, type GoalId, type PlanCategory,
+} from "@/lib/trial-packs";
+
+type KidsPayment = "single" | "flexible";
 
 export function PaymentLinkModal({
   leadId,
@@ -16,28 +21,48 @@ export function PaymentLinkModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [nivel, setNivel]           = useState(defaultLevel || "");
-  const [packId, setPackId]         = useState<PackId | "">("");
-  const [paymentType, setPaymentType] = useState<PaymentType>("single");
+  const [nivel, setNivel] = useState(defaultLevel || "");
+  const [category, setCategory] = useState<PlanCategory | "">("");
+  const [ritmoId, setRitmoId] = useState<RitmoId | "">("");
+  const [goalId, setGoalId] = useState<GoalId | "">("");
+  const [kidsPayment, setKidsPayment] = useState<KidsPayment>("single");
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+  const [pending, startTransition] = useTransition();
 
-  const selectedPack = packId ? TRIAL_PACKS.find(p => p.id === packId) : null;
-  const paymentOptions: { v: PaymentType; label: string }[] = selectedPack
-    ? [
-        { v: "single",   label: selectedPack.labels.single },
-        { v: "flexible",  label: selectedPack.labels.flexible },
-        ...(selectedPack.labels.extended
-          ? [{ v: "extended" as const, label: selectedPack.labels.extended }]
-          : []),
-      ]
-    : [
-        { v: "single",   label: "Pago único" },
-        { v: "flexible",  label: "Flexible" },
-      ];
-  const [error, setError]           = useState<string | null>(null);
-  const [sent, setSent]             = useState(false);
-  const [pending, startTransition]  = useTransition();
+  const selectedRitmo = ritmoId ? RITMOS.find(r => r.id === ritmoId) : null;
+  const selectedGoal = selectedRitmo && goalId
+    ? selectedRitmo.goals.find(g => g.id === goalId)
+    : null;
+  const selectedOneTime = category === "one_time" && goalId
+    ? ONE_TIME_PACKS.find(p => p.id === goalId)
+    : null;
 
-  const canSubmit = packId !== "";
+  // Compute packId for the API
+  const packId =
+    category === "subscription" && ritmoId ? ritmoId :
+    category === "one_time" && goalId ? goalId :
+    category === "kids" ? "kids" : "";
+
+  const canSubmit =
+    (category === "subscription" && ritmoId && goalId) ||
+    (category === "one_time" && goalId) ||
+    category === "kids";
+
+  // Summary line
+  const summaryLine = (() => {
+    if (category === "subscription" && selectedRitmo && selectedGoal) {
+      return `${selectedRitmo.emoji} ${selectedRitmo.name} · Meta ${selectedGoal.label} · ${selectedGoal.months} meses · ${(selectedGoal.totalCents / 100).toLocaleString("es-ES")} € total`;
+    }
+    if (category === "one_time" && selectedOneTime) {
+      return `${selectedOneTime.name} · ${(selectedOneTime.priceCents / 100).toLocaleString("es-ES")} €`;
+    }
+    if (category === "kids") {
+      const label = kidsPayment === "single" ? KIDS_PACK.labels.single : KIDS_PACK.labels.flexible;
+      return `Pack Kids · ${label}`;
+    }
+    return null;
+  })();
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,12 +70,16 @@ export function PaymentLinkModal({
     setError(null);
     startTransition(async () => {
       try {
+        const paymentType =
+          category === "kids" ? kidsPayment :
+          category === "subscription" ? "flexible" : "single";
         const res = await fetch(`/api/teacher/trial/${leadId}/attended`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             packId,
             paymentType,
+            ...(goalId && category !== "kids" ? { goal: goalId } : {}),
             ...(nivel ? { nivel } : {}),
           }),
         });
@@ -94,87 +123,152 @@ export function PaymentLinkModal({
         Enviar enlace de inscripcion · {leadName}
       </h2>
       <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-        El lead recibira el enlace de Stripe del pack seleccionado por email.
+        El lead recibira el enlace de Stripe del plan seleccionado por email.
       </p>
 
       <form onSubmit={submit} className="mt-5 space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Nivel
-            </label>
-            <select
-              value={nivel}
-              onChange={(e) => setNivel(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            >
-              <option value="">— Sin especificar —</option>
-              {["A1", "A2", "B1", "B2", "C1"].map(n => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </div>
+        {/* Nivel */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Nivel
+          </label>
+          <select
+            value={nivel}
+            onChange={(e) => setNivel(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          >
+            <option value="">— Sin especificar —</option>
+            {["A1", "A2", "B1", "B2", "C1"].map(n => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
+        </div>
 
+        {/* Tipo de plan */}
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+            Tipo de plan <span className="text-rose-500">*</span>
+          </label>
+          <select
+            value={category}
+            onChange={(e) => {
+              const v = e.target.value as PlanCategory | "";
+              setCategory(v);
+              setRitmoId("");
+              setGoalId("");
+            }}
+            className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          >
+            <option value="">— Selecciona —</option>
+            <option value="subscription">Suscripcion mensual</option>
+            <option value="one_time">Pago unico por meta</option>
+            <option value="kids">Pack Kids</option>
+          </select>
+        </div>
+
+        {/* Ritmo (solo suscripciones) */}
+        {category === "subscription" && (
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Pack <span className="text-rose-500">*</span>
+              Ritmo <span className="text-rose-500">*</span>
             </label>
             <select
-              value={packId}
+              value={ritmoId}
               onChange={(e) => {
-                const newId = e.target.value as PackId;
-                setPackId(newId);
-                setPaymentType("single");
+                setRitmoId(e.target.value as RitmoId);
+                setGoalId("");
               }}
               className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             >
-              <option value="">— Selecciona —</option>
-              <optgroup label="Suscripciones mensuales">
-                {TRIAL_PACKS.filter(p => p.category === "monthly").map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Pagos únicos por meta">
-                {TRIAL_PACKS.filter(p => p.category === "goal").map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Otros">
-                {TRIAL_PACKS.filter(p => p.category === "other").map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </optgroup>
+              <option value="">— Selecciona ritmo —</option>
+              {RITMOS.map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.emoji} {r.name} ({r.classesPerMonth} clases/mes · {r.pricePerMonth} €/mes)
+                </option>
+              ))}
             </select>
           </div>
-        </div>
+        )}
 
-        {selectedPack && selectedPack.urlSingle !== selectedPack.urlFlexible && (
+        {/* Meta (suscripciones con ritmo seleccionado, o pago único) */}
+        {(category === "subscription" && ritmoId && selectedRitmo) && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Meta <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={goalId}
+              onChange={(e) => setGoalId(e.target.value as GoalId)}
+              className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              <option value="">— Selecciona meta —</option>
+              {selectedRitmo.goals.map(g => (
+                <option key={g.id} value={g.id}>
+                  {g.label} — {g.months} meses · {(g.totalCents / 100).toLocaleString("es-ES")} € total
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {category === "one_time" && (
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              Meta <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={goalId}
+              onChange={(e) => setGoalId(e.target.value as GoalId)}
+              className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            >
+              <option value="">— Selecciona meta —</option>
+              {ONE_TIME_PACKS.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name} — {(p.priceCents / 100).toLocaleString("es-ES")} €
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Kids payment type */}
+        {category === "kids" && (
           <div>
             <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
               Tipo de pago
             </span>
             <div className="mt-2 flex flex-col gap-2">
-              {paymentOptions.map(opt => (
+              {([
+                { v: "single" as const, label: KIDS_PACK.labels.single },
+                { v: "flexible" as const, label: KIDS_PACK.labels.flexible },
+              ]).map(opt => (
                 <label
                   key={opt.v}
                   className={`cursor-pointer rounded-lg border px-3 py-2 text-sm ${
-                    paymentType === opt.v
+                    kidsPayment === opt.v
                       ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
                       : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
                   }`}
                 >
                   <input
                     type="radio"
-                    name="paymentType"
+                    name="kidsPayment"
                     value={opt.v}
-                    checked={paymentType === opt.v}
-                    onChange={() => setPaymentType(opt.v)}
+                    checked={kidsPayment === opt.v}
+                    onChange={() => setKidsPayment(opt.v)}
                     className="sr-only"
                   />
                   {opt.label}
                 </label>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Summary */}
+        {summaryLine && (
+          <div className="rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
+            {summaryLine}
           </div>
         )}
 
