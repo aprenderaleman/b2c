@@ -26,10 +26,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     const paymentType = typeof raw.paymentType === "string" ? raw.paymentType : "";
     const objective   = typeof raw.objective   === "string" ? raw.objective.trim() : "";
     const nivel       = typeof raw.nivel       === "string" ? raw.nivel.trim() : "";
-    // objective ya no es obligatorio (PaymentLinkModal lo eliminó). Si
-    // el profesor lo manda igual queda en metadata, si no se omite.
+    const fullUrl     = typeof raw.fullUrl     === "string" ? raw.fullUrl.trim() : "";
+    const packLabel   = typeof raw.packLabel   === "string" ? raw.packLabel.trim() : "";
     if (VALID_PACKS.has(packId) && isPaymentType(paymentType)) {
-      opts = { packId: packId as PackId, paymentType, objective, ...(nivel ? { nivel } : {}) };
+      opts = {
+        packId: packId as PackId, paymentType, objective,
+        ...(nivel ? { nivel } : {}),
+        ...(fullUrl ? { fullUrl } : {}),
+        ...(packLabel ? { packLabel } : {}),
+      };
     }
   } catch {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });

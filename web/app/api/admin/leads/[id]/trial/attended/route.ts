@@ -29,8 +29,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const paymentType = typeof raw.paymentType === "string" ? raw.paymentType : "";
     const objective   = typeof raw.objective   === "string" ? raw.objective.trim() : "";
     const nivel       = typeof raw.nivel       === "string" ? raw.nivel.trim() : "";
+    const fullUrl     = typeof raw.fullUrl     === "string" ? raw.fullUrl.trim() : "";
+    const packLabel   = typeof raw.packLabel   === "string" ? raw.packLabel.trim() : "";
     if (VALID_PACKS.has(packId) && isPaymentType(paymentType) && objective.length > 0) {
-      opts = { packId: packId as PackId, paymentType, objective, ...(nivel ? { nivel } : {}) };
+      opts = {
+        packId: packId as PackId, paymentType, objective,
+        ...(nivel ? { nivel } : {}),
+        ...(fullUrl ? { fullUrl } : {}),
+        ...(packLabel ? { packLabel } : {}),
+      };
     }
   } catch {
     // body parse failure → fallback to legacy generic message

@@ -32,7 +32,7 @@ export async function addGelfisNote(leadId: string, note: string): Promise<void>
 
 export async function markConverted(leadId: string): Promise<void> {
   const sb = supabaseAdmin();
-  await sb.from("leads").update({ status: "converted", next_contact_date: null }).eq("id", leadId);
+  await sb.from("leads").update({ status: "converted", converted_at: new Date().toISOString(), next_contact_date: null }).eq("id", leadId);
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type: "conversion",
@@ -76,10 +76,16 @@ export async function reactivate(leadId: string): Promise<void> {
  * Gelfis takes over from /admin/leads/{id} → "Convertir en estudiante".
  */
 export type AttendedOptions = {
-  objective:   string;      // free-text — lo que el lead nos contó en clase
+  objective:   string;
   packId:      PackId;
-  paymentType: PaymentType; // "single" (pago único) | "flexible" (mensualidades)
-  nivel?:      string;      // nivel del pack (ej. "A1", "B1") — para el copy del WA
+  paymentType: PaymentType;
+  nivel?:      string;
+  /** URL completa (con client_reference_id si aplica). Si se pasa, se
+   *  usa en lugar de getPackUrlWithOverride(). */
+  fullUrl?:    string;
+  /** Nombre descriptivo del plan (ej. "Estándar · Meta B1 · 6 meses").
+   *  Si se pasa, se usa en lugar de getPack().name. */
+  packLabel?:  string;
 };
 
 export async function markTrialAttendedAwaitingConversion(
@@ -187,8 +193,8 @@ export async function markTrialAttendedAwaitingConversion(
 
   if (opts) {
     const pack     = getPack(opts.packId);
-    const packLink = getPackUrlWithOverride(opts.packId, opts.paymentType);
-    const packName = pack?.name ?? opts.packId;
+    const packLink = opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType);
+    const packName = opts.packLabel || pack?.name || opts.packId;
 
     // Si hay un override activo en message_templates para el kind
     // 'post_trial_followup' canal whatsapp, lo usamos. Si no, caemos
@@ -274,9 +280,9 @@ export async function markTrialAttendedAwaitingConversion(
   if (lead?.email) {
     const langForEmail: "es" | "de" = lead.language === "de" ? "de" : "es";
     const ctaUrl = opts
-      ? (getPackUrlWithOverride(opts.packId, opts.paymentType) ?? "https://aprender-aleman.de/inscripciones")
+      ? (opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType) || "https://aprender-aleman.de/inscripciones")
       : "https://aprender-aleman.de/inscripciones";
-    const packName = opts ? (getPack(opts.packId)?.name ?? opts.packId) : undefined;
+    const packName = opts ? (opts.packLabel || getPack(opts.packId)?.name || opts.packId) : undefined;
     const emailRes = await sendTrialAttendedFollowupEmail(lead.email, {
       leadName: firstName || lead.name || "",
       language: langForEmail,
