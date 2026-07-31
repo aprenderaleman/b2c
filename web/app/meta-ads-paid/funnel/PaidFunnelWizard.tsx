@@ -17,12 +17,13 @@ import { trackFunnel } from "@/lib/track-funnel";
  * contenido debajo). Igual que /agendar/cuando y /diagnostico.
  */
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6;
+// 5 pasos (Gelfis 2026-07-28: eliminado el paso "dolor"):
+//   1. Goal · 2. Level · 3. Deadline · 4. Calendar · 5. Form
+type Step = 1 | 2 | 3 | 4 | 5;
 
 type GoalId    = "job" | "ausbildung" | "citizenship" | "daily_life" | "moving";
 type LevelId   = "zero" | "basic" | "intermediate" | "advanced" | "unknown";
 type DeadlineId= "concrete" | "6m" | "year" | "no_rush";
-type PainId    = "silent" | "dependent" | "job_lost" | "tried_before" | "no_progress";
 
 const GOALS: Array<{ id: GoalId; label: string; emoji: string }> = [
   { id: "job",         emoji: "💼",  label: "Conseguir un mejor trabajo" },
@@ -44,13 +45,6 @@ const DEADLINES: Array<{ id: DeadlineId; label: string; emoji?: string }> = [
   { id: "year",     label: "Este año" },
   { id: "no_rush",  label: "Sin prisa, pero en serio" },
 ];
-const PAINS: Array<{ id: PainId; label: string; emoji: string }> = [
-  { id: "silent",       emoji: "😶", label: "Quedarme callado sabiendo lo que quiero decir" },
-  { id: "dependent",    emoji: "📄", label: "Depender de otros para trámites y citas" },
-  { id: "job_lost",     emoji: "💼", label: "Perder oportunidades de trabajo por el idioma" },
-  { id: "tried_before", emoji: "🔁", label: "Haberlo intentado antes sin resultado" },
-  { id: "no_progress",  emoji: "😰", label: "Sentir que no avanzo nunca" },
-];
 
 function levelToDbEnum(l: LevelId): "A0" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | null {
   switch (l) {
@@ -68,9 +62,8 @@ function stepToIllustration(step: Step): StepKey {
     case 1: return "motivo";
     case 2: return "nivel";
     case 3: return "datos";
-    case 4: return "particulares";
-    case 5: return "calendario";
-    case 6: return "formulario";
+    case 4: return "calendario";
+    case 5: return "formulario";
   }
 }
 
@@ -79,7 +72,6 @@ export function PaidFunnelWizard() {
   const [goal, setGoal] = useState<GoalId | null>(null);
   const [level, setLevel] = useState<LevelId | null>(null);
   const [deadline, setDeadline] = useState<DeadlineId | null>(null);
-  const [pain, setPain] = useState<PainId | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
 
   useEffect(() => {
@@ -91,7 +83,7 @@ export function PaidFunnelWizard() {
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-white">
-      <Header step={step} totalSteps={6} />
+      <Header step={step} totalSteps={5} />
 
       <IllustrationPanel step={stepToIllustration(step)}>
         <main className="flex-1 px-5 md:px-8 lg:px-10 py-6 md:py-10 mx-auto max-w-xl w-full">
@@ -120,29 +112,20 @@ export function PaidFunnelWizard() {
             />
           )}
           {step === 4 && (
-            <QuestionStep
-              title="¿Qué es lo que MÁS te frustra hoy con el alemán?"
-              options={PAINS}
-              value={pain}
-              onSelect={(id) => { setPain(id); trackFunnel("field_typed", { landingIntent: "meta-ads-paid", answer: `pain:${id}` }); advance(5); }}
-            />
-          )}
-          {step === 5 && (
             <CalendarStep
-              onPick={(s) => { setSelectedSlot(s); trackFunnel("slot_picked", { landingIntent: "meta-ads-paid", answer: s.startIso }); advance(6); }}
+              onPick={(s) => { setSelectedSlot(s); trackFunnel("slot_picked", { landingIntent: "meta-ads-paid", answer: s.startIso }); advance(5); }}
             />
           )}
-          {step === 6 && goal && level && deadline && pain && selectedSlot && (
+          {step === 5 && goal && level && deadline && selectedSlot && (
             <FormStep
               goal={goal}
               level={level}
               deadline={deadline}
-              pain={pain}
               slot={selectedSlot}
             />
           )}
 
-          {step > 1 && step < 6 && (
+          {step > 1 && step < 5 && (
             <div className="mt-8 text-center">
               <button
                 type="button"
@@ -299,12 +282,11 @@ function CalendarStep({ onPick }: { onPick: (s: SlotItem) => void }) {
 
 // ────────────────────── Form step ──────────────────────
 function FormStep({
-  goal, level, deadline, pain, slot,
+  goal, level, deadline, slot,
 }: {
   goal:     GoalId;
   level:    LevelId;
   deadline: DeadlineId;
-  pain:     PainId;
   slot:     SlotItem;
 }) {
   const [name, setName]   = useState("");
@@ -351,7 +333,7 @@ function FormStep({
           german_level: levelToDbEnum(level),
           slot_iso: slot.startIso,
           teacher_id: slot.teacherId,
-          qualification: { goal, level, deadline, pain },
+          qualification: { goal, level, deadline },
           gclid:        attribution.gclid ?? null,
           gbraid:       attribution.gbraid ?? null,
           wbraid:       attribution.wbraid ?? null,

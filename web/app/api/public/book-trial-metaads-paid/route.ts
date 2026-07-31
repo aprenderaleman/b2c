@@ -42,7 +42,6 @@ const Body = z.object({
     goal:     z.enum(["job","ausbildung","citizenship","daily_life","moving"]),
     level:    z.enum(["zero","basic","intermediate","advanced","unknown"]),
     deadline: z.enum(["concrete","6m","year","no_rush"]),
-    pain:     z.enum(["silent","dependent","job_lost","tried_before","no_progress"]),
   }),
   gclid:         z.string().trim().max(200).nullable().optional(),
   gbraid:        z.string().trim().max(200).nullable().optional(),
@@ -146,7 +145,7 @@ async function handle(req: Request) {
     lead_id: leadId,
     type:    "agent_note",
     author:  "system",
-    content: `📋 Meta Ads Paid wizard completado. Meta: ${b.qualification.goal} · Nivel: ${b.qualification.level} · Plazo: ${b.qualification.deadline} · Dolor: ${b.qualification.pain}. Notificaciones (email + WA) programadas para +${NOTIFY_DELAY_MIN} min (esperando pago Stripe).`,
+    content: `📋 Meta Ads Paid wizard completado. Meta: ${b.qualification.goal} · Nivel: ${b.qualification.level} · Plazo: ${b.qualification.deadline}. Notificaciones (email + WA) programadas para +${NOTIFY_DELAY_MIN} min (esperando pago Stripe).`,
     metadata: { kind: "meta_ads_paid_qualified", qualification: b.qualification, notify_delay_min: NOTIFY_DELAY_MIN },
   });
 

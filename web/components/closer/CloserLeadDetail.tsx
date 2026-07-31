@@ -19,7 +19,7 @@ type Lead = {
   reserva_prioritaria?: boolean | null;
   priority_deadline?:   string | null;
   deposit_intent_at?:   string | null;
-  qualification_answers?: { goal?: string; level?: string; deadline?: string; pain?: string } | null;
+  qualification_answers?: { goal?: string; level?: string; deadline?: string } | null;
   landing_intent?:      string | null;
 };
 

@@ -79,7 +79,6 @@ export type QualificationAnswers = {
   goal?:     string | null;
   level?:    string | null;
   deadline?: string | null;
-  pain?:     string | null;
 };
 
 const GOAL_LABEL: Record<string, string> = {
@@ -92,17 +91,12 @@ const LEVEL_LABEL: Record<string, string> = {
 const DEADLINE_LABEL: Record<string, string> = {
   concrete: "🔥 fecha concreta", "6m": "6 meses", year: "este año", no_rush: "sin prisa",
 };
-const PAIN_LABEL: Record<string, string> = {
-  silent: "se queda callado", dependent: "depende de otros", job_lost: "pierde trabajo",
-  tried_before: "intentó antes", no_progress: "no avanza",
-};
 
 export function summarizeQualification(q: QualificationAnswers | null | undefined): string | null {
-  if (!q || (!q.goal && !q.level && !q.deadline && !q.pain)) return null;
+  if (!q || (!q.goal && !q.level && !q.deadline)) return null;
   const parts: string[] = [];
   if (q.goal)     parts.push(`Meta: ${GOAL_LABEL[q.goal] ?? q.goal}`);
   if (q.level)    parts.push(`Nivel: ${LEVEL_LABEL[q.level] ?? q.level}`);
   if (q.deadline) parts.push(`Plazo: ${DEADLINE_LABEL[q.deadline] ?? q.deadline}`);
-  if (q.pain)     parts.push(`Dolor: ${PAIN_LABEL[q.pain] ?? q.pain}`);
   return parts.join(" · ");
 }

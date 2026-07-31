@@ -39,7 +39,7 @@ export type TrialClassRow = {
   reservaPrioritaria: boolean | null;
   priorityDeadline:   string | null;
   depositIntentAt:    string | null;
-  qualificationAnswers: { goal?: string; level?: string; deadline?: string; pain?: string } | null;
+  qualificationAnswers: { goal?: string; level?: string; deadline?: string } | null;
   landingIntent:      string | null;
 };
 
@@ -97,7 +97,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       reserva_prioritaria: boolean | null;
       priority_deadline: string | null;
       deposit_intent_at: string | null;
-      qualification_answers: { goal?: string; level?: string; deadline?: string; pain?: string } | null;
+      qualification_answers: { goal?: string; level?: string; deadline?: string } | null;
       landing_intent: string | null;
     } | Array<{
       id: string;
@@ -113,7 +113,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       reserva_prioritaria: boolean | null;
       priority_deadline: string | null;
       deposit_intent_at: string | null;
-      qualification_answers: { goal?: string; level?: string; deadline?: string; pain?: string } | null;
+      qualification_answers: { goal?: string; level?: string; deadline?: string } | null;
       landing_intent: string | null;
     }> | null;
     script: {

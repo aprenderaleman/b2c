@@ -50,7 +50,7 @@ export type LeadRow = {
   reserva_prioritaria_amount_cents: number | null;
   // Meta Ads Paid funnel (migration 088, 2026-07-28).
   qualification_answers: {
-    goal?: string; level?: string; deadline?: string; pain?: string;
+    goal?: string; level?: string; deadline?: string;
   } | null;
   deposit_intent_at: string | null;
   priority_deadline: string | null;
