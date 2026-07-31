@@ -4,27 +4,19 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
 import { BrandLogo } from "@/components/BrandLogo";
+import { IllustrationPanel, type StepKey } from "@/components/diagnostico/IllustrationPanel";
 import { COUNTRY_CODES, resolvePhone } from "@/lib/phone";
 import { captureAttributionFromUrl, readAttribution } from "@/lib/ads-attribution";
 import { trackFunnel } from "@/lib/track-funnel";
 
 /**
- * 5-step qualification wizard + calendar + form + Stripe redirect.
+ * Wizard /meta-ads-paid — 5 pasos + form + Stripe redirect.
  *
- * Steps:
- *   1. Goal (¿para qué necesitas el alemán?)
- *   2. Level (¿cuál es tu nivel actual?)
- *   3. Deadline (¿para cuándo?) — 'concrete' → 🔥 en CRM
- *   4. Pain (¿qué te frustra?)
- *   5. Calendar (día + hora) — reusa MobileDayStrip + TimeList
- *   6. Form (nombre + email + WhatsApp) → POST /api/public/book-trial-metaads-paid
- *      → redirect a Stripe Checkout URL devuelta.
- *
- * La cita queda AGENDADA antes del pago. El pago cambia solo el estado
- * del lead (Reserva Prioritaria dorada).
+ * Layout: split-screen estilo Preply (IllustrationPanel a la izquierda,
+ * contenido a la derecha; en mobile se apila como banda superior +
+ * contenido debajo). Igual que /agendar/cuando y /diagnostico.
  */
 
-// ────────────────────── Tipos y opciones ──────────────────────
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 
 type GoalId    = "job" | "ausbildung" | "citizenship" | "daily_life" | "moving";
@@ -39,7 +31,6 @@ const GOALS: Array<{ id: GoalId; label: string; emoji: string }> = [
   { id: "daily_life",  emoji: "🗣️",  label: "Mi día a día (médico, Amt, vecinos)" },
   { id: "moving",      emoji: "✈️",  label: "Voy a mudarme a Alemania o Suiza" },
 ];
-
 const LEVELS: Array<{ id: LevelId; label: string; emoji?: string }> = [
   { id: "zero",         label: "Cero, no hablo nada" },
   { id: "basic",        label: "Básico, me presento y poco más (A1-A2)" },
@@ -47,14 +38,12 @@ const LEVELS: Array<{ id: LevelId; label: string; emoji?: string }> = [
   { id: "advanced",     label: "Avanzado, quiero perfeccionar (B2+)" },
   { id: "unknown",      emoji: "🤷", label: "No lo sé — que me lo diga el profesor" },
 ];
-
 const DEADLINES: Array<{ id: DeadlineId; label: string; emoji?: string }> = [
   { id: "concrete", emoji: "🔥", label: "Ya — tengo una fecha concreta (examen, entrevista, trámite)" },
   { id: "6m",       label: "En los próximos 6 meses" },
   { id: "year",     label: "Este año" },
   { id: "no_rush",  label: "Sin prisa, pero en serio" },
 ];
-
 const PAINS: Array<{ id: PainId; label: string; emoji: string }> = [
   { id: "silent",       emoji: "😶", label: "Quedarme callado sabiendo lo que quiero decir" },
   { id: "dependent",    emoji: "📄", label: "Depender de otros para trámites y citas" },
@@ -63,7 +52,6 @@ const PAINS: Array<{ id: PainId; label: string; emoji: string }> = [
   { id: "no_progress",  emoji: "😰", label: "Sentir que no avanzo nunca" },
 ];
 
-// german_level BD-friendly viene del step 2 (A0/A1/A2/B1/B2/C1/C2)
 function levelToDbEnum(l: LevelId): "A0" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | null {
   switch (l) {
     case "zero":         return "A0";
@@ -74,7 +62,18 @@ function levelToDbEnum(l: LevelId): "A0" | "A1" | "A2" | "B1" | "B2" | "C1" | "C
   }
 }
 
-// ────────────────────── Component ──────────────────────
+// Mapa step → ilustración del panel izquierdo.
+function stepToIllustration(step: Step): StepKey {
+  switch (step) {
+    case 1: return "motivo";
+    case 2: return "nivel";
+    case 3: return "datos";
+    case 4: return "particulares";
+    case 5: return "calendario";
+    case 6: return "formulario";
+  }
+}
+
 export function PaidFunnelWizard() {
   const [step, setStep] = useState<Step>(1);
   const [goal, setGoal] = useState<GoalId | null>(null);
@@ -83,8 +82,6 @@ export function PaidFunnelWizard() {
   const [pain, setPain] = useState<PainId | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<SlotItem | null>(null);
 
-  // Captura atribución (fbclid, utm, gclid) al aterrizar. Reusa el
-  // helper existente que persiste en sessionStorage.
   useEffect(() => {
     captureAttributionFromUrl();
     trackFunnel("landing_view", { landingIntent: "meta-ads-paid" });
@@ -96,79 +93,82 @@ export function PaidFunnelWizard() {
     <div className="min-h-[100dvh] flex flex-col bg-white">
       <Header step={step} totalSteps={6} />
 
-      <main className="flex-1 mx-auto w-full max-w-xl px-5 py-6 md:py-10">
-        {step === 1 && (
-          <QuestionStep
-            title="¿Para qué necesitas el alemán?"
-            options={GOALS}
-            value={goal}
-            onSelect={(id) => { setGoal(id); trackFunnel("field_typed", { landingIntent: "meta-ads-paid", answer: `goal:${id}` }); advance(2); }}
-          />
-        )}
-        {step === 2 && (
-          <QuestionStep
-            title="¿Cuál es tu nivel actual?"
-            options={LEVELS}
-            value={level}
-            onSelect={(id) => { setLevel(id); trackFunnel("field_typed", { landingIntent: "meta-ads-paid", answer: `level:${id}` }); advance(3); }}
-          />
-        )}
-        {step === 3 && (
-          <QuestionStep
-            title="¿Para cuándo lo necesitas?"
-            options={DEADLINES}
-            value={deadline}
-            onSelect={(id) => { setDeadline(id); trackFunnel("field_typed", { landingIntent: "meta-ads-paid", answer: `deadline:${id}` }); advance(4); }}
-          />
-        )}
-        {step === 4 && (
-          <QuestionStep
-            title="¿Qué es lo que MÁS te frustra hoy con el alemán?"
-            options={PAINS}
-            value={pain}
-            onSelect={(id) => { setPain(id); trackFunnel("field_typed", { landingIntent: "meta-ads-paid", answer: `pain:${id}` }); advance(5); }}
-          />
-        )}
-        {step === 5 && (
-          <CalendarStep
-            onPick={(s) => { setSelectedSlot(s); trackFunnel("slot_picked", { landingIntent: "meta-ads-paid", answer: s.startIso }); advance(6); }}
-          />
-        )}
-        {step === 6 && goal && level && deadline && pain && selectedSlot && (
-          <FormStep
-            goal={goal}
-            level={level}
-            deadline={deadline}
-            pain={pain}
-            slot={selectedSlot}
-          />
-        )}
-      </main>
+      <IllustrationPanel step={stepToIllustration(step)}>
+        <main className="flex-1 px-5 md:px-8 lg:px-10 py-6 md:py-10 mx-auto max-w-xl w-full">
+          {step === 1 && (
+            <QuestionStep
+              title="¿Para qué necesitas el alemán?"
+              options={GOALS}
+              value={goal}
+              onSelect={(id) => { setGoal(id); trackFunnel("field_typed", { landingIntent: "meta-ads-paid", answer: `goal:${id}` }); advance(2); }}
+            />
+          )}
+          {step === 2 && (
+            <QuestionStep
+              title="¿Cuál es tu nivel actual?"
+              options={LEVELS}
+              value={level}
+              onSelect={(id) => { setLevel(id); trackFunnel("field_typed", { landingIntent: "meta-ads-paid", answer: `level:${id}` }); advance(3); }}
+            />
+          )}
+          {step === 3 && (
+            <QuestionStep
+              title="¿Para cuándo lo necesitas?"
+              options={DEADLINES}
+              value={deadline}
+              onSelect={(id) => { setDeadline(id); trackFunnel("field_typed", { landingIntent: "meta-ads-paid", answer: `deadline:${id}` }); advance(4); }}
+            />
+          )}
+          {step === 4 && (
+            <QuestionStep
+              title="¿Qué es lo que MÁS te frustra hoy con el alemán?"
+              options={PAINS}
+              value={pain}
+              onSelect={(id) => { setPain(id); trackFunnel("field_typed", { landingIntent: "meta-ads-paid", answer: `pain:${id}` }); advance(5); }}
+            />
+          )}
+          {step === 5 && (
+            <CalendarStep
+              onPick={(s) => { setSelectedSlot(s); trackFunnel("slot_picked", { landingIntent: "meta-ads-paid", answer: s.startIso }); advance(6); }}
+            />
+          )}
+          {step === 6 && goal && level && deadline && pain && selectedSlot && (
+            <FormStep
+              goal={goal}
+              level={level}
+              deadline={deadline}
+              pain={pain}
+              slot={selectedSlot}
+            />
+          )}
 
-      {/* Back link — persistente salvo en step 6 (para no perder el form) */}
-      {step > 1 && step < 6 && (
-        <div className="pb-6 px-5 text-center">
-          <button
-            type="button"
-            onClick={() => setStep((step - 1) as Step)}
-            className="text-[13px] text-slate-500 hover:text-slate-900 underline underline-offset-4"
-          >
-            ← Volver al paso anterior
-          </button>
-        </div>
-      )}
+          {step > 1 && step < 6 && (
+            <div className="mt-8 text-center">
+              <button
+                type="button"
+                onClick={() => setStep((step - 1) as Step)}
+                className="text-[13px] text-slate-500 hover:text-slate-900 underline underline-offset-4"
+              >
+                ← Volver al paso anterior
+              </button>
+            </div>
+          )}
+        </main>
+      </IllustrationPanel>
     </div>
   );
 }
 
-// ────────────────────── Sub-components ──────────────────────
+// ────────────────────── Header con progress ──────────────────────
 function Header({ step, totalSteps }: { step: Step; totalSteps: number }) {
   const pct = Math.round(((step - 1) / totalSteps) * 100);
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-100"
-            style={{ paddingTop: "env(safe-area-inset-top)" }}>
-      <div className="flex items-center justify-between h-14 px-4 max-w-xl mx-auto w-full">
-        <BrandLogo size="sm" />
+    <header
+      className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-100"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div className="flex items-center justify-between h-14 md:h-16 px-4 max-w-6xl mx-auto w-full">
+        <BrandLogo size="md" />
         <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 tabular-nums">
           Paso {step} de {totalSteps}
         </span>
@@ -313,7 +313,7 @@ function FormStep({
   const [phoneLocal, setPhoneLocal]   = useState("");
   const [submitting, setSubmitting]   = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const submittedRef = useRef(false); // guard doble-submit
+  const submittedRef = useRef(false);
 
   const phoneInfo = useMemo(
     () => resolvePhone(countryCode, phoneLocal),
@@ -338,7 +338,6 @@ function FormStep({
     setError(null);
     trackFunnel("submit_attempt", { landingIntent: "meta-ads-paid" });
 
-    // Recupera fbclid del sessionStorage si sobrevivió del landing.
     const attribution = readAttribution() as Record<string, string | null | undefined>;
 
     try {
@@ -372,11 +371,9 @@ function FormStep({
         return;
       }
       trackFunnel("submit_ok", { landingIntent: "meta-ads-paid" });
-      // Redirect al Stripe Checkout URL devuelto por el backend.
       if (json.stripeUrl) {
         window.location.href = json.stripeUrl;
       } else if (json.confirmacionUrl) {
-        // Fallback si por alguna razón Stripe no está disponible.
         window.location.href = json.confirmacionUrl;
       }
     } catch (e) {
@@ -395,13 +392,24 @@ function FormStep({
         {slotStr} <span className="text-slate-400 lowercase">(Berlín)</span>
       </p>
 
-      <div className="space-y-4">
+      {/* Form real — permite al navegador reconocer los campos y ofrecer
+          autofill (Chrome/Safari/Firefox usan el atributo autoComplete
+          + name + type para saber qué datos meter). submit se maneja
+          via onSubmit para que Enter funcione en cualquier input. */}
+      <form
+        onSubmit={(e) => { e.preventDefault(); submit(); }}
+        autoComplete="on"
+        className="space-y-4"
+      >
         <div>
-          <label className="block text-[12px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+          <label htmlFor="pf-name" className="block text-[12px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
             Tu nombre
           </label>
           <input
+            id="pf-name"
+            name="name"
             type="text"
+            autoComplete="given-name"
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="María García"
@@ -410,10 +418,12 @@ function FormStep({
         </div>
 
         <div>
-          <label className="block text-[12px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+          <label htmlFor="pf-email" className="block text-[12px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
             Email
           </label>
           <input
+            id="pf-email"
+            name="email"
             type="email"
             inputMode="email"
             autoComplete="email"
@@ -425,11 +435,14 @@ function FormStep({
         </div>
 
         <div>
-          <label className="block text-[12px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+          <label htmlFor="pf-phone" className="block text-[12px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
             WhatsApp
           </label>
           <div className="flex gap-2">
             <select
+              id="pf-cc"
+              name="tel-country-code"
+              autoComplete="tel-country-code"
               value={countryCode}
               onChange={e => setCountryCode(e.target.value)}
               className="h-12 rounded-2xl border border-slate-300 px-3 text-[15px] text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 bg-white"
@@ -441,9 +454,11 @@ function FormStep({
               ))}
             </select>
             <input
+              id="pf-phone"
+              name="tel"
               type="tel"
               inputMode="tel"
-              autoComplete="tel"
+              autoComplete="tel-national"
               value={phoneLocal}
               onChange={e => setPhoneLocal(e.target.value)}
               placeholder="612 34 56 78"
@@ -456,8 +471,7 @@ function FormStep({
         </div>
 
         <button
-          type="button"
-          onClick={submit}
+          type="submit"
           disabled={!canSubmit || submitting}
           className={[
             "w-full h-14 rounded-2xl font-bold text-[16px] transition",
@@ -466,7 +480,7 @@ function FormStep({
               : "bg-slate-200 text-slate-400 cursor-not-allowed",
           ].join(" ")}
         >
-          {submitting ? "Reservando…" : "Confirmar mi reserva → pagar 10€"}
+          {submitting ? "Reservando…" : "Continuar"}
         </button>
 
         {error && (
@@ -476,9 +490,9 @@ function FormStep({
         )}
 
         <p className="text-[11.5px] text-center text-slate-500 leading-snug">
-          Tu plaza queda agendada al confirmar. Los 10€ se descuentan íntegros de tu programa si continúas.
+          Tu plaza queda agendada al continuar. Los 10€ se descuentan íntegros de tu programa si continúas.
         </p>
-      </div>
+      </form>
     </div>
   );
 }

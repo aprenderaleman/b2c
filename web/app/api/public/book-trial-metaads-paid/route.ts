@@ -216,16 +216,17 @@ async function handle(req: Request) {
   });
 }
 
-// Mapea la meta del wizard al goal enum-ish de la BD (leads.goal
-// acepta 'work'/'travel'/etc. — no es un enum estricto; alineamos con
-// los valores que ya usa el resto del funnel).
+// Mapea el goal del wizard al ENUM `lead_goal` de la BD.
+// Valores válidos (migration 001): work | visa | studies | exam |
+// travel | already_in_dach. NO uses otros — el INSERT en leads
+// falla con lead_create_failed si se pasa un valor fuera del enum.
 function qualGoalToDbGoal(goal: string): string {
   switch (goal) {
     case "job":         return "work";
-    case "ausbildung":  return "study";
-    case "citizenship": return "official";
-    case "daily_life":  return "daily";
-    case "moving":      return "moving";
-    default:            return "other";
+    case "ausbildung":  return "studies";
+    case "citizenship": return "visa";
+    case "daily_life":  return "already_in_dach";
+    case "moving":      return "travel";
+    default:            return "work";
   }
 }
