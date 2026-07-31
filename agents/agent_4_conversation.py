@@ -333,6 +333,10 @@ def handle_incoming_message(
     # (No-op si ya estaba en 0.)
     reset_reactivation_count(lead["id"])
 
+    # Pausar cadena automática 24h si hay una activa — la conversación
+    # humana tiene prioridad. La cadena se reanuda sola cuando expire.
+    _pause_active_chain(lead["id"])
+
     # Once converted, NEVER auto-reply (spec).
     if status == "converted":
         log.info("Lead %s converted — ignoring inbound.", lead["id"])
@@ -544,6 +548,22 @@ def _trial_class_details(lead_id: str) -> tuple[datetime | None, str | None]:
         )
         r = cur.fetchone()
     return (r["trial_scheduled_at"] if r else None), None
+
+
+def _pause_active_chain(lead_id: str) -> None:
+    """Pausa la cadena activa del lead por 24h cuando responde por WA."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE lead_chains
+               SET paused_until = NOW() + INTERVAL '24 hours',
+                   updated_at   = NOW()
+             WHERE lead_id = %s
+               AND completed_at IS NULL
+            """,
+            (lead_id,),
+        )
+        conn.commit()
 
 
 def _format_trial_when(dt: datetime | None, lang: str) -> str:

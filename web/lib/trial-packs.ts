@@ -11,7 +11,7 @@
 
 // ── Ritmos (suscripciones mensuales) ─────────────────────────────────
 
-export type RitmoId = "estandar" | "intensivo" | "vip_express";
+export type RitmoId = "viajero" | "estandar" | "intensivo" | "vip_express";
 export type GoalId  = "a1_a2" | "b1" | "b2" | "c1" | "fluidez_total";
 
 export type GoalDetail = {
@@ -33,6 +33,21 @@ export type Ritmo = {
 };
 
 export const RITMOS: Ritmo[] = [
+  {
+    id: "viajero",
+    name: "Viajero",
+    emoji: "🌍",
+    pricePerMonth: 240,
+    classesPerMonth: 6,
+    baseUrl: "https://buy.stripe.com/cNi7sE8Hjd9Wfkr2uP0co0D",
+    goals: [
+      { id: "a1_a2",         label: "A1-A2",         months: 6,  totalCents: 144_000, refId: "goal_a1a2" },
+      { id: "b1",            label: "B1",            months: 8,  totalCents: 192_000, refId: "goal_b1" },
+      { id: "b2",            label: "B2",            months: 8,  totalCents: 192_000, refId: "goal_b2" },
+      { id: "c1",            label: "C1",            months: 10, totalCents: 240_000, refId: "goal_c1" },
+      { id: "fluidez_total", label: "Fluidez Total", months: 16, totalCents: 384_000, refId: "goal_zero_to_b1" },
+    ],
+  },
   {
     id: "estandar",
     name: "Estándar",
@@ -121,7 +136,7 @@ export function buildSubscriptionUrl(ritmo: Ritmo, goal: GoalDetail): string {
 // ── Backward-compat types used by attended API, compensation, etc. ──
 
 export type PackId =
-  | "estandar" | "intensivo" | "vip_express"
+  | "viajero" | "estandar" | "intensivo" | "vip_express"
   | "a1_a2" | "b1" | "b2" | "c1" | "fluidez_total"
   | "kids";
 

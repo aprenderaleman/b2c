@@ -66,7 +66,22 @@ async function run() {
   const leads = (data ?? []) as Lead[];
   const results: Array<Record<string, unknown>> = [];
 
+  // Skip leads that are already managed by the new chain engine (lead_chains table).
+  // This allows the old cron to keep processing leads that were mid-sequence
+  // before the chain engine was deployed, without duplicating messages.
+  const leadIds = leads.map(l => l.id);
+  const { data: activeChains } = await sb
+    .from("lead_chains")
+    .select("lead_id")
+    .in("lead_id", leadIds)
+    .is("completed_at", null);
+  const chainedLeadIds = new Set((activeChains ?? []).map((c: { lead_id: string }) => c.lead_id));
+
   for (const lead of leads) {
+    if (chainedLeadIds.has(lead.id)) {
+      results.push({ lead_id: lead.id, action: "skipped_has_chain" });
+      continue;
+    }
     const step = Number((lead.meta as Record<string, unknown> | null)?.post_trial_step ?? 0);
     if (step >= 2) {
       // No debería pasar (el último marca cold y vacía next_contact)

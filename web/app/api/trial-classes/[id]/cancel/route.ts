@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { sendTrialCancelledEmail } from "@/lib/email/send";
+import { startChain } from "@/lib/chain-engine";
 
 /**
  * POST /api/trial-classes/{id}/cancel
@@ -188,6 +189,10 @@ export async function POST(
       }
       await sb.from("leads").update(update).eq("id", c.lead_id);
     }
+
+    // Iniciar cadena de follow-ups cancelación (chain6)
+    await startChain(c.lead_id, "chain6_cancel")
+      .catch(err => console.warn("[trial-cancel] startChain error:", err));
   }
 
   return NextResponse.json({ ok: true });

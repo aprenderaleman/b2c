@@ -43,6 +43,8 @@ export function TrialHubCard({
   const [voiceNoteSent, setVoiceNoteSent] = useState<string | null>(row.voiceNoteSentAt);
   const [togglingVoice, setTogglingVoice] = useState(false);
   const [reschedulingSend, setReschedulingSend] = useState(false);
+  const [objectionOpen, setObjectionOpen] = useState(false);
+  const [objectionSending, setObjectionSending] = useState<string | null>(null);
 
   const date = formatBerlinDate(row.scheduledAt);
   const time = formatBerlinTime(row.scheduledAt);
@@ -315,6 +317,18 @@ export function TrialHubCard({
 
                   <button
                     type="button"
+                    onClick={() => setObjectionOpen(!objectionOpen)}
+                    className={`text-xs font-semibold rounded-full border px-3 py-1.5 ${
+                      objectionOpen
+                        ? "border-violet-400 bg-violet-200 dark:bg-violet-500/25 text-violet-900 dark:text-violet-100"
+                        : "border-violet-300 dark:border-violet-500/40 bg-violet-100 dark:bg-violet-500/15 text-violet-800 dark:text-violet-200 hover:bg-violet-200 dark:hover:bg-violet-500/25"
+                    }`}
+                  >
+                    💬 Objeción
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={async () => {
                       if (!row.leadId) return;
                       if (!confirm(
@@ -432,6 +446,55 @@ export function TrialHubCard({
                 </button>
               )}
             </div>
+
+            {/* Objection chips */}
+            {objectionOpen && row.leadId && !isProcessed && (
+              <div className="mt-3 rounded-lg border border-violet-200 dark:border-violet-500/30 bg-violet-50/50 dark:bg-violet-500/5 p-3">
+                <div className="text-xs font-semibold text-violet-700 dark:text-violet-300 mb-2">
+                  ¿Cuál es la objeción del lead?
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { chip: "precio",   label: "💰 Precio",         desc: "El precio es muy alto" },
+                    { chip: "pensarlo", label: "🤔 Pensarlo",       desc: "Necesita pensarlo" },
+                    { chip: "pareja",   label: "👫 Pareja/familia", desc: "Debe consultarlo con alguien" },
+                    { chip: "tiempo",   label: "⏰ Tiempo",         desc: "No tiene tiempo" },
+                  ] as const).map(({ chip, label, desc }) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      disabled={!!objectionSending}
+                      title={desc}
+                      onClick={async () => {
+                        if (!confirm(
+                          `Marcar como ASISTIÓ CON OBJECIÓN: ${label}\n\n` +
+                          "Se iniciará la cadena de mensajes para esta objeción.\n\n" +
+                          "¿Continuar?"
+                        )) return;
+                        setObjectionSending(chip);
+                        try {
+                          const res = await fetch(`/api/teacher/trial/${row.leadId}/attended-objection`, {
+                            method: "POST",
+                            headers: { "content-type": "application/json" },
+                            body: JSON.stringify({ chip }),
+                          });
+                          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                          setObjectionOpen(false);
+                          router.refresh();
+                        } catch (err) {
+                          alert(err instanceof Error ? err.message : "Error");
+                        } finally {
+                          setObjectionSending(null);
+                        }
+                      }}
+                      className="text-xs font-semibold rounded-full border border-violet-300 dark:border-violet-500/40 bg-white dark:bg-slate-800 px-3 py-1.5 text-violet-800 dark:text-violet-200 hover:bg-violet-100 dark:hover:bg-violet-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {objectionSending === chip ? "Enviando..." : label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Escalation form */}
             {escalateOpen && row.leadId && (

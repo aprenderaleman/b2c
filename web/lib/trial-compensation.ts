@@ -24,6 +24,7 @@
 import { supabaseAdmin } from "./supabase";
 
 export const PACK_COMMISSION_SINGLE_CENTS: Record<string, number> = {
+  viajero:         5_000,    //  50€
   estandar:        7_500,    //  75€
   intensivo:      10_000,    // 100€
   vip_express:    15_000,    // 150€
@@ -36,6 +37,7 @@ export const PACK_COMMISSION_SINGLE_CENTS: Record<string, number> = {
 };
 
 export const PACK_COMMISSION_FLEXIBLE_CENTS: Record<string, number> = {
+  viajero:         5_000,    //  50€
   estandar:        7_500,    //  75€
   intensivo:      10_000,    // 100€
   vip_express:    15_000,    // 150€

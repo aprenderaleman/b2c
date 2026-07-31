@@ -7,6 +7,8 @@ import { sendPostTrialFollowupEmail, sendPostTrialFollowupGenericEmail, sendTria
 import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "./trial-packs";
 import { getLeadTrialTeacher } from "./trial-compensation";
 import { renderTemplate } from "./message-stats";
+import { startChain } from "./chain-engine";
+import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
 
 /**
  * Tag interno: cuando se setea, Stiv debe escalar a `needs_human` la
@@ -312,6 +314,17 @@ export async function markTrialAttendedAwaitingConversion(
       });
     }
   }
+
+  // Iniciar cadena de follow-ups post-enlace (chain2)
+  await startChain(leadId, "chain2_link_sent", {
+    ...(opts ? {
+      packId: opts.packId,
+      paymentType: opts.paymentType,
+      objective: opts.objective,
+      fullUrl: opts.fullUrl,
+      packLabel: opts.packLabel,
+    } : {}),
+  }).catch(err => console.warn("[markTrialAttended] startChain error:", err));
 }
 
 /**
@@ -464,6 +477,10 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
       });
     }
   }
+
+  // Iniciar cadena de follow-ups post-clase sin enlace (chain1)
+  await startChain(leadId, "chain1_attended")
+    .catch(err => console.warn("[markTrialAttendedNoLink] startChain error:", err));
 }
 
 export async function markTrialAbsent(leadId: string): Promise<void> {
@@ -576,6 +593,17 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
       });
     }
   }
+
+  // Iniciar cadena de follow-ups ausente (chain4)
+  // Chequear reserva_prioritaria para variant deposit/no-deposit
+  const { data: reservaRow } = await sb
+    .from("leads")
+    .select("reserva_prioritaria")
+    .eq("id", leadId)
+    .maybeSingle();
+  const hasReserva = (reservaRow as { reserva_prioritaria?: boolean } | null)?.reserva_prioritaria === true;
+  await startChain(leadId, "chain4_absent", { reserva_prioritaria: hasReserva })
+    .catch(err => console.warn("[markTrialAbsent] startChain error:", err));
 }
 
 /**
@@ -669,5 +697,53 @@ export async function sendRescheduleLinkMessage(
       : `💬 Falló envío del link reagendar: ${waRes.reason ?? "unknown"}`,
     metadata: { kind: "trial_reschedule_link", channel: "whatsapp" },
   });
+  // Iniciar cadena de confirmación reagendamiento (chain5)
+  await startChain(leadId, "chain5_reschedule")
+    .catch(err => console.warn("[sendRescheduleLinkMessage] startChain error:", err));
+
   return waRes.ok ? { ok: true } : { ok: false, reason: waRes.reason ?? "send_failed" };
+}
+
+/**
+ * Flujo 3b: lead asistió pero tiene una objeción (precio, pensarlo,
+ * pareja/familia, tiempo). Arranca la cadena chain3_obj_* correspondiente.
+ */
+export async function markTrialAttendedWithObjection(
+  leadId: string,
+  chip: ObjectionChip,
+): Promise<void> {
+  const sb = supabaseAdmin();
+
+  const { data: metaRow } = await sb
+    .from("leads")
+    .select("meta")
+    .eq("id", leadId)
+    .maybeSingle();
+  const existingMeta = (metaRow?.meta && typeof metaRow.meta === "object") ? metaRow.meta as Record<string, unknown> : {};
+
+  await sb
+    .from("leads")
+    .update({
+      status: "trial_attended",
+      trial_attended_at: new Date().toISOString(),
+      meta: {
+        ...existingMeta,
+        [AWAITING_PAYMENT_KEY]: new Date().toISOString(),
+        post_trial_flow: "objection",
+        objection_chip: chip,
+      },
+    })
+    .eq("id", leadId);
+
+  await sb.from("lead_timeline").insert({
+    lead_id: leadId,
+    type: "status_change",
+    author: "teacher",
+    content: `Lead asistió a trial con objeción: ${chip}`,
+    metadata: { kind: "trial_attended_objection", chip },
+  });
+
+  const chainType = OBJECTION_CHIP_TO_CHAIN[chip];
+  await startChain(leadId, chainType, { objection_chip: chip }, { objectionChip: chip })
+    .catch(err => console.warn("[markTrialAttendedWithObjection] startChain error:", err));
 }

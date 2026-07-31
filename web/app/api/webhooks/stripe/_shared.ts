@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getStripeClient } from "@/lib/stripe";
 import { getExchangeRate, convertToEur } from "@/lib/exchange-rates";
+import { cancelActiveChain } from "@/lib/chain-engine";
 
 export async function processStripeEvent(
   event: Stripe.Event,
@@ -121,6 +122,9 @@ async function handleCheckoutCompleted(
     stripe_charge_id: null,
     note: `Stripe ${account.toUpperCase()} checkout`,
   });
+
+  // Cut any active post-trial chain for leads matching this email
+  await cutChainByEmail(sb, customerEmail);
 }
 
 async function handlePaymentIntentSucceeded(
@@ -215,6 +219,8 @@ async function handlePaymentIntentSucceeded(
     stripe_charge_id: chargeId,
     note: `Stripe ${account.toUpperCase()} payment_intent`,
   });
+
+  if (customerEmail) await cutChainByEmail(sb, customerEmail);
 }
 
 async function handleInvoicePaid(
@@ -277,6 +283,8 @@ async function handleInvoicePaid(
     exchange_rate: rate,
     stripe_charge_id: null,
   });
+
+  if (customerEmail) await cutChainByEmail(sb, customerEmail);
 }
 
 function inferPaymentType(session: Stripe.Checkout.Session): string {
@@ -284,4 +292,22 @@ function inferPaymentType(session: Stripe.Checkout.Session): string {
   const meta = session.metadata ?? {};
   if (meta.pack_type) return "package";
   return "package";
+}
+
+async function cutChainByEmail(
+  sb: ReturnType<typeof supabaseAdmin>,
+  email: string,
+): Promise<void> {
+  try {
+    const { data: lead } = await sb
+      .from("leads")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+    if (lead) {
+      await cancelActiveChain((lead as { id: string }).id, "payment_received");
+    }
+  } catch (err) {
+    console.warn("[stripe-webhook] cutChainByEmail error:", err);
+  }
 }
