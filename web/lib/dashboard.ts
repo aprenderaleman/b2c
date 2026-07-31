@@ -43,6 +43,18 @@ export type LeadRow = {
   // Source de verdad para la tasa de asistencia en /admin/ads.
   trial_attended_at: string | null;
   trial_absent_at:   string | null;
+  // Reserva Prioritaria (migration 086, 2026-07-24) — lead pagó los
+  // 10€ del depósito. `reserva_prioritaria=true` ⇒ VIP dorado en CRM.
+  reserva_prioritaria: boolean | null;
+  reserva_prioritaria_paid_at: string | null;
+  reserva_prioritaria_amount_cents: number | null;
+  // Meta Ads Paid funnel (migration 088, 2026-07-28).
+  qualification_answers: {
+    goal?: string; level?: string; deadline?: string; pain?: string;
+  } | null;
+  deposit_intent_at: string | null;
+  priority_deadline: string | null;
+  fbclid: string | null;
 };
 
 export type TimelineRow = {

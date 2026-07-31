@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { TareaCloser } from "@/lib/closer-cadence";
 import { MarkSaleModal } from "./MarkSaleModal";
+import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
 
 type Lead = {
   id: string;
@@ -14,6 +15,12 @@ type Lead = {
   estado_cierre: string;
   motivo_perdido: string | null;
   fecha_asignacion_closer: string | null;
+  // Meta Ads Paid funnel (2026-07-28)
+  reserva_prioritaria?: boolean | null;
+  priority_deadline?:   string | null;
+  deposit_intent_at?:   string | null;
+  qualification_answers?: { goal?: string; level?: string; deadline?: string; pain?: string } | null;
+  landing_intent?:      string | null;
 };
 
 type TimelineEntry = {
@@ -99,9 +106,23 @@ export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendien
           >
             &larr; Mis leads
           </button>
-          <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-50">
+          <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2 flex-wrap">
             {lead.full_name ?? "Lead"}
+            <PriorityBadges flags={{
+              reservaPrioritaria: lead.reserva_prioritaria,
+              priorityDeadline:   lead.priority_deadline,
+              depositIntentAt:    lead.deposit_intent_at,
+            }} />
           </h1>
+          {(() => {
+            const q = summarizeQualification(lead.qualification_answers);
+            if (!q) return null;
+            return (
+              <p className="mt-1 text-[12.5px] text-slate-600 dark:text-slate-400">
+                📋 {q}
+              </p>
+            );
+          })()}
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {lead.whatsapp_normalized && (
               <a

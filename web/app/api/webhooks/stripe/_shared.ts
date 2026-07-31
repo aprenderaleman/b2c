@@ -50,7 +50,7 @@ async function handleCheckoutCompleted(
   // LEAD (no student todavía). Marcamos flag + timeline y salimos antes
   // de tocar `payments` (esa tabla exige student_id). Los 10€ se
   // contabilizarán cuando el lead convierta a pack.
-  if (session.metadata?.type === "trial_deposit") {
+  if (session.metadata?.type === "trial_deposit" || session.metadata?.type === "trial_deposit_metaads") {
     const leadId  = session.metadata.lead_id;
     const classId = session.metadata.class_id;
     if (!leadId) {
@@ -131,7 +131,7 @@ async function handlePaymentIntentSucceeded(
 
   // Reserva Prioritaria (fallback si checkout.session.completed no llegó
   // primero). Idempotencia vía leads.reserva_prioritaria (ya se marcó).
-  if (pi.metadata?.type === "trial_deposit") {
+  if (pi.metadata?.type === "trial_deposit" || pi.metadata?.type === "trial_deposit_metaads") {
     const leadId = pi.metadata.lead_id;
     if (!leadId) return;
     const { data: alreadyPaid } = await sb

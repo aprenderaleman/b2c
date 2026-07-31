@@ -35,6 +35,12 @@ export type TrialClassRow = {
   teacherEmail:       string;
   trialConfirmedAt:   string | null;
   voiceNoteSentAt:    string | null;
+  // Meta Ads Paid funnel (2026-07-28)
+  reservaPrioritaria: boolean | null;
+  priorityDeadline:   string | null;
+  depositIntentAt:    string | null;
+  qualificationAnswers: { goal?: string; level?: string; deadline?: string; pain?: string } | null;
+  landingIntent:      string | null;
 };
 
 /**
@@ -50,7 +56,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       id, scheduled_at, duration_minutes, status, short_code, notes_admin,
       teacher_id,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at),
+      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent),
       script:trial_class_scripts(teacher_notes, final_outcome, voice_note_sent_at)
     `)
     .eq("is_trial", true)
@@ -88,6 +94,11 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       status: string | null;
       converted_to_user_id: string | null;
       trial_confirmed_at: string | null;
+      reserva_prioritaria: boolean | null;
+      priority_deadline: string | null;
+      deposit_intent_at: string | null;
+      qualification_answers: { goal?: string; level?: string; deadline?: string; pain?: string } | null;
+      landing_intent: string | null;
     } | Array<{
       id: string;
       name: string | null;
@@ -99,6 +110,11 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       status: string | null;
       converted_to_user_id: string | null;
       trial_confirmed_at: string | null;
+      reserva_prioritaria: boolean | null;
+      priority_deadline: string | null;
+      deposit_intent_at: string | null;
+      qualification_answers: { goal?: string; level?: string; deadline?: string; pain?: string } | null;
+      landing_intent: string | null;
     }> | null;
     script: {
       teacher_notes: string | null;
@@ -171,6 +187,11 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       teacherEmail:    tu?.email ?? "",
       trialConfirmedAt: lead?.trial_confirmed_at ?? null,
       voiceNoteSentAt:  script?.voice_note_sent_at ?? null,
+      reservaPrioritaria:  lead?.reserva_prioritaria ?? null,
+      priorityDeadline:    lead?.priority_deadline ?? null,
+      depositIntentAt:     lead?.deposit_intent_at ?? null,
+      qualificationAnswers: lead?.qualification_answers ?? null,
+      landingIntent:       lead?.landing_intent ?? null,
     };
   });
 }

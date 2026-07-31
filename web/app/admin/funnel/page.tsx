@@ -39,6 +39,7 @@ import {
   WATERFALL_STEPS,
 } from "@/lib/funnel-waterfall";
 import { StatusBadge } from "@/components/admin/StatusBadge";
+import { PriorityBadges, priorityRowClass, summarizeQualification } from "@/components/admin/PriorityBadge";
 import { ColdCallPill } from "@/components/admin/ColdCallPill";
 import {
   FunnelWaterfall,
@@ -132,6 +133,7 @@ const LANDING_META: Record<string, LandingMeta> = {
   "tiktok":                 { label: "TikTok (bio link)",           sourceLabel: "TikTok",   sourceIcon: "🎵", sourceCls: SRC_TIKTOK    },
   "facebook":               { label: "Facebook (orgánico)",         sourceLabel: "Facebook", sourceIcon: "📘", sourceCls: SRC_FACEBOOK  },
   "meta-ads":               { label: "Meta Ads (FB + IG pagado)",   sourceLabel: "Meta Ads", sourceIcon: "💰", sourceCls: SRC_META_ADS  },
+  "meta-ads-paid":          { label: "Meta Ads · 10€ depósito",     sourceLabel: "Meta Paid",sourceIcon: "💎", sourceCls: SRC_META_ADS  },
   "agendar-directo":        { label: "Atajo CTA verde",             sourceLabel: "Directo",  sourceIcon: "⚡", sourceCls: SRC_DIRECT    },
   "(sin landing)":          { label: "(sin atribución)",            sourceLabel: "Otro",     sourceIcon: "❓", sourceCls: SRC_OTHER     },
 };
@@ -772,12 +774,15 @@ export default async function FunnelControlPage({
                   ? new Date(l.next_contact_date).getTime() < Date.now()
                   : false;
                 const waDigits = l.whatsapp_normalized?.replace(/\D/g, "") ?? null;
+                const prioFlags = {
+                  reservaPrioritaria: l.reserva_prioritaria,
+                  priorityDeadline:   l.priority_deadline,
+                  depositIntentAt:    l.deposit_intent_at,
+                };
+                const qSummary = summarizeQualification(l.qualification_answers);
                 return (
-                  <tr key={l.id} className="hover:bg-white/[0.03]">
+                  <tr key={l.id} className={`hover:bg-white/[0.03] ${priorityRowClass(prioFlags)}`}>
                     <td className="py-2 px-3">
-                      {/* Nombre → abre detalle en NUEVA pestaña. Esto
-                          deja al operador ver datos sin perder el filtro
-                          actual del funnel. */}
                       <a
                         href={`/admin/leads/${l.id}`}
                         target="_blank"
@@ -786,7 +791,13 @@ export default async function FunnelControlPage({
                       >
                         {l.name ?? "(sin nombre)"}
                       </a>
+                      <div className="mt-0.5"><PriorityBadges flags={prioFlags} /></div>
                       <div className="text-[10.5px] text-white/40">{fmtRelative(l.created_at)}</div>
+                      {qSummary && (
+                        <div className="text-[10.5px] text-white/55 mt-0.5 max-w-[260px] truncate" title={qSummary}>
+                          {qSummary}
+                        </div>
+                      )}
                     </td>
                     <td className="py-2 px-3">
                       <div className="text-[12px] text-white/70 truncate max-w-[180px]">{l.email ?? "—"}</div>
@@ -864,14 +875,19 @@ export default async function FunnelControlPage({
               : l.trial_absent_at ? "absent"
               : l.trial_scheduled_at ? "scheduled" : null;
             const waDigits = l.whatsapp_normalized?.replace(/\D/g, "") ?? null;
+            const prioFlagsM = {
+              reservaPrioritaria: l.reserva_prioritaria,
+              priorityDeadline:   l.priority_deadline,
+              depositIntentAt:    l.deposit_intent_at,
+            };
+            const qSummaryM = summarizeQualification(l.qualification_answers);
             return (
               <div
                 key={l.id}
-                className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                className={`rounded-xl border border-white/10 bg-white/[0.03] p-3 ${priorityRowClass(prioFlagsM)}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    {/* Nombre → detalle en nueva pestaña. */}
                     <a
                       href={`/admin/leads/${l.id}`}
                       target="_blank"
@@ -880,7 +896,13 @@ export default async function FunnelControlPage({
                     >
                       {l.name ?? "(sin nombre)"}
                     </a>
+                    <div className="mt-0.5"><PriorityBadges flags={prioFlagsM} /></div>
                     <div className="text-[11px] text-white/40">{fmtRelative(l.created_at)}</div>
+                    {qSummaryM && (
+                      <div className="text-[10.5px] text-white/55 mt-0.5 truncate" title={qSummaryM}>
+                        {qSummaryM}
+                      </div>
+                    )}
                   </div>
                   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold border ${meta.sourceCls} shrink-0`}>
                     {meta.sourceIcon} {meta.sourceLabel}

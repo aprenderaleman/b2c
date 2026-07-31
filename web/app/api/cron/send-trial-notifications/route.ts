@@ -67,7 +67,7 @@ async function run(req: Request) {
     .select(`
       id, scheduled_at, duration_minutes, short_code, lead_id, teacher_id,
       title, deposit_paid_at,
-      lead:leads!inner(id, name, email, whatsapp_normalized, language, german_level, goal),
+      lead:leads!inner(id, name, email, whatsapp_normalized, language, german_level, goal, landing_intent, reserva_prioritaria, qualification_answers),
       teacher:teachers!inner(users!inner(full_name, email))
     `)
     .eq("is_trial", true)
@@ -90,10 +90,14 @@ async function run(req: Request) {
     title: string | null; deposit_paid_at: string | null;
     lead: { id: string; name: string | null; email: string | null;
             whatsapp_normalized: string | null; language: "es" | "de" | null;
-            german_level: string | null; goal: string | null; } |
+            german_level: string | null; goal: string | null;
+            landing_intent: string | null; reserva_prioritaria: boolean | null;
+            qualification_answers: Record<string, string> | null; } |
           Array<{ id: string; name: string | null; email: string | null;
                   whatsapp_normalized: string | null; language: "es" | "de" | null;
-                  german_level: string | null; goal: string | null; }>;
+                  german_level: string | null; goal: string | null;
+                  landing_intent: string | null; reserva_prioritaria: boolean | null;
+                  qualification_answers: Record<string, string> | null; }>;
     teacher: { users: { full_name: string | null; email: string } |
                        Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } |
@@ -129,7 +133,12 @@ async function run(req: Request) {
     const language: "es" | "de" = lead.language === "de" ? "de" : "es";
     const leadFirst = (lead.name ?? "").trim().split(/\s+/)[0] || (lead.name ?? "");
     const durationMin = c.duration_minutes ?? 30;
-    const paid = !!c.deposit_paid_at;
+    // "paid" ahora combina el legacy classes.deposit_paid_at (flow
+    // pre-2026-07) con leads.reserva_prioritaria (nuevo flow depósito
+    // introducido con Meta Ads Paid 2026-07-28).
+    const paid = !!c.deposit_paid_at || lead.reserva_prioritaria === true;
+    const isMetaAdsPaid = lead.landing_intent === "meta-ads-paid";
+    const goalLabel = qualificationGoalLabel((lead.qualification_answers ?? {}).goal);
 
     const startDate = new Date(c.scheduled_at).toLocaleString(language === "de" ? "de-DE" : "es-ES", {
       timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long",
@@ -194,9 +203,22 @@ async function run(req: Request) {
     // la respuesta.
     let waOk: boolean | null = null;
     if (lead.whatsapp_normalized) {
-      const waText = language === "de"
-        ? `Hallo ${leadFirst}! Ich bin Stiv von der Akademie Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\n🔗 Hier kommst du am Tag der Stunde rein:\n${joinUrl}\n\n⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.\n\nAntworte mit:\n👉 "CONFIRMO" wenn du dabei bist\n👉 "CAMBIAR" wenn du einen anderen Termin brauchst\n\nOhne deine Antwort innerhalb von 12h wird dein Slot für einen anderen Schüler auf der Warteliste freigegeben.\n\n— Stiv · Aprender-Aleman.de`
-        : `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\n⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.\n\nResponde con:\n👉 "CONFIRMO" si vas a asistir\n👉 "CAMBIAR" si necesitas otra fecha\n\nSin tu respuesta en 12h, tu slot se libera para otro estudiante en lista de espera.\n\n— Stiv · Aprender-Aleman.de`;
+      // Variantes específicas del funnel /meta-ads-paid (Gelfis
+      // 2026-07-28). Los demás flows mantienen el copy estándar sin
+      // mención al depósito.
+      let waText: string;
+      if (isMetaAdsPaid && paid) {
+        // Pagó → confirmación VIP con mención a su meta.
+        waText = `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\n🌟 Tu Agenda Prioritaria está confirmada para\n${startDate}.\n\nTu profesor ya prepara la clase enfocada en ${goalLabel}. 🎯\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\n⚠️ Responde "CONFIRMO" para asegurar tu asistencia o "CAMBIAR" si necesitas otro horario.\n\n— Stiv · Aprender-Aleman.de`;
+      } else if (isMetaAdsPaid && !paid) {
+        // No pagó → confirmación normal + soft-reminder del depósito.
+        waText = `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\nTu clase está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\n💡 ¿Quieres activar tu Agenda Prioritaria por 10€? Tu profesor prepara la clase para tu objetivo y los 10€ se descuentan íntegros de tu programa:\n${STRIPE_DEPOSIT_URL}\n\n⚠️ Responde "CONFIRMO" para asegurar tu asistencia o "CAMBIAR" si necesitas otra fecha.\n\n— Stiv · Aprender-Aleman.de`;
+      } else {
+        // Flow estándar (no meta-ads-paid) — mantiene el copy actual.
+        waText = language === "de"
+          ? `Hallo ${leadFirst}! Ich bin Stiv von der Akademie Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\n🔗 Hier kommst du am Tag der Stunde rein:\n${joinUrl}\n\n⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.\n\nAntworte mit:\n👉 "CONFIRMO" wenn du dabei bist\n👉 "CAMBIAR" wenn du einen anderen Termin brauchst\n\nOhne deine Antwort innerhalb von 12h wird dein Slot für einen anderen Schüler auf der Warteliste freigegeben.\n\n— Stiv · Aprender-Aleman.de`
+          : `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\n⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.\n\nResponde con:\n👉 "CONFIRMO" si vas a asistir\n👉 "CAMBIAR" si necesitas otra fecha\n\nSin tu respuesta en 12h, tu slot se libera para otro estudiante en lista de espera.\n\n— Stiv · Aprender-Aleman.de`;
+      }
 
       const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
       waOk = r?.ok ?? false;
@@ -216,4 +238,21 @@ async function run(req: Request) {
   }
 
   return NextResponse.json({ ok: true, processed: results.length, results });
+}
+
+/**
+ * Helper: mapea la respuesta del wizard /meta-ads-paid a un label
+ * legible para inyectar en los mensajes ("mejorar tu trabajo",
+ * "tu Ausbildung"…). Fallback genérico si el lead no completó el
+ * paso 1 o si el goal es distinto.
+ */
+function qualificationGoalLabel(goal: string | null | undefined): string {
+  switch (goal) {
+    case "job":         return "mejorar tu trabajo";
+    case "ausbildung":  return "tu Ausbildung o estudios";
+    case "citizenship": return "la nacionalidad y trámites";
+    case "daily_life":  return "tu día a día en alemán";
+    case "moving":      return "tu mudanza a Alemania/Suiza";
+    default:            return "tus objetivos con el alemán";
+  }
 }

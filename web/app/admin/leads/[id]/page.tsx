@@ -4,6 +4,7 @@ import { getGelfisNotes, getLeadById, getTimeline } from "@/lib/dashboard";
 import { supabaseAdmin } from "@/lib/supabase";
 import { formatBerlinFull } from "@/lib/time";
 import { StatusBadge } from "@/components/admin/StatusBadge";
+import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
 import { LeadActions } from "@/components/admin/LeadActions";
 import { ColdCallToggle } from "@/components/admin/ColdCallToggle";
 import { WaQuickActions } from "@/components/admin/WaQuickActions";
@@ -145,6 +146,11 @@ export default async function LeadDetail({
               <span className="text-slate-500 dark:text-slate-400">{lead.source ?? "—"}</span>
               <span>·</span>
               <StatusBadge status={lead.status} />
+              <PriorityBadges flags={{
+                reservaPrioritaria: lead.reserva_prioritaria,
+                priorityDeadline:   lead.priority_deadline,
+                depositIntentAt:    lead.deposit_intent_at,
+              }} />
             </div>
             {lead.motivo_inicial && (
               <div className="mt-2 inline-flex items-center gap-1.5 rounded-full
@@ -154,6 +160,16 @@ export default async function LeadDetail({
                 {motivoInicialLabel(lead.motivo_inicial)}
               </div>
             )}
+            {(() => {
+              const q = summarizeQualification(lead.qualification_answers);
+              if (!q) return null;
+              return (
+                <div className="mt-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 px-3 py-2 text-[12.5px] text-slate-700 dark:text-slate-300">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">Meta Ads Paid · </span>
+                  {q}
+                </div>
+              );
+            })()}
           </div>
           <div className="flex flex-col gap-2 items-end">
             <LeadActions

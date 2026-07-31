@@ -46,6 +46,15 @@ export type LandingStep0Props = {
    *  landings paid para insertar prueba social sin bloatear el
    *  componente. Se muestra tanto en desktop como en mobile. */
   afterBullets?: ReactNode;
+  /** Href override del CTA. Default: /agendar/cuando?landing=... */
+  ctaHref?: string;
+  /** Microcopy bajo el botón. Default: "Sin tarjeta — Agenda tu Clase gratis". */
+  microcopy?: string;
+  /** Bloque opcional bajo el microcopy — usado para propuesta de valor
+   *  extra (e.g. "¿Por qué 10€?" en la variante paid). */
+  belowCtaNote?: ReactNode;
+  /** Píldora opcional sobre el H1 (e.g. "Clase de prueba · Agenda Prioritaria 10€"). */
+  tagline?: string;
 };
 
 function isBullet(b: unknown): b is LandingBullet {
@@ -57,6 +66,10 @@ export function LandingStep0({
   presetMotivo = null, landingIntent,
   ctaLabel = "Reservar Clase de Alemán",
   afterBullets = null,
+  ctaHref: ctaHrefOverride,
+  microcopy = "Sin tarjeta — Agenda tu Clase gratis",
+  belowCtaNote = null,
+  tagline,
 }: LandingStep0Props) {
   // El CTA verde dirige a /agendar/cuando?landing={slug}&motivo={x}
   // para preservar atribución (Gelfis 2026-06-15). /agendar/cuando
@@ -72,7 +85,8 @@ export function LandingStep0({
   }, [landingIntent]);
 
   // Href único (evita duplicar la URL entre el CTA inline y el sticky).
-  const ctaHref = `/agendar/cuando?landing=${encodeURIComponent(landingIntent)}${presetMotivo ? `&motivo=${encodeURIComponent(presetMotivo)}` : ""}`;
+  const ctaHref = ctaHrefOverride
+    ?? `/agendar/cuando?landing=${encodeURIComponent(landingIntent)}${presetMotivo ? `&motivo=${encodeURIComponent(presetMotivo)}` : ""}`;
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-white"
@@ -121,7 +135,12 @@ export function LandingStep0({
                          mx-auto max-w-xl w-full
                          pb-28 md:pb-10">
 
-          {/* Badge de recompensa GRATIS */}
+          {/* Tagline píldora opcional (variante paid: "Clase de prueba · 10€"). */}
+          {tagline && (
+            <p className="mb-2 inline-flex items-center gap-1 rounded-full bg-amber-100 text-amber-900 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider">
+              {tagline}
+            </p>
+          )}
           {/* H1 — keyword target server-rendered para SEO */}
           <h1 className="text-[26px] sm:text-[30px] md:text-[32px] lg:text-[38px]
                          font-extrabold tracking-tight text-slate-900 leading-tight">
@@ -169,6 +188,16 @@ export function LandingStep0({
               landings paid inyectan entre bullets y bloque de cierre. */}
           {afterBullets}
 
+          {/* belowCtaNote mobile-only (el amber card está md:hidden, así
+              que sin este bloque el mensaje "¿Por qué 10€?" no se ve
+              en mobile). Se renderiza también dentro del amber card
+              para desktop. */}
+          {belowCtaNote && (
+            <div className="md:hidden mt-6 rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+              {belowCtaNote}
+            </div>
+          )}
+
           {/* CTA principal — visible SOLO en desktop (hidden md:block).
               En mobile el único CTA es el sticky bottom (Gelfis
               2026-07-21) para no duplicar botones. Card pastel con
@@ -193,8 +222,13 @@ export function LandingStep0({
               <span>{ctaLabel}</span>
             </Link>
             <p className="mt-2 text-center text-[11.5px] text-slate-600 leading-snug">
-              Sin tarjeta — Agenda tu Clase gratis
+              {microcopy}
             </p>
+            {belowCtaNote && (
+              <div className="mt-3 pt-3 border-t border-amber-200/60">
+                {belowCtaNote}
+              </div>
+            )}
           </div>
 
           {/* Rating con 5 estrellas + +500 alumnos + verificado */}

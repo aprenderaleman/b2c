@@ -7,6 +7,7 @@ import {
   type TrialClassRow,
 } from "@/lib/trial-classes";
 import { CancelTrialClassButton } from "@/components/CancelTrialClassButton";
+import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
 import { DeleteTrialClassButton } from "@/components/DeleteTrialClassButton";
 import { ConvertLeadModal } from "@/components/admin/ConvertLeadModal";
 import Link from "next/link";
@@ -109,13 +110,27 @@ export function TrialHubCard({
               </div>
 
               <div className="mt-2">
-                <div className="text-base font-bold text-slate-900 dark:text-slate-50">
+                <div className="text-base font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2 flex-wrap">
                   {row.leadName || "(sin nombre)"}
+                  <PriorityBadges flags={{
+                    reservaPrioritaria: row.reservaPrioritaria,
+                    priorityDeadline:   row.priorityDeadline,
+                    depositIntentAt:    row.depositIntentAt,
+                  }} />
                 </div>
                 <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 flex-wrap">
                   {row.leadGermanLevel && <span>Nivel <strong className="text-slate-700 dark:text-slate-200">{row.leadGermanLevel}</strong></span>}
                   {row.leadGoal && <><span>·</span><span>{formatGoalEs(row.leadGoal)}</span></>}
                 </div>
+                {(() => {
+                  const q = summarizeQualification(row.qualificationAnswers);
+                  if (!q) return null;
+                  return (
+                    <div className="mt-1 text-[11.5px] text-slate-600 dark:text-slate-400 leading-snug">
+                      📋 {q}
+                    </div>
+                  );
+                })()}
               </div>
 
               {isAdmin && row.leadEmail && (
