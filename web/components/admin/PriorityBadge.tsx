@@ -60,13 +60,12 @@ export function PriorityBadges({ flags }: { flags: PriorityFlags }) {
 }
 
 /**
- * Row background helper — devuelve una class util para destacar la
- * fila entera en las tablas del CRM (dorada para VIP, roja tenue
- * para urgente). Combínalo con la row de la tabla.
+ * Row background helper — devuelto vacío (Gelfis 2026-07-28: la fila
+ * dorada/roja completa destacaba demasiado en la tabla del CRM). Los
+ * badges 💰/🔥/💎 al lado del nombre siguen siendo la señal visual.
+ * Mantengo la firma para no romper callers.
  */
-export function priorityRowClass(flags: PriorityFlags): string {
-  if (flags.reservaPrioritaria === true) return "bg-amber-50/40 hover:bg-amber-100/40";
-  if (flags.priorityDeadline === "concrete") return "bg-red-50/25 hover:bg-red-100/30";
+export function priorityRowClass(_flags: PriorityFlags): string {
   return "";
 }
 
