@@ -9,9 +9,8 @@ import {
 import { CancelTrialClassButton } from "@/components/CancelTrialClassButton";
 import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
 import { DeleteTrialClassButton } from "@/components/DeleteTrialClassButton";
-import { ConvertLeadModal } from "@/components/admin/ConvertLeadModal";
 import Link from "next/link";
-import { MarkSaleModal } from "@/components/closer/MarkSaleModal";
+import { ConfirmPaymentModal } from "@/components/teacher/ConfirmPaymentModal";
 import { NotesField } from "./NotesField";
 import { PaymentLinkModal } from "./PaymentLinkModal";
 import { ScheduleClassModal } from "./ScheduleClassModal";
@@ -34,9 +33,8 @@ export function TrialHubCard({
 }) {
   const router = useRouter();
   const [paymentOpen, setPaymentOpen] = useState(false);
-  const [convertOpen, setConvertOpen] = useState(false);
+  const [confirmPaymentOpen, setConfirmPaymentOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [markSaleOpen, setMarkSaleOpen] = useState(false);
   const [escalateOpen, setEscalateOpen] = useState(false);
   const [escalateMsg, setEscalateMsg] = useState("");
   const [escalating, setEscalating] = useState(false);
@@ -402,20 +400,10 @@ export function TrialHubCard({
               {!isConverted && row.leadId && (
                 <button
                   type="button"
-                  onClick={() => setConvertOpen(true)}
-                  className="text-xs font-semibold rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
+                  onClick={() => setConfirmPaymentOpen(true)}
+                  className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1.5 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25"
                 >
-                  🎓 Convertir a estudiante
-                </button>
-              )}
-
-              {!isConverted && row.leadId && (
-                <button
-                  type="button"
-                  onClick={() => setMarkSaleOpen(true)}
-                  className="text-xs font-semibold rounded-full border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-1.5 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20"
-                >
-                  💰 Marcar como vendido
+                  💰 Confirmar Pago
                 </button>
               )}
 
@@ -557,28 +545,16 @@ export function TrialHubCard({
         />
       )}
 
-      {convertOpen && row.leadId && (
-        <ConvertLeadModal
-          lead={{
-            id:           row.leadId,
-            name:         row.leadName || "",
-            email:        row.leadEmail,
-            phone:        row.leadWhatsapp || "",
-            language:     row.leadLanguage || "es",
-            german_level: row.leadGermanLevel || "A0",
-            goal:         row.leadGoal,
-          }}
-          open={convertOpen}
-          onClose={() => setConvertOpen(false)}
-          convertEndpoint={`/api/teacher/trial/${row.leadId}/convert`}
-        />
-      )}
-
-      {markSaleOpen && row.leadId && (
-        <MarkSaleModal
+      {confirmPaymentOpen && row.leadId && (
+        <ConfirmPaymentModal
           leadId={row.leadId}
-          onClose={() => setMarkSaleOpen(false)}
-          endpoint={`/api/teacher/trial/${row.leadId}/mark-sale`}
+          leadName={row.leadName || ""}
+          leadEmail={row.leadEmail}
+          leadPhone={row.leadWhatsapp || null}
+          leadLanguage={row.leadLanguage || "es"}
+          leadGermanLevel={row.leadGermanLevel}
+          leadGoal={row.leadGoal}
+          onClose={() => setConfirmPaymentOpen(false)}
         />
       )}
 
