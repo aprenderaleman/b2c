@@ -8,6 +8,7 @@ import {
   getRevenueByStudent,
   getTeacherPayrollBreakdown,
   getLtvWithProjections,
+  getGoogleAdsLastSync,
   resolvePeriod,
   moneyFromCents,
 } from "@/lib/empresa";
@@ -31,13 +32,19 @@ export default async function EmpresaPage({
   const preset = (sp.period ?? "month") as PeriodPreset;
   const { from, to, prevFrom, prevTo } = resolvePeriod(preset, sp.from, sp.to);
 
-  const [m, monthly, pulse, revenueByStudent, payrollBreakdown] = await Promise.all([
+  const [m, monthly, pulse, revenueByStudent, payrollBreakdown, adsLastSync] = await Promise.all([
     getEmpresaMetrics(from, to, prevFrom, prevTo),
     getMonthlyReport(8),
     getPulseData(from, to, prevFrom, prevTo),
     getRevenueByStudent(from, to),
     getTeacherPayrollBreakdown(from, to),
+    getGoogleAdsLastSync(),
   ]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const adsStaleDays = adsLastSync
+    ? Math.floor((new Date(today).getTime() - new Date(adsLastSync).getTime()) / 86_400_000)
+    : null;
 
   const adsEfficiency = computeAdsScore(m.marketing.roas, m.funnel.rate_lead_to_sale);
   const ltv = await getLtvWithProjections(m.marketing.cac_cents).catch(() => ({
@@ -161,6 +168,12 @@ export default async function EmpresaPage({
 
       {/* ============ SECCION 4: Inversion Marketing ============ */}
       <Panel title="Inversion Marketing">
+        {adsStaleDays !== null && adsStaleDays > 2 && (
+          <div className="mt-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
+            <span className="font-semibold">Datos desactualizados:</span> Último sync de Google Ads: {adsLastSync} ({adsStaleDays} días atrás).
+            El cron de sync puede estar fallando. Sube un CSV diario o revisa las credenciales de Google Ads API.
+          </div>
+        )}
         {m.marketing.has_ads_data ? (
           <div className="mt-4 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
             <MiniStat label="Gasto Ads" value={moneyFromCents(m.marketing.ads_spend_cents)} />
@@ -187,95 +200,178 @@ export default async function EmpresaPage({
           <MiniStat label="LTV/CAC (proy.)" value={`${ltv.ltv_cac_projected.toFixed(1)}x`} />
         </div>
         {ltv.clients.length > 0 && (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 text-left text-slate-500 dark:text-slate-400">
-                  <th className="pb-2 font-medium">Cliente</th>
-                  <th className="pb-2 font-medium">Tipo</th>
-                  <th className="pb-2 font-medium text-right">Cobrado</th>
-                  <th className="pb-2 font-medium text-right">Pendiente</th>
-                  <th className="pb-2 font-medium text-right">LTV Proyectado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {ltv.clients.slice(0, 20).map((c) => (
-                  <tr key={c.email}>
-                    <td className="py-1.5 text-slate-700 dark:text-slate-200">{c.name}</td>
-                    <td className="py-1.5 text-slate-500">
-                      {c.type === "subscription" ? "Suscripcion" : "Pack unico"}
-                    </td>
-                    <td className="py-1.5 text-right font-mono text-slate-700 dark:text-slate-200">
-                      {moneyFromCents(c.paid_cents)}
-                    </td>
-                    <td className="py-1.5 text-right font-mono text-amber-600 dark:text-amber-400">
-                      {c.pending_cents > 0 ? moneyFromCents(c.pending_cents) : "—"}
-                    </td>
-                    <td className="py-1.5 text-right font-mono font-semibold text-slate-900 dark:text-slate-100">
-                      {moneyFromCents(c.ltv_projected_cents)}
-                    </td>
+          <>
+            {/* Mobile: cards apilados */}
+            <div className="sm:hidden mt-4 space-y-2">
+              {ltv.clients.slice(0, 20).map((c) => (
+                <article
+                  key={c.email}
+                  className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[13.5px] font-semibold text-slate-900 dark:text-slate-50 truncate">
+                        {c.name}
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        {c.type === "subscription" ? "Suscripcion" : "Pack unico"}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-[13px] font-mono font-bold text-slate-900 dark:text-slate-100">
+                        {moneyFromCents(c.ltv_projected_cents)}
+                      </div>
+                      <div className="text-[10px] text-slate-500">LTV proy.</div>
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11.5px]">
+                    <span className="text-slate-600 dark:text-slate-400">
+                      Cobrado: <strong className="font-mono text-slate-800 dark:text-slate-200">{moneyFromCents(c.paid_cents)}</strong>
+                    </span>
+                    {c.pending_cents > 0 && (
+                      <span className="text-amber-700 dark:text-amber-400">
+                        Pend.: <strong className="font-mono">{moneyFromCents(c.pending_cents)}</strong>
+                      </span>
+                    )}
+                  </div>
+                </article>
+              ))}
+              {ltv.clients.length > 20 && (
+                <p className="mt-2 text-[11px] text-slate-400">Mostrando top 20 de {ltv.clients.length} clientes</p>
+              )}
+            </div>
+
+            {/* Desktop: tabla original */}
+            <div className="hidden sm:block mt-4 overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700 text-left text-slate-500 dark:text-slate-400">
+                    <th className="pb-2 font-medium">Cliente</th>
+                    <th className="pb-2 font-medium">Tipo</th>
+                    <th className="pb-2 font-medium text-right">Cobrado</th>
+                    <th className="pb-2 font-medium text-right">Pendiente</th>
+                    <th className="pb-2 font-medium text-right">LTV Proyectado</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {ltv.clients.length > 20 && (
-              <p className="mt-2 text-xs text-slate-400">Mostrando top 20 de {ltv.clients.length} clientes</p>
-            )}
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {ltv.clients.slice(0, 20).map((c) => (
+                    <tr key={c.email}>
+                      <td className="py-1.5 text-slate-700 dark:text-slate-200">{c.name}</td>
+                      <td className="py-1.5 text-slate-500">
+                        {c.type === "subscription" ? "Suscripcion" : "Pack unico"}
+                      </td>
+                      <td className="py-1.5 text-right font-mono text-slate-700 dark:text-slate-200">
+                        {moneyFromCents(c.paid_cents)}
+                      </td>
+                      <td className="py-1.5 text-right font-mono text-amber-600 dark:text-amber-400">
+                        {c.pending_cents > 0 ? moneyFromCents(c.pending_cents) : "—"}
+                      </td>
+                      <td className="py-1.5 text-right font-mono font-semibold text-slate-900 dark:text-slate-100">
+                        {moneyFromCents(c.ltv_projected_cents)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {ltv.clients.length > 20 && (
+                <p className="mt-2 text-xs text-slate-400">Mostrando top 20 de {ltv.clients.length} clientes</p>
+              )}
+            </div>
+          </>
         )}
       </Panel>
 
       {/* ============ SECCION 5: Nominas profesores ============ */}
       <Panel title="Nominas profesores">
         {payrollBreakdown.length > 0 ? (
-          <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 dark:border-slate-700 text-left text-xs text-slate-500 dark:text-slate-400">
-                  <th className="pb-2 font-medium">Profesor</th>
-                  <th className="pb-2 font-medium text-center">Clases</th>
-                  <th className="pb-2 font-medium text-center">Grupales</th>
-                  <th className="pb-2 font-medium text-center">Individuales</th>
-                  <th className="pb-2 font-medium text-right">Total</th>
-                  <th className="pb-2 font-medium text-center">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {payrollBreakdown.map((t) => (
-                  <tr key={t.teacher_name}>
-                    <td className="py-2 text-slate-700 dark:text-slate-200 font-medium">{t.teacher_name}</td>
-                    <td className="py-2 text-center text-slate-600 dark:text-slate-300">{t.classes_count}</td>
-                    <td className="py-2 text-center text-slate-600 dark:text-slate-300">{t.group_classes}</td>
-                    <td className="py-2 text-center text-slate-600 dark:text-slate-300">{t.individual_classes}</td>
-                    <td className="py-2 text-right font-mono text-slate-900 dark:text-slate-100">
-                      {moneyFromCents(t.total_cents)}
-                    </td>
-                    <td className="py-2 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                        t.paid
-                          ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
-                          : "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"
-                      }`}>
-                        {t.paid ? "Pagado" : "Pendiente"}
-                      </span>
-                    </td>
+          <>
+            {/* Mobile: cards apilados con total al final */}
+            <div className="sm:hidden mt-3 space-y-2">
+              {payrollBreakdown.map((t) => (
+                <article
+                  key={t.teacher_name}
+                  className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13.5px] font-semibold text-slate-900 dark:text-slate-50 truncate">
+                        {t.teacher_name}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        {t.classes_count} clases · {t.group_classes} grupales · {t.individual_classes} individuales
+                      </div>
+                    </div>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      t.paid
+                        ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                        : "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                    }`}>
+                      {t.paid ? "Pagado" : "Pendiente"}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 text-[15px] font-mono font-bold text-slate-900 dark:text-slate-100">
+                    {moneyFromCents(t.total_cents)}
+                  </div>
+                </article>
+              ))}
+              <div className="rounded-xl border-2 border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50 p-3 flex items-center justify-between">
+                <span className="text-[13px] font-bold text-slate-700 dark:text-slate-200">Total</span>
+                <span className="text-[15px] font-mono font-bold text-slate-900 dark:text-slate-100">
+                  {moneyFromCents(payrollBreakdown.reduce((s, t) => s + t.total_cents, 0))}
+                </span>
+              </div>
+            </div>
+
+            {/* Desktop: tabla original */}
+            <div className="hidden sm:block mt-3 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700 text-left text-xs text-slate-500 dark:text-slate-400">
+                    <th className="pb-2 font-medium">Profesor</th>
+                    <th className="pb-2 font-medium text-center">Clases</th>
+                    <th className="pb-2 font-medium text-center">Grupales</th>
+                    <th className="pb-2 font-medium text-center">Individuales</th>
+                    <th className="pb-2 font-medium text-right">Total</th>
+                    <th className="pb-2 font-medium text-center">Estado</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-slate-200 dark:border-slate-700 font-semibold">
-                  <td className="pt-2">Total</td>
-                  <td className="pt-2 text-center">{payrollBreakdown.reduce((s, t) => s + t.classes_count, 0)}</td>
-                  <td className="pt-2 text-center">{payrollBreakdown.reduce((s, t) => s + t.group_classes, 0)}</td>
-                  <td className="pt-2 text-center">{payrollBreakdown.reduce((s, t) => s + t.individual_classes, 0)}</td>
-                  <td className="pt-2 text-right font-mono">
-                    {moneyFromCents(payrollBreakdown.reduce((s, t) => s + t.total_cents, 0))}
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {payrollBreakdown.map((t) => (
+                    <tr key={t.teacher_name}>
+                      <td className="py-2 text-slate-700 dark:text-slate-200 font-medium">{t.teacher_name}</td>
+                      <td className="py-2 text-center text-slate-600 dark:text-slate-300">{t.classes_count}</td>
+                      <td className="py-2 text-center text-slate-600 dark:text-slate-300">{t.group_classes}</td>
+                      <td className="py-2 text-center text-slate-600 dark:text-slate-300">{t.individual_classes}</td>
+                      <td className="py-2 text-right font-mono text-slate-900 dark:text-slate-100">
+                        {moneyFromCents(t.total_cents)}
+                      </td>
+                      <td className="py-2 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                          t.paid
+                            ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+                            : "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                        }`}>
+                          {t.paid ? "Pagado" : "Pendiente"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-slate-200 dark:border-slate-700 font-semibold">
+                    <td className="pt-2">Total</td>
+                    <td className="pt-2 text-center">{payrollBreakdown.reduce((s, t) => s + t.classes_count, 0)}</td>
+                    <td className="pt-2 text-center">{payrollBreakdown.reduce((s, t) => s + t.group_classes, 0)}</td>
+                    <td className="pt-2 text-center">{payrollBreakdown.reduce((s, t) => s + t.individual_classes, 0)}</td>
+                    <td className="pt-2 text-right font-mono">
+                      {moneyFromCents(payrollBreakdown.reduce((s, t) => s + t.total_cents, 0))}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </>
         ) : (
           <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
             Sin registros de nomina en este periodo.

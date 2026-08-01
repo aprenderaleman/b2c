@@ -145,36 +145,72 @@ export default async function FinanzasPage({
             Aún no hay horas registradas este mes.
           </p>
         ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-slate-600 dark:text-slate-300 text-xs">
-                <tr>
-                  <Th>Profesor</Th>
-                  <Th>Clases</Th>
-                  <Th>Horas</Th>
-                  <Th>Ganancia</Th>
-                  <Th>Estado</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
-                {earnings.map(e => (
-                  <tr key={e.teacher_id}>
-                    <Td>{e.teacher_name ?? e.teacher_email}</Td>
-                    <Td>{e.classes_count}</Td>
-                    <Td>{(e.total_minutes / 60).toFixed(1)} h</Td>
-                    <Td className="font-mono">{moneyFromCents(e.amount_cents, e.currency)}</Td>
-                    <Td>
-                      {e.paid ? (
-                        <span className="text-xs text-emerald-700 dark:text-emerald-300">Pagado</span>
-                      ) : (
-                        <span className="text-xs text-amber-700 dark:text-amber-300">Pendiente</span>
-                      )}
-                    </Td>
+          <>
+            {/* Mobile: cards apilados — evita el squeeze de la tabla 5-col. */}
+            <div className="sm:hidden mt-4 space-y-2.5">
+              {earnings.map(e => (
+                <article
+                  key={e.teacher_id}
+                  className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[14px] font-semibold text-slate-900 dark:text-slate-50 truncate">
+                        {e.teacher_name ?? e.teacher_email}
+                      </div>
+                      <div className="mt-0.5 text-[11.5px] text-slate-500 dark:text-slate-400">
+                        {e.classes_count} clases · {(e.total_minutes / 60).toFixed(1)} h
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-semibold ${
+                        e.paid
+                          ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+                          : "bg-amber-100  text-amber-800  dark:bg-amber-500/15  dark:text-amber-300"
+                      }`}
+                    >
+                      {e.paid ? "Pagado" : "Pendiente"}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 text-[15px] font-mono font-bold text-slate-900 dark:text-slate-100">
+                    {moneyFromCents(e.amount_cents, e.currency)}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {/* Desktop: tabla original con overflow-x guard */}
+            <div className="hidden sm:block mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-slate-600 dark:text-slate-300 text-xs">
+                  <tr>
+                    <Th>Profesor</Th>
+                    <Th>Clases</Th>
+                    <Th>Horas</Th>
+                    <Th>Ganancia</Th>
+                    <Th>Estado</Th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+                  {earnings.map(e => (
+                    <tr key={e.teacher_id}>
+                      <Td>{e.teacher_name ?? e.teacher_email}</Td>
+                      <Td>{e.classes_count}</Td>
+                      <Td>{(e.total_minutes / 60).toFixed(1)} h</Td>
+                      <Td className="font-mono">{moneyFromCents(e.amount_cents, e.currency)}</Td>
+                      <Td>
+                        {e.paid ? (
+                          <span className="text-xs text-emerald-700 dark:text-emerald-300">Pagado</span>
+                        ) : (
+                          <span className="text-xs text-amber-700 dark:text-amber-300">Pendiente</span>
+                        )}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
     </main>

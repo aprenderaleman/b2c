@@ -121,42 +121,78 @@ export default async function TeacherEarningsPage() {
             Aún no hay datos. Este es tu primer mes.
           </p>
         ) : (
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">
-                <tr>
-                  <Th>Mes</Th>
-                  <Th>Clases</Th>
-                  <Th>Horas</Th>
-                  <Th>Ganancia</Th>
-                  <Th>Estado</Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {months.map(m => (
-                  <tr key={m.month} className="text-slate-800 dark:text-slate-200">
-                    <Td className="capitalize font-medium">{formatMonthEs(m.month)}</Td>
-                    <Td>{m.classes_count}</Td>
-                    <Td>{(m.total_minutes / 60).toFixed(1)} h</Td>
-                    <Td className="font-semibold tabular-nums">
-                      {moneyFromCents(m.amount_cents, m.currency)}
-                    </Td>
-                    <Td>
-                      {m.paid ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Pagado
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Pendiente
-                        </span>
-                      )}
-                    </Td>
+          <>
+            {/* Mobile: cards apilados */}
+            <div className="sm:hidden mt-4 space-y-2">
+              {months.map(m => (
+                <article
+                  key={m.month}
+                  className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[14px] font-semibold text-slate-900 dark:text-slate-50 capitalize truncate">
+                        {formatMonthEs(m.month)}
+                      </div>
+                      <div className="mt-0.5 text-[11.5px] text-slate-500 dark:text-slate-400">
+                        {m.classes_count} clases · {(m.total_minutes / 60).toFixed(1)} h
+                      </div>
+                    </div>
+                    {m.paid ? (
+                      <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-500/15 px-2 py-0.5 text-[10.5px] font-medium text-emerald-700 dark:text-emerald-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Pagado
+                      </span>
+                    ) : (
+                      <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-100 dark:bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-medium text-amber-700 dark:text-amber-300">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Pendiente
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1.5 text-[16px] font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                    {moneyFromCents(m.amount_cents, m.currency)}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {/* Desktop: tabla original */}
+            <div className="hidden sm:block mt-4 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">
+                  <tr>
+                    <Th>Mes</Th>
+                    <Th>Clases</Th>
+                    <Th>Horas</Th>
+                    <Th>Ganancia</Th>
+                    <Th>Estado</Th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {months.map(m => (
+                    <tr key={m.month} className="text-slate-800 dark:text-slate-200">
+                      <Td className="capitalize font-medium">{formatMonthEs(m.month)}</Td>
+                      <Td>{m.classes_count}</Td>
+                      <Td>{(m.total_minutes / 60).toFixed(1)} h</Td>
+                      <Td className="font-semibold tabular-nums">
+                        {moneyFromCents(m.amount_cents, m.currency)}
+                      </Td>
+                      <Td>
+                        {m.paid ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 dark:bg-emerald-500/15 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Pagado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-500/15 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Pendiente
+                          </span>
+                        )}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
 
@@ -229,7 +265,33 @@ async function CommissionSection({ userId }: { userId: string }) {
           <div className="mt-3 text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
             {(totalCents / 100).toFixed(2)} EUR
           </div>
-          <div className="mt-4 overflow-x-auto">
+
+          {/* Mobile: cards apilados */}
+          <div className="sm:hidden mt-4 space-y-2">
+            {(comisiones as Array<{ id: string; monto_cents: number; moneda: string; base_amount_cents: number; comision_pct: number; created_at: string }>).map(c => (
+              <article
+                key={c.id}
+                className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-3 flex items-center justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <div className="text-[13px] font-medium text-slate-900 dark:text-slate-50">
+                    {new Date(c.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400 tabular-nums">
+                    Base {(c.base_amount_cents / 100).toFixed(2)} EUR · {c.comision_pct}%
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-[15px] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    +{(c.monto_cents / 100).toFixed(2)} EUR
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          {/* Desktop: tabla original */}
+          <div className="hidden sm:block mt-4 overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-left text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">
                 <tr>
