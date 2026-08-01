@@ -78,7 +78,7 @@ export function ConfirmPaymentModal({
       return {
         classes: totalClasses,
         detail: `${selectedRitmo.classesPerMonth} clases/mes x ${selectedGoal.months} meses = ${totalClasses} clases`,
-        price: `${selectedRitmo.pricePerMonth}€/mes | Total: ${(selectedGoal.totalCents / 100).toLocaleString("es-ES")}€`,
+        price: `${selectedRitmo.pricePerMonth}€/mes`,
       };
     }
     if (category === "one_time" && selectedOneTime) {
