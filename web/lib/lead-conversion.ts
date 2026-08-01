@@ -48,9 +48,17 @@ export type ConvertResult = {
   tempPassword: string | null;
 };
 
+export type ConvertOptions = {
+  skipLegacyCommission?: boolean;
+  stripeCustomerId?: string;
+  ofertaId?: string;
+  conversionSource?: string;
+};
+
 export async function convertLeadToStudent(
   leadId: string,
   body: ConvertInput,
+  options?: ConvertOptions,
 ): Promise<ConvertResult> {
   const sb = supabaseAdmin();
 
@@ -97,6 +105,14 @@ export async function convertLeadToStudent(
     currency:          body.currency,
   });
 
+  if (options?.stripeCustomerId || options?.ofertaId || options?.conversionSource) {
+    const extraFields: Record<string, unknown> = {};
+    if (options.stripeCustomerId) extraFields.stripe_customer_id = options.stripeCustomerId;
+    if (options.ofertaId) extraFields.oferta_id = options.ofertaId;
+    if (options.conversionSource) extraFields.conversion_source = options.conversionSource;
+    await sb.from("students").update(extraFields).eq("id", created.studentId);
+  }
+
   const trial = await getLeadTrialTeacher(lead.id);
   if (trial) {
     const updateFields: Record<string, unknown> = {
@@ -130,7 +146,7 @@ export async function convertLeadToStudent(
       .eq("id", created.studentId);
   }
 
-  if (trial) {
+  if (trial && !options?.skipLegacyCommission) {
     try {
       const { data: leadMetaRow } = await sb
         .from("leads")
@@ -231,6 +247,10 @@ export async function convertLeadToStudent(
     });
   }
 
+  await migrateLeadNotesToStudent(sb, lead.id, created.studentId).catch((e) => {
+    console.error("[convert] migrateLeadNotesToStudent failed:", e instanceof Error ? e.message : e);
+  });
+
   const waPhone = body.phone ?? lead.whatsapp_normalized;
   if (waPhone) {
     const firstName = body.fullName.split(/\s+/)[0] || body.fullName;
@@ -256,4 +276,91 @@ export async function convertLeadToStudent(
     emailSent:    emailResult.ok,
     tempPassword: emailResult.ok ? null : created.tempPassword,
   };
+}
+
+type SB = ReturnType<typeof supabaseAdmin>;
+
+async function migrateLeadNotesToStudent(
+  sb: SB,
+  leadId: string,
+  studentId: string,
+): Promise<void> {
+  const { data: gelfisNotes } = await sb
+    .from("gelfis_notes")
+    .select("note, created_at")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: true });
+
+  const { data: timelineNotes } = await sb
+    .from("lead_timeline")
+    .select("content, timestamp, author, metadata")
+    .eq("lead_id", leadId)
+    .in("type", ["teacher_note", "gelfis_note"])
+    .order("timestamp", { ascending: true });
+
+  const { data: adminUser } = await sb
+    .from("users")
+    .select("id")
+    .in("role", ["superadmin", "admin"])
+    .limit(1)
+    .maybeSingle();
+
+  let teacherUserId: string | null = null;
+  const { data: trialClass } = await sb
+    .from("trial_classes")
+    .select("teacher_id")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (trialClass?.teacher_id) {
+    const { data: teacher } = await sb
+      .from("teachers")
+      .select("user_id")
+      .eq("id", trialClass.teacher_id as string)
+      .maybeSingle();
+    teacherUserId = (teacher as { user_id: string } | null)?.user_id ?? null;
+  }
+
+  const rows: Array<{
+    target_type: string;
+    target_id: string;
+    author_id: string | null;
+    content: string;
+    created_at: string;
+  }> = [];
+
+  const seen = new Set<string>();
+
+  for (const gn of (gelfisNotes ?? []) as Array<{ note: string; created_at: string }>) {
+    const key = `gelfis:${gn.created_at}:${gn.note}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      target_type: "student",
+      target_id: studentId,
+      author_id: adminUser?.id ?? null,
+      content: gn.note,
+      created_at: gn.created_at,
+    });
+  }
+
+  for (const tn of (timelineNotes ?? []) as Array<{ content: string; timestamp: string; author: string; metadata: Record<string, unknown> | null }>) {
+    const isTeacher = tn.author === "teacher";
+    const authorId = isTeacher ? teacherUserId : (adminUser?.id ?? null);
+    const key = `${tn.author}:${tn.timestamp}:${tn.content}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      target_type: "student",
+      target_id: studentId,
+      author_id: authorId,
+      content: tn.content,
+      created_at: tn.timestamp,
+    });
+  }
+
+  if (rows.length > 0) {
+    await sb.from("admin_notes").insert(rows);
+  }
 }

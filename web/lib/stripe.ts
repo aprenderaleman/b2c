@@ -36,3 +36,18 @@ export function constructEvent(
   const client = getStripeClient(account);
   return client.webhooks.constructEvent(body, signature, secret);
 }
+
+export async function findOrCreateCustomer(
+  account: "us" | "de",
+  opts: { email: string; name?: string; metadata?: Record<string, string> },
+): Promise<string> {
+  const stripe = getStripeClient(account);
+  const existing = await stripe.customers.list({ email: opts.email, limit: 1 });
+  if (existing.data.length > 0) return existing.data[0].id;
+  const customer = await stripe.customers.create({
+    email: opts.email,
+    name: opts.name,
+    metadata: opts.metadata,
+  });
+  return customer.id;
+}

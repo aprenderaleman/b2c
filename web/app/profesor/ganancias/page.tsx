@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { formatMonthEs, getTeacherEarningsSummary, moneyFromCents } from "@/lib/finance";
+import { supabaseAdmin } from "@/lib/supabase";
 import { RefreshEarningsButton } from "./refresh-button";
 
 export const dynamic = "force-dynamic";
@@ -159,11 +160,100 @@ export default async function TeacherEarningsPage() {
         )}
       </section>
 
+      {/* ── Comisiones por conversión ── */}
+      <CommissionSection userId={session.user.id} />
+
       <p className="text-xs text-slate-400 dark:text-slate-500 text-center pb-4">
         Las ganancias se calculan automáticamente al confirmar la duración de cada clase.
         Los pagos se procesan manualmente cada mes.
       </p>
     </main>
+  );
+}
+
+const RANK_BADGES: Record<string, { emoji: string; label: string; color: string }> = {
+  starter: { emoji: "🌱", label: "Starter", color: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300" },
+  pro:     { emoji: "⭐", label: "Pro",     color: "bg-blue-100 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300" },
+  elite:   { emoji: "🔥", label: "Elite",   color: "bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300" },
+  master:  { emoji: "👑", label: "Master",  color: "bg-purple-100 dark:bg-purple-500/15 text-purple-700 dark:text-purple-300" },
+};
+
+async function CommissionSection({ userId }: { userId: string }) {
+  const sb = supabaseAdmin();
+
+  const { data: userRow } = await sb
+    .from("users")
+    .select("rango")
+    .eq("id", userId)
+    .maybeSingle();
+  const rango = (userRow as { rango: string } | null)?.rango ?? "starter";
+  const badge = RANK_BADGES[rango] ?? RANK_BADGES.starter;
+
+  const { data: rangoConfig } = await sb
+    .from("config_rangos")
+    .select("comision_pct")
+    .eq("rol", "teacher")
+    .eq("rango", rango)
+    .maybeSingle();
+  const pct = (rangoConfig as { comision_pct: number } | null)?.comision_pct ?? 5;
+
+  const currentMonth = new Date().toISOString().slice(0, 7) + "-01";
+  const { data: comisiones } = await sb
+    .from("comisiones")
+    .select("id, monto_cents, moneda, base_amount_cents, comision_pct, created_at")
+    .eq("usuario_id", userId)
+    .eq("mes", currentMonth)
+    .order("created_at", { ascending: false });
+
+  const totalCents = (comisiones ?? []).reduce(
+    (sum: number, c: { monto_cents: number }) => sum + c.monto_cents, 0
+  );
+
+  return (
+    <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Comisiones por conversion
+        </h2>
+        <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${badge.color}`}>
+          {badge.emoji} {badge.label} · {pct}%
+        </span>
+      </div>
+
+      {(comisiones ?? []).length === 0 ? (
+        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
+          Sin comisiones este mes. Cada alumno que conviertas genera una comision del {pct}% sobre cada pago.
+        </p>
+      ) : (
+        <>
+          <div className="mt-3 text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+            {(totalCents / 100).toFixed(2)} EUR
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wide">
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Pago base</Th>
+                  <Th>%</Th>
+                  <Th>Comision</Th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {(comisiones as Array<{ id: string; monto_cents: number; moneda: string; base_amount_cents: number; comision_pct: number; created_at: string }>).map(c => (
+                  <tr key={c.id} className="text-slate-800 dark:text-slate-200">
+                    <Td>{new Date(c.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}</Td>
+                    <Td className="tabular-nums">{(c.base_amount_cents / 100).toFixed(2)} EUR</Td>
+                    <Td>{c.comision_pct}%</Td>
+                    <Td className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{(c.monto_cents / 100).toFixed(2)} EUR</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 

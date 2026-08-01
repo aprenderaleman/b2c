@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabase";
 import { verifyTrialToken } from "@/lib/trial-token";
-import { stripeUS } from "@/lib/stripe";
+import { stripeUS, findOrCreateCustomer } from "@/lib/stripe";
 
 /**
  * POST /api/public/deposit-checkout
@@ -109,6 +109,18 @@ async function handle(req: Request) {
   const successUrl = `${SITE_URL}/confirmacion?${returnQuery}&deposito=ok`;
   const cancelUrl  = `${SITE_URL}/confirmacion?${returnQuery}`;
 
+  let customerId: string | undefined;
+  if (lead.email) {
+    try {
+      customerId = await findOrCreateCustomer("us", {
+        email: lead.email,
+        metadata: { lead_id: leadId },
+      });
+    } catch (err) {
+      console.warn("[deposit-checkout] findOrCreateCustomer failed, falling back to customer_email:", err);
+    }
+  }
+
   const priceId = process.env.STRIPE_DEPOSIT_PRICE_ID_US;
   const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = priceId
     ? [{ price: priceId, quantity: 1 }]
@@ -129,6 +141,7 @@ async function handle(req: Request) {
     class_id: classId,
     priceId:  priceId ?? "(inline price_data)",
     success:  successUrl,
+    customerId: customerId ?? "(email fallback)",
   });
 
   let session;
@@ -136,7 +149,7 @@ async function handle(req: Request) {
     session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
-      customer_email: lead.email ?? undefined,
+      ...(customerId ? { customer: customerId } : { customer_email: lead.email ?? undefined }),
       line_items: lineItems,
       success_url: successUrl,
       cancel_url:  cancelUrl,
@@ -145,8 +158,6 @@ async function handle(req: Request) {
         lead_id:  leadId,
         class_id: classId,
       },
-      // También en payment_intent para que llegue al webhook cuando el
-      // evento sea payment_intent.succeeded en vez de checkout.completed.
       payment_intent_data: {
         metadata: {
           type:     "trial_deposit",

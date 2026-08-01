@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { canBookClass } from "./class-balance";
 
 // =============================================================================
 // Types
@@ -66,6 +67,8 @@ export type CreateClassInput = {
   topic:               string | null;
   notesAdmin:          string | null;
   createdByUserId:     string | null;
+  adminOverride?:      boolean;
+  isTrial?:            boolean;
 };
 
 // Cap to avoid someone accidentally generating 500 classes.
@@ -97,6 +100,22 @@ export async function createClass(input: CreateClassInput): Promise<{
   }
   if (input.type === "individual" && input.studentIds.length !== 1) {
     throw new Error("individual classes must have exactly one student");
+  }
+
+  // Balance enforcement: check each student has enough classes available.
+  // Trials and admin-created classes bypass the check.
+  if (!input.isTrial && !input.adminOverride) {
+    const dates = expandRecurrence(
+      input.scheduledAt,
+      input.recurrencePattern,
+      input.recurrenceEndDate,
+    );
+    for (const sid of input.studentIds) {
+      const check = await canBookClass(sid, dates.length, false);
+      if (!check.allowed) {
+        throw new Error(check.reason ?? "balance_exceeded");
+      }
+    }
   }
 
   const sb = supabaseAdmin();

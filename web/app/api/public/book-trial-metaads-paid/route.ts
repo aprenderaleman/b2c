@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
-import { stripeUS } from "@/lib/stripe";
+import { stripeUS, findOrCreateCustomer } from "@/lib/stripe";
 import { buildTrialToken } from "@/lib/trial-token";
 
 /**
@@ -159,6 +159,17 @@ async function handle(req: Request) {
   // 'trial_deposit_metaads' → el webhook _shared.ts flipea
   // reserva_prioritaria igual que el flow deposit-checkout.
   const stripe = stripeUS();
+
+  let customerId: string | undefined;
+  try {
+    customerId = await findOrCreateCustomer("us", {
+      email: b.email,
+      metadata: { lead_id: leadId, source: "meta-ads-paid" },
+    });
+  } catch (err) {
+    console.warn("[book-trial-metaads-paid] findOrCreateCustomer failed:", err);
+  }
+
   const priceId = process.env.STRIPE_DEPOSIT_PRICE_ID_US;
   const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = priceId
     ? [{ price: priceId, quantity: 1 }]
@@ -179,7 +190,7 @@ async function handle(req: Request) {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       payment_method_types: ["card"],
-      customer_email: b.email,
+      ...(customerId ? { customer: customerId } : { customer_email: b.email }),
       line_items: lineItems,
       success_url: `${confirmacionUrl}&deposito=ok`,
       cancel_url:  confirmacionUrl,

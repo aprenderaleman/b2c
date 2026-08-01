@@ -3,6 +3,9 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getStripeClient } from "@/lib/stripe";
 import { getExchangeRate, convertToEur } from "@/lib/exchange-rates";
 import { cancelActiveChain } from "@/lib/chain-engine";
+import { sendRaw } from "@/lib/email/send";
+import { handleFirstPayment } from "@/lib/auto-conversion";
+import { registerCommission, isInCommissionWindow } from "@/lib/commission-engine";
 
 export async function processStripeEvent(
   event: Stripe.Event,
@@ -31,6 +34,11 @@ export async function processStripeEvent(
     await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent, account);
   } else if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
     await handleInvoicePaid(event.data.object as Stripe.Invoice, account);
+  } else if (
+    event.type === "customer.subscription.updated" ||
+    event.type === "customer.subscription.deleted"
+  ) {
+    await handleSubscriptionChange(event.data.object as Stripe.Subscription);
   }
 }
 
@@ -80,7 +88,35 @@ async function handleCheckoutCompleted(
     return;
   }
 
-  if (!customerEmail || amountTotal === 0) return;
+  // === Enrollment checkout — first payment triggers auto-conversion
+  if (session.metadata?.type === "enrollment") {
+    const ofertaId = session.metadata.oferta_id;
+    const leadId = session.metadata.lead_id;
+    if (!ofertaId || !leadId) {
+      console.warn("[stripe-webhook] enrollment sin oferta_id/lead_id", session.id);
+      return;
+    }
+    const stripeCustomerId = typeof session.customer === "string"
+      ? session.customer
+      : (session.customer as { id: string } | null)?.id ?? "";
+    try {
+      await handleFirstPayment({
+        leadId,
+        ofertaId,
+        stripeCustomerId,
+        stripePiId: paymentIntentId ?? session.id,
+        amountCents: amountTotal,
+        currency,
+        account,
+      });
+    } catch (err) {
+      console.error("[stripe-webhook] handleFirstPayment failed:", err);
+    }
+    return;
+  }
+
+  if (!customerEmail && !session.customer) return;
+  if (amountTotal === 0) return;
 
   // Check if payment already exists (by payment_intent_id)
   if (paymentIntentId) {
@@ -92,17 +128,17 @@ async function handleCheckoutCompleted(
     if (dup) return;
   }
 
-  // Find student by email
-  const { data: student } = await sb
-    .from("students")
-    .select("id, users!inner(email)")
-    .eq("users.email", customerEmail)
-    .maybeSingle();
+  const stripeCustomerId = typeof session.customer === "string"
+    ? session.customer
+    : (session.customer as { id: string } | null)?.id ?? null;
 
-  if (!student) {
-    console.warn(`Stripe payment for unknown student: ${customerEmail}`);
-    return;
-  }
+  const student = await resolveStudent(sb, {
+    stripeCustomerId,
+    metadata: (session.metadata ?? {}) as Record<string, string>,
+    email: customerEmail,
+  }, account, `checkout.session.completed ${session.id} · ${amountTotal}¢ ${currency}`);
+
+  if (!student) return;
 
   const rate = await getExchangeRate(currency, "EUR");
   const eurCents = convertToEur(amountTotal, currency, rate);
@@ -123,8 +159,7 @@ async function handleCheckoutCompleted(
     note: `Stripe ${account.toUpperCase()} checkout`,
   });
 
-  // Cut any active post-trial chain for leads matching this email
-  await cutChainByEmail(sb, customerEmail);
+  if (customerEmail) await cutChainByEmail(sb, customerEmail);
 }
 
 async function handlePaymentIntentSucceeded(
@@ -187,13 +222,19 @@ async function handlePaymentIntentSucceeded(
     } catch { /* ignore */ }
   }
 
-  if (!customerEmail || pi.amount === 0) return;
+  if (pi.amount === 0) return;
+  if (!customerEmail && !pi.customer) return;
 
-  const { data: student } = await sb
-    .from("students")
-    .select("id, users!inner(email)")
-    .eq("users.email", customerEmail)
-    .maybeSingle();
+  const stripeCustomerId = typeof pi.customer === "string"
+    ? pi.customer
+    : (pi.customer as { id: string } | null)?.id ?? null;
+
+  const student = await resolveStudent(sb, {
+    stripeCustomerId,
+    metadata: (pi.metadata ?? {}) as Record<string, string>,
+    email: customerEmail,
+  }, account, `payment_intent.succeeded ${pi.id} · ${pi.amount}¢ ${(pi.currency ?? "eur").toUpperCase()}`);
+
   if (!student) return;
 
   const rate = await getExchangeRate(currency, "EUR");
@@ -251,13 +292,17 @@ async function handleInvoicePaid(
 
   const currency = (invoice.currency ?? "eur").toUpperCase();
   const customerEmail = invoice.customer_email;
-  if (!customerEmail) return;
 
-  const { data: student } = await sb
-    .from("students")
-    .select("id, users!inner(email)")
-    .eq("users.email", customerEmail)
-    .maybeSingle();
+  const invoiceCustomer = typeof invoice.customer === "string"
+    ? invoice.customer
+    : (invoice.customer as { id: string } | null)?.id ?? null;
+
+  const student = await resolveStudent(sb, {
+    stripeCustomerId: invoiceCustomer,
+    metadata: (invoice.metadata ?? {}) as Record<string, string>,
+    email: customerEmail,
+  }, account, `invoice.paid ${invoice.id} · ${amountPaid}¢ ${currency}`);
+
   if (!student) return;
 
   const rate = await getExchangeRate(currency, "EUR");
@@ -284,7 +329,73 @@ async function handleInvoicePaid(
     stripe_charge_id: null,
   });
 
+  // Subscription renewal: unlock classes + register commission if in window
+  if (isSubscription) {
+    const { data: studentData } = await sb
+      .from("students")
+      .select("id, oferta_id, trial_teacher_id, commission_window_end, clases_por_mes:ofertas_enviadas(clases_por_mes), clases_desbloqueadas, clases_totales")
+      .eq("id", student.id)
+      .maybeSingle();
+    const s = studentData as {
+      id: string; oferta_id: string | null; trial_teacher_id: string | null;
+      commission_window_end: string | null; clases_desbloqueadas: number;
+      clases_totales: number | null;
+      clases_por_mes: { clases_por_mes: number | null } | null;
+    } | null;
+
+    if (s?.oferta_id && s.clases_por_mes?.clases_por_mes) {
+      const perMonth = s.clases_por_mes.clases_por_mes;
+      const cap = s.clases_totales ?? Infinity;
+      const newUnlocked = Math.min(s.clases_desbloqueadas + perMonth, cap);
+      await sb.from("students")
+        .update({ clases_desbloqueadas: newUnlocked })
+        .eq("id", s.id);
+    }
+
+    if (s?.trial_teacher_id && piId && isInCommissionWindow(s.commission_window_end)) {
+      try {
+        await registerCommission({
+          teacherId: s.trial_teacher_id,
+          studentId: s.id,
+          amountCents: eurCents,
+          currency: "EUR",
+          stripePiId: piId,
+          stripeInvoiceId: invoice.id,
+          escenario: "E1",
+        });
+      } catch (err) {
+        console.error("[stripe-webhook] registerCommission on renewal failed:", err);
+      }
+    }
+  }
+
   if (customerEmail) await cutChainByEmail(sb, customerEmail);
+}
+
+async function handleSubscriptionChange(
+  subscription: Stripe.Subscription,
+): Promise<void> {
+  const sb = supabaseAdmin();
+  const customerId = typeof subscription.customer === "string"
+    ? subscription.customer
+    : (subscription.customer as { id: string }).id;
+
+  const statusMap: Record<string, string> = {
+    active: "active",
+    past_due: "past_due",
+    canceled: "canceled",
+    unpaid: "past_due",
+  };
+  const mappedStatus = statusMap[subscription.status] ?? null;
+  if (!mappedStatus) return;
+
+  const { error } = await sb
+    .from("students")
+    .update({ stripe_subscription_status: mappedStatus })
+    .eq("stripe_customer_id", customerId);
+  if (error) {
+    console.warn("[stripe-webhook] subscription status update failed:", error.message);
+  }
 }
 
 function inferPaymentType(session: Stripe.Checkout.Session): string {
@@ -309,5 +420,78 @@ async function cutChainByEmail(
     }
   } catch (err) {
     console.warn("[stripe-webhook] cutChainByEmail error:", err);
+  }
+}
+
+type ResolvedStudent = { id: string; user_id: string } | null;
+
+async function resolveStudent(
+  sb: ReturnType<typeof supabaseAdmin>,
+  opts: {
+    stripeCustomerId?: string | null;
+    metadata?: Record<string, string>;
+    email?: string | null;
+  },
+  account: "us" | "de",
+  eventSummary: string,
+): Promise<ResolvedStudent> {
+  // 1. By stripe_customer_id
+  if (opts.stripeCustomerId) {
+    const { data } = await sb
+      .from("students")
+      .select("id, user_id")
+      .eq("stripe_customer_id", opts.stripeCustomerId)
+      .maybeSingle();
+    if (data) return data as { id: string; user_id: string };
+  }
+
+  // 2. By metadata.student_id
+  if (opts.metadata?.student_id) {
+    const { data } = await sb
+      .from("students")
+      .select("id, user_id")
+      .eq("id", opts.metadata.student_id)
+      .maybeSingle();
+    if (data) return data as { id: string; user_id: string };
+  }
+
+  // 3. By email via users table
+  if (opts.email) {
+    const { data } = await sb
+      .from("students")
+      .select("id, user_id, users!inner(email)")
+      .eq("users.email", opts.email)
+      .maybeSingle();
+    if (data) return data as { id: string; user_id: string };
+  }
+
+  // Not found — send admin alert
+  await sendUnmatchedPaymentAlert(eventSummary, opts.email, opts.stripeCustomerId, account);
+  return null;
+}
+
+async function sendUnmatchedPaymentAlert(
+  eventSummary: string,
+  email?: string | null,
+  stripeCustomerId?: string | null,
+  account?: "us" | "de",
+): Promise<void> {
+  const adminEmail = process.env.ADMIN_ALERT_EMAIL ?? "aprenderaleman2026@gmail.com";
+  const subject = `⚠️ Pago Stripe sin estudiante — ${account?.toUpperCase() ?? "?"}`;
+  const html = `
+    <h3>Pago recibido sin estudiante asociado</h3>
+    <ul>
+      <li><strong>Evento:</strong> ${eventSummary}</li>
+      <li><strong>Email:</strong> ${email ?? "desconocido"}</li>
+      <li><strong>Stripe Customer:</strong> ${stripeCustomerId ?? "N/A"}</li>
+      <li><strong>Cuenta:</strong> ${account?.toUpperCase() ?? "?"}</li>
+    </ul>
+    <p>Revisa el dashboard de Stripe y asigna el pago manualmente en /admin.</p>
+  `;
+  const text = `Pago Stripe sin estudiante. Evento: ${eventSummary}. Email: ${email ?? "?"}. Customer: ${stripeCustomerId ?? "N/A"}. Cuenta: ${account ?? "?"}`;
+  try {
+    await sendRaw(adminEmail, subject, html, text);
+  } catch (err) {
+    console.error("[stripe-webhook] sendUnmatchedPaymentAlert failed:", err);
   }
 }

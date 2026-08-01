@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  RITMOS, ONE_TIME_PACKS, KIDS_PACK, buildSubscriptionUrl,
+  RITMOS, ONE_TIME_PACKS, KIDS_PACK,
   type RitmoId, type GoalId, type PlanCategory,
 } from "@/lib/trial-packs";
 
@@ -70,35 +70,15 @@ export function PaymentLinkModal({
     setError(null);
     startTransition(async () => {
       try {
-        const paymentType =
-          category === "kids" ? kidsPayment :
-          category === "subscription" ? "flexible" : "single";
-
-        // Build the full Stripe URL with client_reference_id for subscriptions
-        let fullUrl: string | undefined;
-        let packLabel: string | undefined;
-
-        if (category === "subscription" && selectedRitmo && selectedGoal) {
-          fullUrl = buildSubscriptionUrl(selectedRitmo, selectedGoal);
-          packLabel = `${selectedRitmo.emoji} ${selectedRitmo.name} · Meta ${selectedGoal.label} · ${selectedGoal.months} meses`;
-        } else if (category === "one_time" && selectedOneTime) {
-          fullUrl = selectedOneTime.url;
-          packLabel = selectedOneTime.name;
-        } else if (category === "kids") {
-          fullUrl = kidsPayment === "single" ? KIDS_PACK.urlSingle : KIDS_PACK.urlFlexible;
-          packLabel = "Pack Kids";
-        }
-
-        const res = await fetch(`/api/teacher/trial/${leadId}/attended`, {
+        const res = await fetch(`/api/teacher/trial/${leadId}/send-offer`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            packId,
-            paymentType,
-            ...(goalId && category !== "kids" ? { goal: goalId } : {}),
+            category,
+            ritmoId: ritmoId || undefined,
+            goalId: goalId || undefined,
+            kidsPayment: category === "kids" ? kidsPayment : undefined,
             ...(nivel ? { nivel } : {}),
-            ...(fullUrl ? { fullUrl } : {}),
-            ...(packLabel ? { packLabel } : {}),
           }),
         });
         if (!res.ok) {
