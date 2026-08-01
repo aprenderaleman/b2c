@@ -12,7 +12,7 @@
 import { supabaseAdmin } from "./supabase";
 import { sendWhatsappText } from "./whatsapp";
 import { renderTemplate } from "./message-stats";
-import { resolveChainVariables } from "./chain-variables";
+import { resolveChainVariables, isBonusAlive } from "./chain-variables";
 import {
   CHAIN_DEFINITIONS,
   type ChainType,
@@ -170,6 +170,10 @@ export async function hasLeadPaid(
 
 // ── Advance chain (called by cron) ─────────────────────────────────────
 
+// R4: transactional chains bypass the 3h minimum spacing rule
+const R4_EXEMPT_CHAINS = new Set(["chain2_link_sent", "chain5_reschedule"]);
+const R4_MIN_GAP_MS = 3 * 3_600_000;
+
 type ChainRow = {
   id: string;
   lead_id: string;
@@ -179,6 +183,7 @@ type ChainRow = {
   started_at: string;
   next_fire_at: string | null;
   paused_until: string | null;
+  last_auto_sent_at: string | null;
   metadata: Record<string, unknown>;
 };
 
@@ -208,16 +213,36 @@ export async function advanceChain(chain: ChainRow): Promise<{
     }
   }
 
-  // Resolve template
-  const templateKind = resolveTemplateKind(chain, step);
-  const { data: tplRow } = await sb
+  // Resolve template — try bonus variant first, fall back to base
+  const baseTemplateKind = resolveTemplateKind(chain, step);
+  const bonusAlive = isBonusAlive(chain.started_at);
+  const bonusSuffix = bonusAlive ? "_bonus_vivo" : "_bonus_vencido";
+  const bonusKind = `${baseTemplateKind}${bonusSuffix}`;
+
+  let templateKind = baseTemplateKind;
+  const { data: bonusTpl } = await sb
     .from("message_templates")
     .select("body")
-    .eq("kind", templateKind)
+    .eq("kind", bonusKind)
     .eq("sub_n", step.templateSubN)
     .eq("channel", "whatsapp")
     .eq("active", true)
     .maybeSingle();
+
+  let tplRow = bonusTpl;
+  if (!tplRow || !(tplRow as { body?: string }).body) {
+    const { data: baseTpl } = await sb
+      .from("message_templates")
+      .select("body")
+      .eq("kind", baseTemplateKind)
+      .eq("sub_n", step.templateSubN)
+      .eq("channel", "whatsapp")
+      .eq("active", true)
+      .maybeSingle();
+    tplRow = baseTpl;
+  } else {
+    templateKind = bonusKind;
+  }
 
   if (!tplRow || !(tplRow as { body?: string }).body) {
     console.error(`[chain-engine] No template found: ${templateKind} sub_n=${step.templateSubN}`);
@@ -237,9 +262,21 @@ export async function advanceChain(chain: ChainRow): Promise<{
   const phone = (lead as { whatsapp_normalized: string | null } | null)?.whatsapp_normalized;
 
   if (phone) {
+    // R4: 3h minimum between automatic messages (transactional chains exempt)
+    if (!R4_EXEMPT_CHAINS.has(chain.chain_type) && chain.last_auto_sent_at) {
+      const elapsed = Date.now() - new Date(chain.last_auto_sent_at).getTime();
+      if (elapsed < R4_MIN_GAP_MS) {
+        const postponeTo = new Date(new Date(chain.last_auto_sent_at).getTime() + R4_MIN_GAP_MS).toISOString();
+        await sb.from("lead_chains").update({
+          next_fire_at: postponeTo,
+          updated_at: new Date().toISOString(),
+        }).eq("id", chain.id);
+        return { action: "skipped_paid", templateKind };
+      }
+    }
+
     // Send window check: 09:00-21:00 Berlin
     if (!isWithinSendWindow()) {
-      // Postpone to next 09:00 Berlin
       const next9am = getNext9amBerlin();
       await sb.from("lead_chains").update({
         next_fire_at: next9am.toISOString(),
@@ -249,6 +286,14 @@ export async function advanceChain(chain: ChainRow): Promise<{
     }
 
     const res = await sendWhatsappText(phone, text, { kind: templateKind });
+
+    // R4: update last_auto_sent_at after successful send
+    if (res.ok) {
+      await sb.from("lead_chains").update({
+        last_auto_sent_at: new Date().toISOString(),
+      }).eq("id", chain.id);
+    }
+
     await sb.from("lead_timeline").insert({
       lead_id: chain.lead_id,
       type: res.ok ? "system_message_sent" : "send_failed",
@@ -386,7 +431,7 @@ export async function getPendingChains(): Promise<ChainRow[]> {
 
   const { data, error } = await sb
     .from("lead_chains")
-    .select("id, lead_id, chain_type, objection_chip, current_step, started_at, next_fire_at, paused_until, metadata")
+    .select("id, lead_id, chain_type, objection_chip, current_step, started_at, next_fire_at, paused_until, last_auto_sent_at, metadata")
     .is("completed_at", null)
     .lte("next_fire_at", now)
     .or(`paused_until.is.null,paused_until.lte.${now}`)

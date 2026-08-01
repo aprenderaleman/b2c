@@ -23,7 +23,7 @@ export async function GET() {
   const sb = supabaseAdmin();
   const { data } = await sb
     .from("users")
-    .select("id, email, full_name, phone, active, rango, created_at")
+    .select("id, email, full_name, phone, active, rango, flujo_activo, created_at")
     .eq("role", "closer")
     .order("created_at", { ascending: false });
 

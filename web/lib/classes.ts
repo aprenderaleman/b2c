@@ -29,6 +29,8 @@ export type ClassRow = {
   ended_at:                string | null;
   actual_duration_minutes: number | null;
   notes_admin:             string | null;
+  teacher_notes:           string | null;
+  notes_shared_with_student: boolean;
   created_at:              string;
 };
 
@@ -247,7 +249,7 @@ export async function getClassesInRange(
       recurrence_pattern, recurrence_end_date, parent_class_id,
       title, topic, status, livekit_room_id, is_trial, group_id,
       group:student_groups(name),
-      started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
+      started_at, ended_at, actual_duration_minutes, notes_admin, teacher_notes, notes_shared_with_student, created_at,
       teacher:teachers(
         users(email, full_name)
       ),
@@ -283,7 +285,7 @@ export async function getTeacherUpcomingClasses(
       recurrence_pattern, recurrence_end_date, parent_class_id,
       title, topic, status, livekit_room_id, is_trial, group_id, lead_id,
       group:student_groups(name),
-      started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
+      started_at, ended_at, actual_duration_minutes, notes_admin, teacher_notes, notes_shared_with_student, created_at,
       teacher:teachers(
         users(email, full_name)
       ),
@@ -344,7 +346,7 @@ export async function getStudentUpcomingClasses(
         recurrence_pattern, recurrence_end_date, parent_class_id,
         title, topic, status, livekit_room_id, is_trial, group_id,
       group:student_groups(name),
-        started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
+        started_at, ended_at, actual_duration_minutes, notes_admin, teacher_notes, notes_shared_with_student, created_at,
         teacher:teachers(
           users(email, full_name)
         ),
@@ -396,7 +398,7 @@ export async function getClassById(id: string): Promise<ClassWithPeople | null> 
       recurrence_pattern, recurrence_end_date, parent_class_id,
       title, topic, status, livekit_room_id, is_trial, group_id,
       group:student_groups(name),
-      started_at, ended_at, actual_duration_minutes, notes_admin, created_at,
+      started_at, ended_at, actual_duration_minutes, notes_admin, teacher_notes, notes_shared_with_student, created_at,
       teacher:teachers(
         users(email, full_name)
       ),
@@ -541,6 +543,8 @@ function normaliseClassRow(r: RawClass): ClassWithPeople {
     ended_at:                 (r.ended_at as string | null) ?? null,
     actual_duration_minutes:  (r.actual_duration_minutes as number | null) ?? null,
     notes_admin:              (r.notes_admin as string | null) ?? null,
+    teacher_notes:            (r.teacher_notes as string | null) ?? null,
+    notes_shared_with_student: (r.notes_shared_with_student as boolean | null) ?? false,
     created_at:               r.created_at as string,
     teacher_name:             (tuFlat?.full_name as string | null) ?? null,
     teacher_email:            (tuFlat?.email as string | undefined) ?? "",

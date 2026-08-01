@@ -1,7 +1,10 @@
 import { supabaseAdmin } from "./supabase";
 import { convertLeadToStudent, type ConvertInput } from "./lead-conversion";
 import { registerCommission, registerBonoCierre } from "./commission-engine";
+import { calculateCommissions } from "./closer-commissions";
 import { cancelActiveChain } from "./chain-engine";
+import { runPostConversionFlow, detectScenario } from "./post-conversion-flow";
+import { sendMetaPurchaseCapi } from "./meta-capi-server";
 
 type AutoConvertOpts = {
   leadId: string;
@@ -29,7 +32,8 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
   }
 
   const of = oferta as {
-    id: string; lead_id: string; teacher_id: string;
+    id: string; lead_id: string; teacher_id: string | null;
+    closer_id: string | null;
     meta: string; ritmo: string | null; tipo_pago: string;
     clases_totales: number; clases_por_mes: number | null;
     importe_cents: number; accepted_at: string | null;
@@ -42,7 +46,7 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
 
   const { data: lead } = await sb
     .from("leads")
-    .select("id, name, email, whatsapp_normalized, status, converted_to_user_id, meta")
+    .select("id, name, email, whatsapp_normalized, status, converted_to_user_id, meta, closer_id")
     .eq("id", of.lead_id)
     .maybeSingle();
 
@@ -55,6 +59,7 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     id: string; name: string | null; email: string | null;
     whatsapp_normalized: string | null; status: string;
     converted_to_user_id: string | null; meta: Record<string, unknown> | null;
+    closer_id: string | null;
   };
 
   if (ld.converted_to_user_id) {
@@ -124,22 +129,82 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     .eq("id", opts.ofertaId);
 
   if (result.studentId && opts.amountCents > 0) {
-    await registerBonoCierre({
-      teacherId: of.teacher_id,
-      studentId: result.studentId,
-      stripePiId: opts.stripePiId,
-      studentName: ld.name ?? "Estudiante",
-    });
+    const closerId = of.closer_id ?? ld.closer_id;
+    const { data: trialClass } = await sb
+      .from("classes")
+      .select("teacher_id, status")
+      .eq("lead_id", ld.id)
+      .eq("is_trial", true)
+      .in("status", ["completed", "scheduled", "live"])
+      .order("scheduled_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    await registerCommission({
-      teacherId: of.teacher_id,
+    const trialTeacherId = (trialClass as { teacher_id?: string } | null)?.teacher_id ?? of.teacher_id;
+    const trialAttended = (trialClass as { status?: string } | null)?.status === "completed";
+
+    const attributed = closerId
+      ? await isCloserAttribution(ld.id, closerId)
+      : false;
+    const effectiveCloserId = attributed ? closerId : null;
+    const scenario = detectScenario({ closerId: effectiveCloserId, trialAttended });
+
+    if (scenario === "E1" && trialTeacherId) {
+      await registerBonoCierre({
+        teacherId: trialTeacherId,
+        studentId: result.studentId,
+        stripePiId: opts.stripePiId,
+        studentName: ld.name ?? "Estudiante",
+      });
+
+      await registerCommission({
+        teacherId: trialTeacherId,
+        studentId: result.studentId,
+        amountCents: opts.amountCents,
+        currency: opts.currency,
+        stripePiId: opts.stripePiId,
+        stripeInvoiceId: opts.stripeInvoiceId,
+        escenario: "E1",
+      });
+    } else if (scenario === "E2" || scenario === "E3") {
+      const { data: ventaRecord } = await sb.from("ventas").insert({
+        lead_id: ld.id,
+        solicitado_por: effectiveCloserId!,
+        rol_solicitante: "closer",
+        pack_id: of.ritmo ?? null,
+        payment_type: of.tipo_pago,
+        monto_cents: opts.amountCents,
+        moneda: opts.currency,
+        estado: "aprobada",
+        aprobado_por: effectiveCloserId!,
+        aprobado_at: new Date().toISOString(),
+      }).select("id").single();
+
+      if (ventaRecord) {
+        const ventaId = (ventaRecord as { id: string }).id;
+        try {
+          await calculateCommissions(ventaId, { stripePiId: opts.stripePiId });
+        } catch (err) {
+          console.error("[auto-conversion] calculateCommissions failed:", err);
+        }
+      }
+    }
+
+    await sb.from("ofertas_enviadas")
+      .update({ escenario: scenario })
+      .eq("id", opts.ofertaId);
+
+    const ritmoLabel = of.ritmo ?? "";
+    const packLabel = `${ritmoLabel} · ${of.clases_totales} clases`;
+    await runPostConversionFlow({
+      leadId: ld.id,
       studentId: result.studentId,
-      amountCents: opts.amountCents,
-      currency: opts.currency,
-      stripePiId: opts.stripePiId,
-      stripeInvoiceId: opts.stripeInvoiceId,
-      escenario: "E1",
-    });
+      leadName: ld.name ?? "Estudiante",
+      closerId: effectiveCloserId,
+      trialTeacherId: trialTeacherId ?? null,
+      trialAttended,
+      packLabel,
+    }).catch(err => console.error("[auto-conversion] post-conversion failed:", err));
   }
 
   try {
@@ -149,4 +214,30 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
   }
 
   console.log(`[auto-conversion] lead ${ld.id} → student ${result.studentId} via oferta ${opts.ofertaId}`);
+}
+
+async function isCloserAttribution(leadId: string, closerId: string): Promise<boolean> {
+  const sb = supabaseAdmin();
+
+  const { data: activeChain } = await sb
+    .from("lead_chains")
+    .select("id")
+    .eq("lead_id", leadId)
+    .eq("status", "active")
+    .limit(1)
+    .maybeSingle();
+
+  if (activeChain) return true;
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3_600_000).toISOString();
+  const { data: recentAction } = await sb
+    .from("acciones_closer")
+    .select("id")
+    .eq("closer_id", closerId)
+    .eq("lead_id", leadId)
+    .gte("created_at", thirtyDaysAgo)
+    .limit(1)
+    .maybeSingle();
+
+  return Boolean(recentAction);
 }

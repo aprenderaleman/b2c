@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { TareaCloser } from "@/lib/closer-cadence";
 import { MarkSaleModal } from "./MarkSaleModal";
+import { QuickActionModal } from "./QuickActionModal";
+import { Layer2Actions } from "./Layer2Actions";
 import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
 
 type Lead = {
@@ -15,12 +17,11 @@ type Lead = {
   estado_cierre: string;
   motivo_perdido: string | null;
   fecha_asignacion_closer: string | null;
-  // Meta Ads Paid funnel (2026-07-28)
   reserva_prioritaria?: boolean | null;
-  priority_deadline?:   string | null;
-  deposit_intent_at?:   string | null;
+  priority_deadline?: string | null;
+  deposit_intent_at?: string | null;
   qualification_answers?: { goal?: string; level?: string; deadline?: string } | null;
-  landing_intent?:      string | null;
+  landing_intent?: string | null;
 };
 
 type TimelineEntry = {
@@ -46,19 +47,70 @@ type VentaPendiente = {
   estado: string;
 } | null;
 
+type TeacherNote = {
+  content: string;
+  created_at: string;
+} | null;
+
 type Props = {
   lead: Lead;
   tasks: TareaCloser[];
   timeline: TimelineEntry[];
   acciones: Accion[];
   ventaPendiente: VentaPendiente;
+  teacherNote?: TeacherNote;
+  leadTipo?: string | null;
 };
 
-export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendiente }: Props) {
+const AUTHOR_BADGE: Record<string, { label: string; cls: string }> = {
+  system: {
+    label: "Sistema",
+    cls: "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300",
+  },
+  teacher: {
+    label: "Profe",
+    cls: "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300",
+  },
+  closer: {
+    label: "Closer",
+    cls: "bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300",
+  },
+  admin: {
+    label: "Admin",
+    cls: "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300",
+  },
+  student: {
+    label: "Alumno",
+    cls: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300",
+  },
+  stiv: {
+    label: "Stiv",
+    cls: "bg-cyan-100 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300",
+  },
+};
+
+const EVENT_DOT: Record<string, string> = {
+  closer: "bg-purple-500",
+  teacher: "bg-blue-500",
+  admin: "bg-amber-500",
+  system: "bg-slate-400 dark:bg-slate-500",
+  stiv: "bg-cyan-500",
+};
+
+export function CloserLeadDetail({
+  lead,
+  tasks,
+  timeline,
+  acciones,
+  ventaPendiente,
+  teacherNote,
+  leadTipo,
+}: Props) {
   const router = useRouter();
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [showLostForm, setShowLostForm] = useState(false);
   const [showActionForm, setShowActionForm] = useState(false);
+  const [completeTaskId, setCompleteTaskId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -76,7 +128,11 @@ export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendien
   ].sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime());
 
   const pendingTasks = tasks.filter((t) => !t.fecha_completada);
-  const completedTasks = tasks.filter((t) => t.fecha_completada);
+  const nextTask = pendingTasks.length > 0
+    ? pendingTasks.reduce((earliest, t) =>
+        new Date(t.fecha_programada) < new Date(earliest.fecha_programada) ? t : earliest
+      )
+    : null;
 
   const handleMarkLost = (motivo: string) => {
     setError(null);
@@ -95,6 +151,8 @@ export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendien
     });
   };
 
+  const phoneDigits = lead.whatsapp_normalized?.replace(/\D/g, "") ?? "";
+
   return (
     <>
       {/* Header */}
@@ -108,35 +166,63 @@ export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendien
           </button>
           <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2 flex-wrap">
             {lead.name ?? "Lead"}
+            {leadTipo && (
+              <span
+                className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                  leadTipo === "tipo_a"
+                    ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30"
+                    : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30"
+                }`}
+              >
+                Tipo {leadTipo === "tipo_a" ? "A" : "B"}
+              </span>
+            )}
             <PriorityBadges flags={{
               reservaPrioritaria: lead.reserva_prioritaria,
-              priorityDeadline:   lead.priority_deadline,
-              depositIntentAt:    lead.deposit_intent_at,
+              priorityDeadline: lead.priority_deadline,
+              depositIntentAt: lead.deposit_intent_at,
             }} />
           </h1>
+
+          {/* Contact links */}
+          <div className="mt-1.5 flex items-center gap-3 flex-wrap">
+            {phoneDigits && (
+              <>
+                <a
+                  href={`https://wa.me/${phoneDigits}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 hover:underline"
+                >
+                  <span className="text-base">WA</span>
+                  <span>{lead.whatsapp_normalized}</span>
+                </a>
+                <a
+                  href={`tel:+${phoneDigits}`}
+                  className="inline-flex items-center gap-1 text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  <span className="text-base">Tel</span>
+                  <span>{lead.whatsapp_normalized}</span>
+                </a>
+              </>
+            )}
+            {lead.email && (
+              <span className="text-sm text-slate-500 dark:text-slate-400">
+                {lead.email}
+              </span>
+            )}
+          </div>
+
+          {/* Qualification summary */}
           {(() => {
             const q = summarizeQualification(lead.qualification_answers);
             if (!q) return null;
             return (
               <p className="mt-1 text-[12.5px] text-slate-600 dark:text-slate-400">
-                📋 {q}
+                {q}
               </p>
             );
           })()}
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {lead.whatsapp_normalized && (
-              <a
-                href={`https://wa.me/${lead.whatsapp_normalized.replace(/\D/g, "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-emerald-600"
-              >
-                {lead.whatsapp_normalized}
-              </a>
-            )}
-            {lead.whatsapp_normalized && lead.email && " · "}
-            {lead.email}
-          </p>
         </div>
 
         <div className="flex gap-2 flex-wrap">
@@ -172,8 +258,92 @@ export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendien
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
-      {/* Pending tasks */}
-      {pendingTasks.length > 0 && (
+      {/* Diagnosis block */}
+      {(lead.qualification_answers || teacherNote) && (
+        <section className="rounded-3xl bg-gradient-to-br from-blue-50/80 to-slate-50 dark:from-blue-500/5 dark:to-slate-900 border border-blue-200 dark:border-blue-500/20 p-5 space-y-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">
+            Diagnostico
+          </h2>
+
+          {lead.qualification_answers && (
+            <div className="grid grid-cols-3 gap-3">
+              {lead.qualification_answers.goal && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Meta</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {lead.qualification_answers.goal}
+                  </p>
+                </div>
+              )}
+              {lead.qualification_answers.level && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Nivel</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {lead.qualification_answers.level}
+                  </p>
+                </div>
+              )}
+              {lead.qualification_answers.deadline && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Plazo</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                    {lead.qualification_answers.deadline}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {teacherNote && (
+            <div className="border-t border-blue-100 dark:border-blue-500/10 pt-3">
+              <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+                Nota del profe
+              </p>
+              <p className="text-sm text-slate-700 dark:text-slate-300 italic">
+                &ldquo;{teacherNote.content}&rdquo;
+              </p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                {new Date(teacherNote.created_at).toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" })}
+              </p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Next pending action */}
+      {nextTask && (
+        <section className="rounded-3xl bg-brand-50/60 dark:bg-brand-500/5 border border-brand-200 dark:border-brand-500/20 p-4 flex items-center gap-3">
+          <span className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-100 dark:bg-brand-500/20 flex items-center justify-center text-xs font-bold text-brand-700 dark:text-brand-300">
+            {nextTask.canal === "llamada" ? "Tel" : nextTask.canal === "whatsapp" ? "WA" : "Em"}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-brand-800 dark:text-brand-200">
+              Proxima accion: {nextTask.plantilla}
+            </p>
+            <p className="text-xs text-brand-600 dark:text-brand-400">
+              {new Date(nextTask.fecha_programada).toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" })}
+              {" · "}
+              {new Date(nextTask.fecha_programada).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+              {" · Paso "}
+              {nextTask.paso}
+            </p>
+          </div>
+          {new Date(nextTask.fecha_programada) < new Date() && (
+            <span className="flex-shrink-0 text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-full px-2 py-0.5 uppercase">
+              Vencida
+            </span>
+          )}
+          <button
+            onClick={() => setCompleteTaskId(nextTask.id)}
+            className="flex-shrink-0 text-xs font-medium rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
+          >
+            Completar
+          </button>
+        </section>
+      )}
+
+      {/* All pending tasks */}
+      {pendingTasks.length > 1 && (
         <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-3">
             Tareas pendientes ({pendingTasks.length})
@@ -188,10 +358,25 @@ export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendien
                 <span className="text-xs text-slate-400">
                   {new Date(t.fecha_programada).toLocaleDateString("es", { day: "numeric", month: "short" })}
                 </span>
+                <button
+                  onClick={() => setCompleteTaskId(t.id)}
+                  className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline flex-shrink-0"
+                >
+                  Completar
+                </button>
               </div>
             ))}
           </div>
         </section>
+      )}
+
+      {/* Layer 2 Actions */}
+      {lead.estado_cierre !== "convertido" && lead.estado_cierre !== "perdido" && (
+        <Layer2Actions
+          leadId={lead.id}
+          leadName={lead.name ?? "Lead"}
+          onOpenSendOffer={() => setShowSaleModal(true)}
+        />
       )}
 
       {/* Timeline */}
@@ -200,25 +385,28 @@ export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendien
           Actividad
         </h2>
         <div className="space-y-3 divide-y divide-slate-100 dark:divide-slate-800">
-          {allEvents.map((event) => (
-            <div key={`${event.source}-${event.id}`} className="pt-3 first:pt-0">
-              <div className="flex items-start gap-2">
-                <span className={`flex-shrink-0 w-2 h-2 mt-1.5 rounded-full ${
-                  event.source === "accion"
-                    ? "bg-brand-500"
-                    : event.type === "conversion"
-                      ? "bg-emerald-500"
-                      : "bg-slate-300 dark:bg-slate-600"
-                }`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-slate-700 dark:text-slate-300">{event.content}</p>
-                  <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
-                    {event.author} · {new Date(event.created_at).toLocaleDateString("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                  </p>
+          {allEvents.map((event) => {
+            const badge = AUTHOR_BADGE[event.author] ?? AUTHOR_BADGE.system;
+            const dot = EVENT_DOT[event.author] ?? EVENT_DOT.system;
+            return (
+              <div key={`${event.source}-${event.id}`} className="pt-3 first:pt-0">
+                <div className="flex items-start gap-2">
+                  <span className={`flex-shrink-0 w-2 h-2 mt-1.5 rounded-full ${dot}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-700 dark:text-slate-300">{event.content}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`inline-flex items-center rounded px-1.5 py-0 text-[10px] font-medium ${badge.cls}`}>
+                        {badge.label}
+                      </span>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                        {new Date(event.created_at).toLocaleDateString("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {allEvents.length === 0 && (
             <p className="text-sm text-slate-400">Sin actividad registrada.</p>
           )}
@@ -245,6 +433,15 @@ export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendien
         <ActionModal
           leadId={lead.id}
           onClose={() => { setShowActionForm(false); router.refresh(); }}
+        />
+      )}
+
+      {completeTaskId && (
+        <QuickActionModal
+          taskId={completeTaskId}
+          leadName={lead.name ?? "Lead"}
+          onClose={() => setCompleteTaskId(null)}
+          onVenta={() => { setCompleteTaskId(null); setShowSaleModal(true); }}
         />
       )}
     </>

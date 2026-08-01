@@ -7,7 +7,7 @@ export type TareaCloser = {
   closer_id: string;
   lead_id: string;
   paso: number;
-  tipo: CadenciaType;
+  tipo: string;
   canal: string;
   plantilla: string;
   fecha_programada: string;
@@ -17,11 +17,18 @@ export type TareaCloser = {
   created_at: string;
   lead_name?: string;
   lead_phone?: string;
+  prioridad?: string | null;
+  fecha_vence?: string | null;
+  origen?: string | null;
+  lead_reserva_prioritaria?: boolean;
+  lead_priority_deadline?: string | null;
+  lead_deposit_intent_at?: string | null;
 };
 
 export type TaskResult =
   | "contactado"
   | "no_contesto"
+  | "buzon"
   | "no_interesado"
   | "reagendado"
   | "venta";
@@ -96,7 +103,7 @@ export async function getCloserTasks(
 
   let query = sb
     .from("tareas_closer")
-    .select("*, leads!inner(name, whatsapp_normalized)")
+    .select("*, leads!inner(name, whatsapp_normalized, reserva_prioritaria, priority_deadline, deposit_intent_at)")
     .eq("closer_id", closerId)
     .is("fecha_completada", null);
 
@@ -112,12 +119,21 @@ export async function getCloserTasks(
   const { data } = await query;
 
   return (data ?? []).map((row: Record<string, unknown>) => {
-    const lead = row.leads as { name?: string; whatsapp_normalized?: string } | null;
+    const lead = row.leads as {
+      name?: string;
+      whatsapp_normalized?: string;
+      reserva_prioritaria?: boolean;
+      priority_deadline?: string;
+      deposit_intent_at?: string;
+    } | null;
     const { leads: _, ...rest } = row;
     return {
       ...rest,
       lead_name: lead?.name ?? "",
       lead_phone: lead?.whatsapp_normalized ?? "",
+      lead_reserva_prioritaria: lead?.reserva_prioritaria ?? false,
+      lead_priority_deadline: lead?.priority_deadline ?? null,
+      lead_deposit_intent_at: lead?.deposit_intent_at ?? null,
     } as unknown as TareaCloser;
   });
 }

@@ -7,6 +7,7 @@ type Closer = {
   id: string;
   full_name: string | null;
   email: string;
+  flujo_activo?: boolean;
 };
 
 type Props = {
@@ -87,7 +88,7 @@ export function AssignCloserModal({ leadId, onClose }: Props) {
                 >
                   {closers.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.full_name ?? c.email}
+                      {c.full_name ?? c.email}{c.flujo_activo === false ? " (PAUSADO)" : ""}
                     </option>
                   ))}
                 </select>

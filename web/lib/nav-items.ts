@@ -35,7 +35,8 @@ export type NavIconKey =
   | "video"
   | "star"
   | "trendingUp"
-  | "heart";
+  | "heart"
+  | "refreshCw";
 
 export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student" | "closer"> | "admin" | "teacher" | "student" | "closer", NavItem[]> = {
   superadmin: adminItems(),
@@ -87,6 +88,7 @@ function adminItems(): NavItem[] {
     { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
     { label: "Closers",     href: "/admin/closers",     icon: "userCheck",     priority: 9.5 },
+    { label: "Reactivacion",href: "/admin/reactivacion", icon: "refreshCw",   priority: 9.55 },
     { label: "Aprobaciones",href: "/admin/aprobaciones", icon: "wallet",       priority: 9.6 },
     { label: "Config CRM",  href: "/admin/config/cadencia", icon: "barChart3", priority: 9.7 },
   ];

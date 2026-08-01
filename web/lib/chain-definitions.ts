@@ -20,7 +20,13 @@ export type ChainType =
   | "chain3_obj_tiempo"
   | "chain4_absent"
   | "chain5_reschedule"
-  | "chain6_cancel";
+  | "chain6_cancel"
+  | "chain8a_agendar"
+  | "chain8b_no_contesto"
+  | "chain8c_info"
+  | "chain8d_propuesta"
+  | "chain8e_seguimiento"
+  | "chain8g_reactivacion";
 
 export type ObjectionChip = "precio" | "pensarlo" | "pareja" | "tiempo";
 
@@ -282,6 +288,147 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
       {
         delayMs: 7 * D,
         templateKind: "chain6_cancel",
+        templateSubN: 2,
+        channels: ["whatsapp"],
+        onComplete: { setStatus: "en_reactivacion" },
+      },
+    ],
+  },
+
+  // ── Closer Layer 2 chains ─────────────────────────────────────────
+
+  chain8a_agendar: {
+    type: "chain8a_agendar",
+    label: "Closer: Agendar clase",
+    steps: [
+      {
+        delayMs: 24 * H,
+        templateKind: "chain8a_agendar",
+        templateSubN: 1,
+        channels: ["whatsapp"],
+        closerTask: {
+          tipo: "seguimiento_post",
+          description: "Confirmar asistencia a clase agendada",
+          delayHours: 24,
+          venceEnHours: 12,
+          prioridad: "media",
+        },
+      },
+    ],
+  },
+
+  chain8b_no_contesto: {
+    type: "chain8b_no_contesto",
+    label: "Closer: No contestó",
+    steps: [
+      {
+        delayMs: 4 * H,
+        templateKind: "chain8b_no_contesto",
+        templateSubN: 1,
+        channels: ["whatsapp"],
+      },
+      {
+        delayMs: 24 * H,
+        templateKind: "chain8b_no_contesto",
+        templateSubN: 2,
+        channels: ["whatsapp"],
+        closerTask: {
+          tipo: "seguimiento_post",
+          description: "Segundo intento de contacto",
+          delayHours: 0,
+          venceEnHours: 8,
+          prioridad: "media",
+        },
+      },
+      {
+        delayMs: 3 * D,
+        templateKind: "chain8b_no_contesto",
+        templateSubN: 3,
+        channels: ["whatsapp"],
+        onComplete: { setStatus: "en_reactivacion" },
+      },
+    ],
+  },
+
+  chain8c_info: {
+    type: "chain8c_info",
+    label: "Closer: Info enviada",
+    steps: [
+      {
+        delayMs: 24 * H,
+        templateKind: "chain8c_info",
+        templateSubN: 1,
+        channels: ["whatsapp"],
+        closerTask: {
+          tipo: "seguimiento_post",
+          description: "Seguimiento tras envío de info",
+          delayHours: 24,
+          venceEnHours: 12,
+          prioridad: "media",
+        },
+      },
+    ],
+  },
+
+  chain8d_propuesta: {
+    type: "chain8d_propuesta",
+    label: "Closer: Propuesta enviada",
+    steps: [
+      {
+        delayMs: 24 * H,
+        templateKind: "chain8d_propuesta",
+        templateSubN: 1,
+        channels: ["whatsapp"],
+        closerTask: {
+          tipo: "seguimiento_post",
+          description: "Seguimiento propuesta enviada",
+          delayHours: 0,
+          venceEnHours: 8,
+          prioridad: "alta",
+        },
+      },
+      {
+        delayMs: 3 * D,
+        templateKind: "chain8d_propuesta",
+        templateSubN: 2,
+        channels: ["whatsapp"],
+      },
+      {
+        delayMs: 5 * D,
+        templateKind: "chain8d_propuesta",
+        templateSubN: 3,
+        channels: ["whatsapp"],
+        onComplete: { setStatus: "en_reactivacion" },
+      },
+    ],
+  },
+
+  chain8e_seguimiento: {
+    type: "chain8e_seguimiento",
+    label: "Closer: Seguimiento con fecha",
+    steps: [
+      {
+        delayMs: 0,
+        templateKind: "chain8e_seguimiento",
+        templateSubN: 1,
+        channels: ["whatsapp"],
+      },
+    ],
+  },
+
+  chain8g_reactivacion: {
+    type: "chain8g_reactivacion",
+    label: "Closer: Reactivación",
+    steps: [
+      {
+        delayMs: 0,
+        templateKind: "chain8g_reactivacion",
+        templateSubN: 1,
+        channels: ["whatsapp"],
+      },
+      {
+        delayMs: 4 * D,
+        templateKind: "chain8g_reactivacion",
         templateSubN: 2,
         channels: ["whatsapp"],
         onComplete: { setStatus: "en_reactivacion" },

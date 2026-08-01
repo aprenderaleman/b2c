@@ -24,6 +24,11 @@ export type NotificationType =
   // en rojo con badge "IMPORTANTE" porque hay <5 min para contactar.
   | "lead_new_urgent"
   | "trial_assigned"
+  | "student_converted"
+  | "teacher_contact_reminder"
+  | "retention_no_classes"
+  | "retention_low_pace"
+  | "retention_inactive"
   | "generic";
 
 export type NotificationRow = {

@@ -337,6 +337,14 @@ def handle_incoming_message(
     # humana tiene prioridad. La cadena se reanuda sola cuando expire.
     _pause_active_chain(lead["id"])
 
+    # Si el lead tiene closer asignado → crear tarea inbound para el closer
+    # y NO auto-responder. El closer maneja la conversación manualmente.
+    closer_id = lead.get("closer_id")
+    if closer_id:
+        _create_closer_inbound_task(lead["id"], closer_id, text)
+        log.info("Lead %s has closer %s — inbound task created, bot silent.", lead["id"], closer_id)
+        return HandleResult("closer_inbound_task_created", sent=False)
+
     # Once converted, NEVER auto-reply (spec).
     if status == "converted":
         log.info("Lead %s converted — ignoring inbound.", lead["id"])
@@ -562,6 +570,23 @@ def _pause_active_chain(lead_id: str) -> None:
                AND completed_at IS NULL
             """,
             (lead_id,),
+        )
+        conn.commit()
+
+
+def _create_closer_inbound_task(lead_id: str, closer_id: str, text: str) -> None:
+    """Crea tarea inbound_response para el closer cuando el lead responde."""
+    preview = text[:200] if text else "Mensaje recibido"
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO tareas_closer
+                   (closer_id, lead_id, paso, tipo, canal, plantilla,
+                    fecha_programada, prioridad, origen)
+            VALUES (%s, %s, 1, 'inbound_response', 'whatsapp', %s,
+                    NOW(), 'alta', 'inbound')
+            """,
+            (closer_id, lead_id, preview),
         )
         conn.commit()
 

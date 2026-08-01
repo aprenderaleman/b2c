@@ -25,7 +25,7 @@ export default async function CloserLeadPage({
 
   if (!lead || lead.closer_id !== closerId) redirect("/closer/leads");
 
-  const [tasks, timelineResult, accionesResult] = await Promise.all([
+  const [tasks, timelineResult, accionesResult, teacherNoteResult] = await Promise.all([
     getLeadTasks(leadId),
     sb
       .from("lead_timeline")
@@ -40,10 +40,20 @@ export default async function CloserLeadPage({
       .eq("closer_id", closerId)
       .order("created_at", { ascending: false })
       .limit(50),
+    sb
+      .from("lead_timeline")
+      .select("content, created_at")
+      .eq("lead_id", leadId)
+      .eq("author", "teacher")
+      .order("created_at", { ascending: false })
+      .limit(1),
   ]);
 
   const timeline = timelineResult.data ?? [];
   const acciones = accionesResult.data ?? [];
+  const teacherNote = (teacherNoteResult.data?.[0] as { content: string; created_at: string } | undefined) ?? null;
+
+  const leadTipo = tasks.find((t) => t.tipo === "tipo_a" || t.tipo === "tipo_b")?.tipo ?? null;
 
   const { data: ventaPendiente } = await sb
     .from("ventas")
@@ -60,6 +70,8 @@ export default async function CloserLeadPage({
         timeline={timeline}
         acciones={acciones}
         ventaPendiente={ventaPendiente}
+        teacherNote={teacherNote}
+        leadTipo={leadTipo}
       />
     </main>
   );

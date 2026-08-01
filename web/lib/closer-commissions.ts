@@ -58,8 +58,13 @@ export type ComisionResult = {
   pool_cap_aplicado: boolean;
 };
 
+export type CalculateCommissionsOpts = {
+  stripePiId?: string;
+};
+
 export async function calculateCommissions(
   ventaId: string,
+  opts?: CalculateCommissionsOpts,
 ): Promise<ComisionResult[]> {
   const sb = supabaseAdmin();
 
@@ -80,8 +85,6 @@ export async function calculateCommissions(
   const factorPreCalif = config.factor_profe_precalificacion ?? 0.5;
 
   const closerId = (venta.leads as { closer_id: string | null }).closer_id;
-  const rolSolicitante = venta.rol_solicitante as string;
-  const solicitadoPor = venta.solicitado_por as string;
 
   const { data: trialClass } = await sb
     .from("classes")
@@ -92,18 +95,29 @@ export async function calculateCommissions(
     .order("scheduled_at", { ascending: false })
     .limit(1);
 
-  const teacherId = (trialClass?.[0] as { teacher_id?: string } | undefined)?.teacher_id ?? null;
+  const teacherTableId = (trialClass?.[0] as { teacher_id?: string } | undefined)?.teacher_id ?? null;
   const trialAttended = (trialClass?.[0] as { status?: string } | undefined)?.status === "completed";
 
-  const comisiones: ComisionResult[] = [];
+  let teacherUserId: string | null = null;
+  if (teacherTableId) {
+    const { data: teacher } = await sb
+      .from("teachers")
+      .select("user_id")
+      .eq("id", teacherTableId)
+      .maybeSingle();
+    teacherUserId = (teacher as { user_id: string } | null)?.user_id ?? null;
+  }
 
-  if (rolSolicitante === "teacher" && !closerId) {
-    // Escenario 1: profe cerro sin closer
-    if (teacherId) {
-      const rango = await getRangoForUser(teacherId, "teacher");
+  const comisiones: ComisionResult[] = [];
+  let escenario: string;
+
+  if (!closerId) {
+    escenario = "E1";
+    if (teacherUserId) {
+      const rango = await getRangoForUser(teacherUserId, "teacher");
       const pct = rango.comision_pct;
       comisiones.push({
-        usuario_id: teacherId,
+        usuario_id: teacherUserId,
         rol: "teacher",
         tipo: "comision_base",
         monto_cents: Math.round((montoCents * pct) / 100),
@@ -113,7 +127,7 @@ export async function calculateCommissions(
       });
     }
   } else if (closerId && trialAttended) {
-    // Escenario 2: closer cerro, lead asistio trial
+    escenario = "E2";
     const rangoCloser = await getRangoForUser(closerId, "closer");
     comisiones.push({
       usuario_id: closerId,
@@ -125,11 +139,11 @@ export async function calculateCommissions(
       pool_cap_aplicado: false,
     });
 
-    if (teacherId) {
-      const rangoProfe = await getRangoForUser(teacherId, "teacher");
+    if (teacherUserId) {
+      const rangoProfe = await getRangoForUser(teacherUserId, "teacher");
       const pctProfe = rangoProfe.comision_pct * factorPreCalif;
       comisiones.push({
-        usuario_id: teacherId,
+        usuario_id: teacherUserId,
         rol: "teacher",
         tipo: "comision_precalificacion",
         monto_cents: Math.round((montoCents * pctProfe) / 100),
@@ -138,10 +152,9 @@ export async function calculateCommissions(
         pool_cap_aplicado: false,
       });
     }
-  } else if (closerId && !trialAttended) {
-    // Escenario 3: closer cerro, lead NO asistio trial
+  } else {
+    escenario = "E3";
     const rangoCloser = await getRangoForUser(closerId, "closer");
-    const pctCloser = rangoCloser.comision_pct + bonusRescate;
     comisiones.push({
       usuario_id: closerId,
       rol: "closer",
@@ -174,6 +187,7 @@ export async function calculateCommissions(
   }
 
   // Persist
+  const mes = new Date().toISOString().slice(0, 7) + "-01";
   if (comisiones.length > 0) {
     const rows = comisiones.map((c) => ({
       venta_id: ventaId,
@@ -184,8 +198,36 @@ export async function calculateCommissions(
       porcentaje_aplicado: c.porcentaje_aplicado,
       porcentaje_teorico: c.porcentaje_teorico,
       pool_cap_aplicado: c.pool_cap_aplicado,
+      base_amount_cents: montoCents,
+      escenario,
+      mes,
+      pagado: false,
+      ...(opts?.stripePiId ? { stripe_payment_intent_id: opts.stripePiId } : {}),
     }));
     await sb.from("comisiones").insert(rows);
+  }
+
+  // Teacher payroll: class_hours_log + recompute
+  if (teacherTableId) {
+    const teacherComision = comisiones.find((c) => c.rol === "teacher");
+    if (teacherComision) {
+      await sb.from("class_hours_log").insert({
+        teacher_id: teacherTableId,
+        duration_minutes: 0,
+        rate_at_time: teacherComision.monto_cents,
+        amount_cents: teacherComision.monto_cents,
+        currency: "EUR",
+        kind: "commission",
+      });
+
+      await sb.rpc("recompute_teacher_month", {
+        p_teacher_id: teacherTableId,
+        p_any_date_in_month: new Date().toISOString(),
+      }).then(
+        () => {},
+        (err) => console.error("[closer-commissions] recompute failed:", err),
+      );
+    }
   }
 
   return comisiones;
@@ -198,6 +240,15 @@ export type CloserStats = {
   leads_perdidos: number;
   close_rate: number;
   comisiones_cents: number;
+};
+
+export type DetailedCloserStats = CloserStats & {
+  comisiones_by_tipo: {
+    comision_base: number;
+    bono_rescate: number;
+    comision_precalificacion: number;
+  };
+  tasa_contacto: number;
 };
 
 export async function getCloserStats(
@@ -249,5 +300,38 @@ export async function getCloserStats(
     leads_perdidos: perdidos,
     close_rate: Math.round(closeRate * 100) / 100,
     comisiones_cents: comisionesCents,
+  };
+}
+
+export async function getCloserDetailedStats(
+  closerId: string,
+  desde: Date,
+  hasta: Date,
+): Promise<DetailedCloserStats> {
+  const base = await getCloserStats(closerId, desde, hasta);
+
+  const sb = supabaseAdmin();
+
+  const { data: comisiones } = await sb
+    .from("comisiones")
+    .select("tipo, monto_cents")
+    .eq("usuario_id", closerId)
+    .gte("created_at", desde.toISOString())
+    .lt("created_at", hasta.toISOString());
+
+  const rows = (comisiones ?? []) as Array<{ tipo: string; monto_cents: number }>;
+
+  const byTipo = { comision_base: 0, bono_rescate: 0, comision_precalificacion: 0 };
+  for (const c of rows) {
+    const key = c.tipo as keyof typeof byTipo;
+    if (key in byTipo) byTipo[key] += c.monto_cents;
+  }
+
+  return {
+    ...base,
+    comisiones_by_tipo: byTipo,
+    tasa_contacto: base.leads_asignados > 0
+      ? Math.round((base.leads_contactados / base.leads_asignados) * 10000) / 100
+      : 0,
   };
 }

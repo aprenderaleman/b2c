@@ -13,6 +13,9 @@
  *   {link_reagenda}       — URL para reagendar la trial
  *   {nueva_fecha}         — fecha reprogramada (de chainMeta)
  *   {hora}                — hora reprogramada (de chainMeta)
+ *   {ritmo}               — nombre del ritmo seleccionado por el closer
+ *   {precio_ritmo}        — precio mensual del ritmo (e.g. "240 €/mes")
+ *   {link_agenda}         — URL para agendar una nueva clase
  */
 
 import { supabaseAdmin } from "./supabase";
@@ -106,17 +109,27 @@ export async function resolveChainVariables(
   const months = resolveGoalMonths(packId, goalId);
   const fechaLlegada = months ? formatArrivalDate(months) : "unos meses";
 
+  const ritmoDirecto = (chainMeta.ritmo as string) || "";
+  const precioRitmo = (chainMeta.precio_ritmo as string) || "";
+
   return {
     nombre: firstName(leadRow?.name ?? null) || "ahí",
     profe: profeName,
     meta: metaLabel,
     ritmo_recomendado: ritmoLabel,
+    ritmo: ritmoDirecto || ritmoLabel,
+    precio_ritmo: precioRitmo,
     fecha_llegada: fechaLlegada,
     dia_bonus: formatBonusDay(startedAt),
     link_inscripciones: INSCRIPCIONES_URL,
     link_pago: (chainMeta.fullUrl as string) || INSCRIPCIONES_URL,
     link_reagenda: `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=chain`,
+    link_agenda: `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=closer`,
     nueva_fecha: (chainMeta.nueva_fecha as string) || "",
     hora: (chainMeta.hora as string) || "",
   };
+}
+
+export function isBonusAlive(chainStartedAt: string): boolean {
+  return new Date(chainStartedAt).getTime() + 48 * 3_600_000 > Date.now();
 }

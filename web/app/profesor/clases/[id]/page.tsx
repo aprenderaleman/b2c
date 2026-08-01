@@ -10,6 +10,7 @@ import { HomeworkSection } from "@/components/homework/HomeworkSection";
 import { AttendanceEditor } from "@/components/classes/AttendanceEditor";
 import { ClassActions } from "./ClassActions";
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
+import { TeacherNotesEditor } from "@/components/classes/TeacherNotesEditor";
 import { getGroupForClass } from "@/lib/student-groups";
 
 export const dynamic = "force-dynamic";
@@ -152,6 +153,14 @@ export default async function TeacherClassDetail({
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Tema</h2>
               <p className="mt-3 text-sm text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{cls.topic}</p>
             </section>
+          )}
+
+          {(cls.status === "completed" || cls.status === "live" || cls.status === "scheduled") && (
+            <TeacherNotesEditor
+              classId={cls.id}
+              initialNotes={cls.teacher_notes}
+              initialShared={cls.notes_shared_with_student}
+            />
           )}
 
           <HomeworkSection classId={cls.id} assignments={homework} />

@@ -9,6 +9,7 @@ import { getLeadTrialTeacher } from "./trial-compensation";
 import { renderTemplate } from "./message-stats";
 import { startChain, cancelActiveChain } from "./chain-engine";
 import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
+import { autoAssignToActiveCloser } from "./closer-actions";
 
 /**
  * Tag interno: cuando se setea, Stiv debe escalar a `needs_human` la
@@ -148,6 +149,9 @@ export async function markTrialAttendedAwaitingConversion(
       } : existingMeta,
     })
     .eq("id", leadId);
+
+  await autoAssignToActiveCloser(leadId, "tipo_a", "teacher_post_trial")
+    .catch(err => console.warn("[markTrialAttendedAwaitingConversion] autoAssign error:", err));
 
   // FIX bug Saul 2026-06-13: si entre la "no asistencia" + reactivacion
   // y el "asistio" final se encolaron mensajes auto-generados (revival,
@@ -368,6 +372,9 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
     })
     .eq("id", leadId);
 
+  await autoAssignToActiveCloser(leadId, "tipo_a", "teacher_post_trial")
+    .catch(err => console.warn("[markTrialAttendedNoLink] autoAssign error:", err));
+
   try {
     const phone = lead?.whatsapp_normalized ?? null;
     if (phone) {
@@ -500,6 +507,10 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
       next_contact_date: null,
     })
     .eq("id", leadId);
+
+  await autoAssignToActiveCloser(leadId, "tipo_b", "teacher_post_trial")
+    .catch(err => console.warn("[markTrialAbsent] autoAssign error:", err));
+
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type: "status_change",
@@ -734,6 +745,9 @@ export async function markTrialAttendedWithObjection(
       },
     })
     .eq("id", leadId);
+
+  await autoAssignToActiveCloser(leadId, "tipo_a", "teacher_post_trial")
+    .catch(err => console.warn("[markTrialAttendedWithObjection] autoAssign error:", err));
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,

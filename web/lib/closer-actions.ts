@@ -128,6 +128,56 @@ export async function getCloserLeads(closerId: string, estadoCierre?: string) {
   return data ?? [];
 }
 
+export async function autoAssignToActiveCloser(
+  leadId: string,
+  tipo: CadenciaType,
+  source: string,
+): Promise<string | null> {
+  const sb = supabaseAdmin();
+
+  const { data: lead } = await sb
+    .from("leads")
+    .select("closer_id")
+    .eq("id", leadId)
+    .maybeSingle();
+
+  if ((lead as { closer_id: string | null } | null)?.closer_id) return null;
+
+  const { data: closers } = await sb
+    .from("users")
+    .select("id")
+    .eq("role", "closer")
+    .eq("active", true)
+    .eq("flujo_activo", true);
+
+  const activeClosers = (closers ?? []) as Array<{ id: string }>;
+  if (activeClosers.length === 0) return null;
+
+  let chosenId = activeClosers[0].id;
+
+  if (activeClosers.length > 1) {
+    const ids = activeClosers.map((c) => c.id);
+    const { data: counts } = await sb
+      .from("leads")
+      .select("closer_id")
+      .in("closer_id", ids)
+      .in("estado_cierre", ["en_seguimiento", "venta_pendiente"]);
+
+    const loadMap: Record<string, number> = {};
+    for (const id of ids) loadMap[id] = 0;
+    for (const row of (counts ?? []) as Array<{ closer_id: string }>) {
+      loadMap[row.closer_id] = (loadMap[row.closer_id] ?? 0) + 1;
+    }
+
+    chosenId = ids.reduce((best, id) =>
+      (loadMap[id] ?? 0) < (loadMap[best] ?? 0) ? id : best,
+    );
+  }
+
+  await assignCloser(leadId, chosenId, tipo);
+  return chosenId;
+}
+
 export async function markLeadLostByCloser(
   leadId: string,
   closerId: string,
