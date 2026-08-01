@@ -4,6 +4,7 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/lib/supabase";
 import { stripeUS, findOrCreateCustomer } from "@/lib/stripe";
 import { buildTrialToken } from "@/lib/trial-token";
+import { reportError } from "@/lib/error-reporting";
 
 /**
  * POST /api/public/book-trial-metaads-paid
@@ -58,9 +59,8 @@ export async function POST(req: Request) {
   try {
     return await handle(req);
   } catch (err) {
-    const e = err as { message?: string; stack?: string };
-    console.error("[book-trial-metaads-paid] UNHANDLED:", { message: e.message, stack: e.stack?.split("\n").slice(0,4).join(" | ") });
-    return NextResponse.json({ ok: false, error: "server_error", detail: e.message ?? "unknown" }, { status: 502 });
+    await reportError(err, { endpoint: "book-trial-metaads-paid" });
+    return NextResponse.json({ ok: false, error: "server_error", detail: (err as { message?: string }).message ?? "unknown" }, { status: 502 });
   }
 }
 

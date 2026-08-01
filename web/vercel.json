@@ -123,6 +123,18 @@
       "schedule": "*/1 * * * *"
     },
     {
+      "path": "/api/cron/trial-slot-release",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/ads-export-health",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/funnel-progress-retention",
+      "schedule": "0 4 * * 0"
+    },
+    {
       "path": "/api/cron/closer-daily-digest",
       "schedule": "0 6 * * *"
     },

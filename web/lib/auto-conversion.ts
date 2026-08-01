@@ -46,7 +46,7 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
 
   const { data: lead } = await sb
     .from("leads")
-    .select("id, name, email, whatsapp_normalized, status, converted_to_user_id, meta, closer_id")
+    .select("id, name, email, whatsapp_normalized, status, converted_to_user_id, meta, closer_id, fbclid")
     .eq("id", of.lead_id)
     .maybeSingle();
 
@@ -60,6 +60,7 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     whatsapp_normalized: string | null; status: string;
     converted_to_user_id: string | null; meta: Record<string, unknown> | null;
     closer_id: string | null;
+    fbclid: string | null;
   };
 
   if (ld.converted_to_user_id) {
@@ -212,6 +213,48 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
   } catch (err) {
     console.warn("[auto-conversion] cancelActiveChain failed:", err);
   }
+
+  // ═══ Meta CAPI Purchase (server-side) ═══
+  // Dispara Purchase con el valor REAL del pack (Gelfis 2026-07-28).
+  // Antes solo mandábamos Schedule al agendar la trial → Meta optimizaba
+  // por "quien reserva" en vez de "quien compra". Ahora aprende quién
+  // convierte a pack real → optimización de campañas mejora sustancialmente.
+  //
+  // eventId = stripe payment_intent.id → dedup determinista si algún día
+  // añadimos también un browser fbq Purchase en la thank-you page del pago.
+  //
+  // Errores NO abortan la conversión — Meta CAPI puede tener downtime y
+  // la venta real ya está registrada. Log y seguimos.
+  const purchaseValueEur = opts.amountCents / 100;
+  const eventIdPurchase = `sale_${opts.stripePiId}`;
+  try {
+    await sendMetaPurchaseCapi({
+      eventId:  eventIdPurchase,
+      value:    purchaseValueEur,
+      currency: opts.currency || "EUR",
+      email:    ld.email,
+      phone:    ld.whatsapp_normalized,
+      fbclid:   ld.fbclid,
+    });
+  } catch (err) {
+    console.warn("[auto-conversion] Meta CAPI Purchase failed (non-fatal):", err);
+  }
+
+  // Timeline audit del disparo (útil para auditar atribución después).
+  await sb.from("lead_timeline").insert({
+    lead_id: ld.id,
+    type:    "conversion",
+    author:  "system",
+    content: `💰 Compra confirmada — ${purchaseValueEur.toFixed(2)} ${opts.currency}. Meta CAPI Purchase disparado (event ${eventIdPurchase}).`,
+    metadata: {
+      kind:             "meta_capi_purchase_sent",
+      value_cents:      opts.amountCents,
+      currency:         opts.currency,
+      event_id:         eventIdPurchase,
+      stripe_pi_id:     opts.stripePiId,
+      has_fbclid:       !!ld.fbclid,
+    },
+  }).then(() => {}, () => {});
 
   console.log(`[auto-conversion] lead ${ld.id} → student ${result.studentId} via oferta ${opts.ofertaId}`);
 }

@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { supabaseAdmin } from "@/lib/supabase";
 import { verifyTrialToken } from "@/lib/trial-token";
 import { stripeUS, findOrCreateCustomer } from "@/lib/stripe";
+import { reportError } from "@/lib/error-reporting";
 
 /**
  * POST /api/public/deposit-checkout
@@ -35,15 +36,11 @@ export async function POST(req: Request) {
     // Cualquier throw sync/async (stripeUS() sin env, supabaseAdmin() sin
     // env, verifyTrialToken sin NEXTAUTH_SECRET, supabase query errors,
     // etc.) cae aquí en vez del 500 opaco de Next.js.
-    const e = err as { message?: string; stack?: string };
-    console.error("[deposit-checkout] UNHANDLED ERROR:", {
-      message: e.message,
-      stack:   e.stack?.split("\n").slice(0, 4).join(" | "),
-    });
+    await reportError(err, { endpoint: "deposit-checkout" });
     return NextResponse.json({
       ok:     false,
       error:  "server_error",
-      detail: e.message ?? "unknown",
+      detail: (err as { message?: string }).message ?? "unknown",
     }, { status: 502 });
   }
 }
