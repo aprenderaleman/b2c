@@ -84,7 +84,7 @@ export async function buildTeacherInvoicePdf(args: {
   const { data: hoursLog } = await sb
     .from("class_hours_log")
     .select(`
-      id, created_at, duration_minutes, amount_cents, rate_at_time,
+      id, created_at, duration_minutes, amount_cents, rate_at_time, kind,
       class:classes!inner(
         id, started_at, scheduled_at, type, title,
         group:student_groups(name),
@@ -94,8 +94,49 @@ export async function buildTeacherInvoicePdf(args: {
       )
     `)
     .eq("teacher_id", args.teacherId)
+    .eq("kind", "class")
     .gte("created_at", monthStart)
     .lt("created_at", monthEnd);
+
+  // Comisiones: class_hours_log kind='commission' (class_id puede ser NULL)
+  const { data: commissionLog } = await sb
+    .from("class_hours_log")
+    .select("id, created_at, amount_cents, comision_id")
+    .eq("teacher_id", args.teacherId)
+    .eq("kind", "commission")
+    .gte("created_at", monthStart)
+    .lt("created_at", monthEnd);
+
+  type CommRow = { id: string; created_at: string; amount_cents: number; comision_id: string | null };
+  const commRows = (commissionLog ?? []) as CommRow[];
+
+  // Enriquecer con datos de la tabla comisiones
+  type CommDetail = { amount_cents: number; tipo: string; base_amount_cents: number; comision_pct: number; escenario: string };
+  const commDetails: CommDetail[] = [];
+  const comisionIds = commRows.map(r => r.comision_id).filter(Boolean) as string[];
+  let comisionesMap = new Map<string, { tipo: string; base_amount_cents: number; comision_pct: number; escenario: string }>();
+  if (comisionIds.length > 0) {
+    const { data: comisionesData } = await sb
+      .from("comisiones")
+      .select("id, tipo, base_amount_cents, comision_pct, escenario")
+      .in("id", comisionIds);
+    for (const c of (comisionesData ?? []) as { id: string; tipo: string; base_amount_cents: number; comision_pct: number; escenario: string }[]) {
+      comisionesMap.set(c.id, c);
+    }
+  }
+  let totalCommissionCents = 0;
+  for (const r of commRows) {
+    if (r.amount_cents <= 0) continue;
+    const meta = r.comision_id ? comisionesMap.get(r.comision_id) : null;
+    commDetails.push({
+      amount_cents: r.amount_cents,
+      tipo: meta?.tipo ?? "comision_base",
+      base_amount_cents: meta?.base_amount_cents ?? 0,
+      comision_pct: Number(meta?.comision_pct ?? 0),
+      escenario: meta?.escenario ?? "",
+    });
+    totalCommissionCents += r.amount_cents;
+  }
 
   type ParticipantRow = {
     student: { user: { full_name: string | null } | Array<{ full_name: string | null }> }
@@ -115,6 +156,7 @@ export async function buildTeacherInvoicePdf(args: {
     duration_minutes: number;
     amount_cents:     number;
     rate_at_time:     string | number;
+    kind:             string;
     class: ClassShape | ClassShape[];
   };
   const logRowsRaw = (hoursLog ?? []) as LogRow[];
@@ -183,13 +225,14 @@ export async function buildTeacherInvoicePdf(args: {
   const rows         = allRows.filter(r => !r.isCarryover);
   const carryoverRows = allRows.filter(r =>  r.isCarryover);
 
-  // El total del PDF incluye carryover — debe cuadrar con teacher_earnings.
+  // El total del PDF incluye carryover + comisiones — debe cuadrar con teacher_earnings.
   let totalCents = 0;
   let totalHours = 0;
   for (const r of allRows) {
     totalCents += r.amount_cents;
     totalHours += r.duration_min / 60;
   }
+  totalCents += totalCommissionCents;
 
   // ── Render PDF
   const doc = new PDFDocument({ size: "A4", margin: 50 });
@@ -372,6 +415,56 @@ export async function buildTeacherInvoicePdf(args: {
       y0 += ROW_H;
       idx++;
     }
+  }
+
+  // ───── Comisiones ─────
+  if (commDetails.length > 0) {
+    if (y0 > 650) { doc.addPage(); y0 = 60; }
+    y0 += 16;
+    doc.font("Helvetica-Bold").fontSize(11).fillColor("#0f172a")
+       .text("Comisiones", 50, y0);
+    y0 += 18;
+    doc.font("Helvetica-Bold").fontSize(9).fillColor("#475569");
+    doc.text("CONCEPTO",       50,  y0);
+    doc.text("BASE",           300, y0, { width: 70, align: "right" });
+    doc.text("%",              375, y0, { width: 40, align: "right" });
+    doc.text("IMPORTE",        475, y0, { width: 75, align: "right" });
+    doc.moveTo(50, y0 + 13).lineTo(550, y0 + 13).strokeColor("#cbd5e1").stroke();
+    y0 += 20;
+
+    const comLabel = (tipo: string): string => {
+      if (tipo === "bono_cierre") return "Bono de cierre";
+      if (tipo === "conversion") return "Comisión por conversión";
+      if (tipo === "comision_base") return "Comisión base";
+      return tipo.replace(/_/g, " ");
+    };
+
+    let cIdx2 = 0;
+    for (const cd of commDetails) {
+      if (y0 > 760) { doc.addPage(); y0 = 60; }
+      if (cIdx2 % 2 === 1) {
+        doc.rect(TABLE_LEFT, y0 - 4, TABLE_RIGHT - TABLE_LEFT, ROW_H)
+           .fillColor("#f0fdf4").fill();
+      } else {
+        doc.rect(TABLE_LEFT, y0 - 4, TABLE_RIGHT - TABLE_LEFT, ROW_H)
+           .fillColor("#f7fee7").fill();
+      }
+      doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
+      doc.text(comLabel(cd.tipo),                50,  y0, { width: 245, lineBreak: false });
+      doc.text(cd.base_amount_cents > 0 ? euros(cd.base_amount_cents) : "—",
+                                                 300, y0, { width: 70,  lineBreak: false, align: "right" });
+      doc.text(cd.comision_pct > 0 ? cd.comision_pct + "%" : "—",
+                                                 375, y0, { width: 40,  lineBreak: false, align: "right" });
+      doc.text(euros(cd.amount_cents),           475, y0, { width: 75,  lineBreak: false, align: "right" });
+      y0 += ROW_H;
+      cIdx2++;
+    }
+
+    // Subtotal comisiones
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f172a");
+    doc.text("Subtotal comisiones:", 300, y0 + 2, { width: 115, lineBreak: false, align: "right" });
+    doc.text(euros(totalCommissionCents), 475, y0 + 2, { width: 75, lineBreak: false, align: "right" });
+    y0 += ROW_H + 4;
   }
 
   // Total box
