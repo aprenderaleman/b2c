@@ -10,6 +10,7 @@ import { StartNowButton } from "./StartNowButton";
 import { ScheduleButton } from "./ScheduleButton";
 import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
+import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
 
 export const dynamic = "force-dynamic";
 
@@ -113,6 +114,12 @@ export default async function TeacherStudentDetail({
           <GroupDocButton documentUrl={student.document_url} label="Apuntes de clase" />
         </div>
       )}
+
+      <GarantiaNivelCard
+        attendanceRate={student.attendance_rate}
+        schuleCompletionPct={student.schule_completion_pct}
+        status={(student.garantia_status as "active" | "at_risk" | "lost" | "not_applicable") ?? "not_applicable"}
+      />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">

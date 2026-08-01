@@ -13,6 +13,7 @@ import { NotesCard } from "@/components/admin/NotesCard";
 import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOutToggle";
 import { listStudentCertificates } from "@/lib/certificates";
 import { listAdminNotes } from "@/lib/admin-notes";
+import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
 import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 
@@ -182,6 +183,12 @@ export default async function StudentDetailPage({
           </div>
         </section>
       )}
+
+      <GarantiaNivelCard
+        attendanceRate={student.attendance_rate}
+        schuleCompletionPct={student.schule_completion_pct}
+        status={(student.garantia_status as "active" | "at_risk" | "lost" | "not_applicable") ?? "not_applicable"}
+      />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-1 space-y-5">

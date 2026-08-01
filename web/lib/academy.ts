@@ -30,6 +30,10 @@ export type StudentRow = {
   lead_id:               string | null;
   notes:                 string | null;
   document_url:          string | null;
+
+  attendance_rate:       number | null;
+  schule_completion_pct: number | null;
+  garantia_status:       string;
 };
 
 export type TeacherRow = {
@@ -123,6 +127,7 @@ export async function getStudentByUserId(userId: string): Promise<StudentRow | n
       subscription_type, subscription_status, classes_remaining,
       classes_per_month, monthly_price_cents, currency,
       schule_access, hans_access, notes, converted_at, document_url,
+      attendance_rate, schule_completion_pct, garantia_status,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("user_id", userId)
@@ -156,6 +161,9 @@ export async function getStudentByUserId(userId: string): Promise<StudentRow | n
     lead_id:              (data.lead_id as string | null) ?? null,
     notes:                (data.notes as string | null) ?? null,
     document_url:         (data.document_url as string | null) ?? null,
+    attendance_rate:      (data.attendance_rate as number | null) ?? null,
+    schule_completion_pct:(data.schule_completion_pct as number | null) ?? null,
+    garantia_status:      (data.garantia_status as string) ?? "not_applicable",
   };
 }
 
@@ -189,6 +197,7 @@ export async function getStudents(
         subscription_type, subscription_status, classes_remaining,
         classes_per_month, monthly_price_cents, currency,
         schule_access, hans_access, notes, converted_at, document_url,
+        attendance_rate, schule_completion_pct, garantia_status,
         users!inner(email, full_name, phone, language_preference, active)
       `,
       { count: "exact" },
@@ -249,6 +258,9 @@ export async function getStudents(
       lead_id:              (r.lead_id as string | null) ?? null,
       notes:                (r.notes as string | null) ?? null,
       document_url:         (r.document_url as string | null) ?? null,
+      attendance_rate:      (r.attendance_rate as number | null) ?? null,
+      schule_completion_pct:(r.schule_completion_pct as number | null) ?? null,
+      garantia_status:      (r.garantia_status as string) ?? "not_applicable",
     };
   });
 
@@ -269,6 +281,7 @@ export async function getStudentById(id: string): Promise<StudentRow | null> {
       subscription_type, subscription_status, classes_remaining,
       classes_per_month, monthly_price_cents, currency,
       schule_access, hans_access, notes, converted_at, document_url,
+      attendance_rate, schule_completion_pct, garantia_status,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("id", id)
@@ -302,6 +315,9 @@ export async function getStudentById(id: string): Promise<StudentRow | null> {
     lead_id:              (data.lead_id as string | null) ?? null,
     notes:                (data.notes as string | null) ?? null,
     document_url:         (data.document_url as string | null) ?? null,
+    attendance_rate:      (data.attendance_rate as number | null) ?? null,
+    schule_completion_pct:(data.schule_completion_pct as number | null) ?? null,
+    garantia_status:      (data.garantia_status as string) ?? "not_applicable",
   };
 }
 

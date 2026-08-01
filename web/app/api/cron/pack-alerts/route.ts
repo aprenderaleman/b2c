@@ -18,6 +18,8 @@ import { sendPackCompletedEmail, sendPackLowBalanceEmail } from "@/lib/email/sen
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+const RENEW_URL = `${PLATFORM_URL}/estudiante`;
 const WHATSAPP_URL = "https://wa.me/4917684930450";
 
 const THRESHOLDS = [
@@ -25,14 +27,14 @@ const THRESHOLDS = [
     remaining: 0,
     notifTitle: "Has completado tu plan — felicidades!",
     notifBody: (total: number) =>
-      `Felicidades! Has completado tus ${total} clases. Cuéntanos cómo ha sido tu experiencia y comunícate con Gelfis Horn para los siguientes pasos.`,
+      `Felicidades! Has completado tus ${total} clases. Renueva tu plan desde tu panel o comunicate con nosotros.`,
     sendEmail: "completed" as const,
   },
   {
     remaining: 5,
     notifTitle: "Te quedan 5 clases en tu plan",
     notifBody: (_total: number) =>
-      "Te quedan 5 clases en tu plan actual. Comunícate con Gelfis Horn para coordinar los siguientes pasos.",
+      "Te quedan 5 clases en tu plan actual. Renueva desde tu panel para no quedarte sin clases.",
     sendEmail: "low_balance" as const,
   },
 ];
@@ -115,8 +117,37 @@ async function run(req: Request) {
           type: "generic",
           title: t.notifTitle,
           body: t.notifBody(totalClasses),
+          link: "/estudiante",
         });
         notifOk = !!id;
+      } catch { /* swallow */ }
+
+      // Notify the student's teacher too
+      try {
+        const { data: groups } = await sb
+          .from("student_group_members")
+          .select("student_groups!inner(teacher_id, type)")
+          .eq("student_id", s.id as string)
+          .eq("student_groups.type", "individual")
+          .limit(1);
+        const teacherId = (() => {
+          const g = groups?.[0];
+          if (!g) return null;
+          const sg = Array.isArray(g.student_groups) ? g.student_groups[0] : g.student_groups;
+          return (sg as { teacher_id?: string })?.teacher_id ?? null;
+        })();
+        if (teacherId) {
+          const { data: teacher } = await sb.from("teachers").select("user_id").eq("id", teacherId).maybeSingle();
+          if (teacher) {
+            await createNotification({
+              user_id: (teacher as { user_id: string }).user_id,
+              type: "generic",
+              title: `${fullName} — ${t.remaining === 0 ? "pack completado" : "5 clases restantes"}`,
+              body: `Tu alumno ${fullName} tiene ${t.remaining} clases restantes.`,
+              link: "/profesor/estudiantes",
+            });
+          }
+        }
       } catch { /* swallow */ }
 
       sent.push({ name: fullName, threshold: t.remaining, email: emailOk, notif: notifOk });

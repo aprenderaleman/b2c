@@ -17,6 +17,8 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { getPendingReviewForStudent } from "@/lib/class-reviews";
 import { ClassReviewPrompt } from "@/components/student/ClassReviewPrompt";
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
+import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
+import { RenewButton } from "@/components/student/RenewButton";
 
 export const dynamic = "force-dynamic";
 
@@ -158,6 +160,12 @@ export default async function StudentHome() {
         </div>
       </section>
 
+      <GarantiaNivelCard
+        attendanceRate={student.attendance_rate ?? null}
+        schuleCompletionPct={student.schule_completion_pct ?? null}
+        status={(student.garantia_status as "active" | "at_risk" | "lost" | "not_applicable") ?? "not_applicable"}
+      />
+
       <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
@@ -172,8 +180,15 @@ export default async function StudentHome() {
               }
             </p>
           </div>
-          {icalToken && <CalendarSyncButton icalUrl={icalUrlFor(icalToken)} />}
+          <div className="flex items-center gap-2">
+            {icalToken && <CalendarSyncButton icalUrl={icalUrlFor(icalToken)} />}
+          </div>
         </div>
+        {student.subscription_type === "monthly_subscription" && (
+          <div className="mt-4">
+            <RenewButton />
+          </div>
+        )}
       </section>
     </main>
   );
