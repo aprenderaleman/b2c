@@ -2,11 +2,9 @@ import { signOut } from "@/lib/auth";
 import { requireRole } from "@/lib/rbac";
 import { AppShell } from "@/components/nav/AppShell";
 import { ImpersonationBanner } from "@/components/nav/ImpersonationBanner";
-import { ImminentClassBanner } from "@/components/classes/ImminentClassBanner";
+import { ImminentClassBannerLoader } from "@/components/classes/ImminentClassBannerLoader";
 import { NAV_BY_ROLE } from "@/lib/nav-items";
 import { getImpersonation } from "@/lib/impersonation";
-import { getStudentByUserId } from "@/lib/academy";
-import { getImminentClassForStudent } from "@/lib/imminent-class";
 
 export const metadata = { title: "Estudiante · Aprender-Aleman.de" };
 
@@ -15,15 +13,8 @@ export default async function StudentLayout({ children }: { children: React.Reac
   const imp     = await getImpersonation();
   const display = (session.user.name ?? session.user.email ?? "Estudiante") as string;
 
-  // If admin is impersonating a student, render as the student role;
-  // otherwise use their own role.
   const effectiveRole = imp?.target_role === "student" ? "student" :
                         (session.user as { role: "superadmin" | "admin" | "teacher" | "student" }).role;
-
-  // Pre-compute imminent class for the sticky banner (null when nothing
-  // is within the next 12h).
-  const student = await getStudentByUserId(session.user.id);
-  const imminent = student ? await getImminentClassForStudent(student.id) : null;
 
   const logoutForm = (
     <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
@@ -40,14 +31,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
           targetRole={imp.target_role}
         />
       )}
-      {imminent && (
-        <ImminentClassBanner
-          classId={imminent.id}
-          title={imminent.title}
-          scheduledAt={imminent.scheduled_at}
-          durationMinutes={imminent.duration_minutes}
-        />
-      )}
+      <ImminentClassBannerLoader />
       <AppShell
         items={NAV_BY_ROLE.student}
         role={effectiveRole}
