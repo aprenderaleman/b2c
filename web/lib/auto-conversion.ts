@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { convertLeadToStudent, type ConvertInput } from "./lead-conversion";
-import { registerCommission } from "./commission-engine";
+import { registerCommission, registerBonoCierre } from "./commission-engine";
 import { cancelActiveChain } from "./chain-engine";
 
 type AutoConvertOpts = {
@@ -124,6 +124,13 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     .eq("id", opts.ofertaId);
 
   if (result.studentId && opts.amountCents > 0) {
+    await registerBonoCierre({
+      teacherId: of.teacher_id,
+      studentId: result.studentId,
+      stripePiId: opts.stripePiId,
+      studentName: ld.name ?? "Estudiante",
+    });
+
     await registerCommission({
       teacherId: of.teacher_id,
       studentId: result.studentId,

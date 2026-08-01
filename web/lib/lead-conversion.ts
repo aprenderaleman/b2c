@@ -9,12 +9,7 @@ import {
 } from "./students";
 import { sendWelcomeStudentEmail } from "./email/send";
 import { sendWhatsappText } from "./whatsapp";
-import {
-  getLeadTrialTeacher,
-  payConversionCommission,
-  payPerformanceBonus,
-  getCommissionCents,
-} from "./trial-compensation";
+import { getLeadTrialTeacher } from "./trial-compensation";
 
 export const ConvertBody = z.object({
   email:             z.string().trim().toLowerCase().email(),
@@ -146,56 +141,9 @@ export async function convertLeadToStudent(
       .eq("id", created.studentId);
   }
 
-  if (trial && !options?.skipLegacyCommission) {
-    try {
-      const { data: leadMetaRow } = await sb
-        .from("leads")
-        .select("meta")
-        .eq("id", lead.id)
-        .maybeSingle();
-      const meta = (leadMetaRow?.meta ?? {}) as Record<string, unknown>;
-      const packId = typeof meta.last_offered_pack === "string" ? meta.last_offered_pack : null;
-      const lop = meta.last_offered_payment;
-      const paymentType = (lop === "flexible" || lop === "extended") ? lop as "flexible" | "extended" : "single" as const;
-      if (packId && getCommissionCents(packId, paymentType) > 0) {
-        const paid = await payConversionCommission({
-          trialClassId: trial.classId,
-          teacherId:    trial.teacherId,
-          packId,
-          paymentType,
-        });
-        if (paid && paid > 0) {
-          await sb.from("lead_timeline").insert({
-            lead_id: lead.id,
-            type:    "agent_note",
-            author:  "system",
-            content: `💰 Pagada comisión de ${(paid/100).toFixed(2)}€ al profe por conversión (pack ${packId})`,
-            metadata: { kind: "conversion_commission_paid", class_id: trial.classId, teacher_id: trial.teacherId, pack_id: packId, amount_cents: paid },
-          });
-        }
-      }
-    } catch (e) {
-      console.error("[convert] payConversionCommission failed:", e instanceof Error ? e.message : e);
-    }
-
-    try {
-      const bonus = await payPerformanceBonus({
-        trialClassId: trial.classId,
-        teacherId:    trial.teacherId,
-      });
-      if (bonus && bonus > 0) {
-        await sb.from("lead_timeline").insert({
-          lead_id: lead.id,
-          type:    "agent_note",
-          author:  "system",
-          content: `🎯 Bono de desempeño: ${(bonus/100).toFixed(0)}€ (close rate ≥30%)`,
-          metadata: { kind: "performance_bonus_paid", class_id: trial.classId, teacher_id: trial.teacherId, amount_cents: bonus },
-        });
-      }
-    } catch (e) {
-      console.error("[convert] payPerformanceBonus failed:", e instanceof Error ? e.message : e);
-    }
-  }
+  // Legacy commission system (trial-compensation.ts) DESACTIVADO.
+  // Todas las comisiones pasan por commission-engine.ts (bono_cierre + % por rango).
+  // El caller (auto-conversion.ts) llama registerBonoCierre + registerCommission directamente.
 
   await sb.from("leads")
     .update({ status: "converted", next_contact_date: null, converted_at: new Date().toISOString() })
