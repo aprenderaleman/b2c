@@ -153,6 +153,10 @@
     {
       "path": "/api/cron/garantia-nivel",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/teacher-contact-timeout",
+      "schedule": "0 * * * *"
     }
   ]
 }
