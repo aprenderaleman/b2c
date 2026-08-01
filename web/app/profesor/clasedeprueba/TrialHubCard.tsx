@@ -12,7 +12,6 @@ import { DeleteTrialClassButton } from "@/components/DeleteTrialClassButton";
 import Link from "next/link";
 import { ConfirmPaymentModal } from "@/components/teacher/ConfirmPaymentModal";
 import { NotesField } from "./NotesField";
-import { PaymentLinkModal } from "./PaymentLinkModal";
 import { ScheduleClassModal } from "./ScheduleClassModal";
 import { PresentationLinks } from "./PresentationLinks";
 
@@ -32,7 +31,6 @@ export function TrialHubCard({
   canDelete?: boolean;
 }) {
   const router = useRouter();
-  const [paymentOpen, setPaymentOpen] = useState(false);
   const [confirmPaymentOpen, setConfirmPaymentOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [escalateOpen, setEscalateOpen] = useState(false);
@@ -298,10 +296,10 @@ export function TrialHubCard({
 
                   <button
                     type="button"
-                    onClick={() => setPaymentOpen(true)}
+                    onClick={() => setConfirmPaymentOpen(true)}
                     className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1.5 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25"
                   >
-                    💳 Enviar enlace de inscripción
+                    💰 Confirmar Pago
                   </button>
 
                   <a
@@ -395,16 +393,6 @@ export function TrialHubCard({
                     {reschedulingSend ? "Enviando..." : "📅 Reagendar"}
                   </button>
                 </>
-              )}
-
-              {!isConverted && row.leadId && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmPaymentOpen(true)}
-                  className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1.5 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25"
-                >
-                  💰 Confirmar Pago
-                </button>
               )}
 
               {isConverted && studentId && (
@@ -536,15 +524,6 @@ export function TrialHubCard({
       </article>
 
       {/* Modals */}
-      {paymentOpen && row.leadId && (
-        <PaymentLinkModal
-          leadId={row.leadId}
-          leadName={row.leadName || "Lead"}
-          defaultLevel={normalizedLevel}
-          onClose={() => setPaymentOpen(false)}
-        />
-      )}
-
       {confirmPaymentOpen && row.leadId && (
         <ConfirmPaymentModal
           leadId={row.leadId}
