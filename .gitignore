@@ -76,3 +76,5 @@ credentials/
 /materiales/**/*-presentacion.docx
 /materiales-premium-all/
 /materiales-premium/
+
+.vercel

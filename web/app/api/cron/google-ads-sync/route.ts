@@ -26,42 +26,54 @@ async function handleSync(req: Request): Promise<Response> {
   }
 
   const sb = supabaseAdmin();
-  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const LOOKBACK_DAYS = 7;
+  const dates: string[] = [];
+  for (let i = 1; i <= LOOKBACK_DAYS; i++) {
+    dates.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
+  }
 
-  try {
-    const metrics = await fetchDailyReport(yesterday);
+  let totalUpserted = 0;
+  const errors: string[] = [];
 
-    let upserted = 0;
-    for (const m of metrics) {
-      const { error } = await sb.from("google_ads_daily").upsert(
-        {
-          date: m.date,
-          account_id: customerId.replace(/-/g, ""),
-          campaign_id: m.campaign_id,
-          campaign_name: m.campaign_name,
-          impressions: m.impressions,
-          clicks: m.clicks,
-          cost_micros: m.cost_micros,
-          conversions: m.conversions,
-          currency: "EUR",
-        },
-        { onConflict: "date,account_id,campaign_id" },
-      );
-      if (!error) upserted++;
+  for (const date of dates) {
+    try {
+      const metrics = await fetchDailyReport(date);
+
+      for (const m of metrics) {
+        const { error } = await sb.from("google_ads_daily").upsert(
+          {
+            date: m.date,
+            account_id: customerId.replace(/-/g, ""),
+            campaign_id: m.campaign_id,
+            campaign_name: m.campaign_name,
+            impressions: m.impressions,
+            clicks: m.clicks,
+            cost_micros: m.cost_micros,
+            conversions: m.conversions,
+            currency: "EUR",
+          },
+          { onConflict: "date,account_id,campaign_id" },
+        );
+        if (!error) totalUpserted++;
+      }
+    } catch (err) {
+      errors.push(`${date}: ${(err as Error).message}`);
     }
+  }
 
-    return NextResponse.json({
-      ok: true,
-      date: yesterday,
-      campaigns: metrics.length,
-      upserted,
-    });
-  } catch (err) {
-    console.error("Google Ads sync error:", (err as Error).message);
+  if (errors.length === LOOKBACK_DAYS) {
+    console.error("Google Ads sync: all days failed", errors[0]);
     return NextResponse.json({
       ok: false,
-      error: (err as Error).message,
-      date: yesterday,
+      error: errors[0],
+      dates,
     }, { status: 200 });
   }
+
+  return NextResponse.json({
+    ok: true,
+    dates,
+    upserted: totalUpserted,
+    errors: errors.length > 0 ? errors : undefined,
+  });
 }

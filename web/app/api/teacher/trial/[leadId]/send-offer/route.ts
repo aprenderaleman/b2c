@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
 import { markTrialAttendedAwaitingConversion, type AttendedOptions } from "@/lib/admin-actions";
 import { supabaseAdmin } from "@/lib/supabase";
+import { stripeUS, findOrCreateCustomer } from "@/lib/stripe";
 import {
   RITMOS, ONE_TIME_PACKS, KIDS_PACK,
   type RitmoId, type GoalId, type PlanCategory, type PaymentType,
-  buildSubscriptionUrl,
 } from "@/lib/trial-packs";
+
+const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 const CLASSES_PER_MONTH: Record<RitmoId, number> = {
   viajero: 6, estandar: 8, intensivo: 12, vip_express: 16,
@@ -44,11 +47,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   let clases_totales: number;
   let clases_por_mes: number | null = null;
   let importe_cents: number;
-  let stripe_price_id: string | null = null;
-  let fullUrl: string | undefined;
+  let monthlyPriceCents: number | null = null;
   let packLabel: string | undefined;
   let packId: string;
   let paymentType: PaymentType;
+  let productName: string;
 
   if (category === "subscription") {
     if (!ritmoId || !goalId) return NextResponse.json({ error: "missing_ritmo_or_goal" }, { status: 400 });
@@ -62,8 +65,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     clases_totales = g.months * r.classesPerMonth;
     clases_por_mes = r.classesPerMonth;
     importe_cents = g.totalCents;
-    fullUrl = buildSubscriptionUrl(r, g);
+    monthlyPriceCents = r.pricePerMonth * 100;
     packLabel = `${r.emoji} ${r.name} · Meta ${g.label} · ${g.months} meses`;
+    productName = `${r.name} — Meta ${g.label}`;
     packId = ritmoId;
     paymentType = "flexible";
   } else if (category === "one_time") {
@@ -75,8 +79,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     tipo_pago = "unico";
     clases_totales = ONE_TIME_CLASSES[goalId] ?? 32;
     importe_cents = p.priceCents;
-    fullUrl = p.url;
     packLabel = p.name;
+    productName = p.name;
     packId = goalId;
     paymentType = "single";
   } else if (category === "kids") {
@@ -84,8 +88,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     tipo_pago = "unico";
     clases_totales = KIDS_PACK.classes;
     importe_cents = KIDS_PACK.priceCents;
-    fullUrl = kidsPayment === "flexible" ? KIDS_PACK.urlFlexible : KIDS_PACK.urlSingle;
     packLabel = "Pack Kids";
+    productName = "Pack Kids — Alemán para niños";
     packId = "kids";
     paymentType = kidsPayment === "flexible" ? "flexible" : "single";
   } else {
@@ -102,6 +106,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   if (!teacherRow) return NextResponse.json({ error: "teacher_not_found" }, { status: 404 });
   const teacherId = (teacherRow as { id: string }).id;
 
+  const { data: leadRow } = await sb
+    .from("leads")
+    .select("email, name")
+    .eq("id", leadId)
+    .maybeSingle();
+  const leadEmail = (leadRow as { email: string | null } | null)?.email;
+  const leadName = (leadRow as { name: string | null } | null)?.name;
+
   const { data: oferta, error: insertErr } = await sb
     .from("ofertas_enviadas")
     .insert({
@@ -113,7 +125,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
       clases_totales,
       clases_por_mes,
       importe_cents,
-      stripe_price_id,
     })
     .select("id")
     .single();
@@ -123,6 +134,87 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     return NextResponse.json({ error: "db_error" }, { status: 500 });
   }
 
+  const ofertaId = (oferta as { id: string }).id;
+
+  // Create Stripe Checkout Session with enrollment metadata
+  let checkoutUrl: string;
+  try {
+    const stripe = stripeUS();
+    const enrollmentMeta: Record<string, string> = {
+      type: "enrollment",
+      oferta_id: ofertaId,
+      lead_id: leadId,
+      teacher_id: teacherId,
+    };
+
+    let customerId: string | undefined;
+    if (leadEmail) {
+      try {
+        customerId = await findOrCreateCustomer("us", {
+          email: leadEmail,
+          name: leadName ?? undefined,
+          metadata: { lead_id: leadId },
+        });
+      } catch { /* fall back to customer_email */ }
+    }
+
+    const successUrl = `${SITE_URL}/inscripcion-exitosa?oferta=${ofertaId}`;
+    const cancelUrl = `${SITE_URL}/`;
+
+    let sessionParams: Stripe.Checkout.SessionCreateParams;
+
+    if (tipo_pago === "suscripcion" && monthlyPriceCents) {
+      sessionParams = {
+        mode: "subscription",
+        ...(customerId ? { customer: customerId } : { customer_email: leadEmail ?? undefined }),
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: "eur",
+            unit_amount: monthlyPriceCents,
+            recurring: { interval: "month" },
+            product_data: {
+              name: productName,
+              description: `${clases_por_mes} clases/mes · ${clases_totales} clases en total`,
+            },
+          },
+        }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: enrollmentMeta,
+        subscription_data: { metadata: enrollmentMeta },
+      };
+    } else {
+      sessionParams = {
+        mode: "payment",
+        payment_method_types: ["card"],
+        ...(customerId ? { customer: customerId } : { customer_email: leadEmail ?? undefined }),
+        line_items: [{
+          quantity: 1,
+          price_data: {
+            currency: "eur",
+            unit_amount: importe_cents,
+            product_data: {
+              name: productName,
+              description: `${clases_totales} clases de alemán`,
+            },
+          },
+        }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: enrollmentMeta,
+        payment_intent_data: { metadata: enrollmentMeta },
+      };
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+    checkoutUrl = session.url!;
+    console.log("[send-offer] checkout session created:", session.id);
+  } catch (err) {
+    console.error("[send-offer] Stripe checkout creation failed:", err);
+    return NextResponse.json({ error: "stripe_error" }, { status: 502 });
+  }
+
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type: "agent_note",
@@ -130,7 +222,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     content: `📦 Oferta enviada: ${packLabel} · ${(importe_cents / 100).toLocaleString("es-ES")} € · ${clases_totales} clases${clases_por_mes ? ` (${clases_por_mes}/mes)` : ""}`,
     metadata: {
       kind: "offer_sent",
-      oferta_id: (oferta as { id: string }).id,
+      oferta_id: ofertaId,
       teacher_id: teacherId,
       pack_id: packId,
       category,
@@ -142,11 +234,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     paymentType,
     objective: "",
     ...(nivel ? { nivel } : {}),
-    ...(fullUrl ? { fullUrl } : {}),
+    fullUrl: checkoutUrl,
     ...(packLabel ? { packLabel } : {}),
   };
 
   await markTrialAttendedAwaitingConversion(leadId, attendedOpts);
 
-  return NextResponse.json({ ok: true, ofertaId: (oferta as { id: string }).id });
+  return NextResponse.json({ ok: true, ofertaId, checkoutUrl });
 }

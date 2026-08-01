@@ -493,6 +493,14 @@ export async function POST(req: Request) {
     notify_after_at:    notifyAfterAt,
   }).select("id").single();
   if (classErr || !cls) {
+    const isDupe = classErr?.message?.includes("classes_no_double_booking_uidx")
+      || classErr?.code === "23505";
+    if (isDupe) {
+      return NextResponse.json({
+        error:   "slot_taken",
+        message: "Ese horario acaba de reservarse o dejó de estar disponible. Elige otro.",
+      }, { status: 409 });
+    }
     return NextResponse.json({
       error: "class_create_failed",
       message: classErr?.message ?? "unknown",

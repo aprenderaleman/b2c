@@ -49,7 +49,8 @@ export function AdsUpload() {
         </button>
       </div>
       <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        CSV de Google Ads con columnas: Day, Campaign, Cost, Clicks, Impressions, Conversions
+        CSV diario de Google Ads con columnas: Day, Campaign, Cost, Clicks, Impressions, Conversions.
+        Debe tener columna de fecha — los reportes agregados (sin fecha por fila) no se aceptan.
       </p>
       {status === "done" && result && (
         <p className="text-xs text-emerald-600 dark:text-emerald-400">

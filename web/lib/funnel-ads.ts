@@ -335,14 +335,15 @@ export async function getFunnelAdsData(
 
   const motivoBreakdown = await getMotivoBreakdown(sb, since, country);
 
-  // Total de conversiones REAL — no excluye leads sin motivo_inicial.
-  // Usa converted_at si está presente; si no, cae a created_at (filas
-  // viejas previas a la columna converted_at quedan con NULL).
+  // Total de conversiones — misma cohorte que el resto del funnel
+  // (leads creados en la ventana). Antes filtraba por converted_at,
+  // lo que desalineaba numerador/denominador de la tasa de conversión
+  // cuando un lead creado hace 40 días convertía hoy.
   let convQ = sb
     .from("leads")
     .select("id", { count: "exact", head: true })
     .eq("status", "converted")
-    .or(`converted_at.gte.${since},and(converted_at.is.null,created_at.gte.${since})`);
+    .gte("created_at", since);
   if (country) convQ = convQ.eq("country", country);
   const { count: totalConverted } = await convQ;
 
@@ -364,13 +365,22 @@ export async function getFunnelAdsData(
     trial_attended_at:  string | null;
     trial_absent_at:    string | null;
   };
+  const now = new Date();
   const trialLeads = (leadsRows ?? []).filter(
     (l: LeadRow) => l.trial_scheduled_at !== null,
   );
   const attendedCount = trialLeads.filter((l: LeadRow) => l.trial_attended_at !== null).length;
-  const absentCount   = trialLeads.filter(
+  const explicitAbsent = trialLeads.filter(
     (l: LeadRow) => l.trial_absent_at !== null && l.trial_attended_at === null,
   ).length;
+  // Trials pasados sin marcar (ni attended ni absent) = ausentes de facto.
+  const implicitAbsent = trialLeads.filter(
+    (l: LeadRow) =>
+      l.trial_attended_at === null &&
+      l.trial_absent_at === null &&
+      new Date(l.trial_scheduled_at!) < now,
+  ).length;
+  const absentCount = explicitAbsent + implicitAbsent;
   const resolved = attendedCount + absentCount;
   const trialAttendance: TrialAttendance = {
     scheduled: trialLeads.length,

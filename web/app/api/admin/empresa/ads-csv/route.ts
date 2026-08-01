@@ -63,9 +63,14 @@ export async function POST(req: Request) {
     );
   }
 
-  // If no date column, this is an aggregate report — use today's date
-  const fallbackDate = new Date().toISOString().slice(0, 10);
+  // If no date column, this is an aggregate report — reject it to avoid double-counting
   const isAggregate = dateIdx === -1;
+  if (isAggregate) {
+    return NextResponse.json(
+      { error: "El CSV no tiene columna de fecha (Day/Date/Día). Exporta un informe diario desde Google Ads para evitar duplicar datos." },
+      { status: 400 },
+    );
+  }
 
   const sb = supabaseAdmin();
   let inserted = 0;
@@ -84,15 +89,10 @@ export async function POST(req: Request) {
     const costEur = parseCost(vals[costIdx]);
     if (costEur === 0) continue;
 
-    let date: string | null;
-    if (isAggregate) {
-      date = fallbackDate;
-    } else {
-      date = parseDate(vals[dateIdx].trim());
-      if (!date) {
-        errors.push(`Fila ${i + headerLineIdx + 2}: fecha invalida "${vals[dateIdx]}"`);
-        continue;
-      }
+    const date = parseDate(vals[dateIdx].trim());
+    if (!date) {
+      errors.push(`Fila ${i + headerLineIdx + 2}: fecha invalida "${vals[dateIdx]}"`);
+      continue;
     }
 
     const campaignName = campaignIdx >= 0 ? vals[campaignIdx].trim() : "all";
@@ -134,7 +134,6 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     inserted,
-    aggregate: isAggregate,
     errors: errors.slice(0, 10),
     total_rows: dataLines.length,
   });
