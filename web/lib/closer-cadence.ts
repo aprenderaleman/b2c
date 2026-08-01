@@ -17,6 +17,10 @@ export type TareaCloser = {
   created_at: string;
   lead_name?: string;
   lead_phone?: string;
+  lead_email?: string;
+  lead_status?: string;
+  lead_estado_cierre?: string;
+  lead_qualification?: { goal?: string; level?: string; deadline?: string } | null;
   prioridad?: string | null;
   fecha_vence?: string | null;
   origen?: string | null;
@@ -103,7 +107,7 @@ export async function getCloserTasks(
 
   let query = sb
     .from("tareas_closer")
-    .select("*, leads!inner(name, whatsapp_normalized, reserva_prioritaria, priority_deadline, deposit_intent_at)")
+    .select("*, leads!inner(name, whatsapp_normalized, email, status, estado_cierre, qualification_answers, reserva_prioritaria, priority_deadline, deposit_intent_at)")
     .eq("closer_id", closerId)
     .is("fecha_completada", null);
 
@@ -122,6 +126,10 @@ export async function getCloserTasks(
     const lead = row.leads as {
       name?: string;
       whatsapp_normalized?: string;
+      email?: string;
+      status?: string;
+      estado_cierre?: string;
+      qualification_answers?: { goal?: string; level?: string; deadline?: string } | null;
       reserva_prioritaria?: boolean;
       priority_deadline?: string;
       deposit_intent_at?: string;
@@ -131,6 +139,10 @@ export async function getCloserTasks(
       ...rest,
       lead_name: lead?.name ?? "",
       lead_phone: lead?.whatsapp_normalized ?? "",
+      lead_email: lead?.email ?? "",
+      lead_status: lead?.status ?? "",
+      lead_estado_cierre: lead?.estado_cierre ?? "",
+      lead_qualification: lead?.qualification_answers ?? null,
       lead_reserva_prioritaria: lead?.reserva_prioritaria ?? false,
       lead_priority_deadline: lead?.priority_deadline ?? null,
       lead_deposit_intent_at: lead?.deposit_intent_at ?? null,

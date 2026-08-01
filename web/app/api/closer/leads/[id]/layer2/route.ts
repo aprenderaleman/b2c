@@ -2,13 +2,21 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import { processLayer2Action } from "@/lib/closer-layer2-actions";
+import { processLayer2Action, resolveMessageForCloser } from "@/lib/closer-layer2-actions";
+
+const TEMPLATE_KIND: Record<string, string> = {
+  no_contesto: "chain8b_no_contesto",
+  enviar_info: "chain8c_info",
+  pasar_reactivacion: "chain8g_reactivacion",
+  enviar_propuesta: "chain8d_propuesta",
+};
 
 const Body = z.object({
   action: z.enum([
     "agendar", "no_contesto", "enviar_info", "enviar_propuesta",
     "seguimiento_fecha", "enviar_enlace", "confirmar_pago", "pasar_reactivacion",
   ]),
+  preview: z.boolean().optional(),
   ritmoId: z.enum(["viajero", "estandar", "intensivo", "vip_express"]).optional(),
   goalId: z.string().optional(),
   fecha: z.string().optional(),
@@ -46,6 +54,25 @@ export async function POST(
   const parsed = Body.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json({ error: "validation_failed", details: parsed.error.flatten() }, { status: 400 });
+  }
+
+  if (parsed.data.preview) {
+    const kind = TEMPLATE_KIND[parsed.data.action];
+    if (!kind) return NextResponse.json({ ok: true, message: null });
+
+    const extraMeta: Record<string, unknown> = {};
+    if (parsed.data.ritmoId) {
+      const { RITMOS } = await import("@/lib/trial-packs");
+      const ritmo = RITMOS.find(r => r.id === parsed.data.ritmoId);
+      if (ritmo) {
+        extraMeta.ritmo = `${ritmo.emoji} ${ritmo.name}`;
+        extraMeta.precio_ritmo = `${ritmo.pricePerMonth} €/mes`;
+        extraMeta.packId = ritmo.id;
+      }
+    }
+
+    const message = await resolveMessageForCloser(leadId, kind, 1, extraMeta);
+    return NextResponse.json({ ok: true, message });
   }
 
   const result = await processLayer2Action({

@@ -95,6 +95,7 @@ const EVENT_DOT: Record<string, string> = {
   admin: "bg-amber-500",
   system: "bg-slate-400 dark:bg-slate-500",
   stiv: "bg-cyan-500",
+  student: "bg-emerald-500",
 };
 
 export function CloserLeadDetail({
@@ -109,7 +110,6 @@ export function CloserLeadDetail({
   const router = useRouter();
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [showLostForm, setShowLostForm] = useState(false);
-  const [showActionForm, setShowActionForm] = useState(false);
   const [completeTaskId, setCompleteTaskId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -247,12 +247,6 @@ export function CloserLeadDetail({
               Marcar perdido
             </button>
           )}
-          <button
-            onClick={() => setShowActionForm(true)}
-            className="text-xs font-medium rounded-full border border-slate-200 dark:border-slate-700 px-3 py-1 text-slate-700 dark:text-slate-300"
-          >
-            Registrar accion
-          </button>
         </div>
       </div>
 
@@ -379,10 +373,13 @@ export function CloserLeadDetail({
         />
       )}
 
+      {/* Quick Note Input */}
+      <InlineNoteInput leadId={lead.id} />
+
       {/* Timeline */}
       <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-3">
-          Actividad
+          Historial completo
         </h2>
         <div className="space-y-3 divide-y divide-slate-100 dark:divide-slate-800">
           {allEvents.map((event) => {
@@ -393,8 +390,7 @@ export function CloserLeadDetail({
                 <div className="flex items-start gap-2">
                   <span className={`flex-shrink-0 w-2 h-2 mt-1.5 rounded-full ${dot}`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-700 dark:text-slate-300">{event.content}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
+                    <div className="flex items-center gap-2 mb-0.5">
                       <span className={`inline-flex items-center rounded px-1.5 py-0 text-[10px] font-medium ${badge.cls}`}>
                         {badge.label}
                       </span>
@@ -402,6 +398,7 @@ export function CloserLeadDetail({
                         {new Date(event.created_at).toLocaleDateString("es", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
                       </span>
                     </div>
+                    <p className="text-sm text-slate-700 dark:text-slate-300">{event.content}</p>
                   </div>
                 </div>
               </div>
@@ -429,13 +426,6 @@ export function CloserLeadDetail({
         />
       )}
 
-      {showActionForm && (
-        <ActionModal
-          leadId={lead.id}
-          onClose={() => { setShowActionForm(false); router.refresh(); }}
-        />
-      )}
-
       {completeTaskId && (
         <QuickActionModal
           taskId={completeTaskId}
@@ -445,6 +435,57 @@ export function CloserLeadDetail({
         />
       )}
     </>
+  );
+}
+
+function InlineNoteInput({ leadId }: { leadId: string }) {
+  const router = useRouter();
+  const [note, setNote] = useState("");
+  const [saving, startSaving] = useTransition();
+
+  const handleSubmit = () => {
+    if (!note.trim()) return;
+    startSaving(async () => {
+      const res = await fetch(`/api/closer/leads/${leadId}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: "nota", contenido: note.trim() }),
+      });
+      if (res.ok) {
+        setNote("");
+        router.refresh();
+      }
+    });
+  };
+
+  return (
+    <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4">
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300 mb-2">
+        Agregar nota
+      </h2>
+      <div className="flex gap-2">
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Escribe una nota sobre este lead..."
+          rows={2}
+          className="flex-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit();
+          }}
+        />
+        <button
+          onClick={handleSubmit}
+          disabled={!note.trim() || saving}
+          className="self-end rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white transition-colors"
+        >
+          {saving ? "..." : "Guardar"}
+        </button>
+      </div>
+      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+        Ctrl+Enter para guardar
+      </p>
+    </section>
   );
 }
 
@@ -477,58 +518,6 @@ function LostModal({
             className="btn-primary bg-red-600 hover:bg-red-700"
           >
             {pending ? "Guardando..." : "Confirmar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ActionModal({ leadId, onClose }: { leadId: string; onClose: () => void }) {
-  const [tipo, setTipo] = useState("nota");
-  const [contenido, setContenido] = useState("");
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  const submit = () => {
-    setError(null);
-    startTransition(async () => {
-      const res = await fetch(`/api/closer/leads/${leadId}/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo, contenido }),
-      });
-      if (!res.ok) {
-        setError("Error al registrar accion");
-        return;
-      }
-      onClose();
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-4">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Registrar accion</h3>
-        <select value={tipo} onChange={(e) => setTipo(e.target.value)} className="input-text">
-          <option value="llamada">Llamada</option>
-          <option value="whatsapp">WhatsApp</option>
-          <option value="email">Email</option>
-          <option value="nota">Nota</option>
-          <option value="otro">Otro</option>
-        </select>
-        <textarea
-          value={contenido}
-          onChange={(e) => setContenido(e.target.value)}
-          placeholder="Detalle..."
-          rows={3}
-          className="input-text"
-        />
-        {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button onClick={submit} disabled={pending} className="btn-primary">
-            {pending ? "Guardando..." : "Guardar"}
           </button>
         </div>
       </div>

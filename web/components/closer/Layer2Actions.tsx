@@ -26,10 +26,9 @@ type Props = {
 
 type ActiveAction =
   | null
-  | { type: "simple"; action: string; label: string }
   | { type: "ritmo_picker" }
   | { type: "fecha_picker" }
-  | { type: "copy_panel"; action: string; label: string; message: string };
+  | { type: "copy_panel"; action: string; label: string; message: string; extras?: Record<string, string> };
 
 type ActionButton = {
   action: string;
@@ -61,6 +60,7 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
   const [selectedRitmo, setSelectedRitmo] = useState<string | null>(null);
   const [fecha, setFecha] = useState("");
   const [nota, setNota] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const executeAction = (action: string, extras?: Record<string, string>) => {
     setError(null);
@@ -83,21 +83,26 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
     });
   };
 
-  const fetchTemplate = async (action: string, label: string) => {
+  const previewMessage = async (action: string, label: string, extras?: Record<string, string>) => {
     setError(null);
-    const res = await fetch(`/api/closer/leads/${leadId}/layer2`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      setError(body?.error ?? "Error");
-      return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/closer/leads/${leadId}/layer2`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, preview: true, ...extras }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body?.error ?? "Error al cargar mensaje");
+        return;
+      }
+      const data = await res.json();
+      const message = data.message || `Hola ${leadName}, [mensaje de ${label}]`;
+      setActiveAction({ type: "copy_panel", action, label, message, extras });
+    } finally {
+      setLoading(false);
     }
-    const data = await res.json();
-    setActiveAction({ type: "copy_panel", action, label, message: data.message ?? `Accion "${label}" ejecutada. Abre WhatsApp para enviar el mensaje.` });
-    router.refresh();
   };
 
   const handleClick = (btn: ActionButton) => {
@@ -114,7 +119,7 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
       return;
     }
     if (btn.isCopy) {
-      executeAction(btn.action);
+      previewMessage(btn.action, btn.label);
       return;
     }
     executeAction(btn.action);
@@ -122,7 +127,7 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
 
   const handleRitmoSubmit = () => {
     if (!selectedRitmo) return;
-    executeAction("enviar_propuesta", { ritmoId: selectedRitmo });
+    previewMessage("enviar_propuesta", "Propuesta", { ritmoId: selectedRitmo });
   };
 
   const handleFechaSubmit = () => {
@@ -136,8 +141,7 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
         message={activeAction.message}
         actionLabel={activeAction.label}
         onSent={() => {
-          setActiveAction(null);
-          router.refresh();
+          executeAction(activeAction.action, activeAction.extras);
         }}
         onClose={() => setActiveAction(null)}
         pending={pending}
@@ -159,7 +163,7 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
             <button
               key={btn.action}
               onClick={() => handleClick(btn)}
-              disabled={pending}
+              disabled={pending || loading}
               className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
             >
               <span className="text-lg flex-shrink-0">{btn.icon}</span>
@@ -174,6 +178,12 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
             </button>
           ))}
         </div>
+      )}
+
+      {loading && (
+        <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-4 animate-pulse">
+          Cargando mensaje personalizado...
+        </p>
       )}
 
       {activeAction?.type === "ritmo_picker" && (
@@ -208,10 +218,10 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
           </div>
           <button
             onClick={handleRitmoSubmit}
-            disabled={!selectedRitmo || pending}
+            disabled={!selectedRitmo || pending || loading}
             className="w-full btn-primary disabled:opacity-50"
           >
-            {pending ? "Enviando..." : "Enviar propuesta"}
+            {loading ? "Cargando..." : pending ? "Enviando..." : "Ver mensaje"}
           </button>
         </div>
       )}
