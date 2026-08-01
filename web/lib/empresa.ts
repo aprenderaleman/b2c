@@ -783,6 +783,20 @@ export async function deleteCosteFijo(id: string): Promise<void> {
 }
 
 // =============================================================================
+// Google Ads freshness check
+// =============================================================================
+
+export async function getGoogleAdsLastSync(): Promise<string | null> {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("google_ads_daily")
+    .select("date")
+    .order("date", { ascending: false })
+    .limit(1);
+  return (data as Array<{ date: string }> | null)?.[0]?.date ?? null;
+}
+
+// =============================================================================
 // Google Ads spend (from google_ads_daily table)
 // =============================================================================
 
@@ -998,11 +1012,11 @@ export async function getPulseData(
       .gte("converted_at", currFromISO).lte("converted_at", currToISO),
     sb.from("payments")
       .select("student_id, amount_cents, paid_at, student:students!inner(users!inner(full_name))")
-      .eq("status", "paid")
+      .not("status", "eq", "refunded")
       .gte("paid_at", currFromISO).lte("paid_at", currToISO),
     sb.from("payments")
       .select("student_id, amount_cents, paid_at, student:students!inner(users!inner(full_name))")
-      .eq("status", "paid")
+      .not("status", "eq", "refunded")
       .gte("paid_at", prevFromISO).lte("paid_at", prevToISO),
     sb.from("google_ads_daily").select("cost_micros")
       .gte("date", currFromISO.slice(0, 10)).lte("date", currToISO.slice(0, 10)),
@@ -1104,7 +1118,7 @@ export async function getLtvWithProjections(cacCents: number): Promise<LtvSummar
   const { data: payments } = await sb
     .from("payments")
     .select("student_id, amount_cents, student:students(users(full_name, email))")
-    .eq("status", "paid");
+    .not("status", "eq", "refunded");
 
   const byStudent = new Map<string, { name: string; email: string; paid: number }>();
   for (const r of (payments ?? []) as any[]) {
