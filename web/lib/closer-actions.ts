@@ -116,7 +116,7 @@ export async function getCloserLeads(closerId: string, estadoCierre?: string) {
   const sb = supabaseAdmin();
   let query = sb
     .from("leads")
-    .select("id, full_name, email, whatsapp_normalized, status, estado_cierre, motivo_perdido, fecha_asignacion_closer, created_at, meta")
+    .select("id, name, email, whatsapp_normalized, status, estado_cierre, motivo_perdido, fecha_asignacion_closer, created_at, meta")
     .eq("closer_id", closerId)
     .order("fecha_asignacion_closer", { ascending: false });
 

@@ -96,7 +96,7 @@ export async function getCloserTasks(
 
   let query = sb
     .from("tareas_closer")
-    .select("*, leads!inner(full_name, whatsapp_normalized)")
+    .select("*, leads!inner(name, whatsapp_normalized)")
     .eq("closer_id", closerId)
     .is("fecha_completada", null);
 
@@ -112,11 +112,11 @@ export async function getCloserTasks(
   const { data } = await query;
 
   return (data ?? []).map((row: Record<string, unknown>) => {
-    const lead = row.leads as { full_name?: string; whatsapp_normalized?: string } | null;
+    const lead = row.leads as { name?: string; whatsapp_normalized?: string } | null;
     const { leads: _, ...rest } = row;
     return {
       ...rest,
-      lead_name: lead?.full_name ?? "",
+      lead_name: lead?.name ?? "",
       lead_phone: lead?.whatsapp_normalized ?? "",
     } as unknown as TareaCloser;
   });

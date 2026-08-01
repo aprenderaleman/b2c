@@ -5,7 +5,7 @@ import { useState } from "react";
 
 type Lead = {
   id: string;
-  full_name: string | null;
+  name: string | null;
   email: string | null;
   whatsapp_normalized: string | null;
   status: string;
@@ -78,7 +78,7 @@ export function CloserLeadsList({ leads }: { leads: Lead[] }) {
               >
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-900 dark:text-slate-50 truncate">
-                    {lead.full_name ?? lead.email ?? "Sin nombre"}
+                    {lead.name ?? lead.email ?? "Sin nombre"}
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {lead.whatsapp_normalized ?? lead.email ?? ""}

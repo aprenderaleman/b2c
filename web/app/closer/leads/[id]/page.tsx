@@ -19,7 +19,7 @@ export default async function CloserLeadPage({
 
   const { data: lead } = await sb
     .from("leads")
-    .select("id, full_name, email, whatsapp_normalized, status, estado_cierre, motivo_perdido, closer_id, fecha_asignacion_closer, created_at, meta, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent")
+    .select("id, name, email, whatsapp_normalized, status, estado_cierre, motivo_perdido, closer_id, fecha_asignacion_closer, created_at, meta, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent")
     .eq("id", leadId)
     .single();
 

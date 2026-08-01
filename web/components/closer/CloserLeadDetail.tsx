@@ -8,7 +8,7 @@ import { PriorityBadges, summarizeQualification } from "@/components/admin/Prior
 
 type Lead = {
   id: string;
-  full_name: string | null;
+  name: string | null;
   email: string | null;
   whatsapp_normalized: string | null;
   status: string;
@@ -107,7 +107,7 @@ export function CloserLeadDetail({ lead, tasks, timeline, acciones, ventaPendien
             &larr; Mis leads
           </button>
           <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-50 flex items-center gap-2 flex-wrap">
-            {lead.full_name ?? "Lead"}
+            {lead.name ?? "Lead"}
             <PriorityBadges flags={{
               reservaPrioritaria: lead.reserva_prioritaria,
               priorityDeadline:   lead.priority_deadline,

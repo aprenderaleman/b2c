@@ -36,7 +36,7 @@ export async function POST(
 
   const { data: lead } = await sb
     .from("leads")
-    .select("id, full_name, closer_id")
+    .select("id, name, closer_id")
     .eq("id", leadId)
     .single();
 
@@ -96,7 +96,7 @@ export async function POST(
     type: "venta_pendiente",
     severity: "warning",
     title: "Venta pendiente de aprobacion",
-    body: `${closerName} marco venta para ${lead.full_name ?? "lead"} (pack ${parsed.data.packId})`,
+    body: `${closerName} marco venta para ${(lead as any).name ?? "lead"} (pack ${parsed.data.packId})`,
     lead_id: leadId,
     action_url: `/admin/aprobaciones`,
   });
