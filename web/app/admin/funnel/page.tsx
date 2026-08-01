@@ -341,7 +341,7 @@ export default async function FunnelControlPage({
               <Link
                 key={r.days}
                 href={`/admin/funnel${qs({ days: r.days, country: activeCountry || undefined, q: searchQuery || undefined })}`}
-                className={`px-2.5 py-1.5 rounded-md text-[12.5px] md:text-sm transition ${
+                className={`px-3 py-2 min-h-[36px] rounded-md text-[12.5px] md:text-sm transition inline-flex items-center ${
                   !activePeriod && r.days === activeDays
                     ? "bg-warm text-warm-foreground font-semibold"
                     : "border border-white/10 bg-white/5 text-white/70 hover:text-white hover:bg-white/10"
@@ -355,7 +355,7 @@ export default async function FunnelControlPage({
               <Link
                 key={p.key}
                 href={`/admin/funnel${qs({ period: p.key, country: activeCountry || undefined, q: searchQuery || undefined })}`}
-                className={`px-2.5 py-1.5 rounded-md text-[12.5px] md:text-sm transition ${
+                className={`px-3 py-2 min-h-[36px] rounded-md text-[12.5px] md:text-sm transition inline-flex items-center ${
                   activePeriod === p.key
                     ? "bg-warm text-warm-foreground font-semibold"
                     : "border border-white/10 bg-white/5 text-white/70 hover:text-white hover:bg-white/10"
@@ -668,7 +668,7 @@ export default async function FunnelControlPage({
                   q: searchQuery, status: active ? "" : f.key,
                   has_trial: hasTrialFilter, cold_call: coldCallFilter,
                 })}
-                className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+                className={`px-3 py-1.5 min-h-[32px] rounded-full text-[12px] font-semibold border transition inline-flex items-center ${
                   active
                     ? "bg-warm text-warm-foreground border-warm"
                     : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"
@@ -686,7 +686,7 @@ export default async function FunnelControlPage({
               has_trial: hasTrialFilter === "yes" ? undefined : "yes",
               cold_call: coldCallFilter,
             })}
-            className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+            className={`px-3 py-1.5 min-h-[32px] rounded-full text-[12px] font-semibold border transition inline-flex items-center ${
               hasTrialFilter === "yes"
                 ? "bg-sky-500/30 text-sky-100 border-sky-500/40"
                 : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"
@@ -701,7 +701,7 @@ export default async function FunnelControlPage({
               has_trial: hasTrialFilter === "no" ? undefined : "no",
               cold_call: coldCallFilter,
             })}
-            className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+            className={`px-3 py-1.5 min-h-[32px] rounded-full text-[12px] font-semibold border transition inline-flex items-center ${
               hasTrialFilter === "no"
                 ? "bg-sky-500/30 text-sky-100 border-sky-500/40"
                 : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"
@@ -717,7 +717,7 @@ export default async function FunnelControlPage({
               has_trial: hasTrialFilter,
               cold_call: coldCallFilter === "pending" ? undefined : "pending",
             })}
-            className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+            className={`px-3 py-1.5 min-h-[32px] rounded-full text-[12px] font-semibold border transition inline-flex items-center ${
               coldCallFilter === "pending"
                 ? "bg-purple-500/30 text-purple-100 border-purple-500/40"
                 : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"
@@ -732,7 +732,7 @@ export default async function FunnelControlPage({
               has_trial: hasTrialFilter,
               cold_call: coldCallFilter === "done" ? undefined : "done",
             })}
-            className={`px-2.5 py-1 rounded-full text-[11.5px] font-semibold border transition ${
+            className={`px-3 py-1.5 min-h-[32px] rounded-full text-[12px] font-semibold border transition inline-flex items-center ${
               coldCallFilter === "done"
                 ? "bg-purple-500/30 text-purple-100 border-purple-500/40"
                 : "bg-white/5 text-white/70 border-white/10 hover:bg-white/10 hover:text-white"

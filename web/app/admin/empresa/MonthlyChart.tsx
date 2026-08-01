@@ -104,7 +104,7 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                 </svg>
                 <span className="font-semibold text-sm w-16">{row.label}</span>
-                <div className="flex-1 grid grid-cols-4 gap-2 text-xs font-mono">
+                <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-x-2 gap-y-1 text-[11px] md:text-xs font-mono">
                   <div>
                     <span className="text-slate-400 mr-1">Ing:</span>
                     <span className="text-slate-900 dark:text-slate-100">{Math.round(row.revenue_cents / 100).toLocaleString("es-ES")}€</span>
@@ -206,7 +206,7 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
         <div className="rounded-xl border-2 border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/50 px-4 py-3 flex items-center gap-3">
           <span className="w-4" />
           <span className="font-bold text-sm w-16">Total</span>
-          <div className="flex-1 grid grid-cols-4 gap-2 text-xs font-mono font-semibold">
+          <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-x-2 gap-y-1 text-[11px] md:text-xs font-mono font-semibold">
             <div>
               <span className="text-slate-400 mr-1">Ing:</span>
               <span>{Math.round(data.reduce((s, r) => s + r.revenue_cents, 0) / 100).toLocaleString("es-ES")}€</span>

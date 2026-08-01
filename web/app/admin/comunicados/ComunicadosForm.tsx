@@ -342,7 +342,7 @@ export function ComunicadosForm({
           1. ¿A quién?
         </h2>
 
-        <div className="grid sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
           {(["all_students","all_teachers","level","group","leads","custom"] as AudienceKind[]).map(k => (
             <button
               key={k}
