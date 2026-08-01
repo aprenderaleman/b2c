@@ -75,6 +75,10 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/email-orphan-recovery",
+      "schedule": "0 5 * * *"
+    },
+    {
       "path": "/api/cron/post-trial-followups",
       "schedule": "0 * * * *"
     },

@@ -132,6 +132,84 @@ const ALLOWED_WA_KINDS = new Set([
 const MIN_GAP_MS = 15_000;
 let _lastWaSentAt = 0;
 
+/**
+ * Anti-ban #1: gate nocturno. Ningún WA automático 22:00–08:00 Europe/Berlin,
+ * salvo recordatorios inminentes (clase en <30 min — legítimo a cualquier hora).
+ * Config editable: `system_config.wa_night_gate_enabled`.
+ */
+const NIGHT_EXEMPT_KINDS = new Set([
+  "trial_reminder_30m",
+  "trial_reminder_15m",
+]);
+let _nightGateCache: { enabled: boolean; ts: number } | null = null;
+async function isNightGateEnabled(): Promise<boolean> {
+  const now = Date.now();
+  if (_nightGateCache && now - _nightGateCache.ts < 60_000) return _nightGateCache.enabled;
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const { data } = await supabaseAdmin()
+      .from("system_config").select("value").eq("key", "wa_night_gate_enabled").maybeSingle();
+    const enabled = (data as { value?: string } | null)?.value !== "false";
+    _nightGateCache = { enabled, ts: now };
+    return enabled;
+  } catch { return true; }
+}
+function isBerlinNight(): boolean {
+  const hourStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Berlin", hour: "numeric", hour12: false,
+  }).format(new Date());
+  const h = parseInt(hourStr, 10);
+  return h >= 22 || h < 8;
+}
+
+/**
+ * Anti-ban #2: cap diario de mensajes salientes. Superado el cap, solo
+ * pasan los kinds transaccionales de `ALLOWED_WA_KINDS`. Cuenta desde
+ * medianoche Europe/Berlin. Config: `system_config.wa_daily_send_cap`.
+ * Durante warm-up post-ban, el cap efectivo es min(cap, warmup_cap_del_dia).
+ */
+let _dailyCapCache: { limit: number; sent: number; ts: number } | null = null;
+async function getDailySendState(): Promise<{ limit: number; sent: number }> {
+  const now = Date.now();
+  if (_dailyCapCache && now - _dailyCapCache.ts < 60_000) {
+    return { limit: _dailyCapCache.limit, sent: _dailyCapCache.sent };
+  }
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const sb = supabaseAdmin();
+    const { data: rows } = await sb
+      .from("system_config").select("key,value")
+      .in("key", ["wa_daily_send_cap", "wa_warmup_day"]);
+    const cfg = new Map((rows ?? []).map(r => [r.key as string, r.value as string]));
+    const baseCap = parseInt(cfg.get("wa_daily_send_cap") ?? "300", 10) || 300;
+    const warmupDay = parseInt(cfg.get("wa_warmup_day") ?? "", 10);
+    // Warm-up post-ban: 30/día días 1-3, 100/día días 4-7, luego sin masivos.
+    let effectiveCap = baseCap;
+    if (Number.isFinite(warmupDay) && warmupDay >= 1 && warmupDay <= 14) {
+      if (warmupDay <= 3) effectiveCap = Math.min(effectiveCap, 30);
+      else if (warmupDay <= 7) effectiveCap = Math.min(effectiveCap, 100);
+      // 8-14: sin masivos → cap efectivo = baseCap normal, pero comunicados
+      // deberían pausarse manualmente.
+    }
+    // Contar sends WA de hoy (medianoche Berlin).
+    const midnightBerlin = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Europe/Berlin" }),
+    );
+    midnightBerlin.setHours(0, 0, 0, 0);
+    const { count } = await sb
+      .from("lead_timeline")
+      .select("id", { count: "exact", head: true })
+      .eq("type", "system_message_sent")
+      .filter("metadata->>channel", "eq", "whatsapp")
+      .gte("timestamp", midnightBerlin.toISOString());
+    const sent = count ?? 0;
+    _dailyCapCache = { limit: effectiveCap, sent, ts: now };
+    return { limit: effectiveCap, sent };
+  } catch {
+    return { limit: 300, sent: 0 };
+  }
+}
+
 export type SendWaOpts = {
   /** Etiqueta de propósito. Si el kill switch está on y este kind NO
    *  está en `ALLOWED_WA_KINDS`, el envío se silencia. */
@@ -172,6 +250,21 @@ export async function sendWhatsappText(
       if (!passesWhitelist) {
         return { ok: false, reason: "whatsapp_globally_disabled" };
       }
+    }
+  }
+  // Anti-ban gate nocturno: 22:00-08:00 Berlin, salvo T-30m / T-15m.
+  if (!opts.bypassKillSwitch && isBerlinNight()) {
+    const gateOn = await isNightGateEnabled();
+    if (gateOn && !NIGHT_EXEMPT_KINDS.has(opts.kind ?? "")) {
+      return { ok: false, reason: "night_gate" };
+    }
+  }
+  // Anti-ban cap diario: superado, solo kinds transaccionales del whitelist.
+  if (!opts.bypassKillSwitch) {
+    const { limit, sent } = await getDailySendState();
+    if (sent >= limit && !ALLOWED_WA_KINDS.has(opts.kind ?? "")) {
+      console.warn(`[whatsapp] daily cap ${limit} alcanzado (${sent}), silenciando kind=${opts.kind}`);
+      return { ok: false, reason: "daily_cap_reached" };
     }
   }
   // Rate limit cliente — separa envíos al menos 15s.

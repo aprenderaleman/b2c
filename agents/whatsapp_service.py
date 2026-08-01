@@ -246,6 +246,73 @@ class WhatsAppService:
         "admin_manual",
     })
 
+    # Anti-ban #1: gate nocturno 22:00-08:00 Europe/Berlin.
+    # Exentos: recordatorios inminentes (T-30m/T-15m — legítimos a cualquier hora).
+    _NIGHT_EXEMPT_KINDS = frozenset({
+        "trial_reminder_30m",
+        "trial_reminder_15m",
+    })
+
+    @staticmethod
+    def _is_berlin_night() -> bool:
+        # Aproximación sin tzdata: UTC + offset Berlin. Verano=+2, invierno=+1.
+        # No hace falta precisión sub-hora: solo comparamos si la hora local
+        # está en [22, 24) ∪ [0, 8).
+        try:
+            from datetime import datetime, timezone
+            now_utc = datetime.now(timezone.utc)
+            month = now_utc.month
+            # DST activo aprox marzo-octubre (aproximación).
+            offset = 2 if 3 <= month <= 10 else 1
+            hour_berlin = (now_utc.hour + offset) % 24
+            return hour_berlin >= 22 or hour_berlin < 8
+        except Exception:
+            return False
+
+    @staticmethod
+    def _night_gate_enabled() -> bool:
+        try:
+            from agents.shared.db import get_config
+            raw = get_config("wa_night_gate_enabled")
+            return raw != "false"
+        except Exception:
+            return True
+
+    # Anti-ban #2: cap diario. Cache 60s. Cuenta sends WA de hoy Berlin.
+    @staticmethod
+    def _daily_cap_state() -> tuple[int, int]:
+        """Returns (limit, sent_today). Si cap alcanzado, solo kinds transaccionales pasan."""
+        now = time.time()
+        cache = getattr(WhatsAppService, "_daily_cap_cache", None)
+        if cache and now - cache[2] < 60:
+            return cache[0], cache[1]
+        try:
+            from agents.shared.db import get_config, get_conn
+            base_cap = int(get_config("wa_daily_send_cap") or "300")
+            warmup_raw = get_config("wa_warmup_day") or ""
+            effective = base_cap
+            try:
+                wd = int(warmup_raw)
+                if 1 <= wd <= 3:   effective = min(effective, 30)
+                elif 4 <= wd <= 7: effective = min(effective, 100)
+            except (ValueError, TypeError):
+                pass
+            # Contar sends de hoy Berlin (aproximación: últimas 30h contando desde
+            # medianoche Berlin UTC hoy — margen para DST y drift).
+            with get_conn() as conn, conn.cursor() as cur:
+                cur.execute("""
+                    SELECT COUNT(*) FROM lead_timeline
+                     WHERE type = 'system_message_sent'
+                       AND metadata->>'channel' = 'whatsapp'
+                       AND timestamp >= (date_trunc('day', now() AT TIME ZONE 'Europe/Berlin') AT TIME ZONE 'Europe/Berlin')
+                """)
+                row = cur.fetchone()
+                sent = row["count"] if isinstance(row, dict) else row[0]
+            setattr(WhatsAppService, "_daily_cap_cache", (effective, sent, now))
+            return effective, sent
+        except Exception:
+            return 300, 0
+
     @staticmethod
     def _wa_disabled_mode() -> str:
         """Lee system_config.whatsapp_disabled:
@@ -316,6 +383,24 @@ class WhatsAppService:
                     mode, kind, lead_id,
                 )
                 return "whatsapp_globally_disabled"
+
+        # Anti-ban gate nocturno (22:00-08:00 Berlin, salvo T-30m/T-15m).
+        if self._is_berlin_night() and self._night_gate_enabled():
+            if kind not in self._NIGHT_EXEMPT_KINDS:
+                import logging
+                logging.getLogger("whatsapp_service").info(
+                    "[night-gate] mensaje suprimido (kind=%s lead=%s)", kind, lead_id,
+                )
+                return "night_gate"
+
+        # Anti-ban cap diario. Solo kinds del whitelist pasan tras el cap.
+        cap, sent_today = self._daily_cap_state()
+        if sent_today >= cap and kind not in self._ALLOWED_KINDS_PARTIAL:
+            import logging
+            logging.getLogger("whatsapp_service").warning(
+                "[daily-cap] mensaje suprimido cap=%d sent=%d kind=%s", cap, sent_today, kind,
+            )
+            return "daily_cap_reached"
 
         payload = {
             "number": self._to_jid(to_e164),

@@ -139,14 +139,43 @@ if (HARDCODED_BLOCKLIST.has(toNumber)) {
 }
 
 const cfg = await db.query(
-  `SELECT value FROM system_config WHERE key = 'whatsapp_disabled' LIMIT 1`,
+  `SELECT key, value FROM system_config
+     WHERE key IN ('whatsapp_disabled','wa_night_gate_enabled','wa_daily_send_cap')`,
 );
-const killMode = cfg.rows[0]?.value ?? "off";
+const cfgMap = new Map(cfg.rows.map(r => [r.key, r.value]));
+const killMode = cfgMap.get("whatsapp_disabled") ?? "off";
 if (killMode === "full" || killMode === "partial") {
   console.error(`ABORT: kill switch WhatsApp en modo "${killMode}". Este script bypasea la whitelist — abortando.`);
   console.error(`Para desbloquear temporalmente: UPDATE system_config SET value='off' WHERE key='whatsapp_disabled';`);
   await db.end();
   process.exit(5);
+}
+
+// Gate nocturno (22-08 Berlin) — este script manda contact_1, no es transaccional.
+const berlinHour = new Intl.DateTimeFormat("en-US", {
+  timeZone: "Europe/Berlin", hour: "numeric", hour12: false,
+}).format(new Date());
+const h = parseInt(berlinHour, 10);
+if ((cfgMap.get("wa_night_gate_enabled") ?? "true") !== "false" && (h >= 22 || h < 8)) {
+  console.error(`ABORT: gate nocturno activo (hora Berlin=${h}). Este script no es exento.`);
+  await db.end();
+  process.exit(6);
+}
+
+// Cap diario.
+const capRes = await db.query(`
+  SELECT (SELECT value::int FROM system_config WHERE key='wa_daily_send_cap') AS cap,
+         (SELECT COUNT(*) FROM lead_timeline
+            WHERE type='system_message_sent'
+              AND metadata->>'channel'='whatsapp'
+              AND timestamp >= (date_trunc('day', now() AT TIME ZONE 'Europe/Berlin') AT TIME ZONE 'Europe/Berlin')) AS sent
+`);
+const dailyCap = capRes.rows[0]?.cap ?? 300;
+const sentToday = parseInt(capRes.rows[0]?.sent ?? "0", 10);
+if (sentToday >= dailyCap) {
+  console.error(`ABORT: cap diario ${dailyCap} alcanzado (${sentToday} enviados hoy).`);
+  await db.end();
+  process.exit(7);
 }
 
 // ── Send via Evolution API ──────────────────────────────────
