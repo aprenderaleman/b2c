@@ -7,7 +7,7 @@ import { sendPostTrialFollowupEmail, sendPostTrialFollowupGenericEmail, sendTria
 import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "./trial-packs";
 import { getLeadTrialTeacher } from "./trial-compensation";
 import { renderTemplate } from "./message-stats";
-import { startChain } from "./chain-engine";
+import { startChain, cancelActiveChain } from "./chain-engine";
 import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
 
 /**
@@ -697,9 +697,9 @@ export async function sendRescheduleLinkMessage(
       : `💬 Falló envío del link reagendar: ${waRes.reason ?? "unknown"}`,
     metadata: { kind: "trial_reschedule_link", channel: "whatsapp" },
   });
-  // Iniciar cadena de confirmación reagendamiento (chain5)
-  await startChain(leadId, "chain5_reschedule")
-    .catch(err => console.warn("[sendRescheduleLinkMessage] startChain error:", err));
+  // Cancelar cualquier cadena activa (el lead está reagendando, no necesita más follow-ups)
+  await cancelActiveChain(leadId, "reschedule")
+    .catch(err => console.warn("[sendRescheduleLinkMessage] cancelActiveChain error:", err));
 
   return waRes.ok ? { ok: true } : { ok: false, reason: waRes.reason ?? "send_failed" };
 }

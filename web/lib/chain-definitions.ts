@@ -271,14 +271,7 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
   chain5_reschedule: {
     type: "chain5_reschedule",
     label: "Reprogramar",
-    steps: [
-      {
-        delayMs: 0,
-        templateKind: "chain5_reschedule",
-        templateSubN: 1,
-        channels: ["whatsapp"],
-      },
-    ],
+    steps: [],
   },
 
   chain6_cancel: {
