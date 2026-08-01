@@ -315,7 +315,7 @@ export function TrialScriptWizard({
         )}
 
         {step === 5 && (
-          <Section5Packs />
+          <Section5Packs leadId={classCtx.leadId} />
         )}
 
         {step === 6 && (
@@ -816,7 +816,7 @@ function Section4Transicion({
   );
 }
 
-function Section5Packs() {
+function Section5Packs({ leadId }: { leadId: string | null }) {
   return (
     <div>
       <StepTitle emoji="📦" title="Presentación de packs"
@@ -849,7 +849,7 @@ function Section5Packs() {
       </div>
 
       <div className="mt-5 flex justify-center">
-        <a href="https://aprender-aleman.de/cursos" target="_blank" rel="noopener noreferrer"
+        <a href={`https://aprender-aleman.de/cursos${leadId ? `?ref=${leadId}` : ""}`} target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 text-base transition shadow-md">
           ABRIR PÁGINA DE CURSOS →
         </a>

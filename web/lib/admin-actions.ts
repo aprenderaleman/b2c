@@ -286,8 +286,8 @@ export async function markTrialAttendedAwaitingConversion(
   if (lead?.email) {
     const langForEmail: "es" | "de" = lead.language === "de" ? "de" : "es";
     const ctaUrl = opts
-      ? (opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType) || "https://aprender-aleman.de/inscripciones")
-      : "https://aprender-aleman.de/inscripciones";
+      ? (opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType) || `https://aprender-aleman.de/inscripciones?ref=${leadId}`)
+      : `https://aprender-aleman.de/inscripciones?ref=${leadId}`;
     const packName = opts ? (opts.packLabel || getPack(opts.packId)?.name || opts.packId) : undefined;
     const emailRes = await sendTrialAttendedFollowupEmail(lead.email, {
       leadName: firstName || lead.name || "",
@@ -425,7 +425,7 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
         `Ha sido un placer tenerte hoy en la clase de prueba. ¡Hoy demostraste que puedes! 💪`,
         ``,
         `Aquí tienes el enlace para elegir el pack que más te encaje e inscribirte oficialmente:`,
-        `👉 https://aprender-aleman.de/inscripciones`,
+        `👉 https://aprender-aleman.de/inscripciones?ref=${leadId}`,
         ``,
         `Desde el momento en que te inscribas recibirás toda la información de tus clases por correo.`,
         ``,
@@ -464,7 +464,7 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
     const emailRes = await sendTrialAttendedFollowupEmail(lead.email, {
       leadName: firstName || lead.name || "",
       language: langForEmail,
-      ctaUrl:   "https://aprender-aleman.de/inscripciones",
+      ctaUrl:   `https://aprender-aleman.de/inscripciones?ref=${leadId}`,
     });
     if (emailRes.ok) {
       await sb.from("lead_timeline").insert({
