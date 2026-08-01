@@ -113,6 +113,17 @@ export async function POST(req: NextRequest) {
       source:              p.source ?? "aprender-aleman.de",
     });
   } catch (err) {
+    // Liberar la clave de idempotencia: si no lo hacemos, el retry del
+    // emisor (1x tras 500ms) chocaría con el dedup y devolvería
+    // duplicate:true sin haber convertido nunca.
+    await sb.from("stripe_events").delete()
+      .eq("event_id", `aa_${p.stripe.checkout_session_id}`);
+
+    if (err instanceof Error && err.message === "lead_not_found") {
+      // 404 distingue "lead inexistente" (dato malo, no reintentar) de un
+      // fallo real del servidor (500, sí reintentar) en los logs de ambos lados.
+      return NextResponse.json({ error: "lead_not_found" }, { status: 404 });
+    }
     console.error("[aa-conversion-webhook] handleExternalConversion failed:", err);
     return NextResponse.json({ error: "conversion_failed" }, { status: 500 });
   }
