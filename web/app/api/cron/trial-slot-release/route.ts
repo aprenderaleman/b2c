@@ -5,40 +5,42 @@ import { sendWhatsappText } from "@/lib/whatsapp";
 /**
  * GET/POST /api/cron/trial-slot-release
  *
- * Libera slots de trials NO CONFIRMADAS 12h después del envío del
- * mensaje "confirma tu asistencia" (send-trial-notifications).
+ * ⚠️ DESHABILITADO 2026-08-02 tras incidente: la versión anterior
+ * canceló ~15 trials futuras (algunas a 10 días vista) porque
+ * filtraba por `notified_at > 12h` sin considerar la distancia al
+ * `scheduled_at`. Corregido — ahora solo actúa sobre trials
+ * INMINENTES (próximas 24h) que no confirmaron a tiempo.
  *
- * Cumple la promesa del copy del WA T+0 ("sin tu respuesta en 12h,
- * tu slot se libera para otro estudiante en lista de espera"), que
- * hasta ahora era escasez falsa (Gelfis 2026-07-28).
+ * Kill switch: env `TRIAL_SLOT_RELEASE_ENABLED=true` requerida para
+ * ejecutar. Sin la env el endpoint devuelve 200 no-op — el cron
+ * puede seguir tocándolo sin efectos secundarios.
  *
- * Criterios (SELECT):
- *   - classes.is_trial = true
- *   - classes.status   = 'scheduled'
- *   - classes.deleted_at IS NULL
- *   - classes.notified_at IS NOT NULL AND < NOW() - 12h
- *   - classes.scheduled_at > NOW()  (aún no ha llegado la clase)
- *   - leads.trial_confirmed_at IS NULL  (no confirmó)
- *   - leads.reserva_prioritaria = false  (respetamos VIP — sus plazas
- *     no se liberan aunque no confirmen a tiempo)
+ * Lógica corregida (SELECT):
+ *   - classes.is_trial = true, status='scheduled', deleted_at IS NULL
+ *   - classes.notified_at NOT NULL AND < NOW() - 12h  (mandamos WA
+ *     confirmar hace >12h)
+ *   - classes.scheduled_at > NOW()                    (aún no pasó)
+ *   - **classes.scheduled_at < NOW() + 24h**          (INMINENTE —
+ *     solo liberamos si la clase es en las próximas 24h; para
+ *     agendas a semanas vista el lead sigue teniendo margen para
+ *     responder CONFIRMO más tarde)
+ *   - leads.trial_confirmed_at IS NULL                (no confirmó)
+ *   - leads.reserva_prioritaria = false               (VIP intocable)
  *
- * Acciones (por cada match):
- *   1. classes.status = 'cancelled', updated_at = NOW
- *   2. leads.status ← 'in_conversation' (para que Stiv/closers puedan
- *      re-engancharlo si sigue interesado), trial_scheduled_at = null
- *   3. WhatsApp al lead con opción de reagendar
- *   4. lead_timeline entry (audit)
+ * Rate: cuando se re-habilite, 1 tick cada hora es suficiente
+ * (window de 24h es amplia; cada tick pesca lo nuevo).
  *
- * Rate: 1 tick cada 15min (Vercel Cron). LIMIT 20 por tick.
- * Auth: CRON_SECRET (Bearer o X-Cron-Secret).
+ * Auth: CRON_SECRET.
  */
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const HOURS_UNCONFIRMED = 12;
-const BATCH_LIMIT       = 20;
-const PLATFORM_URL      = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+const HOURS_UNCONFIRMED       = 12;
+const HOURS_UNTIL_CLASS_MAX   = 24; // solo liberamos trials INMINENTES
+const BATCH_LIMIT             = 20;
+const PLATFORM_URL            = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+const ENABLED                 = process.env.TRIAL_SLOT_RELEASE_ENABLED === "true";
 
 function authorised(req: Request): boolean {
   const expected = process.env.CRON_SECRET;
@@ -59,9 +61,16 @@ async function run(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  if (!ENABLED) {
+    // Kill switch por env — el cron pega el endpoint pero no hace nada
+    // hasta que Gelfis haga TRIAL_SLOT_RELEASE_ENABLED=true en Vercel.
+    return NextResponse.json({ ok: true, released: 0, disabled: true, reason: "env_TRIAL_SLOT_RELEASE_ENABLED_not_true" });
+  }
+
   const sb = supabaseAdmin();
-  const nowIso  = new Date().toISOString();
-  const cutoff  = new Date(Date.now() - HOURS_UNCONFIRMED * 3600_000).toISOString();
+  const nowIso            = new Date().toISOString();
+  const cutoffNotifiedIso = new Date(Date.now() - HOURS_UNCONFIRMED * 3600_000).toISOString();
+  const cutoffImminentIso = new Date(Date.now() + HOURS_UNTIL_CLASS_MAX * 3600_000).toISOString();
 
   // Select trials sin confirmar. JOIN a leads para excluir VIP + verificar
   // trial_confirmed_at. Nota: no podemos filtrar por trial_confirmed_at IS NULL
@@ -77,8 +86,9 @@ async function run(req: Request) {
     .eq("status", "scheduled")
     .is("deleted_at", null)
     .not("notified_at", "is", null)
-    .lt("notified_at", cutoff)
+    .lt("notified_at", cutoffNotifiedIso)
     .gt("scheduled_at", nowIso)
+    .lt("scheduled_at", cutoffImminentIso)  // ⚠️ solo trials INMINENTES (fix 2026-08-02)
     .limit(BATCH_LIMIT);
 
   if (error) {

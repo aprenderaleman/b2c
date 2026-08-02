@@ -123,10 +123,6 @@
       "schedule": "*/1 * * * *"
     },
     {
-      "path": "/api/cron/trial-slot-release",
-      "schedule": "*/15 * * * *"
-    },
-    {
       "path": "/api/cron/ads-export-health",
       "schedule": "0 8 * * *"
     },
