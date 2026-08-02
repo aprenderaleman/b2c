@@ -215,9 +215,15 @@ async function run(req: Request) {
         waText = `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\nTu clase está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\n💡 ¿Quieres activar tu Agenda Prioritaria por 10€? Tu profesor prepara la clase para tu objetivo y los 10€ se descuentan íntegros de tu programa:\n${STRIPE_DEPOSIT_URL}\n\n⚠️ Responde "CONFIRMO" para asegurar tu asistencia o "CAMBIAR" si necesitas otra fecha.\n\n— Stiv · Aprender-Aleman.de`;
       } else {
         // Flow estándar (no meta-ads-paid) — mantiene el copy actual.
+        // Copy actualizado 2026-08-02 tras incidente trial-slot-release:
+        // eliminada la amenaza "sin tu respuesta en 12h tu slot se
+        // libera". Ver docs/no-auto-cancel-policy.md — el sistema NO
+        // libera slots por falta de confirmación. La confirmación suma
+        // señal (leads.trial_confirmed_at + badge en ficha del profe),
+        // nunca resta clase.
         waText = language === "de"
-          ? `Hallo ${leadFirst}! Ich bin Stiv von der Akademie Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\n🔗 Hier kommst du am Tag der Stunde rein:\n${joinUrl}\n\n⚠️ WICHTIG: Ich brauche deine ausdrückliche Bestätigung.\n\nAntworte mit:\n👉 "CONFIRMO" wenn du dabei bist\n👉 "CAMBIAR" wenn du einen anderen Termin brauchst\n\nOhne deine Antwort innerhalb von 12h wird dein Slot für einen anderen Schüler auf der Warteliste freigegeben.\n\n— Stiv · Aprender-Aleman.de`
-          : `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\n⚠️ IMPORTANTE: Necesito tu confirmación EXPLÍCITA.\n\nResponde con:\n👉 "CONFIRMO" si vas a asistir\n👉 "CAMBIAR" si necesitas otra fecha\n\nSin tu respuesta en 12h, tu slot se libera para otro estudiante en lista de espera.\n\n— Stiv · Aprender-Aleman.de`;
+          ? `Hallo ${leadFirst}! Ich bin Stiv von der Akademie Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\n🔗 Hier kommst du am Tag der Stunde rein:\n${joinUrl}\n\nAntworte mit "CONFIRMO", damit dein Lehrer weiß, dass du kommst — und wenn du nicht kannst, sag es mir und wir buchen problemlos um 😊\n\n— Stiv · Aprender-Aleman.de`
+          : `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
       }
 
       const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });

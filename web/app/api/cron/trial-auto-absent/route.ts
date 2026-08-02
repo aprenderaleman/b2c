@@ -1,39 +1,40 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { markTrialAbsent } from "@/lib/admin-actions";
+import { Resend } from "resend";
 
 /**
  * GET/POST /api/cron/trial-auto-absent
  *
- * Vercel Cron diario que CIERRA automáticamente las clases de prueba
- * "huérfanas" — clases con `scheduled_at + grace_window < now()` que
- * nadie marcó como `trial_attended` ni `trial_absent` desde admin.
+ * ⚠️ REESCRITO 2026-08-02 tras política no-auto-cancel.
  *
- * Por qué existe (Gelfis 2026-06-15):
- *   El KPI de asistencia del dashboard /admin/ads se hacía irreal con
- *   leads "pending" que en realidad nunca asistieron — clases pasadas
- *   sin marcar. Si el profe olvida marcar absent, ese lead se queda en
- *   limbo y distorsiona la tasa. Este cron asume "no marcado = no
- *   asistió" pasadas N horas, lo cual es la realidad operativa.
+ * ANTES: cerraba automáticamente clases sin marcar 24h después,
+ * seteaba `leads.status='trial_absent'` y entraba en el flow
+ * AWAITING_ABSENT_INTEREST (que a su vez podía marcar `lost` con
+ * un simple "no" del lead — cascada destructiva). Ver auditoría
+ * en docs/audit-destructive-automations-2026-08.md.
  *
- * Ventana de gracia: 24h después de scheduled_at. Esto da tiempo al
- * profe de marcar manualmente (caso común: marca al día siguiente).
+ * AHORA: patrón **notificar-no-actuar**. Detecta los mismos leads
+ * ("scheduled_at > 24h atrás sin marker") y:
+ *   1. Inserta timeline entry `type='agent_note'` con badge
+ *      "⏰ pendiente marcar asistencia".
+ *   2. Manda 1 email diario a admin con la lista pendiente.
+ *   3. NO modifica leads.status, NO cancela clases, NO inicia
+ *      absent-interest flow.
  *
- * Idempotencia: filtramos `trial_attended_at IS NULL AND trial_absent_at IS NULL`,
- * el propio update salta los ya marcados.
+ * Los humanos (profe/admin) marcan attended/absent desde su hub.
  *
- * Acción: setea `leads.status='trial_absent'`, `trial_absent_at=now()`,
- * inserta marker en lead_timeline para auditoría.
- *
- * Auth: Authorization: Bearer <CRON_SECRET> o X-Cron-Secret.
+ * Auth: Bearer CRON_SECRET.
  */
 
 export const runtime  = "nodejs";
 export const dynamic  = "force-dynamic";
 
 const GRACE_HOURS = 24;
+const ALERT_EMAIL = process.env.NEW_LEAD_ALERT_EMAIL ?? "";
+const RESEND_KEY  = process.env.RESEND_API_KEY ?? "";
+const RESEND_FROM = process.env.RESEND_FROM_EMAIL ?? "no-reply@aprender-aleman.de";
 
-function authorisedCronRequest(req: Request): boolean {
+function authorised(req: Request): boolean {
   const expected = process.env.CRON_SECRET;
   if (!expected) return false;
   const bearer = req.headers.get("authorization");
@@ -48,61 +49,96 @@ async function run(req: Request) {
   if (!process.env.CRON_SECRET) {
     return NextResponse.json({ error: "cron_not_configured" }, { status: 503 });
   }
-  if (!authorisedCronRequest(req)) {
+  if (!authorised(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const sb = supabaseAdmin();
   const cutoff = new Date(Date.now() - GRACE_HOURS * 3600_000).toISOString();
 
-  // Leads cuya última clase de prueba agendada ya pasó hace >24h y
-  // siguen sin marcar como attended/absent. Filtramos por
-  // trial_scheduled_at (timestamp del lead) para alinear con el resto
-  // del dashboard, que cuenta el funnel desde ese campo.
-  //
-  // Excluimos:
-  //   - status='converted' (ya pagó, no nos importa la asistencia)
-  //   - status='lost' (drip los marcó cerrados)
-  //   - status='trial_attended' (ya marcado, defensivo)
-  //   - status='trial_absent' (ya marcado, defensivo)
   const { data: candidates, error } = await sb
     .from("leads")
-    .select("id, trial_scheduled_at, status")
+    .select("id, name, email, whatsapp_normalized, trial_scheduled_at, status")
     .lt("trial_scheduled_at", cutoff)
     .is("trial_attended_at", null)
     .is("trial_absent_at", null)
     .not("status", "in", "(converted,lost,trial_attended,trial_absent)")
-    .limit(500);
+    .order("trial_scheduled_at", { ascending: false })
+    .limit(200);
 
   if (error) {
-    console.error("[cron/trial-auto-absent] select failed:", error);
     return NextResponse.json({ error: "select_failed", detail: error.message }, { status: 500 });
   }
 
   const rows = candidates ?? [];
   if (rows.length === 0) {
-    return NextResponse.json({ ok: true, marked: 0, scanned: 0 });
+    return NextResponse.json({ ok: true, notified: 0, scanned: 0 });
   }
 
-  const ids = rows.map(r => r.id);
+  // Guard: no re-anotar leads que ya tienen el badge de hoy (evita
+  // spam en el timeline si el cron corre 2×/día).
+  const todayIso = new Date().toISOString().slice(0, 10);
+  let notified = 0;
+  for (const r of rows) {
+    // Check si ya tiene entry hoy
+    const { data: existingToday } = await sb
+      .from("lead_timeline")
+      .select("id")
+      .eq("lead_id", r.id)
+      .eq("type", "agent_note")
+      .filter("metadata->>kind", "eq", "trial_pending_review")
+      .gte("created_at", `${todayIso}T00:00:00Z`)
+      .limit(1);
+    if (existingToday && existingToday.length > 0) continue;
 
-  // Fix Gelfis 2026-07-24: en vez de un UPDATE masivo silencioso que
-  // dejaba huérfano el flow absent-interest, iteramos y llamamos a
-  // markTrialAbsent por cada lead — misma ruta que el botón del
-  // profesor. Envía WA + email con SÍ/NO y setea AWAITING_ABSENT_INTEREST.
-  //
-  // Riesgo mitigado: en runs normales aquí caen 0-5 leads del día
-  // anterior, no un burst. sendWhatsappText tiene rate-limit 15s.
-  let succeeded = 0, failed = 0;
-  for (const id of ids) {
+    await sb.from("lead_timeline").insert({
+      lead_id: r.id,
+      type:    "agent_note",
+      author:  "system",
+      content: `⏰ Trial pendiente marcar asistencia — clase fue el ${r.trial_scheduled_at?.slice(0, 16)} y aún no está attended/absent. Revisar en /admin/leads/${r.id} y marcar manualmente.`,
+      metadata: {
+        kind:               "trial_pending_review",
+        trial_scheduled_at: r.trial_scheduled_at,
+        current_status:     r.status,
+        auto_note_date:     todayIso,
+      },
+    }).then(() => {}, () => {});
+    notified++;
+  }
+
+  // Email digest diario al admin — solo si hay pendientes.
+  if (notified > 0 && ALERT_EMAIL && RESEND_KEY) {
     try {
-      await markTrialAbsent(id);
-      succeeded++;
-    } catch (e) {
-      failed++;
-      console.error(`[cron/trial-auto-absent] markTrialAbsent failed for ${id}:`, e);
+      const lines = [
+        `${rows.length} trials pendientes de marcar attended/absent (>24h desde la clase).`,
+        "",
+        "Revisar en /admin/leads o /profesor/clasedeprueba:",
+        "",
+      ];
+      for (const r of rows.slice(0, 30)) {
+        lines.push(`  · ${r.name ?? r.email ?? r.id.slice(0, 8)} — clase ${r.trial_scheduled_at?.slice(0, 16)} — status=${r.status}`);
+      }
+      if (rows.length > 30) lines.push(`  ... y ${rows.length - 30} más`);
+      lines.push("");
+      lines.push("El sistema NO marca absent automáticamente (política 2026-08-02). Marcar a mano.");
+
+      const resend = new Resend(RESEND_KEY);
+      await resend.emails.send({
+        from:    RESEND_FROM,
+        to:      ALERT_EMAIL,
+        subject: `📋 ${rows.length} trials pendientes de marcar asistencia`,
+        text:    lines.join("\n"),
+      });
+    } catch (err) {
+      console.error("[trial-auto-absent] email digest failed:", err);
     }
   }
 
-  return NextResponse.json({ ok: true, marked: succeeded, failed, scanned: rows.length });
+  return NextResponse.json({
+    ok:                true,
+    scanned:           rows.length,
+    notified,
+    pattern:           "notify_only_no_action",
+    policy_doc:        "docs/no-auto-cancel-policy.md",
+  });
 }

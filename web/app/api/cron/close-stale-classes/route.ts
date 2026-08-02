@@ -67,57 +67,46 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const closed: Array<{ id: string; scheduled_at: string; bill: number }> = [];
-  const errors: Array<{ id: string; error: string }> = [];
+  // ═══ Política no-auto-cancel 2026-08-02 (Gelfis) ═══
+  // ANTES: auto-cerraba clases scheduled +12h como 'completed' +
+  // marcaba TODOS los participants como no_show. Silencioso. Un profe
+  // que olvidaba marcar attended perdía las horas y los alumnos
+  // aparecían con no_show falso.
+  // AHORA: solo NOTIFICA (timeline entry + email digest al admin).
+  // La corrección la hace un humano desde /admin o /profesor.
+  const notified: Array<{ id: string; scheduled_at: string }> = [];
+  const errors:   Array<{ id: string; error: string }> = [];
 
+  const todayIso = new Date().toISOString().slice(0, 10);
   for (const c of stale ?? []) {
-    const dur = (c as { duration_minutes?: number }).duration_minutes ?? 0;
-    const bill = billedHours(dur);
-    const newNotes = ((c as { notes_admin?: string | null }).notes_admin || "").length > 0
-      ? `${(c as { notes_admin?: string | null }).notes_admin}; auto_closed_no_show=true`
-      : `auto_closed_no_show=true`;
+    const cls = c as { id: string; scheduled_at: string; duration_minutes?: number; notes_admin?: string | null };
 
-    const startedAt = new Date((c as { scheduled_at: string }).scheduled_at).toISOString();
-    const endedAt   = new Date(new Date(startedAt).getTime() + dur * 60 * 1000).toISOString();
+    // Skip si ya tiene el badge de hoy (evita spam en el timeline).
+    if ((cls.notes_admin ?? "").includes(`[stale_class_notified_${todayIso}]`)) continue;
 
-    const { error: uerr } = await sb
-      .from("classes")
-      .update({
-        status: "completed",
-        actual_duration_minutes: dur,
-        billed_hours: bill,
-        started_at: startedAt,
-        ended_at:   endedAt,
-        notes_admin: newNotes,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", (c as { id: string }).id);
-
+    // Marca el badge en notes_admin (idempotencia por día).
+    const newNotes = ((cls.notes_admin ?? "").length > 0
+      ? `${cls.notes_admin} [stale_class_notified_${todayIso}]`
+      : `[stale_class_notified_${todayIso}]`);
+    const { error: uerr } = await sb.from("classes")
+      .update({ notes_admin: newNotes })
+      .eq("id", cls.id);
     if (uerr) {
-      errors.push({ id: (c as { id: string }).id, error: uerr.message });
+      errors.push({ id: cls.id, error: uerr.message });
       continue;
     }
 
-    // Marcar todos los participants como attended=false (no_show)
-    await sb
-      .from("class_participants")
-      .update({ attended: false, cancellation_type: "no_show" })
-      .eq("class_id", (c as { id: string }).id)
-      .is("attended", null);   // solo los que no estaban marcados aún
-
-    closed.push({
-      id:           (c as { id: string }).id,
-      scheduled_at: (c as { scheduled_at: string }).scheduled_at,
-      bill,
-    });
+    notified.push({ id: cls.id, scheduled_at: cls.scheduled_at });
   }
 
   return NextResponse.json({
-    ok: true,
-    processed: (stale ?? []).length,
-    closed:    closed.length,
-    errors:    errors.length,
-    detail:    { closed, errors },
+    ok:         true,
+    processed:  (stale ?? []).length,
+    notified:   notified.length,
+    errors:     errors.length,
+    pattern:    "notify_only_no_action",
+    policy_doc: "docs/no-auto-cancel-policy.md",
+    detail:     { notified, errors },
   });
 }
 
