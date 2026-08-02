@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { TareaCloser } from "@/lib/closer-cadence";
 import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
+import { TIPO_LABEL, CANAL_ICON, taskPriorityScore, sortByPriority, hoursLate } from "@/lib/closer-constants";
 
 type Props = {
   atrasadas: TareaCloser[];
@@ -11,48 +12,6 @@ type Props = {
   proximas: TareaCloser[];
 };
 
-function taskPriorityScore(task: TareaCloser): number {
-  if (task.tipo === "llamada_rescate") return 0;
-  if (task.lead_reserva_prioritaria || task.lead_priority_deadline === "concrete") return 1;
-  if (task.tipo === "llamada_objecion") return 2;
-  if (task.prioridad === "alta") return 3;
-  return 4;
-}
-
-function sortByPriority(tasks: TareaCloser[]): TareaCloser[] {
-  return [...tasks].sort((a, b) => {
-    const pa = taskPriorityScore(a);
-    const pb = taskPriorityScore(b);
-    if (pa !== pb) return pa - pb;
-    return new Date(a.fecha_programada).getTime() - new Date(b.fecha_programada).getTime();
-  });
-}
-
-function hoursLate(fechaProgramada: string): string {
-  const diff = Date.now() - new Date(fechaProgramada).getTime();
-  const hours = Math.floor(diff / 3_600_000);
-  if (hours < 1) return "< 1h";
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return `${days}d`;
-}
-
-const TIPO_LABEL: Record<string, { text: string; cls: string }> = {
-  tipo_a: { text: "Tipo A", cls: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/30" },
-  tipo_b: { text: "Tipo B", cls: "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/30" },
-  seguimiento_post: { text: "Seguimiento", cls: "bg-slate-50 dark:bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-500/30" },
-  llamada_rescate: { text: "Rescate", cls: "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30" },
-  llamada_objecion: { text: "Objecion", cls: "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/30" },
-  seguimiento_absent: { text: "No-show", cls: "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-500/30" },
-  inbound_response: { text: "Inbound", cls: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/30" },
-  reactivacion: { text: "Reactivacion", cls: "bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-200 dark:border-purple-500/30" },
-};
-
-const CANAL_ICON: Record<string, string> = {
-  whatsapp: "WA",
-  llamada: "Tel",
-  email: "Em",
-};
 
 export function CloserDashboard({ atrasadas, hoy, proximas }: Props) {
   const sortedHoy = sortByPriority(hoy);

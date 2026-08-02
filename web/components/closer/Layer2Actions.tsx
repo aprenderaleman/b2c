@@ -3,20 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CopyMessagePanel } from "./CopyMessagePanel";
-
-type RitmoOption = {
-  id: string;
-  name: string;
-  emoji: string;
-  pricePerMonth: number;
-};
-
-const RITMOS: RitmoOption[] = [
-  { id: "viajero", name: "Viajero", emoji: "🌍", pricePerMonth: 240 },
-  { id: "estandar", name: "Estandar", emoji: "⭐", pricePerMonth: 320 },
-  { id: "intensivo", name: "Intensivo", emoji: "🔥", pricePerMonth: 450 },
-  { id: "vip_express", name: "VIP Express", emoji: "🚀", pricePerMonth: 690 },
-];
+import { RITMOS, ACTION_BUTTONS, type ActionButton } from "@/lib/closer-constants";
 
 type Props = {
   leadId: string;
@@ -30,27 +17,6 @@ type ActiveAction =
   | { type: "fecha_picker" }
   | { type: "copy_panel"; action: string; label: string; message: string; extras?: Record<string, string> };
 
-type ActionButton = {
-  action: string;
-  label: string;
-  icon: string;
-  description: string;
-  isCopy?: boolean;
-  needsRitmo?: boolean;
-  needsFecha?: boolean;
-  isLink?: boolean;
-};
-
-const ACTION_BUTTONS: ActionButton[] = [
-  { action: "agendar", label: "Agendar", icon: "📅", description: "Iniciar cadena de agendamiento" },
-  { action: "no_contesto", label: "No contesto", icon: "📵", description: "Cadena de seguimiento", isCopy: true },
-  { action: "enviar_info", label: "Enviar info", icon: "📋", description: "Info de cursos", isCopy: true },
-  { action: "enviar_propuesta", label: "Propuesta", icon: "💰", description: "Seleccionar ritmo", needsRitmo: true },
-  { action: "seguimiento_fecha", label: "Seguimiento", icon: "📆", description: "Programar seguimiento", needsFecha: true },
-  { action: "enviar_enlace", label: "Enlace", icon: "🔗", description: "Enlace de inscripcion", isLink: true },
-  { action: "confirmar_pago", label: "Confirmar pago", icon: "✅", description: "Verificar pago" },
-  { action: "pasar_reactivacion", label: "Reactivacion", icon: "🔄", description: "Pasar a reactivacion", isCopy: true },
-];
 
 export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
   const router = useRouter();

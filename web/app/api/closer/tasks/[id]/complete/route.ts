@@ -47,11 +47,13 @@ export async function POST(
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  const leadId = (task as { lead_id: string }).lead_id;
+
   try {
     await processActionResult({
       taskId,
       closerId,
-      leadId: (task as { lead_id: string }).lead_id,
+      leadId,
       resultado: parsed.data.resultado,
       objectionChip: parsed.data.objectionChip ?? null,
       motivoNoInteresado: parsed.data.motivoNoInteresado ?? null,
@@ -62,5 +64,11 @@ export async function POST(
     return NextResponse.json({ error: "process_failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  const { count } = await sb
+    .from("tareas_closer")
+    .select("id", { count: "exact", head: true })
+    .eq("lead_id", leadId)
+    .is("fecha_completada", null);
+
+  return NextResponse.json({ ok: true, remainingTasks: count ?? 0 });
 }

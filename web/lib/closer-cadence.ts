@@ -27,6 +27,13 @@ export type TareaCloser = {
   lead_reserva_prioritaria?: boolean;
   lead_priority_deadline?: string | null;
   lead_deposit_intent_at?: string | null;
+  lead_created_at?: string;
+  lead_fecha_asignacion_closer?: string | null;
+  lead_source?: string | null;
+  lead_landing_intent?: string | null;
+  lead_trial_scheduled_at?: string | null;
+  lead_trial_attended_at?: string | null;
+  lead_trial_absent_at?: string | null;
 };
 
 export type TaskResult =
@@ -90,7 +97,7 @@ export async function completeTask(
     .eq("id", taskId);
 }
 
-export type TaskFilter = "hoy" | "atrasadas" | "proximas";
+export type TaskFilter = "hoy" | "atrasadas" | "proximas" | "pendientes";
 
 export async function getCloserTasks(
   closerId: string,
@@ -107,7 +114,7 @@ export async function getCloserTasks(
 
   let query = sb
     .from("tareas_closer")
-    .select("*, leads!inner(name, whatsapp_normalized, email, status, estado_cierre, qualification_answers, reserva_prioritaria, priority_deadline, deposit_intent_at)")
+    .select("*, leads!inner(name, whatsapp_normalized, email, status, estado_cierre, qualification_answers, reserva_prioritaria, priority_deadline, deposit_intent_at, created_at, fecha_asignacion_closer, source, landing_intent, trial_scheduled_at, trial_attended_at, trial_absent_at)")
     .eq("closer_id", closerId)
     .is("fecha_completada", null);
 
@@ -115,9 +122,10 @@ export async function getCloserTasks(
     query = query.gte("fecha_programada", todayStart).lt("fecha_programada", todayEnd);
   } else if (filter === "atrasadas") {
     query = query.lt("fecha_programada", todayStart);
-  } else {
+  } else if (filter === "proximas") {
     query = query.gte("fecha_programada", todayEnd);
   }
+  // "pendientes" → no date filter, returns all pending tasks
 
   query = query.order("fecha_programada", { ascending: true });
   const { data } = await query;
@@ -133,6 +141,13 @@ export async function getCloserTasks(
       reserva_prioritaria?: boolean;
       priority_deadline?: string;
       deposit_intent_at?: string;
+      created_at?: string;
+      fecha_asignacion_closer?: string;
+      source?: string;
+      landing_intent?: string;
+      trial_scheduled_at?: string;
+      trial_attended_at?: string;
+      trial_absent_at?: string;
     } | null;
     const { leads: _, ...rest } = row;
     return {
@@ -146,6 +161,13 @@ export async function getCloserTasks(
       lead_reserva_prioritaria: lead?.reserva_prioritaria ?? false,
       lead_priority_deadline: lead?.priority_deadline ?? null,
       lead_deposit_intent_at: lead?.deposit_intent_at ?? null,
+      lead_created_at: lead?.created_at ?? "",
+      lead_fecha_asignacion_closer: lead?.fecha_asignacion_closer ?? null,
+      lead_source: lead?.source ?? null,
+      lead_landing_intent: lead?.landing_intent ?? null,
+      lead_trial_scheduled_at: lead?.trial_scheduled_at ?? null,
+      lead_trial_attended_at: lead?.trial_attended_at ?? null,
+      lead_trial_absent_at: lead?.trial_absent_at ?? null,
     } as unknown as TareaCloser;
   });
 }
