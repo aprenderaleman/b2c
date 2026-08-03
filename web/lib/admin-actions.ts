@@ -6,7 +6,6 @@ import { sendWhatsappText } from "./whatsapp";
 import { sendPostTrialFollowupEmail, sendPostTrialFollowupGenericEmail, sendTrialAttendedFollowupEmail, sendTrialAbsentFollowupEmail } from "./email/send";
 import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "./trial-packs";
 import { getLeadTrialTeacher } from "./trial-compensation";
-import { renderTemplate } from "./message-stats";
 import { startChain, cancelActiveChain } from "./chain-engine";
 import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
 import { autoAssignToActiveCloser } from "./closer-actions";
@@ -83,12 +82,12 @@ export type AttendedOptions = {
   packId:      PackId;
   paymentType: PaymentType;
   nivel?:      string;
-  /** URL completa (con client_reference_id si aplica). Si se pasa, se
-   *  usa en lugar de getPackUrlWithOverride(). */
   fullUrl?:    string;
-  /** Nombre descriptivo del plan (ej. "Estándar · Meta B1 · 6 meses").
-   *  Si se pasa, se usa en lugar de getPack().name. */
   packLabel?:  string;
+  metaLabel?:  string;
+  ritmoLabel?: string;
+  fechaLlegada?: string;
+  isOneTime?:  boolean;
 };
 
 export async function markTrialAttendedAwaitingConversion(
@@ -197,60 +196,44 @@ export async function markTrialAttendedAwaitingConversion(
 
   let text: string;
 
-  if (opts) {
-    const pack     = getPack(opts.packId);
+  if (opts && opts.fechaLlegada) {
     const packLink = opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType);
-    const packName = opts.packLabel || pack?.name || opts.packId;
+    const metaLabel = opts.metaLabel || opts.packLabel || opts.packId;
 
-    // Si hay un override activo en message_templates para el kind
-    // 'post_trial_followup' canal whatsapp, lo usamos. Si no, caemos
-    // al copy hardcoded de abajo. Editor: /admin/mensajes.
-    const { data: tplRow } = await sb
-      .from("message_templates")
-      .select("body, active")
-      .eq("kind", "post_trial_followup")
-      .eq("channel", "whatsapp")
-      .eq("active", true)
-      .maybeSingle();
-    if (tplRow && (tplRow as { body?: string }).body) {
-      text = renderTemplate((tplRow as { body: string }).body, {
-        firstName,
-        objective: opts.objective,
-        packName,
-        packLink: packLink || "",
-      });
+    if (opts.isOneTime) {
+      text = [
+        `¡Hola ${firstName}! 😊`,
+        ``,
+        `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} (pago único: todas tus clases desbloqueadas desde el día 1) — a tu ritmo: con 2 clases por semana, tu ${metaLabel} llega en ${opts.fechaLlegada} 📅`,
+        `Y con tu inscripción queda activada tu Garantía de Nivel por escrito.`,
+        `👉 ${packLink || "(Te paso el enlace en breve.)"}`,
+        ``,
+        `Son 5 minutos. Cualquier duda durante el proceso, aquí estoy 😊`,
+      ].join("\n");
     } else {
-    // Copy fijo aprobado por Gelfis. NO modificar el wording sin pedirle
-    // antes — el equipo lo usa palabra por palabra.
-    // Copy Mensaje 1 — aprobado por Gelfis 08/06.
-    const nivelLabel = opts.nivel ? ` · Nivel ${opts.nivel}` : "";
-    text = lead.language === "de"
-      ? [
-          `Hallo ${firstName}! 😊`,
-          ``,
-          `Schön, dass du den Schritt machst! Hier ist dein Anmeldelink für das ${packName}${nivelLabel}:`,
-          `👉 ${packLink || "(Ich schicke dir den Link gleich nach.)"}`,
-          ``,
-          `Es dauert nur 5 Minuten. Sag mir Bescheid, sobald du fertig bist. 😊`,
-          ``,
-          `Stiv | Aprender-Aleman.de`,
-        ].join("\n")
-      : [
-          `¡Hola ${firstName}! 😊`,
-          ``,
-          `Me alegra que hayas decidido dar el paso. Aquí tienes el enlace para formalizar tu inscripción en el ${packName}${nivelLabel}:`,
-          `👉 ${packLink || "(Te paso el enlace en breve.)"}`,
-          ``,
-          `Solo tardará 5 minutos. Avísame cuando lo hayas completado. 😊`,
-          ``,
-          `Stiv | Aprender-Aleman.de`,
-        ].join("\n");
-    }  // fin del else del template-override
+      text = [
+        `¡Hola ${firstName}! 😊`,
+        ``,
+        `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} con ritmo ${opts.ritmoLabel || ""} — empezando esta semana, tu ${metaLabel} llega en ${opts.fechaLlegada} 📅`,
+        `Y con tu inscripción queda activada tu Garantía de Nivel por escrito.`,
+        `👉 ${packLink || "(Te paso el enlace en breve.)"}`,
+        ``,
+        `Son 5 minutos. Cualquier duda durante el proceso, aquí estoy 😊`,
+      ].join("\n");
+    }
+  } else if (opts) {
+    const packLink = opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType);
+    const packName = opts.packLabel || getPack(opts.packId)?.name || opts.packId;
+    text = [
+      `¡Hola ${firstName}! 😊`,
+      ``,
+      `Me alegra que hayas decidido dar el paso. Aquí tienes el enlace para formalizar tu inscripción en el ${packName}:`,
+      `👉 ${packLink || "(Te paso el enlace en breve.)"}`,
+      ``,
+      `Son 5 minutos. Cualquier duda durante el proceso, aquí estoy 😊`,
+    ].join("\n");
   } else {
-    // Fallback (sin pack/objetivo seleccionado) — mensaje genérico de antes.
-    text = lead.language === "de"
-      ? `Hallo ${firstName}! 😊\n\nDanke, dass du in deiner Probestunde dabei warst! Wie hat es dir gefallen?\n\nWenn du weitermachen möchtest, kann ich dir einen persönlichen Plan mit Zeiten und Preis vorbereiten — sag mir einfach Bescheid.\n\nStiv, Aprender-Aleman.de`
-      : `¡Hola ${firstName}! 😊\n\n¡Gracias por asistir a tu clase de prueba de alemán!\n\n¿Qué te pareció? Si te interesa avanzar, te preparo un plan personalizado con horarios y precio exacto — dime cuando quieras seguir.\n\nStiv, Aprender-Aleman.de`;
+    text = `¡Hola ${firstName}! 😊\n\n¡Gracias por asistir a tu clase de prueba de alemán!\n\n¿Qué te pareció? Si te interesa avanzar, te preparo un plan personalizado con horarios y precio exacto — dime cuando quieras seguir.\n\nStiv, Aprender-Aleman.de`;
   }
 
   const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
@@ -284,7 +267,7 @@ export async function markTrialAttendedAwaitingConversion(
   // con botón clickable al checkout del pack. Best-effort: si falla,
   // el WA ya fue suficiente — solo logueamos el fallo.
   if (lead?.email) {
-    const langForEmail: "es" | "de" = lead.language === "de" ? "de" : "es";
+    const langForEmail: "es" | "de" = "es";
     const ctaUrl = opts
       ? (opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType) || `https://aprender-aleman.de/inscripciones?ref=${leadId}`)
       : `https://aprender-aleman.de/inscripciones?ref=${leadId}`;
@@ -460,7 +443,7 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
   // Reuso sendPostTrialFollowupGenericEmail (copy genérico — no menciona
   // pack porque este flow es "no link").
   if (lead?.email) {
-    const langForEmail: "es" | "de" = lead.language === "de" ? "de" : "es";
+    const langForEmail: "es" | "de" = "es";
     const emailRes = await sendTrialAttendedFollowupEmail(lead.email, {
       leadName: firstName || lead.name || "",
       language: langForEmail,

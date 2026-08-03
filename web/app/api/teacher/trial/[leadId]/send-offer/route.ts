@@ -11,12 +11,29 @@ import {
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
-const CLASSES_PER_MONTH: Record<RitmoId, number> = {
-  viajero: 6, estandar: 8, intensivo: 12, vip_express: 16,
-};
+const MONTH_NAMES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+function computeFechaLlegada(months: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + months);
+  return `${MONTH_NAMES[d.getMonth()]} de ${d.getFullYear()}`;
+}
 
 const ONE_TIME_CLASSES: Record<GoalId, number> = {
   a1_a2: 32, b1: 48, b2: 48, c1: 64, fluidez_total: 96,
+};
+
+const ESTANDAR_CLASSES_PER_MONTH = 8;
+
+const GOAL_SHORT_LABELS: Record<GoalId, string> = {
+  a1_a2: "A1-A2",
+  b1: "B1",
+  b2: "B2",
+  c1: "C1",
+  fluidez_total: "Fluidez Total",
 };
 
 export async function POST(req: Request, { params }: { params: Promise<{ leadId: string }> }) {
@@ -37,7 +54,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   const ritmoId     = body.ritmoId as RitmoId | undefined;
   const goalId      = body.goalId as GoalId | undefined;
   const kidsPayment = body.kidsPayment as "single" | "flexible" | undefined;
-  const nivel       = typeof body.nivel === "string" ? body.nivel.trim() : "";
 
   if (!category) return NextResponse.json({ error: "missing_category" }, { status: 400 });
 
@@ -52,6 +68,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   let packId: string;
   let paymentType: PaymentType;
   let productName: string;
+  let metaLabel: string;
+  let ritmoLabel: string;
+  let fechaLlegada: string;
+  let isOneTime = false;
 
   if (category === "subscription") {
     if (!ritmoId || !goalId) return NextResponse.json({ error: "missing_ritmo_or_goal" }, { status: 400 });
@@ -68,6 +88,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     monthlyPriceCents = r.pricePerMonth * 100;
     packLabel = `${r.emoji} ${r.name} · Meta ${g.label} · ${g.months} meses`;
     productName = `${r.name} — Meta ${g.label}`;
+    metaLabel = g.label;
+    ritmoLabel = r.name;
+    fechaLlegada = computeFechaLlegada(g.months);
     packId = ritmoId;
     paymentType = "flexible";
   } else if (category === "one_time") {
@@ -75,12 +98,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     const p = ONE_TIME_PACKS.find(x => x.id === goalId);
     if (!p) return NextResponse.json({ error: "invalid_pack" }, { status: 400 });
 
+    const classes = ONE_TIME_CLASSES[goalId] ?? 32;
+    const refMonths = Math.ceil(classes / ESTANDAR_CLASSES_PER_MONTH);
+
     meta = goalId;
     tipo_pago = "unico";
-    clases_totales = ONE_TIME_CLASSES[goalId] ?? 32;
+    clases_totales = classes;
     importe_cents = p.priceCents;
     packLabel = p.name;
     productName = p.name;
+    metaLabel = GOAL_SHORT_LABELS[goalId] || p.name;
+    ritmoLabel = "";
+    fechaLlegada = computeFechaLlegada(refMonths);
+    isOneTime = true;
     packId = goalId;
     paymentType = "single";
   } else if (category === "kids") {
@@ -90,6 +120,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     importe_cents = KIDS_PACK.priceCents;
     packLabel = "Pack Kids";
     productName = "Pack Kids — Alemán para niños";
+    metaLabel = "Pack Kids";
+    ritmoLabel = "";
+    fechaLlegada = computeFechaLlegada(6);
+    isOneTime = true;
     packId = "kids";
     paymentType = kidsPayment === "flexible" ? "flexible" : "single";
   } else {
@@ -136,7 +170,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
 
   const ofertaId = (oferta as { id: string }).id;
 
-  // Create Stripe Checkout Session with enrollment metadata
   let checkoutUrl: string;
   try {
     const stripe = stripeUS();
@@ -233,9 +266,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     packId: packId as AttendedOptions["packId"],
     paymentType,
     objective: "",
-    ...(nivel ? { nivel } : {}),
     fullUrl: checkoutUrl,
     ...(packLabel ? { packLabel } : {}),
+    metaLabel,
+    ritmoLabel,
+    fechaLlegada,
+    isOneTime,
   };
 
   await markTrialAttendedAwaitingConversion(leadId, attendedOpts);
