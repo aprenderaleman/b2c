@@ -55,7 +55,7 @@ PAUSED_STATUSES = (
     "trial_scheduled",
     "trial_reminded",
     "trial_attended",
-    # Estos los maneja tick_absent_followups (agent_5_guardian) en su propio
+    # Estos los maneja el flow absent-interest TS (markTrialAbsent) en su propio
     # cron; Agent 0 no debe tocarlos para no duplicar mensajes.
     "trial_absent",
     "absent_followup_1",

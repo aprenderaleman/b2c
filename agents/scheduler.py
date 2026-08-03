@@ -27,7 +27,8 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from agents.agent_0_watcher import tick as agent_0_tick
-from agents.agent_5_guardian import tick_absent_followups
+# tick_absent_followups eliminada (Gelfis 2026-08-01) — flow absent-interest
+# TS la reemplaza con 1 solo mensaje SÍ/NO, sin cadena legacy.
 from agents.shared.outbound_queue import drain as drain_outbound_queue
 from agents.whatsapp_health import tick_webhook_self_heal, tick_inbound_replay
 from agents.shared.db import get_conn as _dedup_get_conn
@@ -442,13 +443,8 @@ def main() -> int:
         max_instances=1, coalesce=True,
     )
 
-    # Absent follow-up sequence
-    sched.add_job(
-        tick_absent_followups,
-        CronTrigger(minute=10, hour="8-18", timezone=BERLIN),
-        id="absent_followups",
-        max_instances=1, coalesce=True,
-    )
+    # (Absent follow-up sequence removed 2026-08-01 — reemplazado por el
+    # flow absent-interest TS que manda 1 solo mensaje SÍ/NO.)
 
     # Daily summary
     sched.add_job(

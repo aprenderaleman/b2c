@@ -3,31 +3,34 @@ Agent 5 — GUARDIAN AGENT (post-trial conversion monitor).
 
 Event-driven, mostly pure code. Calendly used to live here too but the
 self-book funnel replaced it; the only relevant trigger now is the
-dashboard / absent-followup state machine.
+dashboard state machine (welcome / goodbye).
 
 Triggers:
   * Dashboard actions: mark_attended_converted / mark_attended_lost / mark_absent
-  * Scheduler tick (hourly): absent follow-up sequence
 
 Pre-class reminders are owned by the web side now:
   * /api/cron/trial-reminders-24h    — 24h-before email (lead + teacher)
   * /api/cron/trial-reminders-morning — 8 AM same-day email (lead + teacher)
   * scheduler._notify_trials_30min   — 30-min-before WhatsApp (lead + teacher)
 
+Absent follow-ups: la cadena legacy tick_absent_followups (4 mensajes
+D+1/D+3/D+5/D+7) fue ELIMINADA (Gelfis 2026-08-01). Ahora el flujo es:
+  1. markTrialAbsent (TS admin-actions) manda 1 solo WA/email
+     "¿sigues teniendo interés real? SÍ/NO" (flow absent-interest).
+  2. reschedule_flow.py detecta la respuesta y actúa.
+Sin cadena adicional — reduce mensajes al lead y evita duplicados.
+
 Public surface:
 
     mark_attended_converted(lead_id)
     mark_attended_lost(lead_id, reason)
     mark_absent(lead_id)
-    tick_absent_followups()
 """
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
 
 from agents.agent_3_sender import send_approved
-from agents.shared.db import get_conn
 from agents.shared.leads import get_lead, log_timeline, update_status
 
 log = logging.getLogger("agent_5")
@@ -106,132 +109,20 @@ def mark_attended_lost(lead_id: str, reason: str) -> None:
 
 
 def mark_absent(lead_id: str) -> None:
+    """Marca el lead como trial_absent SIN activar cadena legacy.
+
+    Fix Gelfis 2026-08-01: la cadena tick_absent_followups (4 mensajes)
+    fue eliminada. Este handler ya no setea next_contact_date — el flow
+    real es el TS markTrialAbsent que manda 1 solo WA "¿sigues teniendo
+    interés? SÍ/NO" y espera respuesta. Esta función Python queda como
+    compat para callers antiguos y para el guardián — solo transiciona
+    el status, no envía mensaje.
+    """
     lead = get_lead(lead_id)
     if not lead:
         return
     update_status(lead_id, "trial_absent", author="gelfis")
-    # Make the first absent follow-up eligible immediately so the next
-    # hourly tick_absent_followups picks it up. Mirrors the TS admin
-    # endpoint (web/lib/admin-actions.ts → markTrialAbsent).
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            UPDATE leads
-               SET next_contact_date = NOW() - INTERVAL '1 second'
-             WHERE id = %s
-            """,
-            (lead_id,),
-        )
     log_timeline(
         lead_id, type="status_change", author="gelfis",
-        content="Lead did not attend trial — immediate absent follow-up scheduled.",
+        content="Lead did not attend trial (Python mark_absent — no message sent, TS flow handles absent-interest).",
     )
-
-
-# ──────────────────────────────────────────────────────────
-# Scheduled ticks
-# ──────────────────────────────────────────────────────────
-
-
-def tick_absent_followups() -> int:
-    """Hourly tick to advance the absent-followup sequence."""
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            SELECT id, name, whatsapp_normalized, language,
-                   german_level, goal, urgency, status,
-                   current_followup_number
-              FROM leads
-             WHERE status IN ('trial_absent', 'absent_followup_1',
-                              'absent_followup_2', 'absent_followup_3')
-               AND next_contact_date IS NOT NULL
-               AND next_contact_date <= NOW()
-            """
-        )
-        leads = list(cur.fetchall())
-
-    count = 0
-    for lead in leads:
-        _process_absent_followup(lead)
-        count += 1
-    return count
-
-
-def _process_absent_followup(lead: dict) -> None:
-    status = lead["status"]
-    name = _first_name(lead)
-    lang = lead["language"]
-
-    # Secuencia de 4 follow-ups (copy aprobado por Gelfis 2026-06-08).
-    # Cadencia D+1 / D+3 / D+5 / D+7 medida desde el "No asistió"; las
-    # `timedelta` siguientes son OFFSETS desde el envío de cada paso
-    # (ej. después de FU1 esperamos +2d para FU2 → total 3d).
-    if status == "trial_absent":
-        body = (
-            f"Hallo {name}, ich habe gesehen, dass du nicht in deine "
-            f"Probestunde reinkonntest. Hast du immer noch Interesse, "
-            f"Deutsch zu lernen?\n"
-            f"— Stiv | Aprender-Aleman.de"
-        ) if lang == "de" else (
-            f"Hola {name}, vi que no pudiste conectarte a tu clase de prueba. "
-            f"¿Mantienes el interés en aprender alemán?\n"
-            f"— Stiv | Aprender-Aleman.de"
-        )
-        next_status = "absent_followup_1"
-        next_delta = timedelta(days=2)  # FU2 cae +3d después del marcado
-    elif status == "absent_followup_1":
-        body = (
-            f"Hallo {name}, wir schließen die Anmeldungen und die Plätze gehen aus. "
-            f"Soll ich deinen reservieren?\n"
-            f"— Stiv | Aprender-Aleman.de"
-        ) if lang == "de" else (
-            f"Hola {name}, estamos cerrando inscripciones y los cupos se están agotando. "
-            f"¿Quieres que te reserve el tuyo?\n"
-            f"— Stiv | Aprender-Aleman.de"
-        )
-        next_status = "absent_followup_2"
-        next_delta = timedelta(days=2)  # FU3 cae +5d después del marcado
-    elif status == "absent_followup_2":
-        body = (
-            f"Hallo {name}, je früher du anfängst, desto schneller erreichst du dein "
-            f"Ziel mit Deutsch. Probieren wir es diese Woche?\n"
-            f"— Stiv | Aprender-Aleman.de"
-        ) if lang == "de" else (
-            f"Hola {name}, cuanto antes empieces, antes llegarás a tu objetivo con el "
-            f"alemán. ¿Lo intentamos esta semana?\n"
-            f"— Stiv | Aprender-Aleman.de"
-        )
-        next_status = "absent_followup_3"
-        next_delta = timedelta(days=2)  # FU4 cae +7d después del marcado
-    else:  # absent_followup_3 — último mensaje
-        body = (
-            f"Hallo {name}, wir geben deinen Platz an einen anderen Schüler weiter. "
-            f"Falls du es dir später anders überlegst, sind wir hier. "
-            f"Alles Gute! 🍀\n"
-            f"— Stiv | Aprender-Aleman.de"
-        ) if lang == "de" else (
-            f"Hola {name}, vamos a liberar tu espacio para dárselo a otro estudiante. "
-            f"Si en algún momento decides retomar, aquí estaremos. ¡Mucho éxito! 🍀\n"
-            f"— Stiv | Aprender-Aleman.de"
-        )
-        next_status = "lost"
-        next_delta = None
-
-    result = send_approved(lead, body, is_new_conversation=False, advance_followup=False)
-    if not result.success:
-        return
-
-    with get_conn() as conn, conn.cursor() as cur:
-        cur.execute(
-            """
-            UPDATE leads
-               SET status = %s,
-                   next_contact_date = %s
-             WHERE id = %s
-            """,
-            (
-                next_status,
-                (datetime.utcnow() + next_delta) if next_delta else None,
-                lead["id"],
-            ),
-        )

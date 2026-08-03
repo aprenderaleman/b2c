@@ -445,11 +445,12 @@ def handle_incoming_message(
     if _has_phrase(text_norm, HUMAN_WORDS[lang] + HUMAN_WORDS[other_lang]):
         return _handle_human_request(lead, wa)
 
-    # ABSENT-FOLLOWUP POSITIVE REPLY — el lead no asistió al trial y la
-    # cadena tick_absent_followups ya le mandó "¿mantienes el interés?"
-    # (FU1) o variantes (FU2/3). Si responde algo positivo ("sí", "claro",
-    # "ja", "me interesa"), le mandamos el link self-serve /agendar/cuando
-    # y paramos la cadena absent_followup (Gelfis 2026-06-17, caso Jhon).
+    # ABSENT-FOLLOWUP POSITIVE REPLY — el lead no asistió al trial. El
+    # flow absent-interest TS ya le mandó "¿sigues teniendo interés? SÍ/NO"
+    # (kind trial_absent_initial). Si responde algo positivo ("sí", "claro",
+    # "ja", "me interesa"), le mandamos el link self-serve /agendar/cuando.
+    # Los status absent_followup_1..3 son legacy (cadena eliminada 2026-08-01)
+    # — se mantienen aquí por si hay leads viejos en esos status.
     if status in ("trial_absent", "absent_followup_1",
                   "absent_followup_2", "absent_followup_3"):
         if _looks_positive(text_norm, lang):

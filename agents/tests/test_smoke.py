@@ -48,7 +48,7 @@ def main() -> int:
         from agents.agent_3_sender import send_approved, SendResult
         from agents.agent_4_conversation import handle_incoming_message, BOOKING_WORDS, HUMAN_WORDS, NEGATIVE_WORDS, _has_phrase, _norm
         from agents.agent_5_guardian import (
-            mark_attended_converted, mark_absent, tick_absent_followups,
+            mark_attended_converted, mark_absent,
         )
         from agents.notifications import (
             notify_needs_human, notify_trial_30min, notify_daily_summary,
