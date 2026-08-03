@@ -186,17 +186,16 @@ logging.basicConfig(
 )
 
 
-_PRE_CLASS_30M_TAG = "[pre_class_30m_sent]"
+_PRE_CLASS_30M_TAG = "[pre_class_30m_sent]"  # kept for historical DB rows
 
 
-def _format_class_time_30m(scheduled_at: datetime, lang: str) -> str:
-    """E.g. '17:30' — short label used in the 30-min reminder."""
-    local = scheduled_at.astimezone(BERLIN) if scheduled_at.tzinfo else BERLIN.localize(scheduled_at)
-    return local.strftime("%H:%M")
+def _notify_trials_30min_DEPRECATED() -> None:
+    """DEPRECATED 2026-08-01: eliminado por redundancia con trial-reminders-15m TS.
+    Función mantenida solo para no romper imports externos; ya no se registra
+    en el scheduler. Borrar en el próximo cleanup.
 
-
-def _notify_trials_30min() -> None:
-    """Send a SHORT WhatsApp 30 min before each upcoming trial.
+    (Original doc:)
+    Send a SHORT WhatsApp 30 min before each upcoming trial.
 
     Recipients:
       * Lead   — only if they gave us their WhatsApp number.
@@ -425,15 +424,9 @@ def main() -> int:
         max_instances=1, coalesce=True,
     )
 
-    # 30-min pre-class WhatsApp to lead AND teacher.
-    # Email reminders (24h-before, 8 AM same-day) live on the web side
-    # as Vercel cron jobs.
-    sched.add_job(
-        _notify_trials_30min,
-        IntervalTrigger(minutes=5, timezone=BERLIN),
-        id="trial_30min_whatsapp",
-        max_instances=1, coalesce=True,
-    )
+    # (30-min pre-class WhatsApp eliminado 2026-08-01 — redundante con
+    # trial-reminders-15m TS que cubre inminencia. Los recordatorios
+    # 24h/morning/15m TS son suficientes.)
 
     # Escalation sweep
     sched.add_job(

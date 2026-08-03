@@ -492,56 +492,23 @@ async function runCron(req: Request) {
           console.error(`[diagnostico-followups] welcome email failed lead=${lead.id}:`, err);
         }
       } else if (nextN === 2) {
-        // T+4h — Nudge bajo esfuerzo (solo si NO respondió al msg 1).
-        // Si ya está en conversación con Stiv, saltamos para no parecer
-        // un bot. Si no respondió, repetimos con menos fricción.
-        intendedChannel = "wa";
-        if (await leadResponded()) {
-          // Marcamos progreso pero NO enviamos. Avanza last_drip_msg_n
-          // para que el cron pueda llegar al msg 3 en su gate.
-          skipped++;
-          await sb.from("leads").update({
-            last_drip_msg_n: nextN,
-            last_drip_sent_at: new Date().toISOString(),
-          }).eq("id", lead.id);
-          await sb.from("lead_timeline").insert({
-            lead_id: lead.id,
-            type:    "agent_note",
-            author:  "system",
-            content: `📨 Followup #2 saltado — lead ya respondió al msg 1`,
-            metadata: { kind: "diagnostico_followup_skip", message_n: 2 },
-          });
-          continue;
-        }
-        // forceEmailOnly + msg #2 es WA-only → saltar para no quedarnos
-        // pegados en deadlock (pausa global o cold-lead bloquean el WA
-        // y no hay version email del nudge). Avanza last_drip_msg_n y
-        // deja que msg #3 (T+24h, WA+email con PDF) tome el relevo.
-        if (forceEmailOnly) {
-          skipped++;
-          await sb.from("leads").update({
-            last_drip_msg_n: nextN,
-            last_drip_sent_at: new Date().toISOString(),
-          }).eq("id", lead.id);
-          await sb.from("lead_timeline").insert({
-            lead_id: lead.id,
-            type:    "agent_note",
-            author:  "system",
-            content: `📨 Followup #2 saltado — ${waPaused ? "WA pausado" : "cold-lead cap"} y msg #2 es WA-only`,
-            metadata: { kind: "diagnostico_followup_skip", message_n: 2, reason: waPaused ? "wa_paused" : "cold_cap" },
-          });
-          continue;
-        }
-        const text = [
-          `Hola de nuevo ${firstName} 😊`,
-          ``,
-          `Sé que ahora estás ocupado. Solo dime con UN número (1, 2, 3 o 4) por qué quieres aprender alemán y te mando lo más útil para tu caso.`,
-          ``,
-          `Te tomará 3 segundos 👇`,
-        ].join("\n");
-        sentBody = text;
-        const r = await sendWA(lead.whatsapp_normalized, text);
-        ok = r.ok; actualWa = r.ok;
+        // Eliminado 2026-08-01 (Gelfis): msg #2 (T+4h) enviaba prácticamente
+        // el mismo copy que msg #1 y contribuía a "abrumar" al lead. Ahora
+        // solo avanzamos last_drip_msg_n para que el flow llegue a msg #3
+        // (PDF T+24h) sin enviar nada intermedio.
+        skipped++;
+        await sb.from("leads").update({
+          last_drip_msg_n: nextN,
+          last_drip_sent_at: new Date().toISOString(),
+        }).eq("id", lead.id);
+        await sb.from("lead_timeline").insert({
+          lead_id: lead.id,
+          type:    "agent_note",
+          author:  "system",
+          content: `📨 Followup #2 desactivado (Gelfis 2026-08-01) — avance directo a #3`,
+          metadata: { kind: "diagnostico_followup_skip", message_n: 2, reason: "deprecated" },
+        });
+        continue;
       } else if (nextN === 3) {
         // T+24h — Regalo: PDF adaptado al nivel + curiosity gap del #7.
         // Doble canal. WA = PDF adjunto con caption "te va a sorprender

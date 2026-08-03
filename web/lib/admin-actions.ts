@@ -115,12 +115,11 @@ export async function markTrialAttendedAwaitingConversion(
   //     la venta a mano (es escalado, no auto-respuesta de Stiv). Esto
   //     se hace en el handler de mensajes entrantes leyendo el flag
   //     `awaiting_payment_confirmation_since` en lead_meta.
-  // +2 días desde el envío del Mensaje 1. La cadena post-clase ahora
-  // tiene 3 mensajes en total (1 inmediato + 2 en +2d y +3d) procesada
-  // por /api/cron/post-trial-followups. Antes era +24h con un único
-  // follow-up vía Python; ahora todo es TS para mantener el copy en un
-  // solo sitio y poder mandar email en los pasos que lo necesitan.
-  const followupAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+  // +3 días desde el envío del Mensaje 1 (Gelfis 2026-08-01: consolidado
+  // msg2+msg3 en un único mensaje final para reducir carga). La cadena
+  // post-clase ahora tiene 2 mensajes en total (1 inmediato + 1 final
+  // en +3d) procesada por /api/cron/post-trial-followups.
+  const followupAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
   // Cargamos la metadata existente para no pisarla.
   const { data: metaRow } = await sb
@@ -687,7 +686,6 @@ export async function sendRescheduleLinkMessage(
       source:           "teacher",
       link_sent_at:     linkSentAt,
       started_at:       linkSentAt,
-      followup1_sent_at: null,
       followup2_sent_at: null,
     },
   }).eq("id", leadId);

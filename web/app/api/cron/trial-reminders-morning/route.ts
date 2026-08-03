@@ -192,9 +192,13 @@ async function run(req: Request) {
       );
       // Copy 2026-06-17 (Gelfis): incluye link al aula (antes faltaba —
       // caso John 2026-06-16: solo vio este WA matutino sin enlace).
+      // Fusión Gelfis 2026-08-01: absorbe los tips del extinto
+      // trial-reminders-2h. Ahora este único mensaje matutino avisa +
+      // recomienda preparación, así el lead recibe 3 WA en el día
+      // (morning + 15m + confirmación previa) en vez de 4.
       const waText = lead.language === "de"
-        ? `Guten Morgen ${leadFirst}! Heute ist der Tag.\n\nDeutsch-Stunde um ${timeLabel}.\n\n🔗 Hier kommst du rein:\n${leadJoinUrl}\n\nWir sehen uns endlich heute 😊`
-        : `¡Buenos días ${leadFirst}! Hoy es el día.\n\nClase de alemán a las ${timeLabel}.\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}\n\nWir sehen uns endlich heute 😊`;
+        ? `Guten Morgen ${leadFirst}! Heute ist der Tag.\n\nDeutsch-Stunde um ${timeLabel}.\n\nEmpfehlung:\n- Computer mit Kamera und Mikrofon\n- Ruhiger Ort\n\n🔗 Hier kommst du rein:\n${leadJoinUrl}\n\nWir sehen uns endlich heute 😊`
+        : `¡Buenos días ${leadFirst}! Hoy es el día.\n\nClase de alemán a las ${timeLabel}.\n\nTe recomiendo:\n- Computador con cámara y micrófono\n- Lugar tranquilo\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}\n\nWir sehen uns endlich heute 😊`;
       const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_morning" });
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
       else console.error(`[trial-reminders-morning] lead WA failed for ${r.id}: ${wa.reason}`);

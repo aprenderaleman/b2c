@@ -99,11 +99,11 @@ export async function getWhatsappDisableMode(): Promise<WhatsappDisableMode> {
  */
 const ALLOWED_WA_KINDS = new Set([
   "trial_confirmation",
-  "trial_reminder_2h",
   "trial_reminder_24h",
   "trial_reminder_15m",
   "trial_reminder_morning",
-  "trial_reminder_30m",  // scheduler.py _notify_trials_30min
+  // Eliminados 2026-08-01: trial_reminder_2h (fusionado en morning),
+  // trial_reminder_30m (redundante con 15m).
   "trial_attended_initial",
   "trial_inscription_initial",
   "trial_absent_initial",
@@ -111,9 +111,9 @@ const ALLOWED_WA_KINDS = new Set([
   // ACKs a respuestas del lead al T+0 (CONFIRMO/CAMBIAR/CANCELAR)
   "trial_confirm_ack",
   "trial_reschedule_link",
-  // Follow-ups del reagendamiento iniciado por el profesor
-  "trial_teacher_reschedule_fu1",  // +8h sin rebook
-  "trial_teacher_reschedule_fu2",  // +24h sin rebook (último)
+  // Follow-up único del reagendamiento iniciado por el profesor
+  // (fu1 +8h eliminado 2026-08-01 por redundancia con fu2 +24h)
+  "trial_teacher_reschedule_fu2",  // +24h sin rebook (único)
   // Welcome student al convertir lead → student
   "welcome_student",
   // Absent-interest: mandamos pregunta, si dice SÍ → link, si NO → cierre

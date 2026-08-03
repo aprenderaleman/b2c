@@ -5,11 +5,13 @@ import { sendWhatsappText } from "@/lib/whatsapp";
 /**
  * GET/POST /api/cron/teacher-reschedule-followup
  *
- * Cadena de 2 follow-ups tras "Reagendar" del profesor
+ * Único follow-up tras "Reagendar" del profesor
  * (sendRescheduleLinkMessage en admin-actions.ts).
  *
- *   FU1 → +8h  sin rebook  (kind trial_teacher_reschedule_fu1)
- *   FU2 → +24h sin rebook  (kind trial_teacher_reschedule_fu2, último)
+ *   FU → +24h sin rebook (kind trial_teacher_reschedule_fu2, último)
+ *
+ * FU1 +8h eliminado 2026-08-01 (Gelfis): reducía carga sin sacrificar
+ * captación — el FU2 +24h sigue recuperando la mayor parte.
  *
  * Detecta leads con status='rescheduling' + reschedule_state.source='teacher'
  * y compara delta UTC contra reschedule_state.link_sent_at.
@@ -17,8 +19,8 @@ import { sendWhatsappText } from "@/lib/whatsapp";
  * Si el lead ya reagendó (creó una nueva clase trial después de link_sent_at)
  * cierra el flow (phase='DONE') y no manda nada más.
  *
- * Idempotencia: followup1_sent_at / followup2_sent_at bloquean re-envío.
- * Schedule sugerido: cada 30 min.
+ * Idempotencia: followup2_sent_at bloquea re-envío.
+ * Schedule: cada 30 min.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +42,6 @@ type RS = {
   phase?: string;
   source?: string;
   link_sent_at?: string;
-  followup1_sent_at?: string | null;
   followup2_sent_at?: string | null;
 };
 
@@ -61,10 +62,9 @@ async function run(req: Request) {
   }
 
   const nowMs = Date.now();
-  const EIGHT_H  = 8  * 3600_000;
   const TWENTYFOUR_H = 24 * 3600_000;
 
-  let sentFu1 = 0, sentFu2 = 0, skipped = 0, failed = 0, closed = 0;
+  let sentFu2 = 0, skipped = 0, failed = 0, closed = 0;
 
   for (const l of leads) {
     const rs = (l as { reschedule_state: RS | null }).reschedule_state;
@@ -138,46 +138,12 @@ async function run(req: Request) {
       continue;
     }
 
-    // FU1 (+8h)
-    if (elapsed >= EIGHT_H && !rs.followup1_sent_at) {
-      const text = `¡Hola ${firstName}! 👋 Vi que aún no has elegido tu nuevo horario. Es súper rápido, solo 3 minutos:\n\n` +
-        `👉 ${rescheduleUrl}\n\n` +
-        `Si tienes alguna duda me la puedes escribir por aquí. 😊\n\n` +
-        `— Stiv · Aprender-Aleman.de`;
-
-      const res = await sendWhatsappText(l.whatsapp_normalized, text, { kind: "trial_teacher_reschedule_fu1" });
-      if (res.ok) {
-        sentFu1++;
-        await sb.from("lead_timeline").insert({
-          lead_id: l.id,
-          type:    "system_message_sent",
-          author:  "system",
-          content: text,
-          metadata: { kind: "trial_teacher_reschedule_fu1", channel: "whatsapp", message_id: res.messageId },
-        });
-        await sb.from("leads")
-          .update({ reschedule_state: { ...rs, followup1_sent_at: new Date().toISOString() } })
-          .eq("id", l.id);
-      } else {
-        failed++;
-        console.error(`[teacher-reschedule-followup] FU1 failed for ${l.id}: ${res.reason}`);
-        await sb.from("lead_timeline").insert({
-          lead_id: l.id,
-          type: "send_failed",
-          author: "system",
-          content: `💬 Falló FU1 teacher-reschedule`,
-          metadata: { kind: "trial_teacher_reschedule_fu1", error: res.reason },
-        });
-      }
-      continue;
-    }
-
     skipped++;
   }
 
   return NextResponse.json({
     ok: true,
     candidates: leads.length,
-    sentFu1, sentFu2, closed, skipped, failed,
+    sentFu2, closed, skipped, failed,
   });
 }

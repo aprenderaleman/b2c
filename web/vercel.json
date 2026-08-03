@@ -31,10 +31,6 @@
       "schedule": "0 6,7 * * *"
     },
     {
-      "path": "/api/cron/trial-reminders-2h",
-      "schedule": "*/5 * * * *"
-    },
-    {
       "path": "/api/cron/trial-reminders-15m",
       "schedule": "*/5 * * * *"
     },

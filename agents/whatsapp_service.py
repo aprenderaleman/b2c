@@ -218,11 +218,11 @@ class WhatsAppService:
     # envío pasa, ni siquiera estos.
     _ALLOWED_KINDS_PARTIAL = frozenset({
         "trial_confirmation",
-        "trial_reminder_2h",
         "trial_reminder_24h",
         "trial_reminder_15m",
         "trial_reminder_morning",
-        "trial_reminder_30m",  # scheduler.py _notify_trials_30min
+        # Eliminados 2026-08-01: trial_reminder_2h (fusionado en morning),
+        # trial_reminder_30m (redundante con 15m).
         "trial_attended_initial",
         "trial_inscription_initial",
         "trial_absent_initial",
@@ -232,9 +232,9 @@ class WhatsAppService:
         # (Gelfis 2026-07-08: Hassan y Aisa quedaron sin ACK).
         "trial_confirm_ack",
         "trial_reschedule_link",
-        # Follow-ups del reagendamiento iniciado por el profesor
-        "trial_teacher_reschedule_fu1",  # +8h sin rebook
-        "trial_teacher_reschedule_fu2",  # +24h sin rebook (último)
+        # Follow-up único del reagendamiento iniciado por el profesor
+        # (fu1 +8h eliminado 2026-08-01)
+        "trial_teacher_reschedule_fu2",  # +24h sin rebook (único)
         # WhatsApp de bienvenida al convertir un lead en estudiante
         # (Gelfis 2026-07-15: Ángela quedó sin welcome porque el kind
         # no estaba en la lista → kill switch la silenció).
