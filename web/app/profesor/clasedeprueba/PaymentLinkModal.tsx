@@ -3,16 +3,25 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
-  RITMOS, ONE_TIME_PACKS, KIDS_PACK,
-  type RitmoId, type GoalId, type PlanCategory,
+  RITMOS,
+  ONE_TIME_PACKS,
+  type RitmoId,
+  type GoalId,
 } from "@/lib/trial-packs";
 
-type KidsPayment = "single" | "flexible";
+type PaymentMode = "flexible" | "unico";
+
+const GOALS: { id: GoalId; label: string; emoji: string }[] = [
+  { id: "a1_a2",         label: "A1-A2",         emoji: "🇩🇪" },
+  { id: "b1",            label: "B1",             emoji: "📗" },
+  { id: "b2",            label: "B2",             emoji: "📘" },
+  { id: "c1",            label: "C1",             emoji: "📕" },
+  { id: "fluidez_total", label: "Fluidez Total",  emoji: "🏆" },
+];
 
 export function PaymentLinkModal({
   leadId,
   leadName,
-  defaultLevel,
   onClose,
 }: {
   leadId: string;
@@ -21,65 +30,46 @@ export function PaymentLinkModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [nivel, setNivel] = useState(defaultLevel || "");
-  const [category, setCategory] = useState<PlanCategory | "">("");
-  const [ritmoId, setRitmoId] = useState<RitmoId | "">("");
-  const [goalId, setGoalId] = useState<GoalId | "">("");
-  const [kidsPayment, setKidsPayment] = useState<KidsPayment>("single");
+  const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
-  const [pending, startTransition] = useTransition();
 
-  const selectedRitmo = ritmoId ? RITMOS.find(r => r.id === ritmoId) : null;
-  const selectedGoal = selectedRitmo && goalId
-    ? selectedRitmo.goals.find(g => g.id === goalId)
-    : null;
-  const selectedOneTime = category === "one_time" && goalId
-    ? ONE_TIME_PACKS.find(p => p.id === goalId)
-    : null;
+  const [goalId, setGoalId] = useState<GoalId>("a1_a2");
+  const [ritmoId, setRitmoId] = useState<RitmoId>("viajero");
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("flexible");
 
-  // Compute packId for the API
-  const packId =
-    category === "subscription" && ritmoId ? ritmoId :
-    category === "one_time" && goalId ? goalId :
-    category === "kids" ? "kids" : "";
+  const selectedRitmo = RITMOS.find(r => r.id === ritmoId)!;
+  const selectedGoal = selectedRitmo.goals.find(g => g.id === goalId)!;
+  const selectedOneTime = ONE_TIME_PACKS.find(p => p.id === goalId);
 
-  const canSubmit =
-    (category === "subscription" && ritmoId && goalId) ||
-    (category === "one_time" && goalId) ||
-    category === "kids";
-
-  // Summary line
-  const summaryLine = (() => {
-    if (category === "subscription" && selectedRitmo && selectedGoal) {
-      return `${selectedRitmo.emoji} ${selectedRitmo.name} · Meta ${selectedGoal.label} · ${selectedGoal.months} meses · ${(selectedGoal.totalCents / 100).toLocaleString("es-ES")} € total`;
+  const summary = (() => {
+    if (paymentMode === "flexible" && selectedGoal) {
+      return {
+        detail: `${selectedRitmo.classesPerMonth} clases/mes · Meta ${selectedGoal.label} en ${selectedGoal.months} meses`,
+        price: `${selectedRitmo.pricePerMonth}€/mes`,
+      };
     }
-    if (category === "one_time" && selectedOneTime) {
-      return `${selectedOneTime.name} · ${(selectedOneTime.priceCents / 100).toLocaleString("es-ES")} €`;
-    }
-    if (category === "kids") {
-      const label = kidsPayment === "single" ? KIDS_PACK.labels.single : KIDS_PACK.labels.flexible;
-      return `Pack Kids · ${label}`;
+    if (paymentMode === "unico" && selectedOneTime) {
+      return {
+        detail: `Meta ${selectedOneTime.name}`,
+        price: `Pago unico: ${(selectedOneTime.priceCents / 100).toLocaleString("es-ES")}€`,
+      };
     }
     return null;
   })();
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!canSubmit) return;
+  const submit = () => {
     setError(null);
     startTransition(async () => {
       try {
+        const body = paymentMode === "flexible"
+          ? { category: "subscription", ritmoId, goalId }
+          : { category: "one_time", goalId };
+
         const res = await fetch(`/api/teacher/trial/${leadId}/send-offer`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            category,
-            ritmoId: ritmoId || undefined,
-            goalId: goalId || undefined,
-            kidsPayment: category === "kids" ? kidsPayment : undefined,
-            ...(nivel ? { nivel } : {}),
-          }),
+          body: JSON.stringify(body),
         });
         if (!res.ok) {
           const j = await res.json().catch(() => ({}));
@@ -95,218 +85,175 @@ export function PaymentLinkModal({
 
   if (sent) {
     return (
-      <Overlay onClose={onClose}>
-        <div className="text-center py-8">
-          <div className="text-4xl mb-3">✅</div>
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-            Enlace enviado
-          </h2>
-          <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-            {leadName} recibio el enlace de inscripcion por WhatsApp y email.
-          </p>
-          <button
-            onClick={onClose}
-            className="mt-4 text-sm font-semibold rounded-full border border-emerald-400 bg-emerald-500 text-white px-5 py-2 hover:bg-emerald-600"
-          >
-            Cerrar
-          </button>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      >
+        <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-6">
+          <div className="text-center py-6">
+            <div className="text-4xl mb-3">✅</div>
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">
+              Enlace enviado
+            </h2>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              {leadName} recibio el enlace de inscripcion por WhatsApp y email.
+            </p>
+            <button
+              onClick={onClose}
+              className="btn-primary mt-5"
+            >
+              Cerrar
+            </button>
+          </div>
         </div>
-      </Overlay>
+      </div>
     );
   }
 
   return (
-    <Overlay onClose={onClose}>
-      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-        Enviar enlace de inscripcion · {leadName}
-      </h2>
-      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-        El lead recibira el enlace de Stripe del plan seleccionado por email.
-      </p>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl max-h-[90vh] overflow-y-auto">
+        <header className="px-6 py-5 border-b border-slate-200 dark:border-slate-800">
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">
+            Enviar enlace de inscripcion
+          </h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {leadName} recibira el enlace de Stripe por WhatsApp y email.
+          </p>
+        </header>
 
-      <form onSubmit={submit} className="mt-5 space-y-4">
-        {/* Nivel */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Nivel
-          </label>
-          <select
-            value={nivel}
-            onChange={(e) => setNivel(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-          >
-            <option value="">— Sin especificar —</option>
-            {["A1", "A2", "B1", "B2", "C1"].map(n => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Tipo de plan */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-            Tipo de plan <span className="text-rose-500">*</span>
-          </label>
-          <select
-            value={category}
-            onChange={(e) => {
-              const v = e.target.value as PlanCategory | "";
-              setCategory(v);
-              setRitmoId("");
-              setGoalId("");
-            }}
-            className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-          >
-            <option value="">— Selecciona —</option>
-            <option value="subscription">Suscripcion mensual</option>
-            <option value="one_time">Pago unico por meta</option>
-            <option value="kids">Pack Kids</option>
-          </select>
-        </div>
-
-        {/* Ritmo (solo suscripciones) */}
-        {category === "subscription" && (
+        <div className="p-6 space-y-5">
+          {/* 1. Meta / Goal */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Ritmo <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={ritmoId}
-              onChange={(e) => {
-                setRitmoId(e.target.value as RitmoId);
-                setGoalId("");
-              }}
-              className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            >
-              <option value="">— Selecciona ritmo —</option>
-              {RITMOS.map(r => (
-                <option key={r.id} value={r.id}>
-                  {r.emoji} {r.name} ({r.classesPerMonth} clases/mes · {r.pricePerMonth} €/mes)
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Meta (suscripciones con ritmo seleccionado, o pago único) */}
-        {(category === "subscription" && ritmoId && selectedRitmo) && (
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Meta <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={goalId}
-              onChange={(e) => setGoalId(e.target.value as GoalId)}
-              className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            >
-              <option value="">— Selecciona meta —</option>
-              {selectedRitmo.goals.map(g => (
-                <option key={g.id} value={g.id}>
-                  {g.label} — {g.months} meses · {(g.totalCents / 100).toLocaleString("es-ES")} € total
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {category === "one_time" && (
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Meta <span className="text-rose-500">*</span>
-            </label>
-            <select
-              value={goalId}
-              onChange={(e) => setGoalId(e.target.value as GoalId)}
-              className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            >
-              <option value="">— Selecciona meta —</option>
-              {ONE_TIME_PACKS.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name} — {(p.priceCents / 100).toLocaleString("es-ES")} €
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        {/* Kids payment type */}
-        {category === "kids" && (
-          <div>
-            <span className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-              Tipo de pago
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              Meta
             </span>
-            <div className="mt-2 flex flex-col gap-2">
-              {([
-                { v: "single" as const, label: KIDS_PACK.labels.single },
-                { v: "flexible" as const, label: KIDS_PACK.labels.flexible },
-              ]).map(opt => (
-                <label
-                  key={opt.v}
-                  className={`cursor-pointer rounded-lg border px-3 py-2 text-sm ${
-                    kidsPayment === opt.v
-                      ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
-                      : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300"
+            <div className="mt-2 flex flex-wrap gap-2">
+              {GOALS.map(({ id, label, emoji }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setGoalId(id)}
+                  className={`text-sm font-semibold rounded-xl border px-4 py-2 transition-colors ${
+                    goalId === id
+                      ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+                      : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
                   }`}
                 >
-                  <input
-                    type="radio"
-                    name="kidsPayment"
-                    value={opt.v}
-                    checked={kidsPayment === opt.v}
-                    onChange={() => setKidsPayment(opt.v)}
-                    className="sr-only"
-                  />
-                  {opt.label}
-                </label>
+                  {emoji} {label}
+                </button>
               ))}
             </div>
           </div>
-        )}
 
-        {/* Summary */}
-        {summaryLine && (
-          <div className="rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
-            {summaryLine}
+          {/* 2. Tipo de pago */}
+          <div>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              Tipo de pago
+            </span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {([
+                { id: "flexible" as const, label: "Suscripcion mensual", emoji: "📅" },
+                { id: "unico" as const,    label: "Pago unico",         emoji: "💳" },
+              ]).map(({ id, label, emoji }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setPaymentMode(id)}
+                  className={`text-sm font-semibold rounded-xl border px-4 py-2 transition-colors ${
+                    paymentMode === id
+                      ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-800 dark:text-emerald-200"
+                      : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  {emoji} {label}
+                </button>
+              ))}
+            </div>
           </div>
-        )}
 
-        {error && (
-          <div className="rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
-            {error}
-          </div>
-        )}
+          {/* 3. Ritmo — solo para suscripcion */}
+          {paymentMode === "flexible" && (
+            <div className="space-y-3 rounded-xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5 p-4">
+              <Field label="Ritmo">
+                <select
+                  value={ritmoId}
+                  onChange={(e) => setRitmoId(e.target.value as RitmoId)}
+                  className="input-text"
+                >
+                  {RITMOS.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.emoji} {r.name} ({r.classesPerMonth} cls/mes — {r.pricePerMonth}€/mes)
+                    </option>
+                  ))}
+                </select>
+              </Field>
 
-        <div className="flex justify-end gap-2 pt-2">
+              {summary && (
+                <div className="text-xs text-emerald-700 dark:text-emerald-300 space-y-0.5">
+                  <p>{summary.detail}</p>
+                  <p className="font-semibold">{summary.price}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Pago unico summary */}
+          {paymentMode === "unico" && summary && (
+            <div className="rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50/50 dark:bg-blue-500/5 p-4">
+              <div className="text-xs text-blue-700 dark:text-blue-300 space-y-0.5">
+                <p>{summary.detail}</p>
+                <p className="font-semibold">{summary.price}</p>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+
+        <footer className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
           <button
             type="button"
+            className="btn-secondary"
             onClick={onClose}
             disabled={pending}
-            className="text-sm rounded-full border border-slate-300 dark:border-slate-600 px-4 py-1.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-50"
           >
             Cancelar
           </button>
           <button
-            type="submit"
-            disabled={!canSubmit || pending}
-            className="text-sm font-semibold rounded-full border border-emerald-400 bg-emerald-500 text-white px-4 py-1.5 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            type="button"
+            className="btn-primary"
+            onClick={submit}
+            disabled={pending}
           >
-            {pending ? "Enviando..." : "Enviar enlace de inscripcion"}
+            {pending ? "Enviando…" : "Enviar enlace"}
           </button>
-        </div>
-      </form>
-    </Overlay>
+        </footer>
+      </div>
+    </div>
   );
 }
 
-function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+function Field({ label, children }: {
+  label: string; children: React.ReactNode;
+}) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 p-6 shadow-2xl border border-slate-200 dark:border-slate-700"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
-    </div>
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+        {label}
+      </span>
+      <div className="mt-1">{children}</div>
+    </label>
   );
 }
