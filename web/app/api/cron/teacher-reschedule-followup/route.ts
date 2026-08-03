@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendWhatsappText } from "@/lib/whatsapp";
+import { resolveChainVariables } from "@/lib/chain-variables";
+import { renderTemplate } from "@/lib/message-stats";
 
 /**
  * GET/POST /api/cron/teacher-reschedule-followup
@@ -106,10 +108,14 @@ async function run(req: Request) {
 
     // FU2 (+24h) tiene prioridad — si ya toca y no se ha mandado, va.
     if (elapsed >= TWENTYFOUR_H && !rs.followup2_sent_at) {
-      const text = `Hola ${firstName}, último recordatorio antes de que libere tu plaza para otro estudiante\n\n` +
-        `Elige aquí tu nuevo horario:\n👉 ${rescheduleUrl}\n\n` +
-        `Si ya no te interesa, dímelo con un "no" y no te escribo más.\n\n` +
-        `— Stiv · Aprender-Aleman.de`;
+      // Copy AUTHORING_RULES-compliant (Gelfis 2026-08-01): sin escasez
+      // inventada, sin binario de salida. Variables reales via
+      // resolveChainVariables (mismo helper que el motor de cadenas).
+      const vars = await resolveChainVariables(l.id, {}, rs.link_sent_at);
+      const bodyTpl = `{nombre}, tu clase quedó pendiente de nueva fecha 📅 Elige tu horario cuando quieras: {url} — y si prefieres que te llamemos y lo vemos juntos, dímelo 😊`;
+      const text = renderTemplate(bodyTpl, { ...vars, url: rescheduleUrl });
+      // firstName referenciado solo por logs — evita warn unused.
+      void firstName;
 
       const res = await sendWhatsappText(l.whatsapp_normalized, text, { kind: "trial_teacher_reschedule_fu2" });
       if (res.ok) {

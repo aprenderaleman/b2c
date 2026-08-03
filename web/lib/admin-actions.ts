@@ -115,10 +115,11 @@ export async function markTrialAttendedAwaitingConversion(
   //     la venta a mano (es escalado, no auto-respuesta de Stiv). Esto
   //     se hace en el handler de mensajes entrantes leyendo el flag
   //     `awaiting_payment_confirmation_since` en lead_meta.
-  // +3 días desde el envío del Mensaje 1 (Gelfis 2026-08-01: consolidado
-  // msg2+msg3 en un único mensaje final para reducir carga). La cadena
-  // post-clase ahora tiene 2 mensajes en total (1 inmediato + 1 final
-  // en +3d) procesada por /api/cron/post-trial-followups.
+  // Gelfis 2026-08-01: chain2_link_sent (motor lead_chains) cubre los
+  // follow-ups post-clase con enlace de pago. El cron legacy
+  // post-trial-followups fue eliminado. next_contact_date se deja
+  // seteado como sombrero para dashboards internos, pero no dispara
+  // envío por sí solo (el chain-processor lo hace via lead_chains).
   const followupAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
 
   // Cargamos la metadata existente para no pisarla.
@@ -489,14 +490,24 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
     .catch(err => console.warn("[markTrialAttendedNoLink] startChain error:", err));
 }
 
+/**
+ * markTrialAbsent — handler cuando el profe pulsa "No asistió".
+ *
+ * REGLA AUTHORING_RULES (Gelfis 2026-08-01): los handlers NUNCA envían
+ * mensajes directamente. Este handler solo:
+ *   1. Cambia el status a trial_absent.
+ *   2. Autoasigna closer.
+ *   3. Arranca chain4_absent con el flag reserva_prioritaria en metadata.
+ *
+ * El primer mensaje sale ~20 min después via chain-processor (step 1
+ * de chain4_absent, variante deposit/nodeposit). La lag es deliberada
+ * — el rescate a 20-30 min convierte mejor que el instantáneo (el
+ * lead aún está en lo que le impidió venir) y coincide con la spec
+ * del panel closer.
+ */
 export async function markTrialAbsent(leadId: string): Promise<void> {
   const sb = supabaseAdmin();
-  // Fix Gelfis 2026-07-21: NO seteamos next_contact_date. El cron
-  // Python tick_absent_followups (agent_5_guardian.py) usa ese campo
-  // para disparar la cadena legacy D+1/D+3/D+5/D+7, y esos mensajes
-  // DUPLICAN el WA/email que ya mandamos aquí abajo (nuevo flow
-  // absent-interest con botones SÍ/NO). Sin next_contact_date, el
-  // cron nunca detecta al lead y no hay duplicado.
+
   await sb
     .from("leads")
     .update({
@@ -514,98 +525,11 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     lead_id: leadId,
     type: "status_change",
     author: "gelfis",
-    content: "Lead did not attend trial — absent-interest flow initiated (SÍ/NO).",
+    content: "Lead did not attend trial — chain4_absent iniciada (T+20min).",
   });
 
-  // Email "no te vimos hoy" + WA inmediato con botón a /agendar/cuando.
-  // Antes solo se mandaban 3 WA via cron tick_absent_followups — pero
-  // con WA inestable y la migración a Cloud API en curso, el email
-  // inmediato es el camino más confiable. El WA es uno de los 5
-  // mensajes permitidos en modo restringido (kind=trial_absent_initial).
-  const { data: leadInfo } = await sb
-    .from("leads")
-    .select("name, email, language, whatsapp_normalized")
-    .eq("id", leadId)
-    .maybeSingle();
-  const linfo = leadInfo as { name: string | null; email: string | null; language: "es"|"de"|null; whatsapp_normalized: string | null } | null;
-  const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
-  const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=trial_absent`;
-
-  // Gelfis 2026-07-16: nuevo flujo — NO enviamos link directo; primero
-  // preguntamos si sigue interesado. Si responde SÍ → link, si NO →
-  // cierre + lost. La detección de SÍ/NO la hace reschedule_flow.py
-  // (Python) usando el state AWAITING_ABSENT_INTEREST que seteamos aquí.
-  if (linfo?.whatsapp_normalized || linfo?.email) {
-    const nowIso = new Date().toISOString();
-    await sb.from("leads").update({
-      reschedule_state: {
-        phase: "AWAITING_ABSENT_INTEREST",
-        lead_id: leadId,
-        started_at: nowIso,
-      },
-    }).eq("id", leadId);
-  }
-
-  if (linfo?.whatsapp_normalized) {
-    const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
-    const waText = linfo.language === "de"
-      ? `Hallo ${firstName}! 👋\n\nWir waren heute für deine Probestunde bereit, konnten dich aber nicht erreichen. Kein Stress — sowas passiert.\n\nHast du weiterhin echtes Interesse daran, Deutsch zu lernen? 🇩🇪\n\nWenn du mir mit JA antwortest, schicke ich dir den Link zum Umbuchen. Wenn du lieber Schluss machst, sag NEIN und ich schreibe dir nicht mehr.\n\n— Stiv · Aprender-Aleman.de`
-      : `¡Hola ${firstName}! 👋\n\nHoy estábamos preparados para tu clase de prueba pero no pudimos conectarnos contigo. Sin problema — sé que pasan cosas.\n\n¿Sigues teniendo interés real en aprender alemán? 🇩🇪\n\nSi me dices que SÍ, te paso el enlace para que reagendemos y no perdamos la oportunidad. Si prefieres dejarlo aquí, dime NO y no te sigo escribiendo.\n\n— Stiv · Aprender-Aleman.de`;
-    const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "trial_absent_initial" });
-    if (waRes.ok) {
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "system_message_sent",
-        author:  "gelfis",
-        content: `💬 WA "no te vimos hoy" enviado a ${linfo.whatsapp_normalized}`,
-        metadata: { kind: "absent_followup", channel: "whatsapp" },
-      });
-    } else {
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "send_failed",
-        author:  "gelfis",
-        content: `💬 Falló WA absent followup: ${waRes.reason ?? "unknown"}`,
-        metadata: { kind: "absent_followup", channel: "whatsapp" },
-      });
-    }
-  }
-
-  if (linfo?.email) {
-    const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
-    const langForEmail: "es" | "de" = linfo.language === "de" ? "de" : "es";
-    // Endpoints email-action nuevos — el token identifica al lead y
-    // dispara el flow SÍ (envía WA con link) / NO (cierra + lost).
-    const { buildEmailActionUrl } = await import("./email-action-token");
-    const interestYesUrl = buildEmailActionUrl({ leadId, classId: "absent", action: "absent-interest-yes" });
-    const interestNoUrl  = buildEmailActionUrl({ leadId, classId: "absent", action: "absent-interest-no" });
-    const emailRes = await sendTrialAbsentFollowupEmail(linfo.email, {
-      leadName: firstName,
-      language: langForEmail,
-      interestYesUrl,
-      interestNoUrl,
-    });
-    if (emailRes.ok) {
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "system_message_sent",
-        author:  "gelfis",
-        content: `📧 Email "no te vimos hoy" enviado a ${linfo.email}`,
-        metadata: { kind: "absent_followup", channel: "email" },
-      });
-    } else {
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "send_failed",
-        author:  "gelfis",
-        content: `📧 Falló el email absent followup: ${emailRes.error ?? "unknown"}`,
-        metadata: { kind: "absent_followup", channel: "email" },
-      });
-    }
-  }
-
-  // Iniciar cadena de follow-ups ausente (chain4)
-  // Chequear reserva_prioritaria para variant deposit/no-deposit
+  // Arrancar chain4_absent con flag reserva_prioritaria en metadata.
+  // El motor resuelve la variante deposit/nodeposit en resolveTemplateKind.
   const { data: reservaRow } = await sb
     .from("leads")
     .select("reserva_prioritaria")

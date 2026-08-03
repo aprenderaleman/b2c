@@ -9,8 +9,8 @@ import { bigButton, escapeHtml, h2, p, renderEnvelope, type RenderedEmail } from
  *    seleccionado por el profesor
  *
  * Se manda inmediatamente después de marcar "Asistió" o "Enviar enlace
- * de inscripción". El cron post-trial-followups encadena los recordatorios
- * de los días siguientes (drip ya existente).
+ * de inscripción". El motor lead_chains (chain1_attended / chain2_link_sent)
+ * encadena los recordatorios de los días siguientes.
  */
 export type TrialAttendedFollowupVars = {
   leadName: string;

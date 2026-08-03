@@ -591,24 +591,11 @@ async function runCron(req: Request) {
         const r = await sendWA(lead.whatsapp_normalized, text);
         ok = r.ok; actualWa = r.ok;
       } else if (nextN === 6) {
-        // T+8d — WhatsApp mensaje motivacional honesto.
+        // T+8d — WA que vende el paso pequeño (clase de prueba), no
+        // sermonea la decisión. Copy AUTHORING_RULES-compliant
+        // (Gelfis 2026-08-01): sin sermón, sin escasez, propuesta clara.
         intendedChannel = "wa";
-        const text = [
-          `Hola ${firstName} 👋`,
-          ``,
-          `Voy a ser sincero contigo:`,
-          ``,
-          `He hablado con cientos de personas como tú que querían aprender alemán. La diferencia entre los que LO LOGRAN y los que NO, no es el dinero, ni el tiempo, ni el talento.`,
-          ``,
-          `Es la decisión.`,
-          ``,
-          `30 minutos de clase prueba gratis. Sin compromiso.`,
-          `Tu agenda → ${bookUrl}`,
-          ``,
-          `Si después decides que no, no pasa nada. Pero al menos lo intentaste.`,
-          ``,
-          `Stiv`,
-        ].join("\n");
+        const text = `${firstName}, un dato real: nuestros alumnos empiezan con una clase de prueba gratis — 30 minutos, sin compromiso, y sales sabiendo tu nivel real y tu plan exacto. ¿Te la agendo? ${bookUrl}`;
         sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
         ok = r.ok; actualWa = r.ok;

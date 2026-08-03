@@ -8,6 +8,63 @@
  * Esto es metadata de UI — el cuerpo editable vive en message_templates.
  */
 
+/**
+ * REGLAS DE AUTORÍA DE COPIES (Gelfis 2026-08-01) — vinculantes.
+ *
+ * Cualquier copy nuevo o editado debe cumplir estas reglas. La UI de
+ * /admin/mensajes las muestra como banner permanente.
+ */
+export const AUTHORING_RULES = [
+  {
+    id: "no_scarcity",
+    title: "Prohibida la escasez inventada",
+    body:
+      "No mencionar cupos que se agotan, cierres de inscripciones, " +
+      "'vamos a liberar tu plaza' ni ningún límite artificial. " +
+      "Toda urgencia debe salir de variables reales: {dia_bonus} " +
+      "(con lógica vivo/vencido resuelta por el motor), {fecha_llegada} " +
+      "(fecha proyectada real del objetivo del lead).",
+  },
+  {
+    id: "no_exit_binary",
+    title: "Prohibidos los binarios de salida",
+    body:
+      "No pedir al lead que responda 'NO' para salir de una cadena, " +
+      "ni forzarlo a elegir SÍ/NO. Ofrecer siempre una salida positiva " +
+      "sin fricción (link para actuar) y dejar que el silencio hable.",
+  },
+  {
+    id: "handlers_no_send",
+    title: "Handlers NUNCA envían mensajes",
+    body:
+      "Los handlers de acciones (botones de profe/closer/admin) NUNCA " +
+      "envían mensajes directamente — solo arrancan o cierran cadenas. " +
+      "Todo envío sale del chain-processor o de un cron con las " +
+      "protecciones del wrapper (kill switch, blocklist, rate limit, " +
+      "gate nocturno, cap diario). Lección del incidente de dobles " +
+      "convertida en ley de código.",
+  },
+  {
+    id: "transactional_vs_conversational",
+    title: "Transaccional = inmediato · Conversacional = con aire",
+    body:
+      "Solo son transaccionales (envío inmediato garantizado): " +
+      "confirmación de trial (T+0), enlace de pago tras venta, " +
+      "cancelaciones. El resto va con delay del chain-processor " +
+      "(T+20min para chain4_absent, T+2h para asistió/objeción, etc.). " +
+      "El lag deliberado suele convertir mejor que el instantáneo.",
+  },
+  {
+    id: "single_source",
+    title: "Fuente única de verdad",
+    body:
+      "Los copies de las cadenas 1/2/3/4/6/8x viven en `message_templates` " +
+      "en BD (editables via /admin/mensajes). Los kinds inline en código " +
+      "TS solo son legítimos para transacciones instantáneas o cuando el " +
+      "flow es 1-shot (sin cadena). Ver docs/wa-chains-vs-legacy.md.",
+  },
+] as const;
+
 export type KindCatalogEntry = {
   kind:         string;
   sub_n:        number | null;          // null = único mensaje del kind

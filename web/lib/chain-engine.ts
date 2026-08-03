@@ -353,9 +353,16 @@ async function completeChain(
   }).eq("id", chain.id);
 
   if (lastStep.onComplete?.setStatus) {
+    // Gelfis 2026-08-01: si la cadena cierra en `en_reactivacion`, agendar
+    // el siguiente contacto en +30d para que el motor de reactivación
+    // (chain8g_reactivacion) lo tome. Antes lo dejábamos en null y el
+    // lead quedaba huérfano.
+    const nextContactDate = lastStep.onComplete.setStatus === "en_reactivacion"
+      ? new Date(Date.now() + 30 * 24 * 3_600_000).toISOString()
+      : null;
     await sb.from("leads").update({
       status: lastStep.onComplete.setStatus,
-      next_contact_date: null,
+      next_contact_date: nextContactDate,
     }).eq("id", chain.lead_id);
 
     await sb.from("lead_timeline").insert({

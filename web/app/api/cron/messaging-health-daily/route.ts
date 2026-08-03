@@ -147,18 +147,21 @@ async function run(req: Request) {
       detail: e instanceof Error ? e.message : "check failed" });
   }
 
-  // ── 6. Cron post-trial-followups (query no debe fallar) ───────
+  // ── 6. Motor lead_chains — reemplaza al desaparecido cron
+  //       post-trial-followups (chain1_attended lo cubre desde 2026-08-01).
   try {
-    const { error } = await sb.from("leads").select("id")
-      .in("status", ["trial_attended", "in_conversation"])
-      .lte("next_contact_date", new Date().toISOString())
-      .not("meta->>awaiting_payment_confirmation_since", "is", null)
-      .limit(1);
+    const { data, error } = await sb.from("lead_chains").select("id, chain_type, next_fire_at")
+      .is("completed_at", null)
+      .lte("next_fire_at", new Date().toISOString())
+      .limit(5);
     if (error) throw new Error(error.message);
-    results.push({ name: "Cron post-trial-followups", ok: true, level: "info",
-      detail: "query funcional (meta column accesible)" });
+    const pending = data?.length ?? 0;
+    // Solo alertar si hay muchas chains pendientes acumuladas (procesador atascado).
+    const level = pending >= 5 ? "warning" : "info";
+    results.push({ name: "Motor lead_chains", ok: pending < 5, level,
+      detail: `${pending} cadenas pendientes de disparar` });
   } catch (e) {
-    results.push({ name: "Cron post-trial-followups", ok: false, level: "critical",
+    results.push({ name: "Motor lead_chains", ok: false, level: "critical",
       detail: e instanceof Error ? e.message : "query failed" });
   }
 
