@@ -1,4 +1,5 @@
-import { requireRole } from "@/lib/rbac";
+import { redirect } from "next/navigation";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getCloserLeads } from "@/lib/closer-actions";
 import { supabaseAdmin } from "@/lib/supabase";
 import { CloserLeadsList } from "@/components/closer/CloserLeadsList";
@@ -6,7 +7,8 @@ import { CloserLeadsList } from "@/components/closer/CloserLeadsList";
 export const metadata = { title: "Mis leads · Closer" };
 
 export default async function CloserLeadsPage() {
-  const session = await requireRole(["closer"]);
+  const session = await requireRoleWithImpersonation(["closer", "admin", "superadmin"], "closer");
+  if (session.user.role !== "closer") redirect("/admin");
   const leads = await getCloserLeads(session.user.id);
 
   const teacherByLead: Record<string, string> = {};

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
@@ -72,8 +73,13 @@ function CloserRow({ closer, leadCount }: { closer: Closer; leadCount: number })
 
   return (
     <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-      <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
-        {closer.full_name ?? "—"}
+      <td className="px-4 py-3">
+        <Link
+          href={`/admin/closers/${closer.id}`}
+          className="font-medium text-slate-800 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 hover:underline"
+        >
+          {closer.full_name ?? closer.email}
+        </Link>
       </td>
       <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{closer.email}</td>
       <td className="px-4 py-3 capitalize text-slate-600 dark:text-slate-300">

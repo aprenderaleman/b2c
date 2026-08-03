@@ -29,7 +29,7 @@ type ImpersonatePayload = {
   admin_id:      string;
   admin_name:    string;
   target_id:     string;                                    // users.id
-  target_role:   "teacher" | "student";
+  target_role:   "teacher" | "student" | "closer";
   target_name:   string;
   target_email:  string;
   exp:           number;                                    // epoch ms
@@ -105,11 +105,11 @@ export async function clearImpersonation() {
 // ---------------------------------------------------------------------------
 export async function resolveEffectiveUser(opts: {
   fallbackUserId: string;
-  fallbackRole:   "superadmin" | "admin" | "teacher" | "student";
-  expectRole?:    "teacher" | "student";   // refuse impersonation if role mismatches
+  fallbackRole:   "superadmin" | "admin" | "teacher" | "student" | "closer";
+  expectRole?:    "teacher" | "student" | "closer";   // refuse impersonation if role mismatches
 }): Promise<{
   userId:       string;
-  role:         "superadmin" | "admin" | "teacher" | "student";
+  role:         "superadmin" | "admin" | "teacher" | "student" | "closer";
   impersonated: { admin_id: string; admin_name: string } | null;
 }> {
   const imp = await getImpersonation();

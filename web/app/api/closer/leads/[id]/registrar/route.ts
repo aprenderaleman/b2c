@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { resolveCloserActor } from "@/lib/closer-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { processActionResult } from "@/lib/closer-action-flow";
 
@@ -20,13 +20,10 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const actor = await resolveCloserActor();
+  if (!actor) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const role = (session.user as { role?: string }).role;
-  if (role !== "closer") return NextResponse.json({ error: "forbidden" }, { status: 403 });
-
-  const closerId = (session.user as { id: string }).id;
+  const closerId = actor.id;
   const { id: leadId } = await params;
 
   let rawBody: unknown;

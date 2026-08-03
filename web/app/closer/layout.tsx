@@ -1,19 +1,27 @@
 import { auth, signOut } from "@/lib/auth";
 import { AppShell } from "@/components/nav/AppShell";
+import { ImpersonationBanner } from "@/components/nav/ImpersonationBanner";
 import { NAV_BY_ROLE } from "@/lib/nav-items";
+import { getImpersonation } from "@/lib/impersonation";
 
 export const metadata = { title: "Closer · Aprender-Aleman.de" };
 
 export default async function CloserLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
   const role = (session?.user as { role?: string } | undefined)?.role;
-  const display = (session?.user?.name ?? session?.user?.email ?? "Closer") as string;
+  const imp = await getImpersonation();
 
-  if (!session?.user || role !== "closer") {
+  const isCloser = role === "closer";
+  const isAdminImpersonating =
+    (role === "admin" || role === "superadmin") && imp?.target_role === "closer";
+
+  if (!session?.user || (!isCloser && !isAdminImpersonating)) {
     return <>{children}</>;
   }
 
-  const items = NAV_BY_ROLE.closer;
+  const display = isAdminImpersonating
+    ? imp!.target_name
+    : ((session.user.name ?? session.user.email ?? "Closer") as string);
 
   const logoutForm = (
     <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
@@ -22,14 +30,23 @@ export default async function CloserLayout({ children }: { children: React.React
   );
 
   return (
-    <AppShell
-      items={items}
-      role={role}
-      userDisplayName={display}
-      impersonated={false}
-      logoutForm={logoutForm}
-    >
-      {children}
-    </AppShell>
+    <>
+      {isAdminImpersonating && (
+        <ImpersonationBanner
+          adminName={imp!.admin_name}
+          targetName={imp!.target_name}
+          targetRole={imp!.target_role}
+        />
+      )}
+      <AppShell
+        items={NAV_BY_ROLE.closer}
+        role="closer"
+        userDisplayName={display}
+        impersonated={isAdminImpersonating}
+        logoutForm={logoutForm}
+      >
+        {children}
+      </AppShell>
+    </>
   );
 }

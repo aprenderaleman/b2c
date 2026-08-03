@@ -1,6 +1,6 @@
-import { requireRole } from "@/lib/rbac";
+import { redirect } from "next/navigation";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getCloserDetailedStats } from "@/lib/closer-commissions";
-import { getRankingTable } from "@/lib/ranking";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export const metadata = { title: "Mis numeros · Closer" };
@@ -13,21 +13,20 @@ function fmtEur(cents: number): string {
 }
 
 export default async function CloserNumerosPage() {
-  const session = await requireRole(["closer"]);
+  const session = await requireRoleWithImpersonation(["closer", "admin", "superadmin"], "closer");
+  if (session.user.role !== "closer") redirect("/admin");
   const closerId = session.user.id;
 
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-  const [stats, ranking, userRow] = await Promise.all([
+  const [stats, userRow] = await Promise.all([
     getCloserDetailedStats(closerId, monthStart, monthEnd),
-    getRankingTable("closer"),
     supabaseAdmin().from("users").select("rango").eq("id", closerId).single(),
   ]);
 
   const currentRango = (userRow.data?.rango as string) ?? "rookie";
-  const myPosition = ranking.findIndex((r) => r.user_id === closerId) + 1;
   const currentIdx = RANGO_ORDER.indexOf(currentRango);
   const nextRango = currentIdx < RANGO_ORDER.length - 1 ? RANGO_ORDER[currentIdx + 1] : null;
 
@@ -117,51 +116,6 @@ export default async function CloserNumerosPage() {
 
       </section>
 
-      {/* Ranking */}
-      <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 dark:border-slate-800">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-            Ranking closers {myPosition > 0 && `(tu posicion: #${myPosition})`}
-          </h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 text-left text-xs text-slate-600 dark:text-slate-300">
-              <tr>
-                <th className="px-4 py-2 font-medium">#</th>
-                <th className="px-4 py-2 font-medium">Nombre</th>
-                <th className="px-4 py-2 font-medium">Rango</th>
-                <th className="px-4 py-2 font-medium text-right">Close rate</th>
-                <th className="px-4 py-2 font-medium text-right">Conversiones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {ranking.map((entry, i) => (
-                <tr
-                  key={entry.user_id}
-                  className={`${entry.user_id === closerId ? "bg-brand-50/50 dark:bg-brand-500/5" : ""} hover:bg-slate-50/60 dark:hover:bg-slate-800/40`}
-                >
-                  <td className="px-4 py-2 text-slate-500">{i + 1}</td>
-                  <td className="px-4 py-2 font-medium text-slate-800 dark:text-slate-200">
-                    {entry.full_name}
-                    {entry.user_id === closerId && <span className="text-brand-600 ml-1">(tu)</span>}
-                  </td>
-                  <td className="px-4 py-2 capitalize text-slate-600 dark:text-slate-300">{entry.rango}</td>
-                  <td className="px-4 py-2 text-right">{entry.close_rate.toFixed(1)}%</td>
-                  <td className="px-4 py-2 text-right">{entry.conversiones}</td>
-                </tr>
-              ))}
-              {ranking.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                    Sin datos de ranking.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </main>
   );
 }

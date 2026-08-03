@@ -16,7 +16,7 @@ export function ImpersonateButton({
 }: {
   userId:   string;
   userName: string;
-  role:     "teacher" | "student";
+  role:     "teacher" | "student" | "closer";
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -34,6 +34,7 @@ export function ImpersonateButton({
   });
 
   const label = role === "teacher" ? `Ver como ${userName.split(" ")[0]} (profesor)`
+              : role === "closer"  ? `Ver como ${userName.split(" ")[0]} (closer)`
                                    : `Ver como ${userName.split(" ")[0]}`;
   return (
     <button

@@ -91,7 +91,7 @@ function currentPath(): string {
  */
 export async function requireRoleWithImpersonation(
   allowed:    Role[],
-  expectRole: "teacher" | "student",
+  expectRole: "teacher" | "student" | "closer",
 ): Promise<AuthedSession & {
   impersonation: null | { admin_id: string; admin_name: string; original_user_id: string };
 }> {

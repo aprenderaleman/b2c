@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/rbac";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getLeadTasks } from "@/lib/closer-cadence";
 import { getGelfisNotes } from "@/lib/dashboard";
@@ -12,7 +12,8 @@ export default async function CloserLeadPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireRole(["closer"]);
+  const session = await requireRoleWithImpersonation(["closer", "admin", "superadmin"], "closer");
+  if (session.user.role !== "closer") redirect("/admin");
   const { id: leadId } = await params;
   const closerId = session.user.id;
 

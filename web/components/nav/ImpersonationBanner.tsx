@@ -13,7 +13,7 @@ export function ImpersonationBanner({
 }: {
   adminName:  string;
   targetName: string;
-  targetRole: "teacher" | "student";
+  targetRole: "teacher" | "student" | "closer";
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -34,7 +34,7 @@ export function ImpersonationBanner({
             <strong>{adminName}</strong> viendo como{" "}
             <strong>{targetName}</strong>
             <span className="hidden sm:inline text-amber-900/80">
-              {" "}({targetRole === "teacher" ? "profesor" : "estudiante"})
+              {" "}({targetRole === "teacher" ? "profesor" : targetRole === "closer" ? "closer" : "estudiante"})
             </span>
           </span>
         </div>

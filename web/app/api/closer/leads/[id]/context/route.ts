@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { resolveCloserActor } from "@/lib/closer-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const actor = await resolveCloserActor();
+  if (!actor) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const role = (session.user as { role?: string }).role;
-  if (role !== "closer") return NextResponse.json({ error: "forbidden" }, { status: 403 });
-
-  const closerId = session.user.id;
+  const closerId = actor.id;
   const { id: leadId } = await params;
 
   const sb = supabaseAdmin();

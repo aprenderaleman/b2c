@@ -1,11 +1,13 @@
-import { requireRole } from "@/lib/rbac";
+import { redirect } from "next/navigation";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 import { CloserProfile } from "@/components/closer/CloserProfile";
 
 export const metadata = { title: "Perfil · Closer" };
 
 export default async function CloserPerfilPage() {
-  const session = await requireRole(["closer"]);
+  const session = await requireRoleWithImpersonation(["closer", "admin", "superadmin"], "closer");
+  if (session.user.role !== "closer") redirect("/admin");
   const closerId = session.user.id;
 
   const sb = supabaseAdmin();
