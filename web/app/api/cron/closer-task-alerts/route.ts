@@ -64,7 +64,7 @@ export async function GET(req: Request) {
   const { data: staleLeads } = await sb
     .from("leads")
     .select("id, full_name, closer_id")
-    .eq("estado_cierre", "en_seguimiento")
+    .in("estado_cierre", ["activo", "seguimiento_pactado"])
     .not("closer_id", "is", null)
     .lt("updated_at", threeDaysAgo.toISOString())
     .limit(50);

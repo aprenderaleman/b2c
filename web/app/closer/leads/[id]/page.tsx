@@ -25,14 +25,16 @@ export default async function CloserLeadPage({
     .single();
 
   if (!lead || lead.closer_id !== closerId) redirect("/closer/leads");
+  // El closer solo ve leads post-trial (asistió o no asistió).
+  if (!lead.trial_attended_at && !lead.trial_absent_at) redirect("/closer/leads");
 
-  const [tasks, timelineResult, accionesResult, teacherNoteResult, gelfisNotes] = await Promise.all([
+  const [tasks, timelineResult, accionesResult, gelfisNotes] = await Promise.all([
     getLeadTasks(leadId),
     sb
       .from("lead_timeline")
-      .select("id, type, author, content, metadata, created_at")
+      .select("id, type, author, content, timestamp")
       .eq("lead_id", leadId)
-      .order("created_at", { ascending: false })
+      .order("timestamp", { ascending: false })
       .limit(50),
     sb
       .from("acciones_closer")
@@ -41,18 +43,30 @@ export default async function CloserLeadPage({
       .eq("closer_id", closerId)
       .order("created_at", { ascending: false })
       .limit(50),
-    sb
-      .from("lead_timeline")
-      .select("id, content, created_at")
-      .eq("lead_id", leadId)
-      .eq("author", "teacher")
-      .order("created_at", { ascending: false }),
     getGelfisNotes(leadId),
   ]);
 
-  const timeline = timelineResult.data ?? [];
+  // lead_timeline usa la columna `timestamp`; el componente espera `created_at`
+  const timeline = (timelineResult.data ?? []).map((r) => ({
+    id: r.id as string,
+    type: r.type as string,
+    author: r.author as string,
+    content: r.content as string,
+    created_at: r.timestamp as string,
+  }));
   const acciones = accionesResult.data ?? [];
-  const teacherNotes = (teacherNoteResult.data ?? []) as Array<{ id: string; content: string; created_at: string }>;
+
+  // Notas unificadas: teacher_note (timeline) + notas de Gelfis + notas del closer
+  const closerName = (session.user.name ?? "").trim().split(/\s+/)[0] || "Closer";
+  const notes = [
+    ...timeline
+      .filter((t) => t.type === "teacher_note")
+      .map((t) => ({ id: `tl-${t.id}`, author: t.author || "Profe", content: t.content, created_at: t.created_at })),
+    ...gelfisNotes.map((n) => ({ id: `gn-${n.id}`, author: "Gelfis", content: n.note, created_at: n.created_at })),
+    ...acciones
+      .filter((a) => a.tipo === "nota" && a.contenido)
+      .map((a) => ({ id: `ac-${a.id}`, author: closerName, content: a.contenido as string, created_at: a.created_at as string })),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const leadTipo = tasks.find((t) => t.tipo === "tipo_a" || t.tipo === "tipo_b")?.tipo ?? null;
 
@@ -75,26 +89,30 @@ export default async function CloserLeadPage({
     .in("status", ["scheduled", "live", "completed"])
     .order("scheduled_at", { ascending: true });
 
-  if (trialRows && trialRows.length > 0) {
-    type Row = {
-      id: string;
-      scheduled_at: string;
-      short_code: string | null;
-      status: string;
-      teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
-               Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
-    };
-    const flat = <T,>(x: T | T[] | null | undefined): T | null =>
-      !x ? null : Array.isArray(x) ? x[0] ?? null : x;
+  type TrialRow = {
+    id: string;
+    scheduled_at: string;
+    short_code: string | null;
+    status: string;
+    teacher: { users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> } |
+             Array<{ users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>;
+  };
+  const flat = <T,>(x: T | T[] | null | undefined): T | null =>
+    !x ? null : Array.isArray(x) ? x[0] ?? null : x;
 
-    const active = (trialRows as Row[]).find(c => c.status === "scheduled" || c.status === "live") ?? null;
+  if (trialRows && trialRows.length > 0) {
+    const rows = trialRows as TrialRow[];
+    const active = rows.find(c => c.status === "scheduled" || c.status === "live") ?? null;
     if (active) {
       activeTrial = { id: active.id, scheduled_at: active.scheduled_at, short_code: active.short_code };
-      const tw = flat(active.teacher);
-      const u = tw ? flat(tw.users) : null;
-      const name = (u?.full_name ?? u?.email ?? "").trim();
-      if (name) teacherName = name.split(/\s+/)[0];
     }
+    // Los closers reciben leads DESPUÉS del trial (asistió/no asistió),
+    // así que el profe se toma del trial más reciente sin importar status.
+    const latest = active ?? rows[rows.length - 1];
+    const tw = flat(latest.teacher);
+    const u = tw ? flat(tw.users) : null;
+    const name = (u?.full_name ?? u?.email ?? "").trim();
+    if (name) teacherName = name.split(/\s+/)[0];
   }
 
   return (
@@ -102,14 +120,11 @@ export default async function CloserLeadPage({
       <CloserLeadDetail
         lead={lead}
         tasks={tasks}
-        timeline={timeline}
-        acciones={acciones}
         ventaPendiente={ventaPendiente}
-        teacherNotes={teacherNotes}
+        notes={notes}
         leadTipo={leadTipo}
         activeTrial={activeTrial}
         teacherName={teacherName}
-        gelfisNotes={gelfisNotes}
       />
     </main>
   );

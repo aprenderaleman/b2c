@@ -1,18 +1,17 @@
 import { requireRole } from "@/lib/rbac";
-import { getCloserTasks } from "@/lib/closer-cadence";
-import { CloserInbox } from "@/components/closer/CloserInbox";
+import { getCloserQueue } from "@/lib/closer-semaforo";
+import { CloserQueue } from "@/components/closer/CloserQueue";
 
-export const metadata = { title: "Inbox · Closer" };
+export const metadata = { title: "Hoy · Closer" };
+export const dynamic = "force-dynamic";
 
 export default async function CloserHomePage() {
   const session = await requireRole(["closer"]);
-  const closerId = session.user.id;
-
-  const tasks = await getCloserTasks(closerId, "pendientes");
+  const items = await getCloserQueue(session.user.id);
 
   return (
     <main className="space-y-6">
-      <CloserInbox tasks={tasks} />
+      <CloserQueue items={items} />
     </main>
   );
 }

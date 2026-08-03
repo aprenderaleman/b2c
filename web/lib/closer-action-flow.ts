@@ -12,7 +12,8 @@ export type ActionResultado =
   | "no_interesado";
 
 export type ProcessActionArgs = {
-  taskId: string;
+  /** null → registro directo sobre el lead, sin tarea asociada */
+  taskId: string | null;
   closerId: string;
   leadId: string;
   resultado: ActionResultado;
@@ -24,16 +25,9 @@ export type ProcessActionArgs = {
 export async function processActionResult(args: ProcessActionArgs): Promise<void> {
   const sb = supabaseAdmin();
 
-  const { data: task } = await sb
-    .from("tareas_closer")
-    .select("canal, tipo")
-    .eq("id", args.taskId)
-    .single();
-
-  const canal = (task as { canal?: string })?.canal ?? "llamada";
-  const accionTipo = canal === "whatsapp" ? "whatsapp" : canal === "email" ? "email" : "llamada";
-
-  await completeTask(args.taskId, args.resultado as "contactado" | "no_contesto" | "no_interesado" | "reagendado" | "venta", args.nota ?? undefined);
+  if (args.taskId) {
+    await completeTask(args.taskId, args.resultado as "contactado" | "no_contesto" | "no_interesado" | "reagendado" | "venta", args.nota ?? undefined);
+  }
 
   const insertFields: Record<string, unknown> = {
     closer_id: args.closerId,
@@ -64,6 +58,16 @@ export async function processActionResult(args: ProcessActionArgs): Promise<void
       objection_chip: args.objectionChip ?? null,
     },
   });
+
+  // El "seguimiento pactado" se consume al registrar cualquier resultado:
+  // el lead vuelve a estado activo (derivación automática, sin edición manual).
+  if (args.resultado !== "no_interesado") {
+    await sb
+      .from("leads")
+      .update({ estado_cierre: "activo" })
+      .eq("id", args.leadId)
+      .eq("estado_cierre", "seguimiento_pactado");
+  }
 
   // R2: human kills automatic — any closer action cancels the active chain
   switch (args.resultado) {

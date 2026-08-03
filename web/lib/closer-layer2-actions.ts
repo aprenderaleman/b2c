@@ -143,6 +143,10 @@ async function handleSeguimientoFecha(args: Layer2ActionArgs): Promise<Layer2Res
     origen: "manual",
   });
 
+  // Estado derivado: la acción 📅 pacta un seguimiento — se libera solo
+  // al registrar el siguiente resultado (processActionResult).
+  await sb.from("leads").update({ estado_cierre: "seguimiento_pactado" }).eq("id", args.leadId);
+
   await logCloserAction({
     closerId: args.closerId,
     leadId: args.leadId,

@@ -54,7 +54,7 @@ export async function POST(
 
   await sb
     .from("leads")
-    .update({ estado_cierre: "en_seguimiento" })
+    .update({ estado_cierre: "activo" })
     .eq("id", venta.lead_id);
 
   await sb.from("lead_timeline").insert({

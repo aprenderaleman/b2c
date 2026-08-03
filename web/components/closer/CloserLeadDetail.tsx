@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { TareaCloser } from "@/lib/closer-cadence";
 import { MarkSaleModal } from "./MarkSaleModal";
-import { QuickActionModal } from "./QuickActionModal";
+import { RegistrarModal } from "./RegistrarModal";
 import { Layer2Actions } from "./Layer2Actions";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
@@ -41,22 +41,6 @@ type Lead = {
   trial_absent_at?: string | null;
 };
 
-type TimelineEntry = {
-  id: string;
-  type: string;
-  author: string;
-  content: string;
-  created_at: string;
-};
-
-type Accion = {
-  id: string;
-  tipo: string;
-  contenido: string | null;
-  resultado: string | null;
-  created_at: string;
-};
-
 type VentaPendiente = {
   id: string;
   pack_id: string;
@@ -64,8 +48,9 @@ type VentaPendiente = {
   estado: string;
 } | null;
 
-type TeacherNote = {
+type LeadNote = {
   id: string;
+  author: string;
   content: string;
   created_at: string;
 };
@@ -76,85 +61,45 @@ type ActiveTrial = {
   short_code: string | null;
 } | null;
 
-type GelfisNote = {
-  id: string;
-  lead_id: string;
-  created_at: string;
-  note: string;
-};
-
 type Props = {
   lead: Lead;
   tasks: TareaCloser[];
-  timeline: TimelineEntry[];
-  acciones: Accion[];
   ventaPendiente: VentaPendiente;
-  teacherNotes?: TeacherNote[];
+  notes?: LeadNote[];
   leadTipo?: string | null;
   activeTrial?: ActiveTrial;
   teacherName?: string | null;
-  gelfisNotes?: GelfisNote[];
 };
 
-const TIMELINE_LABELS: Record<string, string> = {
-  system_message_sent:    "Mensaje enviado",
-  lead_message_received:  "Mensaje del lead",
-  status_change:          "Cambio de estado",
-  agent_note:             "Nota del agente",
-  gelfis_note:            "Nota de Gelfis",
-  calendly_event:         "Evento Calendly",
-  trial_reminder:         "Recordatorio de clase",
-  conversion:             "Conversión",
-  escalation:             "Escalado",
-  send_failed:            "Envío fallido",
-  whatsapp_read_receipt:  "WhatsApp leído",
+const GOAL_LABEL: Record<string, string> = {
+  work:            "Trabajar en DACH",
+  visa:            "Visa o residencia",
+  studies:         "Estudiar en universidad",
+  exam:            "Examen oficial",
+  travel:          "Viajes y cultura",
+  already_in_dach: "Ya vive en DACH",
 };
 
-const TIMELINE_COLOR: Record<string, string> = {
-  system_message_sent:    "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30",
-  lead_message_received:  "bg-blue-50    dark:bg-blue-500/10    text-blue-700    dark:text-blue-300    border-blue-200    dark:border-blue-500/30",
-  status_change:          "bg-slate-50   dark:bg-slate-800      text-slate-700   dark:text-slate-300   border-slate-200   dark:border-slate-700",
-  agent_note:             "bg-slate-50   dark:bg-slate-800      text-slate-500   dark:text-slate-400   border-slate-200   dark:border-slate-700",
-  gelfis_note:            "bg-orange-50  dark:bg-orange-500/10  text-orange-700  dark:text-orange-300  border-orange-200  dark:border-orange-500/30",
-  calendly_event:         "bg-violet-50  dark:bg-violet-500/10  text-violet-700  dark:text-violet-300  border-violet-200  dark:border-violet-500/30",
-  trial_reminder:         "bg-cyan-50    dark:bg-cyan-500/10    text-cyan-700    dark:text-cyan-300    border-cyan-200    dark:border-cyan-500/30",
-  conversion:             "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30",
-  escalation:             "bg-red-50     dark:bg-red-500/10     text-red-700     dark:text-red-300     border-red-200     dark:border-red-500/30",
-  send_failed:            "bg-red-50     dark:bg-red-500/10     text-red-700     dark:text-red-300     border-red-200     dark:border-red-500/30",
-  whatsapp_read_receipt:  "bg-slate-50   dark:bg-slate-800      text-slate-500   dark:text-slate-400   border-slate-200   dark:border-slate-700",
+const URGENCY_LABEL: Record<string, string> = {
+  asap:           "Lo antes posible",
+  under_3_months: "Menos de 3 meses",
+  in_6_months:    "En 6 meses",
+  next_year:      "El año que viene",
+  just_looking:   "Solo mirando",
 };
 
 export function CloserLeadDetail({
   lead,
   tasks,
-  timeline,
-  acciones,
   ventaPendiente,
-  teacherNotes,
+  notes,
   leadTipo,
   activeTrial,
   teacherName,
-  gelfisNotes,
 }: Props) {
   const router = useRouter();
   const [showSaleModal, setShowSaleModal] = useState(false);
-  const [showLostForm, setShowLostForm] = useState(false);
-  const [completeTaskId, setCompleteTaskId] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-
-  const allEvents = [
-    ...timeline.map((t) => ({ ...t, source: "timeline" as const, sortDate: t.created_at })),
-    ...acciones.map((a) => ({
-      id: a.id,
-      type: a.tipo,
-      author: "closer",
-      content: a.contenido ?? a.resultado ?? "",
-      created_at: a.created_at,
-      source: "accion" as const,
-      sortDate: a.created_at,
-    })),
-  ].sort((a, b) => new Date(b.sortDate).getTime() - new Date(a.sortDate).getTime());
+  const [registrarTaskId, setRegistrarTaskId] = useState<string | null | "sin_tarea">(null);
 
   const pendingTasks = tasks.filter((t) => !t.fecha_completada);
   const nextTask = pendingTasks.length > 0
@@ -162,23 +107,6 @@ export function CloserLeadDetail({
         new Date(t.fecha_programada) < new Date(earliest.fecha_programada) ? t : earliest
       )
     : null;
-
-  const handleMarkLost = (motivo: string) => {
-    setError(null);
-    startTransition(async () => {
-      const res = await fetch(`/api/closer/leads/${lead.id}/action`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo: "nota", contenido: `Marcado perdido: ${motivo}` }),
-      });
-      if (!res.ok) {
-        setError("Error al marcar como perdido");
-        return;
-      }
-      setShowLostForm(false);
-      router.refresh();
-    });
-  };
 
   const phoneDigits = lead.whatsapp_normalized?.replace(/\D/g, "") ?? "";
   const sourceMeta = SOURCE_META[lead.landing_intent ?? "(sin landing)"] ?? SOURCE_META["(sin landing)"];
@@ -262,6 +190,14 @@ export function CloserLeadDetail({
           </div>
 
           <div className="flex gap-2 flex-wrap">
+            {lead.estado_cierre !== "convertido" && lead.estado_cierre !== "perdido" && (
+              <button
+                onClick={() => setRegistrarTaskId(nextTask?.id ?? "sin_tarea")}
+                className="text-xs font-semibold rounded-full bg-brand-600 hover:bg-brand-700 text-white px-3.5 py-1.5 transition-colors"
+              >
+                Registrar
+              </button>
+            )}
             {!ventaPendiente && lead.estado_cierre !== "convertido" && lead.estado_cierre !== "perdido" && (
               <button
                 onClick={() => setShowSaleModal(true)}
@@ -275,19 +211,9 @@ export function CloserLeadDetail({
                 Venta pendiente
               </span>
             )}
-            {lead.estado_cierre !== "perdido" && lead.estado_cierre !== "convertido" && (
-              <button
-                onClick={() => setShowLostForm(true)}
-                className="text-xs font-medium rounded-full border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 px-3 py-1"
-              >
-                Marcar perdido
-              </button>
-            )}
           </div>
         </div>
       </header>
-
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       {/* 2-column layout */}
       <div className="grid gap-5 lg:grid-cols-3">
@@ -295,20 +221,27 @@ export function CloserLeadDetail({
         <div className="space-y-5 lg:col-span-1">
           <Panel title="Datos del funnel">
             <Kv k="Creado" v={fmtRelative(lead.created_at)} />
-            <Kv k="Origen" v={lead.source ?? "—"} />
             <Kv k="Landing" v={sourceMeta.label} />
-            <Kv k="Nivel de alemán" v={lead.german_level ?? "—"} />
-            <Kv k="Objetivo" v={lead.goal ?? "—"} />
-            <Kv k="Urgencia" v={lead.urgency ?? "—"} />
-            <Kv k="Presupuesto" v={lead.budget ?? "—"} />
-            <Kv k="Email" v={lead.email ?? "—"} />
-            <Kv k="Mensajes vistos" v={String(lead.messages_seen_count ?? 0)} />
-            <Kv k="Seguimiento #" v={String(lead.current_followup_number ?? 0)} />
-            <Kv k="Próximo contacto" v={lead.next_contact_date ? new Date(lead.next_contact_date).toLocaleString("es-ES") : "—"} />
-            <Kv
-              k="Clase agendada"
-              v={activeTrial ? fmtTrialDate(activeTrial.scheduled_at) : lead.trial_scheduled_at ? fmtTrialDate(lead.trial_scheduled_at) : "—"}
-            />
+            {lead.german_level && <Kv k="Nivel de alemán" v={lead.german_level} />}
+            {lead.goal && <Kv k="Objetivo" v={GOAL_LABEL[lead.goal] ?? lead.goal} />}
+            {lead.urgency && <Kv k="Urgencia" v={URGENCY_LABEL[lead.urgency] ?? lead.urgency} />}
+            {lead.budget && <Kv k="Presupuesto" v={lead.budget} />}
+            {lead.email && <Kv k="Email" v={lead.email} />}
+            {(lead.messages_seen_count ?? 0) > 0 && (
+              <Kv k="Mensajes vistos" v={String(lead.messages_seen_count)} />
+            )}
+            {(lead.current_followup_number ?? 0) > 0 && (
+              <Kv k="Seguimiento #" v={String(lead.current_followup_number)} />
+            )}
+            {lead.next_contact_date && (
+              <Kv k="Próximo contacto" v={new Date(lead.next_contact_date).toLocaleString("es-ES")} />
+            )}
+            {(activeTrial || lead.trial_scheduled_at) && (
+              <Kv
+                k="Clase de prueba"
+                v={activeTrial ? fmtTrialDate(activeTrial.scheduled_at) : fmtTrialDate(lead.trial_scheduled_at as string)}
+              />
+            )}
             {teacherName && <Kv k="Profe del trial" v={teacherName} />}
             {attState && (
               <Kv
@@ -322,74 +255,26 @@ export function CloserLeadDetail({
             <Kv k="RGPD" v={lead.gdpr_accepted ? `Sí${lead.gdpr_accepted_at ? ` · ${new Date(lead.gdpr_accepted_at).toLocaleDateString("es-ES")}` : ""}` : "No"} />
           </Panel>
 
-          {/* Diagnosis */}
-          {(lead.qualification_answers || (teacherNotes && teacherNotes.length > 0)) && (
-            <Panel title="Diagnóstico">
-              {lead.qualification_answers && (
-                <div className="grid grid-cols-3 gap-3">
-                  {lead.qualification_answers.goal && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Meta</p>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                        {lead.qualification_answers.goal}
-                      </p>
-                    </div>
-                  )}
-                  {lead.qualification_answers.level && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Nivel</p>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                        {lead.qualification_answers.level}
-                      </p>
-                    </div>
-                  )}
-                  {lead.qualification_answers.deadline && (
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400">Plazo</p>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                        {lead.qualification_answers.deadline}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-              {teacherNotes && teacherNotes.length > 0 && (
-                <div className={lead.qualification_answers ? "border-t border-slate-100 dark:border-slate-800 pt-3 mt-3" : ""}>
-                  <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-                    Notas del profe ({teacherNotes.length})
-                  </p>
-                  <ul className="space-y-2">
-                    {teacherNotes.map((tn) => (
-                      <li key={tn.id}>
-                        <p className="text-sm text-slate-700 dark:text-slate-300 italic">
-                          &ldquo;{tn.content}&rdquo;
-                        </p>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                          {new Date(tn.created_at).toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" })}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </Panel>
-          )}
-
-          {/* Gelfis notes (read-only for closers) */}
-          {gelfisNotes && gelfisNotes.length > 0 && (
-            <Panel title="Notas de Gelfis">
+          {/* Unified notes: teacher + Gelfis + closer */}
+          <Panel title={`Notas${notes && notes.length > 0 ? ` (${notes.length})` : ""}`}>
+            {notes && notes.length > 0 ? (
               <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {gelfisNotes.map((n) => (
+                {notes.map((n) => (
                   <li key={n.id} className="py-2">
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      {new Date(n.created_at).toLocaleString("es-ES")}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="font-semibold text-slate-600 dark:text-slate-300">{n.author}</span>
+                      <span className="ml-auto text-slate-400 dark:text-slate-500">
+                        {new Date(n.created_at).toLocaleDateString("es", { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
                     </div>
-                    <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{n.note}</div>
+                    <div className="mt-0.5 text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{n.content}</div>
                   </li>
                 ))}
               </ul>
-            </Panel>
-          )}
+            ) : (
+              <p className="text-sm text-slate-400 dark:text-slate-500 italic">Aún no hay notas.</p>
+            )}
+          </Panel>
 
           {/* Closer notes */}
           <InlineNoteInput leadId={lead.id} />
@@ -421,10 +306,10 @@ export function CloserLeadDetail({
                 </span>
               )}
               <button
-                onClick={() => setCompleteTaskId(nextTask.id)}
+                onClick={() => setRegistrarTaskId(nextTask.id)}
                 className="flex-shrink-0 text-xs font-medium rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 transition-colors"
               >
-                Completar
+                Registrar
               </button>
             </section>
           )}
@@ -443,10 +328,10 @@ export function CloserLeadDetail({
                       {new Date(t.fecha_programada).toLocaleDateString("es", { day: "numeric", month: "short" })}
                     </span>
                     <button
-                      onClick={() => setCompleteTaskId(t.id)}
+                      onClick={() => setRegistrarTaskId(t.id)}
                       className="text-xs font-medium text-brand-600 dark:text-brand-400 hover:underline flex-shrink-0"
                     >
-                      Completar
+                      Registrar
                     </button>
                   </div>
                 ))}
@@ -463,33 +348,6 @@ export function CloserLeadDetail({
             />
           )}
 
-          {/* Timeline */}
-          <Panel title={`Historial (${allEvents.length})`}>
-            {allEvents.length === 0 ? (
-              <p className="text-sm text-slate-400">Sin actividad registrada.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {allEvents.map((event) => {
-                  const cls = TIMELINE_COLOR[event.type] ?? "bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700";
-                  const label = event.source === "accion"
-                    ? event.type
-                    : (TIMELINE_LABELS[event.type] ?? event.type);
-                  return (
-                    <li key={`${event.source}-${event.id}`} className="py-3">
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className={`rounded-full border px-2 py-0.5 font-medium ${cls}`}>{label}</span>
-                        <span className="text-slate-500 dark:text-slate-400">{event.author}</span>
-                        <span className="ml-auto text-slate-400 dark:text-slate-500">
-                          {new Date(event.created_at).toLocaleString("es-ES")}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{event.content}</div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Panel>
         </div>
       </div>
 
@@ -501,20 +359,13 @@ export function CloserLeadDetail({
         />
       )}
 
-      {showLostForm && (
-        <LostModal
-          onClose={() => setShowLostForm(false)}
-          onConfirm={handleMarkLost}
-          pending={pending}
-        />
-      )}
-
-      {completeTaskId && (
-        <QuickActionModal
-          taskId={completeTaskId}
+      {registrarTaskId && (
+        <RegistrarModal
+          leadId={lead.id}
           leadName={lead.name ?? "Lead"}
-          onClose={() => setCompleteTaskId(null)}
-          onVenta={() => { setCompleteTaskId(null); setShowSaleModal(true); }}
+          taskId={registrarTaskId === "sin_tarea" ? null : registrarTaskId}
+          onClose={() => setRegistrarTaskId(null)}
+          onVenta={() => { setRegistrarTaskId(null); setShowSaleModal(true); }}
         />
       )}
     </>
@@ -587,38 +438,3 @@ function InlineNoteInput({ leadId }: { leadId: string }) {
   );
 }
 
-function LostModal({
-  onClose,
-  onConfirm,
-  pending,
-}: {
-  onClose: () => void;
-  onConfirm: (motivo: string) => void;
-  pending: boolean;
-}) {
-  const [motivo, setMotivo] = useState("");
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-4">
-        <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-50">Marcar como perdido</h3>
-        <input
-          value={motivo}
-          onChange={(e) => setMotivo(e.target.value)}
-          placeholder="Motivo..."
-          className="input-text"
-        />
-        <div className="flex justify-end gap-3">
-          <button onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button
-            onClick={() => onConfirm(motivo)}
-            disabled={!motivo.trim() || pending}
-            className="btn-primary bg-red-600 hover:bg-red-700"
-          >
-            {pending ? "Guardando..." : "Confirmar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

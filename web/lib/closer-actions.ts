@@ -66,7 +66,7 @@ export async function assignCloser(
     .from("leads")
     .update({
       closer_id: closerId,
-      estado_cierre: "en_seguimiento",
+      estado_cierre: "activo",
       fecha_asignacion_closer: new Date().toISOString(),
     })
     .eq("id", leadId);
@@ -118,6 +118,9 @@ export async function getCloserLeads(closerId: string, estadoCierre?: string) {
     .from("leads")
     .select("id, name, email, whatsapp_normalized, status, estado_cierre, motivo_perdido, fecha_asignacion_closer, created_at, meta, source, language, german_level, goal, urgency, budget, landing_intent, qualification_answers, reserva_prioritaria, priority_deadline, deposit_intent_at, next_contact_date, current_followup_number, messages_seen_count, trial_scheduled_at, trial_attended_at, trial_absent_at")
     .eq("closer_id", closerId)
+    // Regla Gelfis 2026-08-02: el closer solo ve leads DESPUÉS del trial
+    // (asistió o no asistió). Los pre-trial los maneja Stiv/admin.
+    .or("trial_attended_at.not.is.null,trial_absent_at.not.is.null")
     .order("fecha_asignacion_closer", { ascending: false });
 
   if (estadoCierre) {
@@ -161,7 +164,7 @@ export async function autoAssignToActiveCloser(
       .from("leads")
       .select("closer_id")
       .in("closer_id", ids)
-      .in("estado_cierre", ["en_seguimiento", "venta_pendiente"]);
+      .in("estado_cierre", ["activo", "seguimiento_pactado"]);
 
     const loadMap: Record<string, number> = {};
     for (const id of ids) loadMap[id] = 0;

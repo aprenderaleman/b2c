@@ -29,12 +29,14 @@ export type CloserLead = {
   trial_absent_at: string | null;
 };
 
+// 5 estados derivados (Gelfis 2026-08-03) — el closer nunca los edita a mano
 const ESTADO_LABELS: Record<string, { label: string; cls: string }> = {
-  sin_asignar:      { label: "Sin asignar",      cls: "bg-slate-50 dark:bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-500/30" },
-  en_seguimiento:   { label: "En seguimiento",   cls: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30" },
-  venta_pendiente:  { label: "Venta pendiente",  cls: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30" },
-  convertido:       { label: "Convertido",        cls: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30" },
-  perdido:          { label: "Perdido",           cls: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30" },
+  sin_asignar:         { label: "Sin asignar",         cls: "bg-slate-50 dark:bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-500/30" },
+  activo:              { label: "Activo",              cls: "bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30" },
+  seguimiento_pactado: { label: "📅 Seguimiento pactado", cls: "bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-500/30" },
+  convertido:          { label: "Convertido",          cls: "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30" },
+  en_reactivacion:     { label: "🌙 En reactivación",  cls: "bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30" },
+  perdido:             { label: "Perdido",             cls: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30" },
 };
 
 type Props = {
@@ -44,56 +46,34 @@ type Props = {
 
 export function CloserLeadsList({ leads, teacherByLead }: Props) {
   const router = useRouter();
-  const [filter, setFilter] = useState<string>("todos");
   const [search, setSearch] = useState("");
 
+  // Poda de UI (Gelfis 2026-08-03): sin filtros por estado — la cola HOY
+  // ya prioriza el trabajo. Aquí solo queda el buscador.
   const filtered = useMemo(() => {
-    let result = filter === "todos"
-      ? leads
-      : leads.filter((l) => l.estado_cierre === filter);
-
-    if (search.trim()) {
-      const q = search.trim().toLowerCase();
-      result = result.filter((l) =>
-        (l.name ?? "").toLowerCase().includes(q) ||
-        (l.email ?? "").toLowerCase().includes(q) ||
-        (l.whatsapp_normalized ?? "").includes(q)
-      );
-    }
-    return result;
-  }, [leads, filter, search]);
+    if (!search.trim()) return leads;
+    const q = search.trim().toLowerCase();
+    return leads.filter((l) =>
+      (l.name ?? "").toLowerCase().includes(q) ||
+      (l.email ?? "").toLowerCase().includes(q) ||
+      (l.whatsapp_normalized ?? "").includes(q)
+    );
+  }, [leads, search]);
 
   return (
     <div className="space-y-4">
-      {/* Filters + search */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex gap-2 flex-wrap flex-1">
-          {["todos", "en_seguimiento", "venta_pendiente", "convertido", "perdido"].map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`text-xs font-medium rounded-full border px-3 py-1 transition-colors ${
-                filter === f
-                  ? "bg-brand-600 text-white border-brand-600"
-                  : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-              }`}
-            >
-              {f === "todos" ? `Todos (${leads.length})` : ESTADO_LABELS[f]?.label ?? f}
-            </button>
-          ))}
-        </div>
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar nombre, email o WA..."
-          className="h-8 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-brand-400 dark:focus:border-brand-500 w-full sm:w-64"
-        />
-      </div>
+      {/* Buscador */}
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Buscar nombre, email o WA..."
+        className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-brand-400 dark:focus:border-brand-500 w-full sm:w-80"
+      />
 
       {filtered.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
-          {search ? "Sin resultados para esta búsqueda." : "No hay leads con este filtro."}
+          {search ? "Sin resultados para esta búsqueda." : "Aún no tienes leads asignados."}
         </div>
       ) : (
         <>

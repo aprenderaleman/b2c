@@ -72,10 +72,7 @@ export async function POST(
     return NextResponse.json({ error: "insert_failed", message: error.message }, { status: 500 });
   }
 
-  await sb
-    .from("leads")
-    .update({ estado_cierre: "venta_pendiente" })
-    .eq("id", leadId);
+  // estado_cierre no cambia: la venta pendiente vive en la tabla `ventas`.
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,

@@ -116,6 +116,9 @@ export async function getCloserTasks(
     .from("tareas_closer")
     .select("*, leads!inner(name, whatsapp_normalized, email, status, estado_cierre, qualification_answers, reserva_prioritaria, priority_deadline, deposit_intent_at, created_at, fecha_asignacion_closer, source, landing_intent, trial_scheduled_at, trial_attended_at, trial_absent_at)")
     .eq("closer_id", closerId)
+    // Regla Gelfis 2026-08-02: el closer solo ve tareas de leads DESPUÉS
+    // del trial (asistió o no asistió). Los pre-trial los maneja Stiv/admin.
+    .or("trial_attended_at.not.is.null,trial_absent_at.not.is.null", { foreignTable: "leads" })
     .is("fecha_completada", null);
 
   if (filter === "hoy") {

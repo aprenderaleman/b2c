@@ -61,7 +61,7 @@ export async function GET(req: Request) {
           .from("leads")
           .select("id", { count: "exact", head: true })
           .eq("closer_id", closer.id)
-          .in("estado_cierre", ["en_seguimiento", "venta_pendiente"]),
+          .in("estado_cierre", ["activo", "seguimiento_pactado"]),
         sb
           .from("leads")
           .select("id", { count: "exact", head: true })
