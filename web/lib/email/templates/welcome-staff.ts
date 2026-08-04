@@ -5,7 +5,7 @@ export type WelcomeStaffVars = {
   email:        string;
   tempPassword: string;
   platformUrl:  string;
-  role:         "admin" | "teacher";
+  role:         "admin" | "teacher" | "closer";
   language:     "es" | "de";
 };
 
@@ -14,7 +14,7 @@ export function renderWelcomeStaff(v: WelcomeStaffVars): RenderedEmail {
 }
 
 function renderES(v: WelcomeStaffVars): RenderedEmail {
-  const roleLabel = v.role === "teacher" ? "profesor" : "administrador";
+  const roleLabel = v.role === "teacher" ? "profesor" : v.role === "closer" ? "closer" : "administrador";
   const subject = `Tu acceso a Aprender-Aleman.de (${roleLabel})`;
   // El destinatario aún no tiene sesión — el botón debe llevar a la
   // pantalla de login (no a "/"), donde podrá usar el email + pwd
@@ -56,7 +56,7 @@ function renderES(v: WelcomeStaffVars): RenderedEmail {
 }
 
 function renderDE(v: WelcomeStaffVars): RenderedEmail {
-  const roleLabel = v.role === "teacher" ? "Lehrer" : "Administrator";
+  const roleLabel = v.role === "teacher" ? "Lehrer" : v.role === "closer" ? "Closer" : "Administrator";
   const subject = `Dein Zugang zu Aprender-Aleman.de (${roleLabel})`;
   const loginUrl = `${v.platformUrl.replace(/\/$/, "")}/login`;
 

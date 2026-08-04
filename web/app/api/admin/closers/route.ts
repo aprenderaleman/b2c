@@ -76,7 +76,7 @@ export async function POST(req: Request) {
     email: parsed.data.email,
     tempPassword: created.tempPassword,
     platformUrl,
-    role: "admin",
+    role: "closer",
     language: parsed.data.language,
   });
 
