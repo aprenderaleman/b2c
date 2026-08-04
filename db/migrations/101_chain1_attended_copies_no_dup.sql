@@ -1,3 +1,6 @@
+-- ⚠️ IMPORTANTE: esta migración contiene UTF-8 (¡, ¿, —, emojis, tildes).
+-- Debe aplicarse con client_encoding='UTF8'. Ver nota en migración 100.
+--
 -- Fix Gelfis 2026-08-04: copies chain1_attended sin duplicaciones + bono
 -- separado en variante bonus_vivo (AUTHORING_RULES: escasez real, no inventada).
 --

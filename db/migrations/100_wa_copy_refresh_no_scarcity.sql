@@ -1,3 +1,11 @@
+-- ⚠️ IMPORTANTE: esta migración contiene UTF-8 (¡, ¿, —, emojis, tildes).
+-- Debe aplicarse con client_encoding='UTF8'. En psycopg2:
+--   conn.set_client_encoding('UTF8')  ANTES del cur.execute().
+-- En psql: `psql -v ON_ERROR_STOP=1 -f 100.sql` respeta LANG del env.
+-- Sin esto Postgres almacena doble-codificación y los mensajes salen
+-- con Â¡, ðŸ˜Š, Ã³ (mojibake). Bug reportado por Gelfis 2026-08-04
+-- (Raúl y 9 leads más recibieron chain4_absent corrupto).
+--
 -- Refresh copies WhatsApp para cumplir la regla AUTHORING_RULES:
 --   1. Prohibida la escasez inventada (cupos/cierres/liberar plazas).
 --   2. Prohibidos binarios de salida ('dime NO').
