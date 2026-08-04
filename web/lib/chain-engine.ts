@@ -215,7 +215,7 @@ export async function advanceChain(chain: ChainRow): Promise<{
 
   // Resolve template — try bonus variant first, fall back to base
   const baseTemplateKind = resolveTemplateKind(chain, step);
-  const bonusAlive = isBonusAlive(chain.started_at);
+  const bonusAlive = isBonusAlive(chain.started_at, chain.metadata);
   const bonusSuffix = bonusAlive ? "_bonus_vivo" : "_bonus_vencido";
   const bonusKind = `${baseTemplateKind}${bonusSuffix}`;
 

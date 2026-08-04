@@ -36,9 +36,11 @@ function firstName(name: string | null): string {
 }
 
 function formatBonusDay(startedAt: string): string {
+  // Devuelve solo el nombre del día ("jueves") — el copy pone el
+  // artículo/preposición ("antes de {dia_bonus}"). Antes devolvía
+  // "el jueves" y producía "antes del el jueves" (doble artículo).
   const d = new Date(new Date(startedAt).getTime() + 48 * 3_600_000);
-  const day = DAY_NAMES_ES[d.getDay()];
-  return `el ${day}`;
+  return DAY_NAMES_ES[d.getDay()];
 }
 
 function formatArrivalDate(monthsFromNow: number): string {
@@ -75,34 +77,42 @@ export async function resolveChainVariables(
     meta: Record<string, unknown> | null;
   } | null;
 
-  // Teacher name from latest trial class
-  let profeName = "tu profesor/a";
+  // Teacher name from latest trial class.
+  // Fix Gelfis 2026-08-04: la columna es `full_name`, no `name`. Todos
+  // los mensajes con {profe} caían al fallback "tu profesor/a".
+  let profeName = "tu profe";
   const { data: classRow } = await sb
     .from("classes")
-    .select("teacher_id, users!classes_teacher_id_fkey(name)")
+    .select("teacher_id, users!classes_teacher_id_fkey(full_name)")
     .eq("lead_id", leadId)
     .eq("is_trial", true)
     .order("scheduled_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (classRow) {
-    const teacher = (classRow as Record<string, unknown>).users as { name: string } | null;
-    if (teacher?.name) profeName = firstName(teacher.name);
+    const teacher = (classRow as Record<string, unknown>).users as { full_name: string } | null;
+    if (teacher?.full_name) profeName = firstName(teacher.full_name);
   }
 
-  // Goal/meta resolution
+  // Goal/meta resolution.
+  // Fallback "aprender alemán": lee natural en "lograr {meta}" y "llegas a
+  // {meta}". Antes era "tu nivel objetivo" → producía "tu tu nivel objetivo"
+  // cuando el copy decía "tu {meta}".
   const metaLabel =
     (chainMeta.objective as string) ||
     (leadRow?.qualification_answers?.goal as string) ||
     (leadRow?.meta?.last_offered_objective as string) ||
-    "tu nivel objetivo";
+    "aprender alemán";
 
-  // Ritmo name
+  // Ritmo name.
+  // Fallback "un ritmo personalizado": lee natural en "Tu plan recomendado:
+  // {ritmo_recomendado}". Antes era "el ritmo recomendado" → duplicaba
+  // "ritmo" en el copy.
   const packId = chainMeta.packId as string | undefined;
   const ritmo = packId ? RITMOS.find(r => r.id === packId) : null;
   const ritmoLabel =
     (chainMeta.packLabel as string) ||
-    (ritmo ? `${ritmo.emoji} ${ritmo.name}` : "el ritmo recomendado");
+    (ritmo ? `${ritmo.emoji} ${ritmo.name}` : "un ritmo personalizado");
 
   // Arrival date
   const goalId = (chainMeta.goal as string) || (chainMeta.goalId as string);
@@ -130,6 +140,13 @@ export async function resolveChainVariables(
   };
 }
 
-export function isBonusAlive(chainStartedAt: string): boolean {
-  return new Date(chainStartedAt).getTime() + 48 * 3_600_000 > Date.now();
+/**
+ * ¿Hay bono real activo? Cumple AUTHORING_RULES ("prohibida la escasez
+ * inventada"): si `chainMeta.bonus_activo` no es explícitamente true,
+ * NO se sirve la variante _bonus_vivo. La ventana temporal de 48h
+ * antigua queda deprecada — el handler que arranca la chain debe
+ * pasar `bonus_activo: true` cuando decidamos ofrecer el bono real.
+ */
+export function isBonusAlive(chainStartedAt: string, chainMeta?: Record<string, unknown>): boolean {
+  return chainMeta?.bonus_activo === true;
 }

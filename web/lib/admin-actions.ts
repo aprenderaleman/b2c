@@ -468,8 +468,27 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
     }
   }
 
-  // Iniciar cadena de follow-ups post-clase sin enlace (chain1)
-  await startChain(leadId, "chain1_attended")
+  // Fix Gelfis 2026-08-04: pasar metaLabel mínimo desde leads.meta si
+  // existe (setted por markTrialAttendedAwaitingConversion cuando el
+  // profe eligió pack antes). Sin él, {meta} caía al fallback y salía
+  // "aprender alemán" en el copy — sirve pero pierde personalización.
+  const { data: metaRow2 } = await sb
+    .from("leads")
+    .select("meta")
+    .eq("id", leadId)
+    .maybeSingle();
+  const priorMeta = (metaRow2?.meta && typeof metaRow2.meta === "object")
+    ? metaRow2.meta as Record<string, unknown>
+    : {};
+  const chainMetadata: Record<string, unknown> = {};
+  if (typeof priorMeta.last_offered_objective === "string") {
+    chainMetadata.objective = priorMeta.last_offered_objective;
+  }
+  if (typeof priorMeta.last_offered_pack === "string") {
+    chainMetadata.packId = priorMeta.last_offered_pack;
+  }
+
+  await startChain(leadId, "chain1_attended", chainMetadata)
     .catch(err => console.warn("[markTrialAttendedNoLink] startChain error:", err));
 }
 

@@ -73,7 +73,9 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
     label: "Asistió (general)",
     steps: [
       {
-        delayMs: 2 * H,
+        // Gelfis 2026-08-04: T+2h se percibía muy rápido. T+6h da aire
+        // sin perder el momentum de la clase.
+        delayMs: 6 * H,
         templateKind: "chain1_attended",
         templateSubN: 1,
         channels: ["whatsapp"],
