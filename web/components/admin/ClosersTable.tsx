@@ -31,7 +31,7 @@ export function ClosersTable({ closers, leadCounts }: Props) {
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Rango</th>
               <th className="px-4 py-3 font-medium text-right">Leads</th>
-              <th className="px-4 py-3 font-medium">Flujo</th>
+              <th className="px-4 py-3 font-medium">Recibe leads</th>
               <th className="px-4 py-3 font-medium">Estado</th>
             </tr>
           </thead>
@@ -88,15 +88,32 @@ function CloserRow({ closer, leadCount }: { closer: Closer; leadCount: number })
       <td className="px-4 py-3 text-right">{leadCount}</td>
       <td className="px-4 py-3">
         <button
+          type="button"
+          role="switch"
+          aria-checked={flujo}
           onClick={toggleFlujo}
           disabled={pending}
-          className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium cursor-pointer transition-colors ${
-            flujo
-              ? "bg-brand-50 dark:bg-brand-500/10 text-brand-700 dark:text-brand-300 border-brand-200 dark:border-brand-500/30 hover:bg-brand-100 dark:hover:bg-brand-500/20"
-              : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30 hover:bg-amber-100 dark:hover:bg-amber-500/20"
-          }`}
+          title={flujo
+            ? "Recibe leads nuevos automáticamente. Clic para pausar."
+            : "NO recibe leads nuevos (fuera de la rotación). Clic para activar."}
+          className="inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 group"
         >
-          {pending ? "..." : flujo ? "ACTIVO" : "PAUSADO"}
+          <span
+            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+              flujo ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-600"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                flujo ? "left-[18px]" : "left-0.5"
+              }`}
+            />
+          </span>
+          <span className={`text-xs font-medium ${
+            flujo ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400"
+          }`}>
+            {pending ? "..." : flujo ? "Sí" : "No"}
+          </span>
         </button>
       </td>
       <td className="px-4 py-3">
