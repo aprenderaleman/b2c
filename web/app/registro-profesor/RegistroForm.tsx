@@ -45,7 +45,6 @@ type FormState = {
   levels:       string[];   // ['A1', 'A2', ...]
   iban:         string;
   gdpr:         boolean;
-  agreement:    boolean;
 };
 
 export function RegistroForm({
@@ -66,7 +65,7 @@ export function RegistroForm({
     specialties: "",
     levels: [],
     iban: "",
-    gdpr: false, agreement: false,
+    gdpr: false,
   });
   const [submitting, setSubmitting]     = useState(false);
   const [err, setErr]                   = useState<string | null>(null);
@@ -93,7 +92,7 @@ export function RegistroForm({
     form.specialties.trim().length >= 2 &&
     form.levels.length >= 1 &&
     form.iban.replace(/\s/g, "").length >= 10 &&
-    form.gdpr && form.agreement &&
+    form.gdpr &&
     !submitting;
 
   async function submit(e: React.FormEvent) {
@@ -270,12 +269,6 @@ export function RegistroForm({
           <input type="checkbox" checked={form.gdpr} onChange={e => toggle("gdpr", e.target.checked)} className="mt-1 h-4 w-4 accent-brand-500" />
           <span className="text-sm text-slate-700 leading-relaxed">
             Acepto la <a href="https://www.aprender-aleman.de/datenschutz" target="_blank" rel="noopener noreferrer" className="text-brand-600 underline">política de privacidad</a>.
-          </span>
-        </label>
-        <label className="flex items-start gap-3 cursor-pointer mt-2">
-          <input type="checkbox" checked={form.agreement} onChange={e => toggle("agreement", e.target.checked)} className="mt-1 h-4 w-4 accent-brand-500" />
-          <span className="text-sm text-slate-700 leading-relaxed">
-            Acepto el acuerdo de colaboración con Aprender-Aleman.de (autónomo / freelance bajo las condiciones acordadas).
           </span>
         </label>
       </Section>
