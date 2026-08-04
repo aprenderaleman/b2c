@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 
 const COUNTRIES = [
@@ -27,38 +27,12 @@ const COUNTRIES = [
 
 const LEVELS = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
-const TIMEZONES = [
-  { value: "Europe/Madrid",        label: "España (Madrid)" },
-  { value: "Atlantic/Canary",      label: "España (Canarias)" },
-  { value: "Europe/Berlin",        label: "Alemania / Austria / Suiza" },
-  { value: "Europe/Lisbon",        label: "Portugal" },
-  { value: "Europe/London",        label: "Reino Unido" },
-  { value: "America/Mexico_City",  label: "México (CDMX)" },
-  { value: "America/Bogota",       label: "Colombia / Perú / Ecuador" },
-  { value: "America/Caracas",      label: "Venezuela" },
-  { value: "America/Santiago",     label: "Chile" },
-  { value: "America/Argentina/Buenos_Aires", label: "Argentina / Uruguay" },
-  { value: "America/Sao_Paulo",    label: "Brasil (São Paulo)" },
-  { value: "America/New_York",     label: "EE.UU. (Este)" },
-  { value: "America/Chicago",      label: "EE.UU. (Centro)" },
-  { value: "America/Los_Angeles",  label: "EE.UU. (Pacífico)" },
-];
-
-const FRANJAS = [
-  { value: "mananas", label: "🌅 Mañanas", hint: "8:00–13:00" },
-  { value: "tardes",  label: "☀️ Tardes",  hint: "13:00–18:00" },
-  { value: "noches",  label: "🌙 Noches",  hint: "18:00–22:00" },
-  { value: "findes",  label: "📅 Fines de semana", hint: "sáb y dom" },
-];
-
 const RANGO_LABEL: Record<string, string> = {
   starter: "Starter",
   pro:     "Pro",
   elite:   "Elite",
   master:  "Master",
 };
-
-const MAX_PHOTO_BYTES = 2 * 1024 * 1024;   // 2 MB
 
 type FormState = {
   name:         string;
@@ -69,8 +43,6 @@ type FormState = {
   languages:    string;     // libre, comma-separated
   specialties:  string;     // libre, comma-separated
   levels:       string[];   // ['A1', 'A2', ...]
-  timezone:     string;
-  franjas:      string[];   // ['mananas', 'tardes', ...]
   iban:         string;
   gdpr:         boolean;
   agreement:    boolean;
@@ -93,26 +65,12 @@ export function RegistroForm({
     languages: "Alemán nativo, Español",
     specialties: "",
     levels: [],
-    timezone: "Europe/Madrid",
-    franjas: [],
     iban: "",
     gdpr: false, agreement: false,
   });
-  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
-  const [photoErr, setPhotoErr]         = useState<string | null>(null);
   const [submitting, setSubmitting]     = useState(false);
   const [err, setErr]                   = useState<string | null>(null);
   const [done, setDone]                 = useState(false);
-
-  // Preseleccionar la zona horaria del navegador si está en la lista.
-  useEffect(() => {
-    try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      if (TIMEZONES.some(t => t.value === tz)) {
-        setForm(f => ({ ...f, timezone: tz }));
-      }
-    } catch { /* keep default */ }
-  }, []);
 
   function toggle<K extends keyof FormState>(key: K, val: FormState[K]) {
     setForm(f => ({ ...f, [key]: val }));
@@ -125,30 +83,6 @@ export function RegistroForm({
     }));
   }
 
-  function toggleFranja(v: string) {
-    setForm(f => ({
-      ...f,
-      franjas: f.franjas.includes(v) ? f.franjas.filter(x => x !== v) : [...f.franjas, v],
-    }));
-  }
-
-  function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setPhotoErr(null);
-    const file = e.target.files?.[0];
-    if (!file) { setPhotoDataUrl(null); return; }
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
-      setPhotoErr("Formato no válido. Usa JPG, PNG o WebP.");
-      return;
-    }
-    if (file.size > MAX_PHOTO_BYTES) {
-      setPhotoErr("La foto supera los 2 MB. Usa una más ligera.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => setPhotoDataUrl(reader.result as string);
-    reader.readAsDataURL(file);
-  }
-
   const phoneDigits = form.phone.replace(/\D/g, "");
   const canSubmit =
     form.name.trim().length >= 2 &&
@@ -158,7 +92,6 @@ export function RegistroForm({
     form.languages.trim().length >= 2 &&
     form.specialties.trim().length >= 2 &&
     form.levels.length >= 1 &&
-    form.timezone.length > 0 &&
     form.iban.replace(/\s/g, "").length >= 10 &&
     form.gdpr && form.agreement &&
     !submitting;
@@ -183,9 +116,6 @@ export function RegistroForm({
           languages:      form.languages.trim(),
           specialties:    form.specialties.trim(),
           levels:         form.levels,
-          timezone:       form.timezone,
-          availability:   form.franjas,
-          photo_data_url: photoDataUrl ?? undefined,
           iban:           form.iban.replace(/\s/g, "").toUpperCase(),
           gdpr_accepted:  true,
         }),
@@ -286,19 +216,6 @@ export function RegistroForm({
             {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
           </select>
         </Field>
-        <Field label="Foto de perfil" hint="Opcional. Se mostrará en tu card de profesor. JPG/PNG/WebP, máx 2 MB.">
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={onPhotoChange}
-            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-200"
-          />
-          {photoErr && <p className="mt-1 text-xs text-red-600">{photoErr}</p>}
-          {photoDataUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={photoDataUrl} alt="Vista previa" className="mt-2 h-20 w-20 rounded-full object-cover border border-slate-200" />
-          )}
-        </Field>
       </Section>
 
       <Section title="Datos profesionales">
@@ -335,41 +252,6 @@ export function RegistroForm({
                   ].join(" ")}
                 >
                   {l}
-                </button>
-              );
-            })}
-          </div>
-        </Field>
-      </Section>
-
-      <Section title="Agenda">
-        <Field label="Zona horaria *" hint="Para mostrar tu agenda en tu hora local.">
-          <select
-            value={form.timezone}
-            onChange={e => toggle("timezone", e.target.value)}
-            className="w-full h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            {TIMEZONES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-          </select>
-        </Field>
-        <Field label="Disponibilidad inicial" hint="Orientativa — la disponibilidad detallada la configuras luego en tu panel.">
-          <div className="flex flex-wrap gap-2">
-            {FRANJAS.map(fr => {
-              const on = form.franjas.includes(fr.value);
-              return (
-                <button
-                  key={fr.value}
-                  type="button"
-                  onClick={() => toggleFranja(fr.value)}
-                  className={[
-                    "h-11 px-4 rounded-lg text-sm font-semibold transition",
-                    on
-                      ? "bg-brand-500 text-white border border-brand-500"
-                      : "bg-white text-slate-700 border border-slate-300 hover:border-brand-300",
-                  ].join(" ")}
-                  title={fr.hint}
-                >
-                  {fr.label}
                 </button>
               );
             })}

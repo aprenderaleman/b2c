@@ -31,9 +31,6 @@ import {
  *     languages:       "Alemán nativo, Español B2",
  *     specialties:     "Gramática A1-A2, conversación B1",
  *     levels:          ["A1","A2","B1"],
- *     timezone:        "Europe/Madrid",
- *     availability:    ["mananas","noches"],       // franjas orientativas
- *     photo_data_url:  "data:image/jpeg;base64,...", // opcional, máx 2MB
  *     iban:            "ES00...",
  *     gdpr_accepted:   true
  *   }
@@ -44,16 +41,13 @@ import {
  *   3. Validar invitation code → condiciones + email de la invitación.
  *   4. Verificar email único en `users`.
  *   5. createUser inactive con la tarifa de la invitación.
- *   6. Aplicar rango (users.rango), accepts_trials, timezone,
- *      availability_prefs y foto (users.avatar_url).
+ *   6. Aplicar rango (users.rango) y accepts_trials (teachers).
  *   7. consumeInvitation(code, userId) con race-guard.
  *   8. Notificación in-app + email a superadmins.
  *   9. NO se manda welcome al profe — eso espera a que admin apruebe.
  */
 export const runtime  = "nodejs";
 export const dynamic  = "force-dynamic";
-
-const MAX_PHOTO_DATAURL_LEN = 2_900_000;   // ~2MB binario en base64
 
 const Body = z.object({
   code:             z.string().trim().min(8).max(64),
@@ -65,9 +59,6 @@ const Body = z.object({
   languages:        z.string().trim().min(2).max(500),
   specialties:      z.string().trim().min(2).max(500),
   levels:           z.array(z.enum(["A0","A1","A2","B1","B2","C1","C2"])).min(1),
-  timezone:         z.string().trim().min(3).max(60),
-  availability:     z.array(z.enum(["mananas","tardes","noches","findes"])).default([]),
-  photo_data_url:   z.string().startsWith("data:image/").max(MAX_PHOTO_DATAURL_LEN).optional(),
   iban:             z.string().trim().min(10).max(40),
   gdpr_accepted:    z.literal(true, { errorMap: () => ({ message: "Aceptación GDPR obligatoria" }) }),
 });
@@ -179,60 +170,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 4. Aplicar condiciones de la invitación + datos de agenda.
+  // 4. Aplicar condiciones de la invitación.
   //    - rango → users.rango (el motor de comisiones lee de ahí)
-  //    - accepts_trials, timezone, availability_prefs → teachers
+  //    - accepts_trials → teachers
   try {
     await sb.from("users")
       .update({ rango: inv.rango })
       .eq("id", created.userId);
     await sb.from("teachers")
-      .update({
-        accepts_trials:     inv.accepts_trials,
-        timezone:           b.timezone,
-        availability_prefs: b.availability,
-      })
+      .update({ accepts_trials: inv.accepts_trials })
       .eq("id", created.teacherId);
   } catch (e) {
     console.error("[teacher-register] apply invitation conditions failed:", e);
   }
 
-  // 5. Foto de perfil (opcional) → Supabase storage + users.avatar_url.
-  //    Best-effort: si falla, el registro sigue — la foto se puede subir
-  //    después desde el panel.
-  if (b.photo_data_url) {
-    try {
-      const m = b.photo_data_url.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
-      if (m) {
-        const contentType = m[1];
-        const buffer = Buffer.from(m[2], "base64");
-        if (buffer.length <= 2 * 1024 * 1024) {
-          const ext = contentType === "image/png" ? "png" : contentType === "image/webp" ? "webp" : "jpg";
-          const path = `avatars/${created.userId}.${ext}`;
-          const { error: upErr } = await sb.storage.from("comunidad").upload(path, buffer, {
-            cacheControl: "3600",
-            upsert:       true,
-            contentType,
-          });
-          if (!upErr) {
-            // Signed URL de larga duración (10 años) — el bucket es
-            // privado y las cards solo necesitan un src estable.
-            const { data: signed } = await sb.storage.from("comunidad")
-              .createSignedUrl(path, 10 * 365 * 24 * 3600);
-            if (signed?.signedUrl) {
-              await sb.from("users")
-                .update({ avatar_url: signed.signedUrl })
-                .eq("id", created.userId);
-            }
-          }
-        }
-      }
-    } catch (e) {
-      console.error("[teacher-register] photo upload failed (non-fatal):", e);
-    }
-  }
-
-  // 6. Consumir invitación con race-guard. Si OTRO request lo consumió
+  // 5. Consumir invitación con race-guard. Si OTRO request lo consumió
   //    entre validateInvitation() y aquí, rollback del user creado.
   const consumed = await consumeInvitation(b.code, created.userId);
   if (!consumed.ok) {
