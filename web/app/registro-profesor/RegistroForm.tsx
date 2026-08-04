@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 const COUNTRIES = [
@@ -27,9 +27,41 @@ const COUNTRIES = [
 
 const LEVELS = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"] as const;
 
+const TIMEZONES = [
+  { value: "Europe/Madrid",        label: "España (Madrid)" },
+  { value: "Atlantic/Canary",      label: "España (Canarias)" },
+  { value: "Europe/Berlin",        label: "Alemania / Austria / Suiza" },
+  { value: "Europe/Lisbon",        label: "Portugal" },
+  { value: "Europe/London",        label: "Reino Unido" },
+  { value: "America/Mexico_City",  label: "México (CDMX)" },
+  { value: "America/Bogota",       label: "Colombia / Perú / Ecuador" },
+  { value: "America/Caracas",      label: "Venezuela" },
+  { value: "America/Santiago",     label: "Chile" },
+  { value: "America/Argentina/Buenos_Aires", label: "Argentina / Uruguay" },
+  { value: "America/Sao_Paulo",    label: "Brasil (São Paulo)" },
+  { value: "America/New_York",     label: "EE.UU. (Este)" },
+  { value: "America/Chicago",      label: "EE.UU. (Centro)" },
+  { value: "America/Los_Angeles",  label: "EE.UU. (Pacífico)" },
+];
+
+const FRANJAS = [
+  { value: "mananas", label: "🌅 Mañanas", hint: "8:00–13:00" },
+  { value: "tardes",  label: "☀️ Tardes",  hint: "13:00–18:00" },
+  { value: "noches",  label: "🌙 Noches",  hint: "18:00–22:00" },
+  { value: "findes",  label: "📅 Fines de semana", hint: "sáb y dom" },
+];
+
+const RANGO_LABEL: Record<string, string> = {
+  starter: "Starter",
+  pro:     "Pro",
+  elite:   "Elite",
+  master:  "Master",
+};
+
+const MAX_PHOTO_BYTES = 2 * 1024 * 1024;   // 2 MB
+
 type FormState = {
   name:         string;
-  email:        string;
   countryCode:  string;     // "+34"
   phone:        string;
   address:      string;
@@ -37,28 +69,50 @@ type FormState = {
   languages:    string;     // libre, comma-separated
   specialties:  string;     // libre, comma-separated
   levels:       string[];   // ['A1', 'A2', ...]
-  rateGroup:    string;
-  rateIndividual: string;
+  timezone:     string;
+  franjas:      string[];   // ['mananas', 'tardes', ...]
   iban:         string;
   gdpr:         boolean;
   agreement:    boolean;
 };
 
-export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmail: string }) {
+export function RegistroForm({
+  code, invEmail, invName, rateIndividual, rango, comisionPct,
+}: {
+  code:           string;
+  invEmail:       string;
+  invName:        string;
+  rateIndividual: number | null;
+  rango:          string;
+  comisionPct:    number | null;
+}) {
   const [form, setForm] = useState<FormState>({
-    name: "", email: prefillEmail,
+    name: invName,
     countryCode: "+34", phone: "",
     address: "", country: "ES",
     languages: "Alemán nativo, Español",
     specialties: "",
     levels: [],
-    rateGroup: "", rateIndividual: "",
+    timezone: "Europe/Madrid",
+    franjas: [],
     iban: "",
     gdpr: false, agreement: false,
   });
-  const [submitting, setSubmitting] = useState(false);
-  const [err, setErr]               = useState<string | null>(null);
-  const [done, setDone]             = useState(false);
+  const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
+  const [photoErr, setPhotoErr]         = useState<string | null>(null);
+  const [submitting, setSubmitting]     = useState(false);
+  const [err, setErr]                   = useState<string | null>(null);
+  const [done, setDone]                 = useState(false);
+
+  // Preseleccionar la zona horaria del navegador si está en la lista.
+  useEffect(() => {
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (TIMEZONES.some(t => t.value === tz)) {
+        setForm(f => ({ ...f, timezone: tz }));
+      }
+    } catch { /* keep default */ }
+  }, []);
 
   function toggle<K extends keyof FormState>(key: K, val: FormState[K]) {
     setForm(f => ({ ...f, [key]: val }));
@@ -71,19 +125,40 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
     }));
   }
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  function toggleFranja(v: string) {
+    setForm(f => ({
+      ...f,
+      franjas: f.franjas.includes(v) ? f.franjas.filter(x => x !== v) : [...f.franjas, v],
+    }));
+  }
+
+  function onPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setPhotoErr(null);
+    const file = e.target.files?.[0];
+    if (!file) { setPhotoDataUrl(null); return; }
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) {
+      setPhotoErr("Formato no válido. Usa JPG, PNG o WebP.");
+      return;
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoErr("La foto supera los 2 MB. Usa una más ligera.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => setPhotoDataUrl(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
   const phoneDigits = form.phone.replace(/\D/g, "");
   const canSubmit =
     form.name.trim().length >= 2 &&
-    emailValid &&
     phoneDigits.length >= 6 &&
     form.address.trim().length >= 4 &&
     form.country.length === 2 &&
     form.languages.trim().length >= 2 &&
     form.specialties.trim().length >= 2 &&
     form.levels.length >= 1 &&
-    Number(form.rateGroup) > 0 &&
-    Number(form.rateIndividual) > 0 &&
+    form.timezone.length > 0 &&
     form.iban.replace(/\s/g, "").length >= 10 &&
     form.gdpr && form.agreement &&
     !submitting;
@@ -101,7 +176,6 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
         body: JSON.stringify({
           code,
           name:           form.name.trim(),
-          email:          form.email.trim().toLowerCase(),
           whatsapp_e164:  `${cc}${phoneDigits}`,
           whatsapp_raw:   `${cc} ${form.phone}`,
           address:        form.address.trim(),
@@ -109,8 +183,9 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
           languages:      form.languages.trim(),
           specialties:    form.specialties.trim(),
           levels:         form.levels,
-          rate_group:     Number(form.rateGroup),
-          rate_individual: Number(form.rateIndividual),
+          timezone:       form.timezone,
+          availability:   form.franjas,
+          photo_data_url: photoDataUrl ?? undefined,
           iban:           form.iban.replace(/\s/g, "").toUpperCase(),
           gdpr_accepted:  true,
         }),
@@ -134,8 +209,8 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
         <div className="text-4xl mb-2" aria-hidden>✅</div>
         <h2 className="text-lg font-bold text-emerald-800">¡Solicitud recibida!</h2>
         <p className="mt-2 text-sm text-emerald-700 leading-relaxed">
-          Revisaremos tu perfil y te enviaremos un email con tus accesos
-          a la plataforma. Suele tardar máximo 24 horas.
+          Revisaremos tu perfil y te enviaremos un email con el enlace
+          para crear tu contraseña. Suele tardar máximo 24 horas.
         </p>
         <Link
           href="https://aprender-aleman.de"
@@ -149,15 +224,37 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
 
   return (
     <form onSubmit={submit} className="space-y-7">
+      {/* Condiciones acordadas — solo lectura */}
+      <div className="rounded-2xl border-2 border-brand-200 bg-brand-50/60 p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">
+          Tus condiciones
+        </h2>
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-slate-800">
+          {rateIndividual != null && (
+            <span>💶 Tarifa individual: <strong>{rateIndividual}€/h</strong></span>
+          )}
+          <span>
+            🏅 Rango de comisión: <strong>{RANGO_LABEL[rango] ?? rango}</strong>
+            {comisionPct != null && <> ({comisionPct}%)</>}
+          </span>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Acordadas con la academia — se aplican automáticamente a tu cuenta.
+        </p>
+      </div>
+
       <Section title="Datos personales">
         <Field label="Nombre completo *">
           <Input value={form.name} onChange={v => toggle("name", v)} placeholder="Sabine Arning" />
         </Field>
-        <Field label="Email * (será tu login)">
-          <Input type="email" value={form.email} onChange={v => toggle("email", v)} placeholder="sabine@ejemplo.com" />
-          {form.email && !emailValid && (
-            <p className="mt-1 text-xs text-red-600">Email no válido.</p>
-          )}
+        <Field label="Email (será tu login)">
+          <input
+            type="email"
+            value={invEmail}
+            disabled
+            className="w-full h-11 rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 cursor-not-allowed"
+          />
+          <p className="mt-1 text-xs text-slate-500">Fijado por tu invitación — no se puede cambiar.</p>
         </Field>
         <Field label="WhatsApp *">
           <div className="flex gap-2">
@@ -188,6 +285,19 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
           >
             {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
           </select>
+        </Field>
+        <Field label="Foto de perfil" hint="Opcional. Se mostrará en tu card de profesor. JPG/PNG/WebP, máx 2 MB.">
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            onChange={onPhotoChange}
+            className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-brand-700 hover:file:bg-brand-200"
+          />
+          {photoErr && <p className="mt-1 text-xs text-red-600">{photoErr}</p>}
+          {photoDataUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photoDataUrl} alt="Vista previa" className="mt-2 h-20 w-20 rounded-full object-cover border border-slate-200" />
+          )}
         </Field>
       </Section>
 
@@ -232,13 +342,42 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
         </Field>
       </Section>
 
-      <Section title="Tarifa acordada">
-        <Field label="Tarifa por hora — clase grupal (€) *">
-          <Input type="number" value={form.rateGroup} onChange={v => toggle("rateGroup", v)} placeholder="35" />
+      <Section title="Agenda">
+        <Field label="Zona horaria *" hint="Para mostrar tu agenda en tu hora local.">
+          <select
+            value={form.timezone}
+            onChange={e => toggle("timezone", e.target.value)}
+            className="w-full h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            {TIMEZONES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
         </Field>
-        <Field label="Tarifa por hora — clase individual (€) *">
-          <Input type="number" value={form.rateIndividual} onChange={v => toggle("rateIndividual", v)} placeholder="45" />
+        <Field label="Disponibilidad inicial" hint="Orientativa — la disponibilidad detallada la configuras luego en tu panel.">
+          <div className="flex flex-wrap gap-2">
+            {FRANJAS.map(fr => {
+              const on = form.franjas.includes(fr.value);
+              return (
+                <button
+                  key={fr.value}
+                  type="button"
+                  onClick={() => toggleFranja(fr.value)}
+                  className={[
+                    "h-11 px-4 rounded-lg text-sm font-semibold transition",
+                    on
+                      ? "bg-brand-500 text-white border border-brand-500"
+                      : "bg-white text-slate-700 border border-slate-300 hover:border-brand-300",
+                  ].join(" ")}
+                  title={fr.hint}
+                >
+                  {fr.label}
+                </button>
+              );
+            })}
+          </div>
         </Field>
+      </Section>
+
+      <Section title="Datos de cobro">
         <Field label="IBAN para cobros *" hint="Tu cuenta bancaria. Solo accesible para la administración de la academia.">
           <Input value={form.iban} onChange={v => toggle("iban", v.toUpperCase())} placeholder="ES00 0000 0000 0000 0000 0000" />
         </Field>
@@ -254,7 +393,7 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
         <label className="flex items-start gap-3 cursor-pointer mt-2">
           <input type="checkbox" checked={form.agreement} onChange={e => toggle("agreement", e.target.checked)} className="mt-1 h-4 w-4 accent-brand-500" />
           <span className="text-sm text-slate-700 leading-relaxed">
-            Acepto el acuerdo de colaboración con Aprender-Aleman.de (autónomo / freelance bajo la tarifa indicada).
+            Acepto el acuerdo de colaboración con Aprender-Aleman.de (autónomo / freelance bajo las condiciones acordadas).
           </span>
         </label>
       </Section>
@@ -273,8 +412,8 @@ export function RegistroForm({ code, prefillEmail }: { code: string; prefillEmai
         {submitting ? "Enviando…" : "Enviar solicitud"}
       </button>
       <p className="text-xs text-slate-500 text-center">
-        Tu perfil queda pendiente de aprobación. Cuando la academia lo valide
-        te llegará un email con tu login y contraseña temporal.
+        Tu perfil queda pendiente de aprobación. Cuando la academia lo
+        valide, te llegará un email con el enlace para crear tu contraseña.
       </p>
     </form>
   );

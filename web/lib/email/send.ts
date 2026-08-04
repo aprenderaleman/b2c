@@ -5,6 +5,8 @@ import {
   type PostTrialFollowupVars, type PostTrialFollowupGenericVars, type PostTrialFinalVars,
 } from "./templates/post-trial-followup";
 import { renderWelcomeStaff,   type WelcomeStaffVars }   from "./templates/welcome-staff";
+import { renderTeacherInvitation, type TeacherInvitationVars } from "./templates/teacher-invitation";
+import { renderTeacherWelcomeSetPassword, type TeacherWelcomeSetPasswordVars } from "./templates/teacher-welcome-setpassword";
 import { renderPasswordReset,  type PasswordResetVars }  from "./templates/password-reset";
 import { renderDailyDigest,    type DailyDigestVars }    from "./templates/daily-digest";
 import {
@@ -381,6 +383,29 @@ export async function sendWelcomeStaffEmail(
   vars: WelcomeStaffVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderWelcomeStaff(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Invitación a candidato a profesor con su link único de registro.
+ */
+export async function sendTeacherInvitationEmail(
+  to: string,
+  vars: TeacherInvitationVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTeacherInvitation(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Bienvenida al profesor aprobado con enlace de creación de contraseña
+ * (sin contraseña temporal en texto plano).
+ */
+export async function sendTeacherWelcomeSetPasswordEmail(
+  to: string,
+  vars: TeacherWelcomeSetPasswordVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTeacherWelcomeSetPassword(vars);
   return sendRaw(to, subject, html, text);
 }
 

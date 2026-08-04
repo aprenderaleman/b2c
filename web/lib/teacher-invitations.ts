@@ -1,12 +1,15 @@
 /**
- * Helpers para teacher_invitations — códigos one-shot que el admin
- * genera y comparte con candidatos a profesor para que se auto-
- * registren via /profesor/registro?code=XXX.
+ * Helpers para teacher_invitations — invitaciones que el admin envía
+ * por email (o comparte por link) a candidatos a profesor para que se
+ * auto-registren via /registro-profesor?code=XXX.
  *
- * Reglas:
- *   - TTL 7 días desde la creación.
+ * Reglas (rediseño 2026-08-02):
+ *   - TTL 14 días desde la creación.
  *   - Single-use: la primera persona que envíe el form lo consume.
- *   - Admin puede revocar manualmente con `revokeInvitation()`.
+ *   - El admin fija las condiciones al invitar (tarifa individual,
+ *     rango de comisión, accepts_trials) — se aplican al perfil al
+ *     completarse el registro y el profe NUNCA las edita.
+ *   - Admin puede revocar y reenviar.
  *   - El código es URL-safe (base62 ≈ 16 chars).
  */
 import { randomBytes } from "node:crypto";
@@ -15,31 +18,51 @@ import { supabaseAdmin } from "./supabase";
 const CODE_LEN  = 16;
 const ALPHABET  = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
 
+export type TeacherRango = "starter" | "pro" | "elite" | "master";
+
 export type TeacherInvitation = {
-  id:              string;
-  code:            string;
-  email:           string | null;
-  notes:           string | null;
-  created_by:      string | null;
-  created_at:      string;
-  expires_at:      string;
-  used_at:         string | null;
-  used_by_user_id: string | null;
-  revoked_at:      string | null;
+  id:                  string;
+  code:                string;
+  email:               string | null;
+  name:                string | null;
+  notes:               string | null;
+  rate_individual_eur: number | null;
+  rango:               TeacherRango;
+  accepts_trials:      boolean;
+  created_by:          string | null;
+  created_at:          string;
+  expires_at:          string;
+  used_at:             string | null;
+  used_by_user_id:     string | null;
+  revoked_at:          string | null;
+  last_sent_at:        string | null;
 };
+
+export type InvitationStatus = "pendiente" | "completada" | "expirada" | "revocada";
+
+export function invitationStatus(inv: TeacherInvitation): InvitationStatus {
+  if (inv.used_at) return "completada";
+  if (inv.revoked_at) return "revocada";
+  if (new Date(inv.expires_at).getTime() < Date.now()) return "expirada";
+  return "pendiente";
+}
 
 export type ValidationResult =
   | { ok: true;  invitation: TeacherInvitation }
   | { ok: false; reason: "not_found" | "expired" | "already_used" | "revoked" };
 
 /**
- * Crea una invitación nueva y devuelve la URL completa lista para
- * pegar en WhatsApp/email al candidato.
+ * Crea una invitación nueva con las condiciones acordadas y devuelve
+ * la URL completa lista para el email o para copiar.
  */
 export async function createInvitation(opts: {
-  createdBy: string;
-  email?:    string | null;
-  notes?:    string | null;
+  createdBy:      string;
+  email:          string;
+  name?:          string | null;
+  notes?:         string | null;
+  rateIndividual: number;
+  rango?:         TeacherRango;
+  acceptsTrials?: boolean;
 }): Promise<{ invitation: TeacherInvitation; url: string }> {
   const sb = supabaseAdmin();
   const code = generateCode();
@@ -47,9 +70,13 @@ export async function createInvitation(opts: {
     .from("teacher_invitations")
     .insert({
       code,
-      email:      opts.email   ?? null,
-      notes:      opts.notes   ?? null,
-      created_by: opts.createdBy,
+      email:               opts.email.trim().toLowerCase(),
+      name:                opts.name?.trim() || null,
+      notes:               opts.notes ?? null,
+      rate_individual_eur: opts.rateIndividual,
+      rango:               opts.rango ?? "starter",
+      accepts_trials:      opts.acceptsTrials ?? false,
+      created_by:          opts.createdBy,
     })
     .select("*")
     .single();
@@ -57,16 +84,12 @@ export async function createInvitation(opts: {
     throw new Error(`teacher_invitations insert failed: ${error?.message ?? "unknown"}`);
   }
   const inv = data as TeacherInvitation;
-  const base = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
-  return {
-    invitation: inv,
-    url:        `${base}/registro-profesor?code=${encodeURIComponent(inv.code)}`,
-  };
+  return { invitation: inv, url: buildInvitationUrl(inv.code) };
 }
 
 /**
  * Valida un código de invitación sin consumirlo. Útil para
- * /profesor/registro?code=... que sólo necesita saber si renderiza
+ * /registro-profesor?code=... que sólo necesita saber si renderiza
  * el formulario o el error "link no válido".
  */
 export async function validateInvitation(code: string): Promise<ValidationResult> {
@@ -118,18 +141,17 @@ export async function consumeInvitation(
 }
 
 /**
- * Lista invitaciones activas (no usadas, no revocadas, no expiradas).
- * Usado por el panel admin para ver qué links están pendientes.
+ * Lista invitaciones recientes (todas: pendientes, completadas,
+ * expiradas, revocadas) para la tabla del panel admin. El estado se
+ * deriva con invitationStatus().
  */
-export async function listActiveInvitations(): Promise<TeacherInvitation[]> {
+export async function listInvitations(limit = 50): Promise<TeacherInvitation[]> {
   const sb = supabaseAdmin();
   const { data } = await sb
     .from("teacher_invitations")
     .select("*")
-    .is("used_at", null)
-    .is("revoked_at", null)
-    .gt("expires_at", new Date().toISOString())
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(limit);
   return (data ?? []) as TeacherInvitation[];
 }
 
@@ -141,6 +163,32 @@ export async function revokeInvitation(id: string): Promise<void> {
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", id)
     .is("used_at", null);
+}
+
+/** Registra el envío del email de invitación (creación o reenvío). */
+export async function markInvitationSent(id: string): Promise<void> {
+  const sb = supabaseAdmin();
+  await sb
+    .from("teacher_invitations")
+    .update({ last_sent_at: new Date().toISOString() })
+    .eq("id", id);
+}
+
+/**
+ * Reenvío: si la invitación expiró, extiende la validez 14 días más
+ * desde ahora (mismo código — el candidato conserva el mismo link).
+ */
+export async function extendInvitationExpiry(id: string): Promise<TeacherInvitation | null> {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("teacher_invitations")
+    .update({ expires_at: new Date(Date.now() + 14 * 24 * 3600_000).toISOString() })
+    .eq("id", id)
+    .is("used_at", null)
+    .is("revoked_at", null)
+    .select("*")
+    .maybeSingle();
+  return (data as TeacherInvitation | null) ?? null;
 }
 
 function generateCode(): string {

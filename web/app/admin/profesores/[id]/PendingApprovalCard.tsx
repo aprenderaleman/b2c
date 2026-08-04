@@ -24,36 +24,34 @@ type Teacher = {
  * profesor se auto-registró y aún no fue aprobado por admin.
  * Muestra los datos completos (más fáciles de revisar que dispersos
  * por la página) y los botones Aprobar / Rechazar.
+ *
+ * Rediseño 2026-08-02: la tarifa viene fijada por la invitación del
+ * admin (el profe ya no la elige). Sigue siendo editable aquí por si
+ * hay que ajustarla en el último momento. Al aprobar, el profe recibe
+ * un email con enlace de creación de contraseña (no password temporal).
  */
 export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
   const router = useRouter();
   const [busy, setBusy] = useState<null | "approve" | "reject">(null);
   const [err,  setErr]  = useState<string | null>(null);
-  const [done, setDone] = useState<null | { tempPassword: string | null; emailSent: boolean }>(null);
+  const [done, setDone] = useState<null | { setPasswordUrl: string | null; emailSent: boolean }>(null);
 
-  // Tarifas editables (pre-rellenadas con lo que envió el profe). Admin
-  // puede ajustar ANTES de aprobar. Caso real Gelfis 2026-05-19: profe
-  // se auto-registra con su tarifa propuesta, admin la revisa contra el
-  // mercado y la ajusta si toca.
   const [rateInd, setRateInd] = useState<string>(teacher.hourly_rate_individual ?? "");
-  const [rateGrp, setRateGrp] = useState<string>(teacher.hourly_rate_group ?? "");
 
   async function approve() {
     const ri = Number(rateInd);
-    const rg = Number(rateGrp);
     if (!Number.isFinite(ri) || ri <= 0) { setErr("Tarifa individual inválida (€/h, > 0)."); return; }
-    if (!Number.isFinite(rg) || rg <= 0) { setErr("Tarifa grupal inválida (€/h, > 0).");    return; }
     if (!confirm(
       `Aprobar a ${teacher.full_name ?? teacher.email}?\n\n` +
-      `Tarifas:\n  Individual: ${ri} €/h\n  Grupal:     ${rg} €/h\n\n` +
-      `Se le enviará un email con su login y contraseña temporal.`,
+      `Tarifa individual: ${ri} €/h\n\n` +
+      `Se le enviará un email de bienvenida con el enlace para crear su contraseña.`,
     )) return;
     setBusy("approve"); setErr(null);
     try {
       const res = await fetch(`/api/admin/teachers/${teacher.id}/approve`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ rate_individual: ri, rate_group: rg }),
+        body:    JSON.stringify({ rate_individual: ri }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) {
@@ -61,7 +59,7 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
         setBusy(null);
         return;
       }
-      setDone({ tempPassword: data.tempPassword ?? null, emailSent: !!data.email_sent });
+      setDone({ setPasswordUrl: data.set_password_url ?? null, emailSent: !!data.email_sent });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error de conexión.");
       setBusy(null);
@@ -95,12 +93,12 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
         </h2>
         <p className="mt-2 text-sm text-emerald-700 dark:text-emerald-300">
           {done.emailSent
-            ? "Le enviamos un email con su login y contraseña temporal. Recarga para ver el perfil completo."
-            : "No pudimos enviar el email. Contraseña temporal generada:"}
+            ? "Le enviamos el email de bienvenida con el enlace para crear su contraseña. Recarga para ver el perfil completo."
+            : "No pudimos enviar el email. Pásale este enlace de creación de contraseña manualmente (válido 7 días):"}
         </p>
-        {done.tempPassword && (
-          <div className="mt-3 rounded-lg bg-white dark:bg-slate-900 px-3 py-2 font-mono text-sm border border-emerald-300">
-            {done.tempPassword}
+        {done.setPasswordUrl && (
+          <div className="mt-3 rounded-lg bg-white dark:bg-slate-900 px-3 py-2 font-mono text-xs break-all border border-emerald-300">
+            {done.setPasswordUrl}
           </div>
         )}
         <button
@@ -122,7 +120,7 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
             ⏳ Pendiente de aprobación
           </h2>
           <p className="mt-1 text-sm text-amber-700 dark:text-amber-300">
-            Este profesor se auto-registró el {new Date(teacher.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}. Revisa el perfil y decide.
+            Este profesor completó su registro el {new Date(teacher.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}. Revisa el perfil y decide.
           </p>
         </div>
       </div>
@@ -141,7 +139,7 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
 
       <div className="mt-5 rounded-xl bg-white/60 dark:bg-slate-900/50 border border-amber-300 dark:border-amber-500/30 p-4">
         <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-200">
-          Tarifas (revísalas antes de aprobar)
+          Tarifa individual (fijada en la invitación — ajústala solo si toca)
         </p>
         <div className="mt-3 grid sm:grid-cols-2 gap-3">
           <label className="block">
@@ -152,19 +150,7 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
               className="input-text w-full mt-1"
             />
           </label>
-          <label className="block">
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-200">Grupal €/h</span>
-            <input
-              type="number" min={0} step={0.5} value={rateGrp}
-              onChange={e => setRateGrp(e.target.value)}
-              className="input-text w-full mt-1"
-            />
-          </label>
         </div>
-        <p className="mt-2 text-[11px] text-amber-700 dark:text-amber-400">
-          Lo que envió en el formulario: <strong>{teacher.hourly_rate_individual ?? "—"} €/h</strong> individual ·
-          <strong> {teacher.hourly_rate_group ?? "—"} €/h</strong> grupal. Ajusta si toca.
-        </p>
       </div>
 
       {err && (

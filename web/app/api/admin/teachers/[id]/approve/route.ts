@@ -1,21 +1,21 @@
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import { sendWelcomeStaffEmail } from "@/lib/email/send";
+import { sendTeacherWelcomeSetPasswordEmail } from "@/lib/email/send";
 
 /**
  * POST /api/admin/teachers/[id]/approve
  *
- * Aprueba un profesor que se auto-registró via /profesor/registro.
+ * Aprueba un profesor que se auto-registró via /registro-profesor.
  * Pasos:
  *   1. Verifica que el teacher existe y está pending
  *      (registered_self=TRUE, approved_at NULL).
- *   2. Genera password temporal nuevo y actualiza users.password_hash.
- *   3. users.active = TRUE  (le permite loguearse).
- *   4. teachers.active = TRUE + approved_at + approved_by.
- *   5. Envía welcome email con el password temporal y link de login.
+ *   2. users.active = TRUE  (le permite loguearse).
+ *   3. teachers.active = TRUE + approved_at + approved_by.
+ *   4. Genera token de creación de contraseña (7 días) y envía
+ *      welcome email con el enlace — NO contraseña temporal en texto
+ *      (rediseño Gelfis 2026-08-02).
  *
  * Auth: admin / superadmin.
  */
@@ -23,6 +23,7 @@ export const runtime  = "nodejs";
 export const dynamic  = "force-dynamic";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+const SETPW_TOKEN_DAYS = 7;
 
 export async function POST(
   req: Request,
@@ -36,10 +37,9 @@ export async function POST(
   const adminId = (session.user as { id: string }).id;
   const { id: teacherId } = await params;
 
-  // Body opcional: rate_individual y rate_group (€/h). Si vienen,
-  // override de los valores que el profe puso en el form de
-  // auto-registro. Decisión Gelfis 2026-05-19: admin revisa la
-  // tarifa antes de aprobar y puede ajustarla.
+  // Body opcional: rate_individual y rate_group (€/h) — override del
+  // admin en el momento de aprobar (normalmente ya vienen fijadas por
+  // la invitación).
   let rateOverride: { rate_individual?: number; rate_group?: number } = {};
   if ((req.headers.get("content-type") ?? "").includes("application/json")) {
     try { rateOverride = await req.json(); } catch { /* no body */ }
@@ -72,23 +72,18 @@ export async function POST(
     );
   }
 
-  // Generar nuevo password temporal (no reutilizamos uno viejo).
-  const tempPassword = generateTempPassword();
-  const passwordHash = await bcrypt.hash(tempPassword, 12);
-
-  // Activar user.
+  // Activar user. Sin password temporal — creará la suya vía el enlace.
   const { error: uErr } = await sb
     .from("users")
-    .update({ active: true, password_hash: passwordHash, must_change_password: true })
+    .update({ active: true })
     .eq("id", u.id);
   if (uErr) {
     return NextResponse.json({ ok: false, error: "user_update_failed", reason: uErr.message }, { status: 500 });
   }
 
-  // Activar teacher + marcar approved + setear tarifas (override admin
-  // si vinieron, si no se quedan como el profe puso en el form). El
-  // sistema de payroll lee rate_*_cents, así que escribimos ambos sets:
-  // hourly_rate_* (€ NUMERIC legacy) y rate_*_cents (céntimos INTEGER).
+  // Activar teacher + marcar approved + tarifas override si vinieron.
+  // El sistema de payroll lee rate_*_cents, así que escribimos ambos
+  // sets: hourly_rate_* (€ NUMERIC legacy) y rate_*_cents (INTEGER).
   const teacherUpdate: Record<string, unknown> = {
     active:       true,
     approved_at:  new Date().toISOString(),
@@ -111,32 +106,38 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "teacher_update_failed", reason: tErr.message }, { status: 500 });
   }
 
-  // Mandar welcome email con el temp password.
+  // Token de creación de contraseña — misma tabla y pantalla que el
+  // reset (/reset-password?token=...), pero con validez de 7 días en
+  // vez de 1h porque es un email de bienvenida, no un reset urgente.
+  const rawToken  = randomBytes(32).toString("base64url");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+  const { error: tokErr } = await sb.from("password_reset_tokens").insert({
+    user_id:      u.id,
+    token_hash:   tokenHash,
+    expires_at:   new Date(Date.now() + SETPW_TOKEN_DAYS * 24 * 3600_000).toISOString(),
+    requested_ip: null,
+  });
+  if (tokErr) {
+    return NextResponse.json({ ok: false, error: "token_insert_failed", reason: tokErr.message }, { status: 500 });
+  }
+  const setPasswordUrl = `${PLATFORM_URL}/reset-password?token=${rawToken}`;
+
   const firstName = (u.full_name ?? "").trim().split(/\s+/)[0] || (u.full_name ?? "");
-  const emailRes = await sendWelcomeStaffEmail(u.email, {
-    name:         firstName,
-    role:         "teacher",
-    email:        u.email,
-    tempPassword,
-    platformUrl:  PLATFORM_URL,
-    language:     u.language_preference ?? "es",
+  const emailRes = await sendTeacherWelcomeSetPasswordEmail(u.email, {
+    name:           firstName,
+    email:          u.email,
+    setPasswordUrl,
+    validDays:      SETPW_TOKEN_DAYS,
+    language:       u.language_preference ?? "es",
   });
 
   return NextResponse.json({
     ok:           true,
     teacher_id:   t.id,
     email_sent:   emailRes.ok,
-    // En caso de que el email falle, devolvemos el password para que
-    // admin pueda comunicárselo manualmente.
-    tempPassword: emailRes.ok ? null : tempPassword,
+    // Si el email falla, devolvemos el enlace para que el admin pueda
+    // pasárselo manualmente (WhatsApp etc).
+    set_password_url: emailRes.ok ? null : setPasswordUrl,
     email_error:  emailRes.ok ? null : ("error" in emailRes ? emailRes.error : "unknown"),
   });
-}
-
-function generateTempPassword(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-  const bytes = randomBytes(12);
-  let out = "";
-  for (let i = 0; i < 12; i++) out += alphabet[bytes[i] % alphabet.length];
-  return out;
 }

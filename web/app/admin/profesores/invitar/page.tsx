@@ -1,27 +1,34 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
-import { listActiveInvitations, buildInvitationUrl } from "@/lib/teacher-invitations";
+import { listInvitations, buildInvitationUrl, invitationStatus } from "@/lib/teacher-invitations";
 import { InviteTeacherPanel } from "./InviteTeacherPanel";
 
 export const dynamic  = "force-dynamic";
 export const metadata = { title: "Invitar profesor · Admin" };
 
 /**
- * Página admin para generar links de invitación a profesores. El
- * candidato abre el link y se auto-registra en /profesor/registro.
- * Tras enviar el form, queda pendiente de aprobación manual.
+ * Página admin para invitar profesores por email. El admin fija las
+ * condiciones acordadas (tarifa individual, rango, trials) que se
+ * aplican al perfil cuando el candidato completa su registro en
+ * /registro-profesor. Tras completarse, queda pendiente de aprobación.
  */
 export default async function InviteTeacherPage() {
   await requireRole(["superadmin", "admin"]);
-  const invitations = await listActiveInvitations();
+  const invitations = await listInvitations();
   const list = invitations.map(inv => ({
-    id:         inv.id,
-    code:       inv.code,
-    email:      inv.email,
-    notes:      inv.notes,
-    created_at: inv.created_at,
-    expires_at: inv.expires_at,
-    url:        buildInvitationUrl(inv.code),
+    id:              inv.id,
+    code:            inv.code,
+    email:           inv.email,
+    name:            inv.name,
+    notes:           inv.notes,
+    rate_individual: inv.rate_individual_eur,
+    rango:           inv.rango,
+    accepts_trials:  inv.accepts_trials,
+    created_at:      inv.created_at,
+    expires_at:      inv.expires_at,
+    last_sent_at:    inv.last_sent_at,
+    status:          invitationStatus(inv),
+    url:             buildInvitationUrl(inv.code),
   }));
 
   return (
@@ -34,9 +41,10 @@ export default async function InviteTeacherPage() {
           Invitar profesor
         </h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Genera un link que el candidato puede usar para auto-registrarse
-          con todos sus datos. Tras enviarlo, recibirás una notificación
-          para revisar el perfil y aprobarlo.
+          Configura las condiciones acordadas y envía la invitación por
+          email. El candidato completa sus datos con tus condiciones ya
+          fijadas (no puede editarlas). Al completar, recibirás una
+          notificación para aprobar el perfil con 1 click.
         </p>
       </div>
 
