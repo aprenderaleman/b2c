@@ -197,33 +197,27 @@ async function run(req: Request) {
       });
     }
 
-    // WhatsApp T+0 — sin mención al depósito (Gelfis 2026-07-04: Stiv
-    // no habla del depósito en ningún canal). Bloque CONFIRMO/CAMBIAR
-    // que activa reschedule_flow.py de agents Python cuando llegue
-    // la respuesta.
+    // WhatsApp T+0 — SIEMPRE sin mención al depósito (Gelfis 2026-07-04
+    // + reafirmado 2026-08-05: Stiv no habla del depósito en ningún canal).
+    // Antes había una variante `isMetaAdsPaid && !paid` que mandaba
+    // upsell inline "activar tu Agenda Prioritaria por 10€" — violaba
+    // la regla. Eliminada. Ahora todos los flows usan el copy estándar
+    // aprobado, salvo los VIP que ya pagaron (variante paid).
     let waOk: boolean | null = null;
     if (lead.whatsapp_normalized) {
-      // Variantes específicas del funnel /meta-ads-paid (Gelfis
-      // 2026-07-28). Los demás flows mantienen el copy estándar sin
-      // mención al depósito.
       let waText: string;
       if (isMetaAdsPaid && paid) {
-        // Pagó → confirmación VIP con mención a su meta.
-        waText = `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\n🌟 Tu Agenda Prioritaria está confirmada para\n${startDate}.\n\nTu profesor ya prepara la clase enfocada en ${goalLabel}. 🎯\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\n⚠️ Responde "CONFIRMO" para asegurar tu asistencia o "CAMBIAR" si necesitas otro horario.\n\n— Stiv · Aprender-Aleman.de`;
-      } else if (isMetaAdsPaid && !paid) {
-        // No pagó → confirmación normal + soft-reminder del depósito.
-        waText = `¡Hola ${leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\nTu clase está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\n💡 ¿Quieres activar tu Agenda Prioritaria por 10€? Tu profesor prepara la clase para tu objetivo y los 10€ se descuentan íntegros de tu programa:\n${STRIPE_DEPOSIT_URL}\n\n⚠️ Responde "CONFIRMO" para asegurar tu asistencia o "CAMBIAR" si necesitas otra fecha.\n\n— Stiv · Aprender-Aleman.de`;
+        // Lead VIP (ya pagó la Agenda Prioritaria) → confirmación
+        // reconociendo el estado + copy amable estándar.
+        waText = `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\n🌟 Tu Agenda Prioritaria está confirmada para\n${startDate}.\n\nTu profesor ya prepara la clase enfocada en ${goalLabel}. 🎯\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
       } else {
-        // Flow estándar (no meta-ads-paid) — mantiene el copy actual.
-        // Copy actualizado 2026-08-02 tras incidente trial-slot-release:
-        // eliminada la amenaza "sin tu respuesta en 12h tu slot se
-        // libera". Ver docs/no-auto-cancel-policy.md — el sistema NO
-        // libera slots por falta de confirmación. La confirmación suma
-        // señal (leads.trial_confirmed_at + badge en ficha del profe),
-        // nunca resta clase.
-        waText = language === "de"
-          ? `Hallo ${leadFirst}! Ich bin Stiv von der Akademie Aprender-Aleman.de 👋\n\nDeine Deutsch-Probestunde ist gebucht für\n${startDate}.\n\n🔗 Hier kommst du am Tag der Stunde rein:\n${joinUrl}\n\nAntworte mit "CONFIRMO", damit dein Lehrer weiß, dass du kommst — und wenn du nicht kannst, sag es mir und wir buchen problemlos um 😊\n\n— Stiv · Aprender-Aleman.de`
-          : `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
+        // Copy estándar único para todos los demás flows (incluye
+        // meta-ads-paid sin depósito). Copy actualizado 2026-08-02
+        // tras incidente trial-slot-release: eliminada la amenaza
+        // "sin tu respuesta en 12h tu slot se libera". Ver
+        // docs/no-auto-cancel-policy.md — el sistema NO libera slots
+        // por falta de confirmación.
+        waText = `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
       }
 
       const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
