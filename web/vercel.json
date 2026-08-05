@@ -11,6 +11,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/cron/stripe-reconcile",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/class-reminders",
       "schedule": "*/10 * * * *"
     },

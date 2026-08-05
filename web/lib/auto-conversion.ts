@@ -64,10 +64,50 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
   };
 
   if (ld.converted_to_user_id) {
-    console.log("[auto-conversion] lead already converted:", ld.id);
+    // Caso real Nancy 2026-08-05: el closer confirmó el pago MANUALMENTE
+    // antes de que llegara el webhook (entrega retrasada). La conversión
+    // manual (convertLeadToStudent pelado) no rellena los campos Stripe,
+    // ni el balance de clases, ni la oferta, ni comisiones. Completamos
+    // aquí lo que falta en vez de solo marcar accepted_at y salir.
+    console.log("[auto-conversion] lead already converted:", ld.id, "— completando datos");
     await sb.from("ofertas_enviadas")
       .update({ accepted_at: new Date().toISOString() })
       .eq("id", opts.ofertaId);
+
+    const { data: existingStudent } = await sb
+      .from("students")
+      .select("id, oferta_id, stripe_customer_id")
+      .eq("user_id", ld.converted_to_user_id)
+      .maybeSingle();
+    const es = existingStudent as { id: string; oferta_id: string | null; stripe_customer_id: string | null } | null;
+
+    // Si ya tiene oferta ligada, el flujo automático ya corrió antes —
+    // no tocar nada (idempotencia).
+    if (!es || es.oferta_id) return;
+
+    const lateClassesRemaining = of.tipo_pago === "suscripcion"
+      ? (of.clases_por_mes ?? of.clases_totales)
+      : of.clases_totales;
+    const lateFields: Record<string, unknown> = {
+      clases_totales:        of.clases_totales,
+      clases_desbloqueadas:  lateClassesRemaining,
+      oferta_id:             opts.ofertaId,
+      conversion_source:     "stripe_auto_late",
+      commission_window_end: new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    if (!es.stripe_customer_id && opts.stripeCustomerId) {
+      lateFields.stripe_customer_id = opts.stripeCustomerId;
+    }
+    if (of.tipo_pago === "suscripcion") {
+      lateFields.stripe_subscription_status = "active";
+    }
+    await sb.from("students").update(lateFields).eq("id", es.id);
+
+    await registerConversionExtras({
+      sb, of, ld, opts,
+      studentId: es.id,
+      skipPostConversionFlow: true,   // el welcome ya salió con la conversión manual
+    });
     return;
   }
 
@@ -129,7 +169,49 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     .update({ accepted_at: new Date().toISOString() })
     .eq("id", opts.ofertaId);
 
-  if (result.studentId && opts.amountCents > 0) {
+  if (result.studentId) {
+    await registerConversionExtras({
+      sb, of, ld, opts,
+      studentId: result.studentId,
+      skipPostConversionFlow: false,
+    });
+  }
+
+  console.log(`[auto-conversion] lead ${ld.id} → student ${result.studentId} via oferta ${opts.ofertaId}`);
+}
+
+type OfertaRow = {
+  id: string; lead_id: string; teacher_id: string | null;
+  closer_id: string | null;
+  meta: string; ritmo: string | null; tipo_pago: string;
+  clases_totales: number; clases_por_mes: number | null;
+  importe_cents: number; accepted_at: string | null;
+};
+
+type LeadRow = {
+  id: string; name: string | null; email: string | null;
+  whatsapp_normalized: string | null; status: string;
+  converted_to_user_id: string | null; meta: Record<string, unknown> | null;
+  closer_id: string | null;
+  fbclid: string | null;
+};
+
+/**
+ * Comisiones + escenario + post-conversion + Meta CAPI + timeline.
+ * Compartido por el camino normal (webhook convierte) y el tardío
+ * (closer convirtió manualmente y el webhook llegó después).
+ */
+async function registerConversionExtras({
+  sb, of, ld, opts, studentId, skipPostConversionFlow,
+}: {
+  sb: ReturnType<typeof supabaseAdmin>;
+  of: OfertaRow;
+  ld: LeadRow;
+  opts: AutoConvertOpts;
+  studentId: string;
+  skipPostConversionFlow: boolean;
+}): Promise<void> {
+  if (opts.amountCents > 0) {
     const closerId = of.closer_id ?? ld.closer_id;
     const { data: trialClass } = await sb
       .from("classes")
@@ -153,14 +235,14 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     if (scenario === "E1" && trialTeacherId) {
       await registerBonoCierre({
         teacherId: trialTeacherId,
-        studentId: result.studentId,
+        studentId,
         stripePiId: opts.stripePiId,
         studentName: ld.name ?? "Estudiante",
       });
 
       await registerCommission({
         teacherId: trialTeacherId,
-        studentId: result.studentId,
+        studentId,
         amountCents: opts.amountCents,
         currency: opts.currency,
         stripePiId: opts.stripePiId,
@@ -195,17 +277,19 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
       .update({ escenario: scenario })
       .eq("id", opts.ofertaId);
 
-    const ritmoLabel = of.ritmo ?? "";
-    const packLabel = `${ritmoLabel} · ${of.clases_totales} clases`;
-    await runPostConversionFlow({
-      leadId: ld.id,
-      studentId: result.studentId,
-      leadName: ld.name ?? "Estudiante",
-      closerId: effectiveCloserId,
-      trialTeacherId: trialTeacherId ?? null,
-      trialAttended,
-      packLabel,
-    }).catch(err => console.error("[auto-conversion] post-conversion failed:", err));
+    if (!skipPostConversionFlow) {
+      const ritmoLabel = of.ritmo ?? "";
+      const packLabel = `${ritmoLabel} · ${of.clases_totales} clases`;
+      await runPostConversionFlow({
+        leadId: ld.id,
+        studentId,
+        leadName: ld.name ?? "Estudiante",
+        closerId: effectiveCloserId,
+        trialTeacherId: trialTeacherId ?? null,
+        trialAttended,
+        packLabel,
+      }).catch(err => console.error("[auto-conversion] post-conversion failed:", err));
+    }
   }
 
   try {
@@ -216,15 +300,8 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
 
   // ═══ Meta CAPI Purchase (server-side) ═══
   // Dispara Purchase con el valor REAL del pack (Gelfis 2026-07-28).
-  // Antes solo mandábamos Schedule al agendar la trial → Meta optimizaba
-  // por "quien reserva" en vez de "quien compra". Ahora aprende quién
-  // convierte a pack real → optimización de campañas mejora sustancialmente.
-  //
-  // eventId = stripe payment_intent.id → dedup determinista si algún día
-  // añadimos también un browser fbq Purchase en la thank-you page del pago.
-  //
-  // Errores NO abortan la conversión — Meta CAPI puede tener downtime y
-  // la venta real ya está registrada. Log y seguimos.
+  // eventId = stripe payment_intent.id → dedup determinista.
+  // Errores NO abortan la conversión — la venta real ya está registrada.
   const purchaseValueEur = opts.amountCents / 100;
   const eventIdPurchase = `sale_${opts.stripePiId}`;
   try {
@@ -255,8 +332,6 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
       has_fbclid:       !!ld.fbclid,
     },
   }).then(() => {}, () => {});
-
-  console.log(`[auto-conversion] lead ${ld.id} → student ${result.studentId} via oferta ${opts.ofertaId}`);
 }
 
 async function isCloserAttribution(leadId: string, closerId: string): Promise<boolean> {

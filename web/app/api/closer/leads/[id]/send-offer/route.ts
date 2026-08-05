@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import type Stripe from "stripe";
 import { resolveCloserActor } from "@/lib/closer-auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import { stripeUS, findOrCreateCustomer } from "@/lib/stripe";
+import { buildPagoUrl } from "@/lib/enrollment-checkout";
 import { startChain } from "@/lib/chain-engine";
 import { logCloserAction } from "@/lib/closer-actions";
 import { RITMOS, ONE_TIME_PACKS, type RitmoId, type GoalId } from "@/lib/trial-packs";
@@ -121,83 +120,11 @@ export async function POST(
 
   const ofertaId = (oferta as { id: string }).id;
 
-  let checkoutUrl: string;
-  try {
-    const stripe = stripeUS();
-    const enrollmentMeta: Record<string, string> = {
-      type: "enrollment",
-      oferta_id: ofertaId,
-      lead_id: leadId,
-      closer_id: closerId,
-      ...(teacherId ? { teacher_id: teacherId } : {}),
-    };
-
-    let customerId: string | undefined;
-    if (leadRow.email) {
-      try {
-        customerId = await findOrCreateCustomer("us", {
-          email: leadRow.email,
-          name: leadRow.name ?? undefined,
-          metadata: { lead_id: leadId },
-        });
-      } catch { /* fall back to customer_email */ }
-    }
-
-    const successUrl = `${SITE_URL}/inscripcion-exitosa?oferta=${ofertaId}`;
-    const cancelUrl = `${SITE_URL}/`;
-
-    let sessionParams: Stripe.Checkout.SessionCreateParams;
-
-    if (tipo_pago === "suscripcion" && monthlyPriceCents) {
-      sessionParams = {
-        mode: "subscription",
-        ...(customerId ? { customer: customerId } : { customer_email: leadRow.email ?? undefined }),
-        line_items: [{
-          quantity: 1,
-          price_data: {
-            currency: "eur",
-            unit_amount: monthlyPriceCents,
-            recurring: { interval: "month" },
-            product_data: {
-              name: productName,
-              description: `${clases_por_mes} clases/mes · ${clases_totales} clases en total`,
-            },
-          },
-        }],
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: enrollmentMeta,
-        subscription_data: { metadata: enrollmentMeta },
-      };
-    } else {
-      sessionParams = {
-        mode: "payment",
-        payment_method_types: ["card"],
-        ...(customerId ? { customer: customerId } : { customer_email: leadRow.email ?? undefined }),
-        line_items: [{
-          quantity: 1,
-          price_data: {
-            currency: "eur",
-            unit_amount: importe_cents,
-            product_data: {
-              name: productName,
-              description: `${clases_totales} clases de alemán`,
-            },
-          },
-        }],
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: enrollmentMeta,
-        payment_intent_data: { metadata: enrollmentMeta },
-      };
-    }
-
-    const stripeSession = await stripe.checkout.sessions.create(sessionParams);
-    checkoutUrl = stripeSession.url!;
-  } catch (err) {
-    console.error("[closer/send-offer] Stripe error:", err);
-    return NextResponse.json({ error: "stripe_error" }, { status: 502 });
-  }
+  // Link corto en nuestro dominio (b2c.../pago/xxx). La Checkout
+  // Session real se crea cuando el lead VISITA el link — así el
+  // mensaje de WhatsApp lleva una URL limpia (no la de 500+ chars de
+  // checkout.stripe.com, caso Nancy 2026-08-05) y el link no caduca.
+  const checkoutUrl = buildPagoUrl(ofertaId);
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,

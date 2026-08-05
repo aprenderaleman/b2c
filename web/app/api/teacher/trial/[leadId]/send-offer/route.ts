@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import type Stripe from "stripe";
 import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
 import { markTrialAttendedAwaitingConversion, type AttendedOptions } from "@/lib/admin-actions";
 import { supabaseAdmin } from "@/lib/supabase";
-import { stripeUS, findOrCreateCustomer } from "@/lib/stripe";
+import { buildPagoUrl } from "@/lib/enrollment-checkout";
 import {
   RITMOS, ONE_TIME_PACKS, KIDS_PACK,
   type RitmoId, type GoalId, type PlanCategory, type PaymentType,
@@ -170,83 +169,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
 
   const ofertaId = (oferta as { id: string }).id;
 
-  let checkoutUrl: string;
-  try {
-    const stripe = stripeUS();
-    const enrollmentMeta: Record<string, string> = {
-      type: "enrollment",
-      oferta_id: ofertaId,
-      lead_id: leadId,
-      teacher_id: teacherId,
-    };
-
-    let customerId: string | undefined;
-    if (leadEmail) {
-      try {
-        customerId = await findOrCreateCustomer("us", {
-          email: leadEmail,
-          name: leadName ?? undefined,
-          metadata: { lead_id: leadId },
-        });
-      } catch { /* fall back to customer_email */ }
-    }
-
-    const successUrl = `${SITE_URL}/inscripcion-exitosa?oferta=${ofertaId}`;
-    const cancelUrl = `${SITE_URL}/`;
-
-    let sessionParams: Stripe.Checkout.SessionCreateParams;
-
-    if (tipo_pago === "suscripcion" && monthlyPriceCents) {
-      sessionParams = {
-        mode: "subscription",
-        ...(customerId ? { customer: customerId } : { customer_email: leadEmail ?? undefined }),
-        line_items: [{
-          quantity: 1,
-          price_data: {
-            currency: "eur",
-            unit_amount: monthlyPriceCents,
-            recurring: { interval: "month" },
-            product_data: {
-              name: productName,
-              description: `${clases_por_mes} clases/mes · ${clases_totales} clases en total`,
-            },
-          },
-        }],
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: enrollmentMeta,
-        subscription_data: { metadata: enrollmentMeta },
-      };
-    } else {
-      sessionParams = {
-        mode: "payment",
-        payment_method_types: ["card"],
-        ...(customerId ? { customer: customerId } : { customer_email: leadEmail ?? undefined }),
-        line_items: [{
-          quantity: 1,
-          price_data: {
-            currency: "eur",
-            unit_amount: importe_cents,
-            product_data: {
-              name: productName,
-              description: `${clases_totales} clases de alemán`,
-            },
-          },
-        }],
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: enrollmentMeta,
-        payment_intent_data: { metadata: enrollmentMeta },
-      };
-    }
-
-    const session = await stripe.checkout.sessions.create(sessionParams);
-    checkoutUrl = session.url!;
-    console.log("[send-offer] checkout session created:", session.id);
-  } catch (err) {
-    console.error("[send-offer] Stripe checkout creation failed:", err);
-    return NextResponse.json({ error: "stripe_error" }, { status: 502 });
-  }
+  // Link corto en nuestro dominio — la Checkout Session real se crea
+  // cuando el lead visita el link (ver lib/enrollment-checkout.ts).
+  const checkoutUrl = buildPagoUrl(ofertaId);
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,

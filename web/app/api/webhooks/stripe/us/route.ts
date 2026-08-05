@@ -3,6 +3,10 @@ import { constructEvent } from "@/lib/stripe";
 import { processStripeEvent } from "../_shared";
 
 export const runtime = "nodejs";
+// La conversión automática (emails + WhatsApp + comisiones) puede
+// superar el límite por defecto → Stripe veía timeout y reintentaba
+// sin éxito (caso Nancy 2026-08-05).
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const body = await req.text();

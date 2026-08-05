@@ -3,6 +3,9 @@ import { constructEvent } from "@/lib/stripe";
 import { processStripeEvent } from "../_shared";
 
 export const runtime = "nodejs";
+// Igual que /us: la conversión automática puede superar el límite por
+// defecto → timeouts → Stripe reintenta sin éxito.
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   const body = await req.text();
