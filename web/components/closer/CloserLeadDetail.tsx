@@ -344,7 +344,11 @@ export function CloserLeadDetail({
             <Layer2Actions
               leadId={lead.id}
               leadName={lead.name ?? "Lead"}
-              onOpenSendOffer={() => setShowSaleModal(true)}
+              leadEmail={lead.email}
+              leadPhone={lead.whatsapp_normalized}
+              leadLanguage={(lead.language === "de" ? "de" : "es")}
+              leadGermanLevel={lead.german_level ?? null}
+              leadGoal={lead.goal ?? null}
             />
           )}
 

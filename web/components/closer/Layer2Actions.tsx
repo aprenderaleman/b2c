@@ -4,11 +4,18 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CopyMessagePanel } from "./CopyMessagePanel";
 import { RITMOS, ACTION_BUTTONS, type ActionButton } from "@/lib/closer-constants";
+import { PaymentLinkModal } from "@/app/profesor/clasedeprueba/PaymentLinkModal";
+import { ConfirmPaymentModal } from "@/components/teacher/ConfirmPaymentModal";
 
 type Props = {
   leadId: string;
   leadName: string;
-  onOpenSendOffer: () => void;
+  /** Datos para ConfirmPaymentModal (mismo form que el Trial Hub del profe) */
+  leadEmail?: string | null;
+  leadPhone?: string | null;
+  leadLanguage?: "es" | "de";
+  leadGermanLevel?: string | null;
+  leadGoal?: string | null;
 };
 
 type ActiveAction =
@@ -18,7 +25,15 @@ type ActiveAction =
   | { type: "copy_panel"; action: string; label: string; message: string; extras?: Record<string, string> };
 
 
-export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
+export function Layer2Actions({
+  leadId,
+  leadName,
+  leadEmail,
+  leadPhone,
+  leadLanguage,
+  leadGermanLevel,
+  leadGoal,
+}: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
@@ -27,6 +42,39 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
   const [fecha, setFecha] = useState("");
   const [nota, setNota] = useState("");
   const [loading, setLoading] = useState(false);
+  const [enlaceOpen, setEnlaceOpen] = useState(false);
+  const [confirmPagoOpen, setConfirmPagoOpen] = useState(false);
+  const [rescheduling, setRescheduling] = useState(false);
+
+  // Mismo comportamiento que el botón 📅 Reagendar del Trial Hub del profe
+  const handleReagendar = async () => {
+    if (!confirm(
+      "REAGENDAR clase de prueba.\n\n" +
+      "Esto va a:\n" +
+      "  • Cancelar la clase futura del lead (si existe).\n" +
+      "  • Enviar por WhatsApp el link a /agendar/cuando.\n" +
+      "  • Cambiar el estado del lead a 'Reagendando'.\n\n" +
+      "Cuando el lead elija nuevo horario, vuelve a 'Clase agendada' automáticamente.\n\n" +
+      "¿Continuar?"
+    )) return;
+    setRescheduling(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/teacher/trial/${leadId}/send-reschedule-link`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.reason ?? `HTTP ${res.status}`);
+      alert("💬 Mensaje de reagendar enviado.");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al enviar reagendamiento");
+    } finally {
+      setRescheduling(false);
+    }
+  };
 
   const executeAction = (action: string, extras?: Record<string, string>) => {
     setError(null);
@@ -72,8 +120,20 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
   };
 
   const handleClick = (btn: ActionButton) => {
-    if (btn.isLink) {
-      onOpenSendOffer();
+    if (btn.isEnlace) {
+      setEnlaceOpen(true);
+      return;
+    }
+    if (btn.isConfirmarPago) {
+      setConfirmPagoOpen(true);
+      return;
+    }
+    if (btn.isReagendar) {
+      void handleReagendar();
+      return;
+    }
+    if (btn.isWebLink) {
+      window.open(`https://www.aprender-aleman.de/inscripciones?ref=${leadId}`, "_blank", "noopener,noreferrer");
       return;
     }
     if (btn.needsRitmo) {
@@ -129,7 +189,7 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
             <button
               key={btn.action}
               onClick={() => handleClick(btn)}
-              disabled={pending || loading}
+              disabled={pending || loading || rescheduling}
               className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
             >
               <span className="text-lg flex-shrink-0">{btn.icon}</span>
@@ -226,6 +286,28 @@ export function Layer2Actions({ leadId, leadName, onOpenSendOffer }: Props) {
             {pending ? "Guardando..." : "Programar"}
           </button>
         </div>
+      )}
+
+      {/* Modales compartidos con el Trial Hub del profesor */}
+      {enlaceOpen && (
+        <PaymentLinkModal
+          leadId={leadId}
+          leadName={leadName}
+          onClose={() => { setEnlaceOpen(false); router.refresh(); }}
+        />
+      )}
+
+      {confirmPagoOpen && (
+        <ConfirmPaymentModal
+          leadId={leadId}
+          leadName={leadName}
+          leadEmail={leadEmail ?? null}
+          leadPhone={leadPhone ?? null}
+          leadLanguage={leadLanguage ?? "es"}
+          leadGermanLevel={leadGermanLevel ?? null}
+          leadGoal={leadGoal ?? null}
+          onClose={() => { setConfirmPagoOpen(false); router.refresh(); }}
+        />
       )}
     </section>
   );

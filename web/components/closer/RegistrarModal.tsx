@@ -198,7 +198,6 @@ export function RegistrarModal({ leadId, leadName, taskId, onClose, onVenta }: P
               <Layer2Actions
                 leadId={leadId}
                 leadName={leadName}
-                onOpenSendOffer={() => { onClose(); onVenta(); }}
               />
               <button
                 onClick={() => { router.refresh(); onClose(); }}
