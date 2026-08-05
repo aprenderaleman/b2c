@@ -150,15 +150,11 @@ export type ActionButton = {
 };
 
 export const ACTION_BUTTONS: ActionButton[] = [
-  { action: "reagendar", label: "Reagendar", icon: "\u{1f4c5}", description: "Enviar link para elegir nuevo horario", isReagendar: true },
-  { action: "no_contesto", label: "No contesto", icon: "\u{1f4f5}", description: "Cadena de seguimiento", isCopy: true },
-  { action: "enviar_info", label: "Enviar info", icon: "\u{1f4cb}", description: "Info de cursos", isCopy: true },
-  { action: "enviar_propuesta", label: "Propuesta", icon: "\u{1f4b0}", description: "Seleccionar ritmo", needsRitmo: true },
+  { action: "reagendar", label: "Enviar enlace Clase de prueba", icon: "\u{1f4c5}", description: "Link para elegir nuevo horario de trial", isReagendar: true },
   { action: "seguimiento_fecha", label: "Seguimiento", icon: "\u{1f4c6}", description: "Programar seguimiento", needsFecha: true },
-  { action: "enviar_enlace", label: "Enviar enlace", icon: "\u{1f4b3}", description: "Enlace de inscripcion (Stripe)", isEnlace: true },
+  { action: "enviar_enlace", label: "Enviar enlace de inscripcion", icon: "\u{1f4b3}", description: "Enlace de pago (Stripe)", isEnlace: true },
   { action: "confirmar_pago", label: "Confirmar pago", icon: "✅", description: "Crear estudiante y accesos", isConfirmarPago: true },
   { action: "pagina_web", label: "Página web", icon: "\u{1f310}", description: "Inscripciones en la web", isWebLink: true },
-  { action: "pasar_reactivacion", label: "Reactivacion", icon: "\u{1f504}", description: "Pasar a reactivacion", isCopy: true },
 ];
 
 /* ── Task type → template action mapping (for inline message preview) ── */
