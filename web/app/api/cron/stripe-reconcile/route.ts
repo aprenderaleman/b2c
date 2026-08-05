@@ -35,7 +35,8 @@ const EVENT_TYPES = [
   "customer.subscription.deleted",
 ];
 
-const LOOKBACK_SECONDS = 60 * 60;   // 1h — cubre de sobra el ciclo de 5 min
+const DEFAULT_LOOKBACK_HOURS = 1;   // cubre de sobra el ciclo de 5 min
+const MAX_LOOKBACK_HOURS     = 72;  // ?hours=N para recuperaciones puntuales
 
 function authorised(req: Request): boolean {
   const expected = process.env.CRON_SECRET;
@@ -53,6 +54,12 @@ async function run(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const url = new URL(req.url);
+  const hoursParam = Number(url.searchParams.get("hours") ?? DEFAULT_LOOKBACK_HOURS);
+  const lookbackHours = Number.isFinite(hoursParam)
+    ? Math.min(Math.max(hoursParam, 1), MAX_LOOKBACK_HOURS)
+    : DEFAULT_LOOKBACK_HOURS;
+
   const sb = supabaseAdmin();
   const results: Record<string, { checked: number; recovered: number; errors: number }> = {};
 
@@ -65,7 +72,7 @@ async function run(req: Request) {
     try { stripe = getStripeClient(account); }
     catch { continue; }
 
-    const since = Math.floor(Date.now() / 1000) - LOOKBACK_SECONDS;
+    const since = Math.floor(Date.now() / 1000) - lookbackHours * 3600;
 
     for (const type of EVENT_TYPES) {
       try {
