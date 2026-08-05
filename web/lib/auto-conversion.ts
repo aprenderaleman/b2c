@@ -92,7 +92,9 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
       clases_totales:        of.clases_totales,
       clases_desbloqueadas:  lateClassesRemaining,
       oferta_id:             opts.ofertaId,
-      conversion_source:     "stripe_auto_late",
+      // OJO: students_conversion_source_check solo permite
+      // stripe_auto | manual | legacy — no inventar valores nuevos.
+      conversion_source:     "stripe_auto",
       commission_window_end: new Date(Date.now() + 6 * 30 * 24 * 60 * 60 * 1000).toISOString(),
     };
     if (!es.stripe_customer_id && opts.stripeCustomerId) {
@@ -101,7 +103,10 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     if (of.tipo_pago === "suscripcion") {
       lateFields.stripe_subscription_status = "active";
     }
-    await sb.from("students").update(lateFields).eq("id", es.id);
+    const { error: lateErr } = await sb.from("students").update(lateFields).eq("id", es.id);
+    if (lateErr) {
+      console.error("[auto-conversion] late student update failed:", lateErr.message);
+    }
 
     await registerConversionExtras({
       sb, of, ld, opts,

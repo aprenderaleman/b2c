@@ -200,6 +200,13 @@ async function handlePaymentIntentSucceeded(
     return;
   }
 
+  // Si el PI pertenece a un invoice (cobro de suscripción), lo maneja
+  // handleInvoicePaid — evita la fila duplicada tipo "other" (caso
+  // Nancy 2026-08-05). En API nuevas el campo puede no venir; el
+  // dedup heurístico del invoice handler cubre ese hueco.
+  const piInvoice = (pi as unknown as { invoice?: string | { id: string } | null }).invoice;
+  if (piInvoice) return;
+
   // Skip if already handled via checkout.session.completed
   const { data: dup } = await sb
     .from("payments")
@@ -277,7 +284,21 @@ async function handleInvoicePaid(
     ? piRaw
     : piRaw?.id ?? null;
 
-  // Skip if already handled by checkout or payment_intent events
+  // Dedup 1: por invoice id — invoice.paid e invoice.payment_succeeded
+  // llegan AMBOS para el mismo cobro (caso Nancy 2026-08-05: 320€
+  // insertados 3 veces). El índice único de migración 105 es la última
+  // línea de defensa; este check evita el error de insert.
+  if (invoice.id) {
+    const { data: dupInv } = await sb
+      .from("payments")
+      .select("id")
+      .eq("stripe_invoice_id", invoice.id)
+      .maybeSingle();
+    if (dupInv) return;
+  }
+
+  // Dedup 2: por payment_intent (si el API aún lo incluye — las
+  // versiones nuevas de Stripe ya no lo mandan en el invoice).
   if (piId) {
     const { data: dup } = await sb
       .from("payments")
@@ -312,22 +333,50 @@ async function handleInvoicePaid(
     (line) => (line as unknown as { type?: string }).type === "subscription" || line.description?.includes("×"),
   );
 
-  await sb.from("payments").insert({
-    student_id: (student as { id: string }).id,
-    amount_cents: eurCents,
-    currency: "EUR",
-    type: isSubscription ? "subscription_payment" : "package",
-    status: "paid",
-    paid_at: invoice.status_transitions?.paid_at
-      ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
-      : new Date().toISOString(),
-    stripe_payment_intent_id: piId,
-    stripe_account: account,
-    original_currency: currency,
-    original_amount_cents: amountPaid,
-    exchange_rate: rate,
-    stripe_charge_id: null,
-  });
+  // Dedup 3 (heurístico): el payment_intent.succeeded del mismo cobro
+  // pudo insertar ya una fila (sin invoice id y, en API nuevas, sin
+  // forma de cruzarlos). Mismo student + mismo importe original a ±1h
+  // del paid_at del invoice = mismo cobro. Los renewals legítimos van
+  // con ~1 mes de separación, así que la ventana es segura. Se ancla
+  // al paid_at del INVOICE (no a "ahora") para que también funcione
+  // cuando el evento llega tarde vía el cron stripe-reconcile.
+  const invoicePaidMs = invoice.status_transitions?.paid_at
+    ? invoice.status_transitions.paid_at * 1000
+    : Date.now();
+  const { data: recentSameAmount } = await sb
+    .from("payments")
+    .select("id")
+    .eq("student_id", (student as { id: string }).id)
+    .eq("original_amount_cents", amountPaid)
+    .gte("paid_at", new Date(invoicePaidMs - 3600_000).toISOString())
+    .lte("paid_at", new Date(invoicePaidMs + 3600_000).toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (recentSameAmount) {
+    // Ya hay fila del PI — solo estampamos el invoice id para que el
+    // dedup 1 corte el segundo evento invoice.* de este cobro.
+    await sb.from("payments")
+      .update({ stripe_invoice_id: invoice.id ?? null, type: isSubscription ? "subscription_payment" : "package" })
+      .eq("id", (recentSameAmount as { id: string }).id);
+  } else {
+    await sb.from("payments").insert({
+      student_id: (student as { id: string }).id,
+      amount_cents: eurCents,
+      currency: "EUR",
+      type: isSubscription ? "subscription_payment" : "package",
+      status: "paid",
+      paid_at: invoice.status_transitions?.paid_at
+        ? new Date(invoice.status_transitions.paid_at * 1000).toISOString()
+        : new Date().toISOString(),
+      stripe_payment_intent_id: piId,
+      stripe_invoice_id: invoice.id ?? null,
+      stripe_account: account,
+      original_currency: currency,
+      original_amount_cents: amountPaid,
+      exchange_rate: rate,
+      stripe_charge_id: null,
+    });
+  }
 
   // Subscription renewal: unlock classes + register commission if in window
   if (isSubscription) {
