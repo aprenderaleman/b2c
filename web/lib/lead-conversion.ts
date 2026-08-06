@@ -8,6 +8,7 @@ import {
   type SubscriptionType,
 } from "./students";
 import { sendWelcomeStudentEmail } from "./email/send";
+import { issueGarantiaCertificate, type GarantiaSource } from "./garantia-cert";
 import { sendWhatsappText } from "./whatsapp";
 import { getLeadTrialTeacher } from "./trial-compensation";
 
@@ -165,6 +166,64 @@ export async function convertLeadToStudent(
   const hansUrl     = process.env.HANS_URL     ?? "https://hans.aprender-aleman.de";
   const schuleUrl   = process.env.SCHULE_URL   ?? "https://schule.aprender-aleman.de";
 
+  // ═══ Garantía de Nivel por Escrito (Gelfis 2026-08-06) ═══
+  // PDF personalizado emitido en cada conversión del Método Nativo y
+  // adjuntado al email de bienvenida. También queda como certificado
+  // en el perfil (panel del estudiante + ficha admin). Best-effort:
+  // si falla, la conversión sigue y el cert puede emitirse después
+  // desde el backfill admin.
+  let garantiaAttachment: { filename: string; content: Buffer; contentType?: string } | undefined;
+  try {
+    let source: GarantiaSource;
+    if (options?.ofertaId) {
+      const { data: ofertaRow } = await sb
+        .from("ofertas_enviadas")
+        .select("meta, ritmo, tipo_pago, clases_totales")
+        .eq("id", options.ofertaId)
+        .maybeSingle();
+      const ofr = ofertaRow as { meta: string; ritmo: string | null; tipo_pago: string; clases_totales: number } | null;
+      source = {
+        meta:            ofr?.meta ?? body.goal,
+        ritmo:           ofr?.ritmo ?? null,
+        tipoPago:        ofr?.tipo_pago ?? null,
+        clasesTotales:   ofr?.clases_totales ?? (body.classesRemaining || null),
+        fechaConversion: new Date(),
+      };
+    } else {
+      // Conversión manual (transferencia / closer): derivar el ritmo
+      // de las clases/mes cuando el combo coincide con el catálogo.
+      const ritmoFromCadence =
+        body.classesPerMonth === 6  ? "viajero"     :
+        body.classesPerMonth === 8  ? "estandar"    :
+        body.classesPerMonth === 12 ? "intensivo"   :
+        body.classesPerMonth === 16 ? "vip_express" : null;
+      source = {
+        meta:            body.goal,
+        ritmo:           body.subscriptionType === "monthly_subscription" ? ritmoFromCadence : null,
+        tipoPago:        body.subscriptionType === "monthly_subscription" ? "suscripcion" : "unico",
+        clasesTotales:   body.classesRemaining || null,
+        fechaConversion: new Date(),
+      };
+    }
+
+    if (created.studentId) {
+      const issued = await issueGarantiaCertificate({
+        studentId:      created.studentId,
+        nombreCompleto: body.fullName,
+        source,
+      });
+      if (issued) {
+        garantiaAttachment = {
+          filename:    `Garantia-de-Nivel-${issued.numero}.pdf`,
+          content:     issued.pdfBuffer,
+          contentType: "application/pdf",
+        };
+      }
+    }
+  } catch (e) {
+    console.error("[convert] garantia issuance failed (non-fatal):", e instanceof Error ? e.message : e);
+  }
+
   const emailResult = await sendWelcomeStudentEmail(body.email, {
     name:                body.fullName.split(/\s+/)[0] || body.fullName,
     email:               body.email,
@@ -184,7 +243,7 @@ export async function convertLeadToStudent(
       body.language,
     ),
     language: body.language,
-  });
+  }, garantiaAttachment ? [garantiaAttachment] : undefined);
 
   if (!emailResult.ok) {
     await sb.from("lead_timeline").insert({

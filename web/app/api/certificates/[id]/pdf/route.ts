@@ -3,6 +3,7 @@ import PDFDocument from "pdfkit";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getCertificateById, certificateLevelLabel } from "@/lib/certificates";
+import { issueGarantiaCertificate } from "@/lib/garantia-cert";
 
 function formatDateDE(iso: string): string {
   const d = new Date(iso);
@@ -40,6 +41,27 @@ export async function GET(
   const uRaw = (s as { users: unknown } | null)?.users;
   const u = (Array.isArray(uRaw) ? uRaw[0] : uRaw) as { full_name: string | null; email: string } | undefined;
   const studentName = u?.full_name ?? u?.email ?? "Teilnehmer/in";
+
+  // La Garantía de Nivel tiene su propia plantilla (A4 vertical,
+  // navy/dorado, español) — regenerada desde la metadata del cert.
+  if (cert.type === "garantia_nivel") {
+    const issued = await issueGarantiaCertificate({
+      studentId:      cert.student_id,
+      nombreCompleto: studentName,
+      // source se ignora: el cert ya existe y se regenera de su metadata
+      source: { meta: null, ritmo: null, tipoPago: null, clasesTotales: null, fechaConversion: new Date(cert.issued_at) },
+    });
+    if (!issued) return NextResponse.json({ error: "pdf_failed" }, { status: 500 });
+    const ab = new ArrayBuffer(issued.pdfBuffer.byteLength);
+    new Uint8Array(ab).set(issued.pdfBuffer);
+    return new NextResponse(ab, {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `inline; filename="Garantia-de-Nivel-${(studentName || "estudiante").replace(/[^a-zA-Z0-9]+/g, "-")}.pdf"`,
+        "Content-Length": String(issued.pdfBuffer.byteLength),
+      },
+    });
+  }
 
   const levelLabel = certificateLevelLabel(cert.type);
   const isLevelCert = !!levelLabel;

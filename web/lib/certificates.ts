@@ -4,7 +4,7 @@ import { createNotification } from "./notifications";
 export type CertificateType =
   | "classes_50" | "classes_100"
   | "level_a1" | "level_a2" | "level_b1" | "level_b2" | "level_c1"
-  | "exam_passed";
+  | "exam_passed" | "garantia_nivel";
 
 export type CertificateRow = {
   id:            string;
@@ -45,6 +45,8 @@ export function certificateTitle(type: CertificateType, extraLabel?: string | nu
       return { title: "Nivel C1 alcanzado", description: "Usuario competente — fluidez y precisión en contextos profesionales." };
     case "exam_passed":
       return { title: `Examen oficial aprobado${extraLabel ? ` — ${extraLabel}` : ""}`, description: "Superado con éxito en el centro oficial correspondiente." };
+    case "garantia_nivel":
+      return { title: "Garantía de Nivel por Escrito", description: "Compromiso por escrito: si no alcanzas tu nivel objetivo, continuamos tus clases gratis hasta que lo consigas." };
   }
 }
 

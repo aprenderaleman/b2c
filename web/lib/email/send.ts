@@ -331,9 +331,10 @@ export async function sendRaw(
 export async function sendWelcomeStudentEmail(
   to: string,
   vars: WelcomeStudentVars,
+  attachments?: EmailAttachment[],
 ): Promise<SendResult> {
   const { subject, html, text } = renderWelcomeStudent(vars);
-  return sendRaw(to, subject, html, text);
+  return sendRaw(to, subject, html, text, attachments);
 }
 
 /**
