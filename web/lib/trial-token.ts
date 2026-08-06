@@ -104,10 +104,18 @@ declare const __leadJoinUrlBrand: unique symbol;
 export type LeadJoinUrl = string & { readonly [__leadJoinUrlBrand]: true };
 
 /**
- * Construye el URL que damos al LEAD para que entre al aula sin
- * login. Preferimos el shortcode (`/c/{code}`) porque es corto y se
- * lee bien en WhatsApp; si la clase no tiene shortcode (datos viejos
- * pre-migración 036) caemos al URL signed `/trial/{id}?t={token}`.
+ * Construye el URL que damos al LEAD para que entre al aula sin login.
+ *
+ * SIEMPRE usa el shortcode (`/c/{code}`) — se lee bien en WhatsApp.
+ * A partir de migración 102 (2026-08-06), `classes.short_code` es
+ * NOT NULL con default vía trigger `classes_ensure_short_code_trg`,
+ * así que en producción SIEMPRE hay shortCode.
+ *
+ * Fallback al URL signed largo `/trial/{id}?t={token}` ELIMINADO:
+ * causaba mensajes feos (~200 chars). Si un caller pasa shortCode
+ * null/vacío indica bug de datos — logueamos error y usamos el fallback
+ * largo SOLO como último recurso para no romper al lead. En producción
+ * este path no debería tomarse jamás.
  *
  * ÚNICA forma soportada de obtener un LeadJoinUrl. NO hagas cast
  * desde string — eso burla la garantía de tipos y rompemos a los
@@ -121,10 +129,17 @@ export function buildLeadJoinUrl(opts: {
 }): LeadJoinUrl {
   const base = (opts.baseUrl ?? process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de")
     .replace(/\/$/, "");
-  const raw = opts.shortCode
-    ? `${base}/c/${opts.shortCode}`
-    : `${base}/trial/${opts.classId}?t=${encodeURIComponent(buildTrialToken(opts.leadId, opts.classId))}`;
-  return raw as LeadJoinUrl;
+  if (opts.shortCode && opts.shortCode.length > 0) {
+    return `${base}/c/${opts.shortCode}` as LeadJoinUrl;
+  }
+  // Guard rail: no debería pasar tras migración 102. Log alto + fallback
+  // al URL largo para no dejar al lead sin acceso al aula.
+  console.error(
+    `[buildLeadJoinUrl] short_code missing for class ${opts.classId} — ` +
+    `usando fallback URL largo. Investigar por qué el trigger BD no lo generó.`,
+  );
+  const token = encodeURIComponent(buildTrialToken(opts.leadId, opts.classId));
+  return `${base}/trial/${opts.classId}?t=${token}` as LeadJoinUrl;
 }
 
 /**
@@ -143,16 +158,12 @@ export function assertLeadJoinUrl(url: string, context: string): void {
 
 /**
  * URL para clases de prueba (is_trial=true) destinado a CUALQUIER
- * recipient (profesor, lead, admin). Prefiere `/c/{short_code}` porque:
+ * recipient (profesor, lead, admin). SIEMPRE `/c/{short_code}` — tras
+ * migración 102 short_code es NOT NULL con default vía trigger.
  *
- *  - El lead lo necesita (entra sin auth).
- *  - El profesor también lo recibe — si bien `/aula/{id}` le funciona
- *    autenticado, Gelfis pidió que TODAS las notificaciones de trial
- *    lleven el short-code para que el link sea uniforme entre canales
- *    (email, WhatsApp, in-app) y entre destinatarios.
- *
- * Fallback a `/aula/{id}` solo si por alguna razón la clase no tiene
- * short_code (datos pre-migración 036 — no debería pasar en producción).
+ * Si por bug de datos falta short_code, log de error + fallback a
+ * `/aula/{id}` (el profe autenticado igual entra; el lead necesitaría
+ * el URL largo con token, pero ese caso lo cubre buildLeadJoinUrl).
  */
 export function buildTrialClassUrl(opts: {
   classId:    string;
@@ -161,7 +172,12 @@ export function buildTrialClassUrl(opts: {
 }): string {
   const base = (opts.baseUrl ?? process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de")
     .replace(/\/$/, "");
-  return opts.shortCode
-    ? `${base}/c/${opts.shortCode}`
-    : `${base}/aula/${opts.classId}`;
+  if (opts.shortCode && opts.shortCode.length > 0) {
+    return `${base}/c/${opts.shortCode}`;
+  }
+  console.error(
+    `[buildTrialClassUrl] short_code missing for class ${opts.classId} — ` +
+    `usando fallback /aula/{id}. Investigar por qué el trigger BD no lo generó.`,
+  );
+  return `${base}/aula/${opts.classId}`;
 }

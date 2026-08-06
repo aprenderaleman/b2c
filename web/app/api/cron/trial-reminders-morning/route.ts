@@ -196,9 +196,11 @@ async function run(req: Request) {
       // trial-reminders-2h. Ahora este único mensaje matutino avisa +
       // recomienda preparación, así el lead recibe 3 WA en el día
       // (morning + 15m + confirmación previa) en vez de 4.
-      const waText = lead.language === "de"
-        ? `Guten Morgen ${leadFirst}! Heute ist der Tag.\n\nDeutsch-Stunde um ${timeLabel}.\n\nEmpfehlung:\n- Computer mit Kamera und Mikrofon\n- Ruhiger Ort\n\n🔗 Hier kommst du rein:\n${leadJoinUrl}\n\nWir sehen uns endlich heute 😊`
-        : `¡Buenos días ${leadFirst}! Hoy es el día.\n\nClase de alemán a las ${timeLabel}.\n\nTe recomiendo:\n- Computador con cámara y micrófono\n- Lugar tranquilo\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}\n\nWir sehen uns endlich heute 😊`;
+      //
+      // Fix Gelfis 2026-08-06: eliminada frase "Wir sehen uns endlich
+      // heute 😊" del copy ES — residuo del cleanup DE que salía a todos
+      // los leads matutinos. Idioma unificado a ES (task #36).
+      const waText = `¡Buenos días ${leadFirst}! Hoy es el día 😊\n\nTu clase de alemán es a las ${timeLabel}.\n\nTe recomiendo:\n- Computador con cámara y micrófono\n- Lugar tranquilo\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}`;
       const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_morning" });
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
       else console.error(`[trial-reminders-morning] lead WA failed for ${r.id}: ${wa.reason}`);

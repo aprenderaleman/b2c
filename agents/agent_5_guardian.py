@@ -11,7 +11,7 @@ Triggers:
 Pre-class reminders are owned by the web side now:
   * /api/cron/trial-reminders-24h    — 24h-before email (lead + teacher)
   * /api/cron/trial-reminders-morning — 8 AM same-day email (lead + teacher)
-  * scheduler._notify_trials_30min   — 30-min-before WhatsApp (lead + teacher)
+  * /api/cron/trial-reminders-15m     — 15-min-before WhatsApp TS (lead)
 
 Absent follow-ups: la cadena legacy tick_absent_followups (4 mensajes
 D+1/D+3/D+5/D+7) fue ELIMINADA (Gelfis 2026-08-01). Ahora el flujo es:
