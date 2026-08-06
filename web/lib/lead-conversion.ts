@@ -245,6 +245,15 @@ export async function convertLeadToStudent(
     language: body.language,
   }, garantiaAttachment ? [garantiaAttachment] : undefined);
 
+  // Guard anti-duplicados del email de garantía (caso Javier
+  // 2026-08-06): marcar que este estudiante ya recibió su PDF para
+  // que el backfill nunca se lo reenvíe.
+  if (emailResult.ok && garantiaAttachment && created.studentId) {
+    await sb.from("students")
+      .update({ garantia_email_sent_at: new Date().toISOString() })
+      .eq("id", created.studentId);
+  }
+
   if (!emailResult.ok) {
     await sb.from("lead_timeline").insert({
       lead_id: lead.id,

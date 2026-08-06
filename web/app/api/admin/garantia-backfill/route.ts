@@ -47,7 +47,7 @@ export async function POST(req: Request) {
   }
 
   type ExtraEntry = { student_id: string; meta?: string; ritmo?: string; tipo_pago?: string; clases_totales?: number; converted_at?: string };
-  let body: { dry_run?: boolean; extra?: ExtraEntry[]; send_email?: boolean } = {};
+  let body: { dry_run?: boolean; extra?: ExtraEntry[]; send_email?: boolean; force_email?: boolean } = {};
   try { body = await req.json(); } catch { /* defaults */ }
   const dryRun = body.dry_run ?? true;
   const sendEmail = body.send_email ?? true;
@@ -142,8 +142,22 @@ export async function POST(req: Request) {
         continue;
       }
 
+      // Guard anti-duplicados (caso Javier 2026-08-06: 3 emails por
+      // re-emisiones). El flag en students sobrevive a borrados del
+      // cert; solo force_email explícito lo salta.
       let emailed = false;
-      if (sendEmail && c.email) {
+      let emailBlocked = false;
+      if (sendEmail && c.email && !body.force_email) {
+        const { data: st } = await sb
+          .from("students")
+          .select("garantia_email_sent_at")
+          .eq("id", c.studentId)
+          .maybeSingle();
+        if ((st as { garantia_email_sent_at: string | null } | null)?.garantia_email_sent_at) {
+          emailBlocked = true;
+        }
+      }
+      if (sendEmail && c.email && !emailBlocked) {
         const firstName = c.name.split(/\s+/)[0] || c.name;
         const res = await sendRaw(
           c.email,
@@ -156,9 +170,20 @@ export async function POST(req: Request) {
           [{ filename: `Garantia-de-Nivel-${issued.numero}.pdf`, content: issued.pdfBuffer, contentType: "application/pdf" }],
         );
         emailed = res.ok;
+        if (res.ok) {
+          await sb.from("students")
+            .update({ garantia_email_sent_at: new Date().toISOString() })
+            .eq("id", c.studentId);
+        }
       }
 
-      results.push({ studentId: c.studentId, name: c.name, numero: issued.numero, emailed });
+      results.push({
+        studentId: c.studentId,
+        name: c.name,
+        numero: issued.numero,
+        emailed,
+        ...(emailBlocked ? { skipped: "email_already_sent" } : {}),
+      });
     } catch (e) {
       results.push({ studentId: c.studentId, name: c.name, error: e instanceof Error ? e.message : "unknown" });
     }
