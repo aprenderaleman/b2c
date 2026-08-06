@@ -141,9 +141,6 @@ export function buildGarantiaPdf(v: GarantiaPdfVars): Promise<Buffer> {
   body("✓  Completar al menos el 85% de tus ejercicios en la plataforma SCHULE", { bold: true });
   body("Podrás consultar el estado de tu garantía en cualquier momento desde tu panel de estudiante.");
 
-  sectionTitle("CÓMO SE VERIFICA EL NIVEL");
-  body("El nivel alcanzado se evalúa al completar el programa mediante nuestra prueba de nivel interna (equivalente al marco MCER) y/o simulacro de examen oficial Goethe/TELC según tu meta.");
-
   sectionTitle("CONDICIONES GENERALES");
   const conds = [
     `La garantía cubre el programa contratado y su nivel objetivo: ${v.metaLabel}`,
@@ -170,11 +167,6 @@ export function buildGarantiaPdf(v: GarantiaPdfVars): Promise<Buffer> {
     .text("DE NIVEL", sealX - 30, sealY - 4, { width: 60, align: "center", characterSpacing: 1 });
   doc.font("Helvetica").fontSize(5.5).fillColor(GOLD)
     .text("APRENDER-ALEMAN.DE", sealX - 30, sealY + 6, { width: 60, align: "center" });
-
-  // Línea de firma a la izquierda
-  doc.lineWidth(0.7).strokeColor(NAVY).moveTo(76, footY + 34).lineTo(260, footY + 34).stroke();
-  doc.font("Helvetica").fontSize(8).fillColor(GRAY)
-    .text("Gelfis Horn · Fundador", 76, footY + 39, { width: 184 });
 
   doc.font("Helvetica").fontSize(7.5).fillColor(GRAY)
     .text(
