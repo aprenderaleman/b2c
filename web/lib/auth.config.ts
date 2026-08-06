@@ -21,6 +21,23 @@ const PROTECTED: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/chat",       roles: ["superadmin", "admin", "teacher", "student"] },
 ];
 
+/**
+ * Lee el class_id del payload de la cookie aa_trial_session SIN
+ * verificar la firma (edge runtime, solo para routing — la
+ * verificación HMAC real vive en lib/trial-token.ts server-side).
+ */
+function decodeTrialCookieClassId(raw: string): string | null {
+  try {
+    const body = raw.split(".")[0];
+    if (!body) return null;
+    const json = atob(body.replace(/-/g, "+").replace(/_/g, "/"));
+    const payload = JSON.parse(json) as { class_id?: string };
+    return payload.class_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function defaultPathForRole(role: Role): string {
   switch (role) {
     case "superadmin":
@@ -85,7 +102,20 @@ export const authConfig: NextAuthConfig = {
       const isTrialOpenRoute = gate.prefix === "/aula" || gate.prefix === "/grabacion";
       if (isTrialOpenRoute) {
         const trialCookie = request.cookies.get("aa_trial_session")?.value;
-        if (trialCookie) return true;
+        // La cookie vale solo si apunta a ESTA clase. Si es de una
+        // clase anterior (lead reagendado con cookie vieja), tratamos
+        // el hit como sin credencial → trial-recover le emite la
+        // sesión correcta. La verificación HMAC real sigue siendo
+        // server-side en /aula — aquí solo leemos el payload para
+        // decidir el routing (edge-safe, sin crypto).
+        if (trialCookie) {
+          const cookieClassId = decodeTrialCookieClassId(trialCookie);
+          const pathClassId = pathname.match(/^\/(?:aula|grabacion)\/([0-9a-f-]{36})/i)?.[1];
+          if (!pathClassId || !cookieClassId || cookieClassId === pathClassId) {
+            return true;
+          }
+          // cookie de OTRA clase → sigue al fallback ?t / recover
+        }
         // Fallback magic-link: `?t=<token>` en la URL. Algunos in-app
         // browsers descartan cookies seteadas durante 302s (WhatsApp/IG
         // en iOS son los principales infractores); el token también
