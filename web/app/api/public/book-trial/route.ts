@@ -275,6 +275,11 @@ export async function POST(req: Request) {
       language:             b.language,
       status:               "trial_scheduled",
       trial_scheduled_at:   b.slot_iso,
+      // Caso Andreina 2026-08-06: al reagendar, la phase
+      // AWAITING_TEACHER_REBOOK quedaba puesta y TODOS los crons de
+      // recordatorio saltaban al lead (llegó a su clase sin ningún
+      // recordatorio ni link a mano). Al agendar SIEMPRE se limpia.
+      reschedule_state:     null,
       landing_intent:       updateLanding,
       motivo_inicial:       updateMotivoIni,
       ...adAttribution,
