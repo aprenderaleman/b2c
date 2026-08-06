@@ -46,7 +46,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  type ExtraEntry = { student_id: string; meta?: string; ritmo?: string; tipo_pago?: string; clases_totales?: number };
+  type ExtraEntry = { student_id: string; meta?: string; ritmo?: string; tipo_pago?: string; clases_totales?: number; converted_at?: string };
   let body: { dry_run?: boolean; extra?: ExtraEntry[]; send_email?: boolean } = {};
   try { body = await req.json(); } catch { /* defaults */ }
   const dryRun = body.dry_run ?? true;
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
       ritmo:     extra.ritmo ?? null,
       tipoPago:  extra.tipo_pago ?? (row.subscription_type === "monthly_subscription" ? "suscripcion" : "unico"),
       clases:    extra.clases_totales ?? row.classes_remaining,
-      converted: row.created_at,
+      converted: extra.converted_at ?? row.created_at,
     });
   }
 
