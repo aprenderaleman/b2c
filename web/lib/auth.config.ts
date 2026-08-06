@@ -93,6 +93,22 @@ export const authConfig: NextAuthConfig = {
         // code en /aula/[id] valida HMAC server-side — la edge
         // middleware solo gatekeepea presencia para no rechazar al lead.
         if (request.nextUrl.searchParams.get("t")) return true;
+
+        // Caso Andreina 2026-08-06: el profe compartió la URL pelada
+        // /aula/{id} (copiada del navegador) y el lead rebotó a /login
+        // justo antes de su clase de prueba. En vez de login, mandamos
+        // al recuperador: si la clase es trial, redirige a /c/{code}
+        // (mismo nivel de acceso — quien tiene el UUID de la clase
+        // tendría acceso igual con el shortcode). Si no es trial,
+        // el recuperador devuelve al login normal.
+        if (!auth?.user) {
+          const m = pathname.match(/^\/(?:aula|grabacion)\/([0-9a-f-]{36})/i);
+          if (m) {
+            return Response.redirect(
+              new URL(`/trial-recover?class=${m[1]}&from=${gate.prefix.slice(1)}`, request.nextUrl),
+            );
+          }
+        }
       }
 
       if (!auth?.user) return false;   // NextAuth will redirect to /login
