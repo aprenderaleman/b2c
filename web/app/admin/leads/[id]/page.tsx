@@ -37,10 +37,29 @@ export default async function LeadDetail({
   const lead = await getLeadById(id);
   if (!lead) notFound();
 
-  const [timeline, notes] = await Promise.all([
+  const [timeline, notes, closerAcciones] = await Promise.all([
     getTimeline(lead.id),
     getGelfisNotes(lead.id),
+    supabaseAdmin()
+      .from("acciones_closer")
+      .select("id, tipo, contenido, resultado, created_at, closer_id")
+      .eq("lead_id", lead.id)
+      .order("created_at", { ascending: false })
+      .limit(50)
+      .then(r => r.data ?? []),
   ]);
+
+  // Resolve closer name if there are actions
+  let closerName: string | null = null;
+  if (closerAcciones.length > 0) {
+    const cid = (closerAcciones[0] as { closer_id: string }).closer_id;
+    const { data: cu } = await supabaseAdmin()
+      .from("users")
+      .select("full_name")
+      .eq("id", cid)
+      .maybeSingle();
+    closerName = ((cu as { full_name: string | null } | null)?.full_name ?? "").split(/\s+/)[0] || "Closer";
+  }
 
   // If the lead has been converted, resolve the student_id so the
   // "Ver estudiante →" link on <LeadActions> can link to it directly.
@@ -285,7 +304,7 @@ export default async function LeadDetail({
             />
           )}
 
-          <Panel title="Notas de Gelfis">
+          <Panel title="Notas">
             <form
               action={`/api/admin/leads/${lead.id}/notes`}
               method="post"
@@ -302,15 +321,57 @@ export default async function LeadDetail({
               <button type="submit" className="btn-primary text-sm">Añadir nota</button>
             </form>
             <ul className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
-              {notes.length === 0 && <li className="py-2 text-sm text-slate-500 dark:text-slate-400">Aún no hay notas.</li>}
-              {notes.map((n) => (
-                <li key={n.id} className="py-2">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">{new Date(n.created_at).toLocaleString("es-ES")}</div>
-                  <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{n.note}</div>
-                </li>
-              ))}
+              {(() => {
+                const closerNotes = closerAcciones
+                  .filter((a: Record<string, unknown>) => a.tipo === "nota" && a.contenido)
+                  .map((a: Record<string, unknown>) => ({
+                    id: `cn-${a.id}`,
+                    author: closerName ?? "Closer",
+                    text: a.contenido as string,
+                    at: a.created_at as string,
+                  }));
+                const allNotes = [
+                  ...notes.map((n) => ({ id: `gn-${n.id}`, author: "Gelfis", text: n.note, at: n.created_at })),
+                  ...closerNotes,
+                ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+                if (allNotes.length === 0) return <li className="py-2 text-sm text-slate-500 dark:text-slate-400">Aún no hay notas.</li>;
+                return allNotes.map((n) => (
+                  <li key={n.id} className="py-2">
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{n.author}</span>
+                      <span>{new Date(n.at).toLocaleString("es-ES")}</span>
+                    </div>
+                    <div className="text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{n.text}</div>
+                  </li>
+                ));
+              })()}
             </ul>
           </Panel>
+
+          {closerAcciones.length > 0 && (
+            <Panel title={`Acciones del Closer${closerName ? ` (${closerName})` : ""} — ${closerAcciones.length}`}>
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {closerAcciones.map((a) => {
+                  const ac = a as { id: string; tipo: string; contenido: string | null; resultado: string | null; created_at: string };
+                  return (
+                    <li key={ac.id} className="py-2">
+                      <div className="flex items-center gap-2 text-xs">
+                        <CloserAccionBadge tipo={ac.tipo} resultado={ac.resultado} />
+                        <span className="ml-auto text-slate-400 dark:text-slate-500">
+                          {new Date(ac.created_at).toLocaleString("es-ES")}
+                        </span>
+                      </div>
+                      {ac.contenido && (
+                        <div className="mt-1 text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                          {ac.contenido}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </Panel>
+          )}
         </div>
 
         {/* RIGHT: timeline */}
@@ -337,6 +398,25 @@ function motivoInicialLabel(m: NonNullable<Awaited<ReturnType<typeof getLeadById
     case "otro":         return "Otro motivo";
     default:             return "—";
   }
+}
+
+const ACCION_STYLE: Record<string, { emoji: string; label: string; cls: string }> = {
+  contactado:    { emoji: "✅", label: "Contactado",   cls: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" },
+  no_contesto:   { emoji: "📵", label: "No contestó",  cls: "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300" },
+  buzon:         { emoji: "📬", label: "Buzón de voz",  cls: "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300" },
+  reagendado:    { emoji: "🔄", label: "Reagendado",    cls: "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300" },
+  nota:          { emoji: "📝", label: "Nota",          cls: "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300" },
+  no_interesado: { emoji: "❌", label: "No interesado", cls: "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300" },
+  venta:         { emoji: "💰", label: "Venta",         cls: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" },
+};
+
+function CloserAccionBadge({ tipo, resultado }: { tipo: string; resultado: string | null }) {
+  const style = ACCION_STYLE[tipo] ?? ACCION_STYLE[resultado ?? ""] ?? { emoji: "·", label: tipo, cls: "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400" };
+  return (
+    <span className={`rounded-full px-2 py-0.5 font-medium text-xs ${style.cls}`}>
+      {style.emoji} {style.label}
+    </span>
+  );
 }
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {

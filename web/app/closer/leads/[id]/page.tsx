@@ -123,6 +123,7 @@ export default async function CloserLeadPage({
         tasks={tasks}
         ventaPendiente={ventaPendiente}
         notes={notes}
+        acciones={(acciones as Array<{ id: string; tipo: string; contenido: string | null; resultado: string | null; created_at: string }>)}
         leadTipo={leadTipo}
         activeTrial={activeTrial}
         teacherName={teacherName}

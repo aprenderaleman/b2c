@@ -80,6 +80,22 @@ export function TrialClassCard({
               <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{row.leadFirstNote}</p>
             </div>
           )}
+
+          {/* Closer notes */}
+          {row.closerNotes.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-500 dark:text-violet-400 mb-1">
+                Notas del Closer
+              </div>
+              {row.closerNotes.map((cn, i) => (
+                <div key={i} className="mb-1">
+                  <span className="text-[10px] font-semibold text-violet-400 dark:text-violet-500">{cn.author}</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-1">· {new Date(cn.created_at).toLocaleString("es-ES")}</span>
+                  <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{cn.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Action buttons */}

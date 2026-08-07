@@ -61,11 +61,20 @@ type ActiveTrial = {
   short_code: string | null;
 } | null;
 
+type AccionCloserRow = {
+  id: string;
+  tipo: string;
+  contenido: string | null;
+  resultado: string | null;
+  created_at: string;
+};
+
 type Props = {
   lead: Lead;
   tasks: TareaCloser[];
   ventaPendiente: VentaPendiente;
   notes?: LeadNote[];
+  acciones?: AccionCloserRow[];
   leadTipo?: string | null;
   activeTrial?: ActiveTrial;
   teacherName?: string | null;
@@ -88,11 +97,31 @@ const URGENCY_LABEL: Record<string, string> = {
   just_looking:   "Solo mirando",
 };
 
+const ACCION_STYLE: Record<string, { emoji: string; label: string; cls: string }> = {
+  contactado:    { emoji: "✅", label: "Contactado",   cls: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" },
+  no_contesto:   { emoji: "📵", label: "No contestó",  cls: "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300" },
+  buzon:         { emoji: "📬", label: "Buzón de voz",  cls: "bg-amber-100 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300" },
+  reagendado:    { emoji: "🔄", label: "Reagendado",    cls: "bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300" },
+  nota:          { emoji: "📝", label: "Nota",          cls: "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300" },
+  no_interesado: { emoji: "❌", label: "No interesado", cls: "bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300" },
+  venta:         { emoji: "💰", label: "Venta",         cls: "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" },
+};
+
+function AccionBadge({ tipo, resultado }: { tipo: string; resultado: string | null }) {
+  const style = ACCION_STYLE[tipo] ?? ACCION_STYLE[resultado ?? ""] ?? { emoji: "·", label: tipo, cls: "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400" };
+  return (
+    <span className={`rounded-full px-2 py-0.5 font-medium text-xs ${style.cls}`}>
+      {style.emoji} {style.label}
+    </span>
+  );
+}
+
 export function CloserLeadDetail({
   lead,
   tasks,
   ventaPendiente,
   notes,
+  acciones,
   leadTipo,
   activeTrial,
   teacherName,
@@ -350,6 +379,29 @@ export function CloserLeadDetail({
               leadGermanLevel={lead.german_level ?? null}
               leadGoal={lead.goal ?? null}
             />
+          )}
+
+          {/* Action history */}
+          {acciones && acciones.length > 0 && (
+            <Panel title={`Mi historial (${acciones.length})`}>
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {acciones.map((a) => (
+                  <li key={a.id} className="py-2">
+                    <div className="flex items-center gap-2 text-xs">
+                      <AccionBadge tipo={a.tipo} resultado={a.resultado} />
+                      <span className="ml-auto text-slate-400 dark:text-slate-500">
+                        {new Date(a.created_at).toLocaleString("es-ES")}
+                      </span>
+                    </div>
+                    {a.contenido && (
+                      <div className="mt-1 text-sm text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                        {a.contenido}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </Panel>
           )}
 
         </div>

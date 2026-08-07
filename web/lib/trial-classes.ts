@@ -41,6 +41,7 @@ export type TrialClassRow = {
   depositIntentAt:    string | null;
   qualificationAnswers: { goal?: string; level?: string; deadline?: string } | null;
   landingIntent:      string | null;
+  closerNotes:        Array<{ author: string; content: string; created_at: string }>;
 };
 
 /**
@@ -140,17 +141,39 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
     ),
   );
   const firstNoteByLead = new Map<string, { content: string; timestamp: string; author: string | null }>();
+  const closerNotesByLead = new Map<string, Array<{ author: string; content: string; created_at: string }>>();
   if (leadIds.length > 0) {
-    const { data: notes } = await sb
-      .from("lead_timeline")
-      .select("lead_id, content, timestamp, author")
-      .eq("type", "agent_note")
-      .in("lead_id", leadIds)
-      .order("timestamp", { ascending: true });
+    const [{ data: notes }, { data: cNotes }] = await Promise.all([
+      sb.from("lead_timeline")
+        .select("lead_id, content, timestamp, author")
+        .eq("type", "agent_note")
+        .in("lead_id", leadIds)
+        .order("timestamp", { ascending: true }),
+      sb.from("acciones_closer")
+        .select("lead_id, contenido, created_at, closer_id")
+        .eq("tipo", "nota")
+        .not("contenido", "is", null)
+        .in("lead_id", leadIds)
+        .order("created_at", { ascending: false }),
+    ]);
     for (const n of (notes ?? []) as Array<{ lead_id: string; content: string; timestamp: string; author: string | null }>) {
       if (!firstNoteByLead.has(n.lead_id)) {
         firstNoteByLead.set(n.lead_id, { content: n.content, timestamp: n.timestamp, author: n.author });
       }
+    }
+    // Resolve closer names
+    const closerIds = new Set((cNotes ?? []).map((n: Record<string, unknown>) => n.closer_id as string));
+    const closerNameMap = new Map<string, string>();
+    if (closerIds.size > 0) {
+      const { data: users } = await sb.from("users").select("id, full_name").in("id", [...closerIds]);
+      for (const u of (users ?? []) as Array<{ id: string; full_name: string | null }>) {
+        closerNameMap.set(u.id, (u.full_name ?? "").split(/\s+/)[0] || "Closer");
+      }
+    }
+    for (const n of (cNotes ?? []) as Array<{ lead_id: string; contenido: string; created_at: string; closer_id: string }>) {
+      const list = closerNotesByLead.get(n.lead_id) ?? [];
+      list.push({ author: closerNameMap.get(n.closer_id) ?? "Closer", content: n.contenido, created_at: n.created_at });
+      closerNotesByLead.set(n.lead_id, list);
     }
   }
 
@@ -192,6 +215,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       depositIntentAt:     lead?.deposit_intent_at ?? null,
       qualificationAnswers: lead?.qualification_answers ?? null,
       landingIntent:       lead?.landing_intent ?? null,
+      closerNotes:         lead?.id ? closerNotesByLead.get(lead.id) ?? [] : [],
     };
   });
 }

@@ -259,6 +259,24 @@ export function TrialHubCard({
               </div>
             )}
 
+            {/* Closer notes */}
+            {row.closerNotes.length > 0 && (
+              <div className="rounded-lg bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/30 p-3 space-y-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-violet-500 dark:text-violet-400">
+                  Notas del Closer
+                </div>
+                {row.closerNotes.map((cn, i) => (
+                  <div key={i}>
+                    <div className="flex items-center gap-2 text-[10px] text-violet-400 dark:text-violet-500">
+                      <span className="font-semibold">{cn.author}</span>
+                      <span>{new Date(cn.created_at).toLocaleString("es-ES")}</span>
+                    </div>
+                    <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{cn.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Notes */}
             <NotesField classId={row.classId} initialNotes={row.scriptTeacherNotes} />
 
