@@ -94,11 +94,18 @@ async function generateCertPdf(cert: {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const role = (session.user as { role: string }).role;
-  if (role !== "admin" && role !== "superadmin") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // Auth: session OR internal secret (for CLI calls)
+  const bearer = req.headers.get("authorization");
+  const internalSecret = process.env.B2C_NOTIFY_SECRET || process.env.CRON_SECRET;
+  const isSecretAuth = bearer && internalSecret && bearer === `Bearer ${internalSecret}`;
+
+  if (!isSecretAuth) {
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const role = (session.user as { role: string }).role;
+    if (role !== "admin" && role !== "superadmin") {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
   }
 
   const { studentId, certId, teacherEmail, teacherName } = await req.json();
