@@ -164,7 +164,7 @@ export async function canViewRecording(
   const sb = supabaseAdmin();
   const { data: rec } = await sb
     .from("recordings")
-    .select("id, class_id, status")
+    .select("id, class_id, status, shared_with_teachers")
     .eq("id", recordingId)
     .maybeSingle();
   if (!rec) return { ok: false };
@@ -187,12 +187,17 @@ export async function canViewRecording(
   const teacher = (cls as { teacher: unknown }).teacher;
   const tFlat = (Array.isArray(teacher) ? teacher[0] : teacher) as { user_id: string } | null;
 
-  // Trials: solo superadmin y el profesor asignado.
+  // Trials: superadmin y el profesor asignado. Con el flag
+  // shared_with_teachers (migración 109, formación interna) cualquier
+  // profesor activo logueado también puede verla.
   if (isTrial) {
     if (role === "superadmin") {
       return { ok: true, classId: (rec as { class_id: string }).class_id };
     }
     if (role === "teacher" && tFlat?.user_id === userId) {
+      return { ok: true, classId: (rec as { class_id: string }).class_id };
+    }
+    if (role === "teacher" && (rec as { shared_with_teachers?: boolean }).shared_with_teachers) {
       return { ok: true, classId: (rec as { class_id: string }).class_id };
     }
     return { ok: false };
