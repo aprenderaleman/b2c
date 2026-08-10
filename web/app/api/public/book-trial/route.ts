@@ -368,7 +368,7 @@ export async function POST(req: Request) {
   {
     const { data: existingTrials } = await sb
       .from("classes")
-      .select("id, scheduled_at, short_code, google_calendar_event_id, duration_minutes")
+      .select("id, scheduled_at, short_code, google_calendar_event_id, duration_minutes, teacher_id")
       .eq("lead_id", leadId)
       .eq("is_trial", true)
       .in("status", ["scheduled", "live"])
@@ -377,6 +377,7 @@ export async function POST(req: Request) {
     type ExistingTrial = {
       id: string; scheduled_at: string; short_code: string;
       google_calendar_event_id: string | null; duration_minutes: number | null;
+      teacher_id: string;
     };
     const active = (existingTrials ?? []) as ExistingTrial[];
     if (active.length > 0) {
@@ -400,10 +401,14 @@ export async function POST(req: Request) {
       // Caso B: slot distinto → auto-reschedule. UPDATE + reset notes
       // para que los crons de recordatorios re-disparen en la fecha
       // nueva. lead_timeline registra el cambio para auditoría.
+      // Bug Sabine 2026-08-10: antes NO se actualizaba teacher_id →
+      // el lead elegía un slot de otro profe pero la clase quedaba
+      // asignada al profe original (fuera de su disponibilidad).
       const { error: rescheduleErr } = await sb
         .from("classes")
         .update({
           scheduled_at:    requestedSlotIso,
+          teacher_id:      b.teacher_id,
           notes_admin:     null,
           // Fix Gelfis 2026-07-24: sin resetear notified_at el cron
           // send-trial-notifications no re-envía la confirmación con
@@ -438,8 +443,9 @@ export async function POST(req: Request) {
         }
         if (!patched) {
           // Rollback — no dejar BD y Calendar desincronizados.
+          // Restaurar teacher_id original junto con scheduled_at.
           await sb.from("classes")
-            .update({ scheduled_at: ex.scheduled_at })
+            .update({ scheduled_at: ex.scheduled_at, teacher_id: ex.teacher_id })
             .eq("id", ex.id);
           return NextResponse.json({
             error:   "gcal_patch_failed",
@@ -448,12 +454,37 @@ export async function POST(req: Request) {
         }
       }
 
+      const teacherChanged = ex.teacher_id !== b.teacher_id;
       await sb.from("lead_timeline").insert({
         lead_id: leadId,
         type:    "status_change",
         author:  "system",
-        content: `Trial reagendado vía self-service: ${existingSlotIso} → ${requestedSlotIso}. Google Calendar patched.`,
+        content: `Trial reagendado vía self-service: ${existingSlotIso} → ${requestedSlotIso}.${teacherChanged ? ` Profesor reasignado a ${match.teacherName}.` : ""} Google Calendar patched.`,
       });
+
+      if (teacherChanged) {
+        await notifyTeacherOfTrial({
+          teacherId:   b.teacher_id,
+          leadName:    b.name,
+          startIso:    requestedSlotIso,
+          germanLevel: b.german_level ?? null,
+          goal:        b.goal ?? "travel",
+          classId:     ex.id,
+        }).catch(e => console.error("[book-trial] reschedule teacher notification failed:", e));
+
+        await createTeacherTrialEvent(b.teacher_id, {
+          leadName:        b.name,
+          teacherName:     match.teacherName,
+          startIso:        requestedSlotIso,
+          durationMinutes: ex.duration_minutes ?? TRIAL_DURATION_MIN,
+          leadEmail:       b.email,
+          leadWhatsapp:    b.whatsapp_e164 ?? null,
+          germanLevel:     b.german_level ?? null,
+          goal:            b.goal ?? "travel",
+          joinUrl:         buildLeadJoinUrl({ classId: ex.id, leadId, shortCode: ex.short_code, baseUrl: PLATFORM_URL }),
+        }).catch(e => console.error("[book-trial] reschedule teacher gcal event failed:", e));
+      }
+
       const token = buildTrialToken(leadId, ex.id);
       return NextResponse.json({
         ok: true,
