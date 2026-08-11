@@ -11,6 +11,26 @@
 
 type Email = string;
 
+/**
+ * Regla única de elegibilidad de pack (caso Victoria 2026-08-07):
+ * un estudiante con clases restantes NUNCA pierde acceso a
+ * Schule/Hans aunque pack_expires_at haya pasado — esa fecha queda
+ * obsoleta en legacy/repras (Javier compró 48 clases y su fecha
+ * seguía en julio). La fecha solo bloquea cuando además no quedan
+ * clases.
+ */
+export function packEligible(s: {
+  subscription_status: string | null;
+  pack_expires_at:     string | null;
+  classes_remaining:   number | null;
+}): boolean {
+  const statusOk = s.subscription_status === "active" || s.subscription_status === "paused";
+  if (!statusOk) return false;
+  const expired = s.pack_expires_at ? new Date(s.pack_expires_at) < new Date() : false;
+  if (!expired) return true;
+  return (s.classes_remaining ?? 0) > 0;
+}
+
 export type SchuleLinkResult = {
   ok:          true;
   ssoToken:    string;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { packEligible } from "@/lib/entitlements";
 
 /**
  * GET /api/internal/student/verify?email=...
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
   const sb = supabaseAdmin();
   const { data } = await sb
     .from("users")
-    .select("id, active, students(subscription_status, pack_expires_at)")
+    .select("id, active, students(subscription_status, pack_expires_at, classes_remaining)")
     .eq("email", email)
     .maybeSingle();
 
@@ -53,22 +54,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, data: { isActiveStudent: false } });
   }
 
+  type StudentBits = { subscription_status: string; pack_expires_at: string | null; classes_remaining: number | null };
   type Row = {
     active: boolean;
-    students:
-      | { subscription_status: string; pack_expires_at: string | null }
-      | Array<{ subscription_status: string; pack_expires_at: string | null }>
-      | null;
+    students: StudentBits | StudentBits[] | null;
   };
   const r = data as Row;
   const s = Array.isArray(r.students) ? r.students[0] : r.students;
 
   const userActive = r.active;
-  const subActive  = !!s && (s.subscription_status === "active" || s.subscription_status === "paused");
-  const notExpired = !s?.pack_expires_at || new Date(s.pack_expires_at) > new Date();
+  const eligible   = !!s && packEligible(s);
 
   return NextResponse.json({
     success: true,
-    data: { isActiveStudent: Boolean(userActive && subActive && notExpired) },
+    data: { isActiveStudent: Boolean(userActive && eligible) },
   });
 }

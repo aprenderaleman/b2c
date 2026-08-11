@@ -69,6 +69,7 @@ type StudentRow = {
   user_id:                string;
   subscription_status:    string;
   pack_expires_at:        string | null;
+  classes_remaining:      number | null;
   current_level:          string | null;
   stripe_customer_id:     string | null;
   stripe_subscription_id: string | null;
@@ -122,6 +123,7 @@ export async function GET(req: NextRequest) {
         user_id,
         subscription_status,
         pack_expires_at,
+        classes_remaining,
         current_level,
         stripe_customer_id,
         stripe_subscription_id,
@@ -165,11 +167,22 @@ export async function GET(req: NextRequest) {
         stripe_customer_id:     r.stripe_customer_id,
         stripe_subscription_id: r.stripe_subscription_id,
         _userActive: Boolean(u?.active),
-      } as WireUser & { _userActive: boolean };
+        _classesRemaining: r.classes_remaining ?? 0,
+      } as WireUser & { _userActive: boolean; _classesRemaining: number };
     })
     .filter(s => s._userActive)
-    .filter(s => !s.pack_expires_at || new Date(s.pack_expires_at).getTime() > now)
-    .map(({ _userActive, ...rest }) => { void _userActive; return rest; });
+    // Fecha vencida solo excluye si además no quedan clases (caso
+    // Victoria 2026-08-07: pack_expires_at obsoleto con 7 clases
+    // restantes la dejaba fuera del sync y sin acceso a Schule).
+    .filter(s => !s.pack_expires_at
+      || new Date(s.pack_expires_at).getTime() > now
+      || (s as unknown as { _classesRemaining: number })._classesRemaining > 0)
+    .map(({ _userActive, ...rest }) => {
+      void _userActive;
+      const { _classesRemaining, ...clean } = rest as WireUser & { _classesRemaining: number };
+      void _classesRemaining;
+      return clean;
+    });
 
   // Map staff → wire shape. No subscription / Stripe — null on every
   // student-only field. Staff always has full SCHULE access (admin

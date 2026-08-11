@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getImpersonation } from "@/lib/impersonation";
 import { supabaseAdmin } from "@/lib/supabase";
-import { createSchuleSsoLink } from "@/lib/entitlements";
+import { createSchuleSsoLink, packEligible } from "@/lib/entitlements";
 
 /**
  * POST /api/entitlements/schule-link
@@ -42,15 +42,11 @@ export async function POST() {
   if (role === "student") {
     const { data: s } = await sb
       .from("students")
-      .select("subscription_status, pack_expires_at")
+      .select("subscription_status, pack_expires_at, classes_remaining")
       .eq("user_id", userId)
       .maybeSingle();
     if (!s) return NextResponse.json({ error: "no_student_profile" }, { status: 403 });
-    const status = (s as { subscription_status: string }).subscription_status;
-    const exp    = (s as { pack_expires_at: string | null }).pack_expires_at;
-    const expired = exp ? new Date(exp) < new Date() : false;
-    const eligible = (status === "active" || status === "paused") && !expired;
-    if (!eligible) {
+    if (!packEligible(s as Parameters<typeof packEligible>[0])) {
       return NextResponse.json({
         error:   "not_eligible",
         message: "Tu pack no está activo. Contacta con nosotros si crees que es un error.",
