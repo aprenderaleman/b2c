@@ -134,13 +134,20 @@ let _lastWaSentAt = 0;
 
 /**
  * Anti-ban #1: gate nocturno. Ningún WA automático 22:00–08:00 Europe/Berlin,
- * salvo recordatorios inminentes (clase en <30 min — legítimo a cualquier hora).
+ * salvo mensajes TRANSACCIONALES — el lead acaba de hacer una acción y
+ * espera respuesta inmediata (agendar, reagendar, cancelar, confirmar
+ * asistencia post-trial). Si estos se bloquean, el lead nunca recibe la
+ * respuesta y el cron no reintenta.
+ *
+ * La lista transaccional es la MISMA que ALLOWED_WA_KINDS (whitelist del
+ * kill switch): si un mensaje es transaccional-suficiente para pasar el
+ * kill switch, también lo es para pasar el gate nocturno.
+ *
+ * Fix 2026-08-11 tras 18 mensajes perdidos en 7d (mayoría
+ * trial_confirmation de leads que agendaron 22-08h Berlin).
  * Config editable: `system_config.wa_night_gate_enabled`.
  */
-const NIGHT_EXEMPT_KINDS = new Set([
-  "trial_reminder_30m",
-  "trial_reminder_15m",
-]);
+const NIGHT_EXEMPT_KINDS = ALLOWED_WA_KINDS;
 let _nightGateCache: { enabled: boolean; ts: number } | null = null;
 async function isNightGateEnabled(): Promise<boolean> {
   const now = Date.now();

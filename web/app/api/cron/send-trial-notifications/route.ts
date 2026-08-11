@@ -132,7 +132,7 @@ async function run(req: Request) {
 
     const language: "es" | "de" = lead.language === "de" ? "de" : "es";
     const leadFirst = (lead.name ?? "").trim().split(/\s+/)[0] || (lead.name ?? "");
-    const durationMin = c.duration_minutes ?? 30;
+    const durationMin = c.duration_minutes ?? 40;
     // "paid" ahora combina el legacy classes.deposit_paid_at (flow
     // pre-2026-07) con leads.reserva_prioritaria (nuevo flow depósito
     // introducido con Meta Ads Paid 2026-07-28).
@@ -159,7 +159,7 @@ async function run(req: Request) {
       summary:       classTitle,
       description:
         `¿Quieres probar nuestro método antes de comprometerte?\n\n` +
-        `Reserva una sesión individual de 30 minutos con un profesor bilingüe experto. Analizaremos tu nivel, definiremos tus objetivos y vivirás la experiencia de nuestra metodología.\n\n` +
+        `Reserva una sesión individual de 40 minutos con un profesor bilingüe experto. Analizaremos tu nivel, definiremos tus objetivos y vivirás la experiencia de nuestra metodología.\n\n` +
         `Aula virtual: ${joinUrl}\n\n` +
         `Importante: al abrir el enlace tu navegador te pedirá permiso para micrófono y cámara — pulsa "Permitir".`,
       organizerName:  "Aprender-Aleman.de",
@@ -233,8 +233,20 @@ async function run(req: Request) {
       });
     }
 
-    // notified_at ya marcado atómicamente al inicio del bucle.
+    // Rollback del lock si TODO falló. Fix 2026-08-11 tras 15+
+    // trial_confirmation perdidos por night_gate: si tanto email como
+    // WA fallaron, dejar notified_at=NULL para que el próximo tick
+    // reintente. Si al menos uno OK, mantenemos el lock (no queremos
+    // reenviar el que sí funcionó).
+    const bothFailed = emailOk === false && waOk === false;
+    const noneAttempted = !lead.email && !lead.whatsapp_normalized;
+    if (bothFailed || (waOk === false && !lead.email) || (emailOk === false && !lead.whatsapp_normalized)) {
+      await sb.from("classes").update({ notified_at: null }).eq("id", c.id).then(() => {}, () => {});
+      console.warn(`[send-trial-notifications] rollback notified_at para ${c.id} — ambos canales fallaron`);
+    }
+
     results.push({ classId: c.id, email: emailOk, wa: waOk, paid });
+    if (bothFailed || noneAttempted) console.log(`[send-trial-notifications] ${c.id} rolled back for retry`);
   }
 
   return NextResponse.json({ ok: true, processed: results.length, results });
