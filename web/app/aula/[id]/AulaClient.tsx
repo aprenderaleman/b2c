@@ -23,7 +23,7 @@ import {
 } from "@livekit/components-react";
 import type { LocalUserChoices } from "@livekit/components-core";
 import { RoomEvent, Track, ParticipantEvent, type Participant } from "livekit-client";
-import { VirtualBackgroundButton } from "./VirtualBackgroundButton";
+import { VirtualBackgroundButton, BRAND_IMAGES, BG_LABELS, type BgMode } from "./VirtualBackgroundButton";
 
 type Props = {
   classId:          string;
@@ -111,6 +111,10 @@ export function AulaClient(p: Props) {
   // fallbacks. PreJoin hace lo mismo internamente y además da
   // controles UI al usuario, así que el probe se elimina.
   const [userChoices, setUserChoices] = useState<LocalUserChoices | null>(null);
+  // Fondo virtual elegido en el lobby — se aplica automáticamente al
+  // entrar (VirtualBackgroundButton initialMode) y puede cambiarse
+  // luego mid-call desde la barra inferior.
+  const [bgChoice, setBgChoice] = useState<BgMode>("off");
   const [mediaWarning, setMediaWarning] = useState<string | null>(null);
   // "handoff": tras submit del PreJoin, esperamos ~400 ms antes de
   // montar LiveKitRoom. iOS Safari sólo permite UN getUserMedia por
@@ -162,6 +166,9 @@ export function AulaClient(p: Props) {
         classTitle={p.classTitle}
         defaultName={p.displayName}
         backHref={p.backHref}
+        background={bgChoice}
+        onBackgroundChange={setBgChoice}
+        brandEnabled={p.brandBackground}
         onSubmit={(choices) => setUserChoices(choices)}
         onError={(e) => {
           console.warn("[aula/prejoin] media error:", e);
@@ -299,7 +306,11 @@ export function AulaClient(p: Props) {
                 leave:       true,
               }}
             />
-            <VirtualBackgroundButton canCamera={userChoices.videoEnabled} brandEnabled={p.brandBackground} />
+            <VirtualBackgroundButton
+              canCamera={userChoices.videoEnabled}
+              brandEnabled={p.brandBackground}
+              initialMode={bgChoice}
+            />
           </div>
         </div>
         <RoomAudioRenderer />
@@ -936,13 +947,20 @@ function LoadingScreen({ classTitle }: { classTitle: string }) {
  */
 function AulaPreJoin({
   classTitle, defaultName, backHref, onSubmit, onError,
+  background, onBackgroundChange, brandEnabled,
 }: {
   classTitle:  string;
   defaultName: string;
   backHref:    string;
   onSubmit:    (choices: LocalUserChoices) => void;
   onError?:    (e: Error) => void;
+  background:  BgMode;
+  onBackgroundChange: (m: BgMode) => void;
+  brandEnabled?: boolean;
 }) {
+  const bgOptions: BgMode[] = brandEnabled
+    ? ["off", "blur", "azul", "calido", "verde"]
+    : ["off", "blur"];
   return (
     <main
       data-lk-theme="default"
@@ -994,6 +1012,54 @@ function AulaPreJoin({
             userLabel="Tu nombre"
             persistUserChoices={false}
           />
+
+          {/* Selector de fondo virtual — se aplica automáticamente al
+              entrar. La preview del PreJoin no lo muestra en vivo
+              (limitación del componente); las miniaturas enseñan el
+              diseño. */}
+          <div className="mt-5">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 text-center mb-2">
+              Fondo virtual
+            </div>
+            <div className="flex items-center justify-center gap-2.5 flex-wrap">
+              {bgOptions.map((m) => {
+                const active = background === m;
+                const isImage = m !== "off" && m !== "blur";
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => onBackgroundChange(m)}
+                    className={`group flex flex-col items-center gap-1.5 focus:outline-none`}
+                    title={BG_LABELS[m]}
+                  >
+                    <span
+                      className={`block w-20 h-12 rounded-lg overflow-hidden border-2 transition bg-cover bg-center
+                                  ${active ? "border-warm shadow-md shadow-warm/25" : "border-slate-700 group-hover:border-slate-500"}`}
+                      style={isImage
+                        ? { backgroundImage: `url(${BRAND_IMAGES[m as keyof typeof BRAND_IMAGES]})` }
+                        : undefined}
+                    >
+                      {m === "off" && (
+                        <span className="flex items-center justify-center w-full h-full bg-slate-800 text-slate-400 text-[10px]">
+                          Ninguno
+                        </span>
+                      )}
+                      {m === "blur" && (
+                        <span className="flex items-center justify-center w-full h-full text-slate-300 text-[10px]
+                                         bg-[linear-gradient(120deg,#334155_0%,#475569_40%,#334155_100%)] blur-[0.3px]">
+                          Difuminado
+                        </span>
+                      )}
+                    </span>
+                    <span className={`text-[10px] ${active ? "text-warm font-semibold" : "text-slate-400"}`}>
+                      {BG_LABELS[m]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </main>

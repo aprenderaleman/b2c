@@ -11,36 +11,59 @@ import { Track, type LocalVideoTrack } from "livekit-client";
  * SIMD en el cliente.
  *
  * Modos:
- *   "off"   → cámara normal
- *   "blur"  → fondo difuminado
- *   "brand" → imagen de marca Aprender-Aleman.de (/fondo-livekit.png)
+ *   "off"    → cámara normal
+ *   "blur"   → fondo difuminado
+ *   "azul" | "calido" | "verde" → fondos de marca Aprender-Aleman.de
  *
- * El modo "brand" solo aparece si `brandEnabled` (rollout Gelfis
- * 2026-08-12: primero admin/superadmin para probar, luego profes).
+ * Los modos de marca solo aparecen si `brandEnabled` (rollout Gelfis:
+ * primero admin/superadmin, luego profes).
+ *
+ * `initialMode` permite pre-seleccionar el fondo desde el lobby
+ * (AulaPreJoin) — se aplica automáticamente en cuanto la cámara
+ * publica su track.
  *
  * El processor se importa dinámicamente para que los ~2MB de wasm no
  * engorden el bundle del aula para quien nunca lo usa.
  */
 
-type Mode = "off" | "blur" | "brand";
-type State = "idle" | "working" | "unsupported";
+export type BgMode = "off" | "blur" | "azul" | "calido" | "verde";
 
-const BRAND_IMAGE = "/fondo-livekit.png";
+export const BRAND_IMAGES: Record<Exclude<BgMode, "off" | "blur">, string> = {
+  azul:   "/fondo-livekit.png",
+  calido: "/fondo-livekit-calido.png",
+  verde:  "/fondo-livekit-verde.png",
+};
+
+export const BG_LABELS: Record<BgMode, string> = {
+  off:    "Sin fondo",
+  blur:   "Difuminado",
+  azul:   "Marca · Azul",
+  calido: "Marca · Cálido",
+  verde:  "Marca · Verde",
+};
+
+const isBrand = (m: BgMode): m is Exclude<BgMode, "off" | "blur"> =>
+  m !== "off" && m !== "blur";
+
+type State = "idle" | "working" | "unsupported";
 
 export function VirtualBackgroundButton({
   canCamera,
   brandEnabled = false,
+  initialMode = "off",
 }: {
   canCamera: boolean;
   brandEnabled?: boolean;
+  initialMode?: BgMode;
 }) {
   const { localParticipant } = useLocalParticipant();
-  const [mode, setMode] = useState<Mode>("off");
+  const [mode, setMode] = useState<BgMode>("off");
   const [state, setState] = useState<State>("idle");
   const [menuOpen, setMenuOpen] = useState(false);
   const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const initialApplied = useRef(false);
 
   // Si el usuario apaga la cámara externamente, reset — reaplicar tras
   // reencenderla intentaría montar el processor en un track muerto.
@@ -62,23 +85,7 @@ export function VirtualBackgroundButton({
     return () => document.removeEventListener("mousedown", close);
   }, [menuOpen]);
 
-  if (!canCamera) return null;
-
-  if (state === "unsupported") {
-    return (
-      <button
-        type="button"
-        disabled
-        className="h-9 inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-3 text-xs font-medium text-white/40 cursor-not-allowed"
-        title="Tu navegador no soporta fondo virtual (necesita WebGL2 + WASM SIMD)"
-      >
-        <BlurIcon />
-        No disponible
-      </button>
-    );
-  }
-
-  const applyMode = (target: Mode) => {
+  const applyMode = (target: BgMode) => {
     setMenuOpen(false);
     if (state === "working" || target === mode) return;
     setError(null);
@@ -109,7 +116,7 @@ export function VirtualBackgroundButton({
         }
         const processor = target === "blur"
           ? BackgroundBlur(10 /* radius */)
-          : VirtualBackground(BRAND_IMAGE);
+          : VirtualBackground(BRAND_IMAGES[target as Exclude<BgMode, "off" | "blur">]);
         await cameraTrack.setProcessor(processor);
         setMode(target);
         setState("idle");
@@ -127,12 +134,45 @@ export function VirtualBackgroundButton({
     });
   };
 
+  // Auto-aplicar la elección hecha en el lobby en cuanto el track de
+  // cámara exista. Se reintenta con un poll corto porque LiveKitRoom
+  // publica la cámara de forma asíncrona tras conectar.
+  useEffect(() => {
+    if (initialApplied.current || initialMode === "off" || !canCamera) return;
+    let tries = 0;
+    const id = setInterval(() => {
+      tries++;
+      const track = localParticipant.getTrackPublication(Track.Source.Camera)?.track;
+      if (track) {
+        clearInterval(id);
+        initialApplied.current = true;
+        applyMode(initialMode);
+      } else if (tries > 20) {
+        clearInterval(id);   // cámara nunca llegó — rendirse en silencio
+      }
+    }, 500);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialMode, canCamera, localParticipant]);
+
+  if (!canCamera) return null;
+
+  if (state === "unsupported") {
+    return (
+      <button
+        type="button"
+        disabled
+        className="h-9 inline-flex items-center gap-1.5 rounded-full bg-white/[0.04] px-3 text-xs font-medium text-white/40 cursor-not-allowed"
+        title="Tu navegador no soporta fondo virtual (necesita WebGL2 + WASM SIMD)"
+      >
+        <BlurIcon />
+        No disponible
+      </button>
+    );
+  }
+
   const working = state === "working";
-  const label =
-    working          ? "Aplicando…" :
-    mode === "blur"  ? "Fondo difuminado" :
-    mode === "brand" ? "Fondo Aprender-Aleman" :
-                       "Fondo virtual";
+  const label = working ? "Aplicando…" : mode === "off" ? "Fondo virtual" : BG_LABELS[mode];
 
   // Sin la opción de marca, el botón se comporta como el toggle
   // original (off ↔ blur) sin menú.
@@ -145,13 +185,17 @@ export function VirtualBackgroundButton({
     }
   };
 
+  const modes: BgMode[] = brandEnabled
+    ? ["off", "blur", "azul", "calido", "verde"]
+    : ["off", "blur"];
+
   return (
     <div ref={menuRef} className="relative inline-flex flex-col items-center gap-0.5">
-      {/* Con el fondo de marca activo, des-espejamos la self-view local
+      {/* Con un fondo de marca activo, des-espejamos la self-view local
           para que el texto "Aprender-Aleman.de" del fondo se lea bien
           también para uno mismo (los demás siempre lo ven correcto).
           Override del rotateY(180deg) de @livekit/components-styles. */}
-      {mode === "brand" && (
+      {isBrand(mode) && (
         <style>{`
           [data-lk-facing-mode=user] .lk-participant-media-video[data-lk-local-participant=true][data-lk-source=camera] {
             transform: none !important;
@@ -175,9 +219,11 @@ export function VirtualBackgroundButton({
 
       {menuOpen && (
         <div className="absolute bottom-11 z-50 min-w-[190px] rounded-xl bg-slate-900 border border-white/10 shadow-xl p-1.5 space-y-0.5">
-          <MenuItem active={mode === "off"}   onClick={() => applyMode("off")}>Sin fondo</MenuItem>
-          <MenuItem active={mode === "blur"}  onClick={() => applyMode("blur")}>Difuminado</MenuItem>
-          <MenuItem active={mode === "brand"} onClick={() => applyMode("brand")}>Fondo Aprender-Aleman.de</MenuItem>
+          {modes.map(m => (
+            <MenuItem key={m} active={mode === m} onClick={() => applyMode(m)}>
+              {BG_LABELS[m]}
+            </MenuItem>
+          ))}
         </div>
       )}
 
