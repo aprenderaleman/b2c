@@ -9,6 +9,7 @@ import { getLeadTrialTeacher } from "./trial-compensation";
 import { startChain, cancelActiveChain } from "./chain-engine";
 import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
 import { autoAssignToActiveCloser } from "./closer-actions";
+import { deleteTrialEvent } from "./google-calendar";
 
 /**
  * Tag interno: cuando se setea, Stiv debe escalar a `needs_human` la
@@ -559,7 +560,9 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
  */
 export async function sendRescheduleLinkMessage(
   leadId: string,
+  opts?: { actorName?: string },
 ): Promise<{ ok: boolean; reason?: string }> {
+  const actorName = opts?.actorName ?? "teacher";
   const sb = supabaseAdmin();
   const { data: leadInfo } = await sb
     .from("leads")
@@ -569,13 +572,10 @@ export async function sendRescheduleLinkMessage(
   const linfo = leadInfo as { name: string | null; whatsapp_normalized: string | null } | null;
   if (!linfo?.whatsapp_normalized) return { ok: false, reason: "no_whatsapp" };
 
-  // Cancelar la clase de prueba activa (futura) del lead — si existe.
-  // Silencioso (sin mandar el WA cancel standard); el mensaje combinado
-  // de abajo cubre la comunicación.
   const nowIso = new Date().toISOString();
   const { data: currentTrial } = await sb
     .from("classes")
-    .select("id, scheduled_at")
+    .select("id, scheduled_at, teacher_id, google_calendar_event_id")
     .eq("lead_id", leadId)
     .eq("is_trial", true)
     .eq("status", "scheduled")
@@ -583,7 +583,7 @@ export async function sendRescheduleLinkMessage(
     .order("scheduled_at", { ascending: true })
     .limit(1)
     .maybeSingle();
-  const trial = currentTrial as { id: string; scheduled_at: string } | null;
+  const trial = currentTrial as { id: string; scheduled_at: string; teacher_id: string | null; google_calendar_event_id: string | null } | null;
   if (trial) {
     await sb.from("classes")
       .update({ status: "cancelled", updated_at: nowIso })
@@ -591,10 +591,40 @@ export async function sendRescheduleLinkMessage(
     await sb.from("lead_timeline").insert({
       lead_id: leadId,
       type:    "status_change",
-      author:  "teacher",
-      content: `🚫 Clase de prueba cancelada por reagendamiento del profesor (${new Date(trial.scheduled_at).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })} Berlín)`,
-      metadata: { class_id: trial.id, kind: "trial_cancelled_for_reschedule" },
+      author:  actorName,
+      content: `🚫 Clase de prueba cancelada por reagendamiento (${actorName}) (${new Date(trial.scheduled_at).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })} Berlín)`,
+      metadata: { class_id: trial.id, kind: "trial_cancelled_for_reschedule", actor: actorName },
     });
+
+    // Eliminar evento de Google Calendar
+    if (trial.google_calendar_event_id) {
+      deleteTrialEvent(trial.google_calendar_event_id).catch(() => {});
+    }
+
+    // Notificar al profesor in-app si el que reagenda NO es el propio profesor
+    if (trial.teacher_id) {
+      const { data: teacherRow } = await sb
+        .from("teachers")
+        .select("user_id")
+        .eq("id", trial.teacher_id)
+        .maybeSingle();
+      const teacherUserId = (teacherRow as { user_id: string } | null)?.user_id;
+      if (teacherUserId) {
+        const leadName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "Lead";
+        const whenTxt = new Date(trial.scheduled_at).toLocaleString("es-ES", {
+          timeZone: "Europe/Berlin", weekday: "short", day: "numeric", month: "short",
+          hour: "2-digit", minute: "2-digit",
+        });
+        await sb.from("notifications").insert({
+          user_id:  teacherUserId,
+          type:     "class_cancelled",
+          title:    `Clase de ${leadName} reagendada`,
+          body:     `${actorName} reagendó la clase del ${whenTxt} (Berlín). El lead recibirá un link para elegir nuevo horario.`,
+          link:     "/profesor/clasedeprueba",
+          class_id: trial.id,
+        }).then(() => {}, () => {});
+      }
+    }
   }
 
   // Setear status → rescheduling (nuevo enum value migration 087).

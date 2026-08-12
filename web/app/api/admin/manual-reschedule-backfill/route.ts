@@ -52,7 +52,7 @@ export async function POST(req: Request) {
   const results: Array<{ leadId: string; ok: boolean; reason?: string }> = [];
   for (const leadId of ids) {
     try {
-      const r = await sendRescheduleLinkMessage(leadId);
+      const r = await sendRescheduleLinkMessage(leadId, { actorName: "system (backfill)" });
       results.push({ leadId, ok: r.ok, reason: r.reason });
       // pequeño delay para no saturar Evolution
       await new Promise(res => setTimeout(res, 3000));

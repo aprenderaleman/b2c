@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
 import { sendRescheduleLinkMessage } from "@/lib/admin-actions";
+import { supabaseAdmin } from "@/lib/supabase";
 
 /**
  * POST /api/teacher/trial/[leadId]/send-reschedule-link
@@ -20,7 +21,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ leadId
   try { await assertTeacherOwnsTrialLead(user.id, leadId, user.role); }
   catch { return NextResponse.json({ error: "forbidden" }, { status: 403 }); }
 
-  const result = await sendRescheduleLinkMessage(leadId);
+  const { data: userRow } = await supabaseAdmin()
+    .from("users").select("full_name").eq("id", user.id).maybeSingle();
+  const actorName = (userRow as { full_name: string | null } | null)?.full_name || user.email;
+
+  const result = await sendRescheduleLinkMessage(leadId, { actorName });
   if (!result.ok) {
     return NextResponse.json({ ok: false, reason: result.reason }, { status: 400 });
   }
