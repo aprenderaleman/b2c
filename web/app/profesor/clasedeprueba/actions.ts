@@ -14,19 +14,27 @@ export async function saveTeacherNotes(classId: string, notes: string) {
     throw new Error("forbidden");
   }
 
-  const teacher = await getTeacherByUserId(user.id);
-  if (!teacher) throw new Error("no_teacher_profile");
-
   const sb = supabaseAdmin();
 
-  const { data: cls } = await sb
+  // Admin/superadmin pueden guardar notas en CUALQUIER trial (usan
+  // /admin/clasedeprueba, que reutiliza este componente). Los profes
+  // solo en las suyas. Caso Gelfis 2026-08-08: "Error al guardar
+  // notas" porque el check exigía perfil de profesor + ownership.
+  const isAdmin = role === "admin" || role === "superadmin";
+
+  let query = sb
     .from("classes")
     .select("id, lead_id, teacher_id")
     .eq("id", classId)
-    .eq("is_trial", true)
-    .eq("teacher_id", teacher.id)
-    .maybeSingle();
+    .eq("is_trial", true);
 
+  if (!isAdmin) {
+    const teacher = await getTeacherByUserId(user.id);
+    if (!teacher) throw new Error("no_teacher_profile");
+    query = query.eq("teacher_id", teacher.id);
+  }
+
+  const { data: cls } = await query.maybeSingle();
   if (!cls) throw new Error("not_owner");
 
   const { data: userRow } = await sb
