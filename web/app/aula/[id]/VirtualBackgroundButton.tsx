@@ -147,6 +147,17 @@ export function VirtualBackgroundButton({
 
   return (
     <div ref={menuRef} className="relative inline-flex flex-col items-center gap-0.5">
+      {/* Con el fondo de marca activo, des-espejamos la self-view local
+          para que el texto "Aprender-Aleman.de" del fondo se lea bien
+          también para uno mismo (los demás siempre lo ven correcto).
+          Override del rotateY(180deg) de @livekit/components-styles. */}
+      {mode === "brand" && (
+        <style>{`
+          [data-lk-facing-mode=user] .lk-participant-media-video[data-lk-local-participant=true][data-lk-source=camera] {
+            transform: none !important;
+          }
+        `}</style>
+      )}
       <button
         type="button"
         onClick={onButtonClick}
