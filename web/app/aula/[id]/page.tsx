@@ -133,11 +133,13 @@ export default async function AulaPage({
     : !session?.user        ? "lead"
     :                          "student";
 
-  // Fondo de marca: rollout gradual (Gelfis 2026-08-12). Fase 1:
-  // admin/superadmin para probar. Fase 2 (cuando Gelfis dé el OK):
-  // añadir "teacher" a la lista.
+  // Fondo de marca: activo para profes y admins (OK Gelfis 2026-08-12
+  // tras probar desde Admin). Estudiantes y leads ven solo el toggle
+  // de difuminado — el fondo de marca es para quien representa a la
+  // academia en pantalla.
   const sessionRole = (session?.user as { role?: string } | undefined)?.role;
-  const brandBackground = sessionRole === "admin" || sessionRole === "superadmin";
+  const brandBackground =
+    sessionRole === "admin" || sessionRole === "superadmin" || sessionRole === "teacher";
 
   return (
     <AulaClient
