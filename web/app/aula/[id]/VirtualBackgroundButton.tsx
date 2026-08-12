@@ -1,45 +1,68 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useLocalParticipant } from "@livekit/components-react";
 import { Track, type LocalVideoTrack } from "livekit-client";
 
 /**
- * Toggle button that applies a real-time background blur to the local
- * camera track. Uses LiveKit's `@livekit/track-processors` package
- * which runs MediaPipe Selfie Segmentation in a Web Worker — no extra
- * server-side compute, but does need WebGL2 + Wasm SIMD on the client.
+ * Selector de fondo virtual para la cámara local. Usa
+ * `@livekit/track-processors` (MediaPipe Selfie Segmentation en un
+ * Web Worker) — sin cómputo server-side, pero requiere WebGL2 + Wasm
+ * SIMD en el cliente.
  *
- * State machine:
- *   "off"        → blur not applied
- *   "applying"   → user just clicked, processor mounting on the track
- *   "blurred"    → segmentation pipeline running
- *   "removing"   → user clicked again, tearing down processor
- *   "unsupported" → device can't run the segmenter (older Safari, very old GPU)
+ * Modos:
+ *   "off"   → cámara normal
+ *   "blur"  → fondo difuminado
+ *   "brand" → imagen de marca Aprender-Aleman.de (/fondo-livekit.png)
  *
- * The processor is created lazily (dynamic import) so the wasm/onnx
- * payload (~2 MB) doesn't bloat the main /aula bundle for visitors
- * who never click the button.
+ * El modo "brand" solo aparece si `brandEnabled` (rollout Gelfis
+ * 2026-08-12: primero admin/superadmin para probar, luego profes).
+ *
+ * El processor se importa dinámicamente para que los ~2MB de wasm no
+ * engorden el bundle del aula para quien nunca lo usa.
  */
 
-type State = "off" | "applying" | "blurred" | "removing" | "unsupported";
+type Mode = "off" | "blur" | "brand";
+type State = "idle" | "working" | "unsupported";
 
-export function VirtualBackgroundButton({ canCamera }: { canCamera: boolean }) {
+const BRAND_IMAGE = "/fondo-livekit.png";
+
+export function VirtualBackgroundButton({
+  canCamera,
+  brandEnabled = false,
+}: {
+  canCamera: boolean;
+  brandEnabled?: boolean;
+}) {
   const { localParticipant } = useLocalParticipant();
-  const [state, setState] = useState<State>("off");
+  const [mode, setMode] = useState<Mode>("off");
+  const [state, setState] = useState<State>("idle");
+  const [menuOpen, setMenuOpen] = useState(false);
   const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // If the user toggles their camera off externally, our state needs
-  // to reset so reapplying after re-enabling the camera doesn't try
-  // to attach a processor to a stale track.
+  // Si el usuario apaga la cámara externamente, reset — reaplicar tras
+  // reencenderla intentaría montar el processor en un track muerto.
   useEffect(() => {
-    if (!localParticipant.isCameraEnabled && state === "blurred") {
-      setState("off");
+    if (!localParticipant.isCameraEnabled && mode !== "off") {
+      setMode("off");
     }
-  }, [localParticipant.isCameraEnabled, state]);
+  }, [localParticipant.isCameraEnabled, mode]);
 
-  const isWorking = state === "applying" || state === "removing";
+  // Cerrar el menú al clicar fuera.
+  useEffect(() => {
+    if (!menuOpen) return;
+    const close = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [menuOpen]);
+
+  if (!canCamera) return null;
 
   if (state === "unsupported") {
     return (
@@ -55,8 +78,9 @@ export function VirtualBackgroundButton({ canCamera }: { canCamera: boolean }) {
     );
   }
 
-  const onClick = () => {
-    if (isWorking) return;
+  const applyMode = (target: Mode) => {
+    setMenuOpen(false);
+    if (state === "working" || target === mode) return;
     setError(null);
     startTransition(async () => {
       try {
@@ -68,60 +92,105 @@ export function VirtualBackgroundButton({ canCamera }: { canCamera: boolean }) {
           return;
         }
 
-        if (state === "blurred") {
-          setState("removing");
+        setState("working");
+
+        if (target === "off") {
           await cameraTrack.stopProcessor();
-          setState("off");
+          setMode("off");
+          setState("idle");
           return;
         }
 
-        setState("applying");
-        // Dynamic import — keeps the ~2MB segmentation wasm out of the
-        // main aula bundle until the user actually wants blur.
-        const { BackgroundBlur } = await import("@livekit/track-processors");
-        const processor = BackgroundBlur(10 /* radius */);
+        const { BackgroundBlur, VirtualBackground } = await import("@livekit/track-processors");
+        // setProcessor sobre un track con processor previo lo sustituye,
+        // pero algunos navegadores fallan — paramos primero por robustez.
+        if (mode !== "off") {
+          await cameraTrack.stopProcessor().catch(() => {});
+        }
+        const processor = target === "blur"
+          ? BackgroundBlur(10 /* radius */)
+          : VirtualBackground(BRAND_IMAGE);
         await cameraTrack.setProcessor(processor);
-        setState("blurred");
+        setMode(target);
+        setState("idle");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "unknown";
-        // Older Safari / Firefox without WASM SIMD throw on import.
-        if (/wasm|webgl|simd|backgroundblur/i.test(msg)) {
+        // Safari viejo / Firefox sin WASM SIMD lanzan en el import.
+        if (/wasm|webgl|simd|backgroundblur|virtualbackground/i.test(msg)) {
           setState("unsupported");
         } else {
           setError(msg);
-          setState("off");
+          setMode("off");
+          setState("idle");
         }
       }
     });
   };
 
-  if (!canCamera) return null;   // device has no camera; hide the button
+  const working = state === "working";
+  const label =
+    working          ? "Aplicando…" :
+    mode === "blur"  ? "Fondo difuminado" :
+    mode === "brand" ? "Fondo Aprender-Aleman" :
+                       "Fondo virtual";
+
+  // Sin la opción de marca, el botón se comporta como el toggle
+  // original (off ↔ blur) sin menú.
+  const onButtonClick = () => {
+    if (working) return;
+    if (!brandEnabled) {
+      applyMode(mode === "blur" ? "off" : "blur");
+    } else {
+      setMenuOpen(o => !o);
+    }
+  };
 
   return (
-    <div className="inline-flex flex-col items-center gap-0.5">
+    <div ref={menuRef} className="relative inline-flex flex-col items-center gap-0.5">
       <button
         type="button"
-        onClick={onClick}
-        disabled={isWorking}
+        onClick={onButtonClick}
+        disabled={working}
         className={`h-9 inline-flex items-center gap-1.5 rounded-full px-3 text-xs font-semibold transition
-                    ${state === "blurred"
+                    ${mode !== "off"
                       ? "bg-warm text-warm-foreground shadow-md shadow-warm/20"
                       : "bg-white/[0.06] text-white hover:bg-white/[0.12]"}
-                    ${isWorking ? "opacity-60 cursor-wait" : ""}`}
-        title={state === "blurred" ? "Quitar fondo virtual" : "Difuminar el fondo"}
+                    ${working ? "opacity-60 cursor-wait" : ""}`}
+        title="Fondo virtual"
       >
         <BlurIcon />
-        {state === "applying" ? "Aplicando…" :
-         state === "removing" ? "Quitando…" :
-         state === "blurred"  ? "Fondo difuminado" :
-                                "Fondo virtual"}
+        {label}
       </button>
+
+      {menuOpen && (
+        <div className="absolute bottom-11 z-50 min-w-[190px] rounded-xl bg-slate-900 border border-white/10 shadow-xl p-1.5 space-y-0.5">
+          <MenuItem active={mode === "off"}   onClick={() => applyMode("off")}>Sin fondo</MenuItem>
+          <MenuItem active={mode === "blur"}  onClick={() => applyMode("blur")}>Difuminado</MenuItem>
+          <MenuItem active={mode === "brand"} onClick={() => applyMode("brand")}>Fondo Aprender-Aleman.de</MenuItem>
+        </div>
+      )}
+
       {error && (
         <span className="text-[10px] text-red-300 max-w-[140px] truncate" title={error}>
           {error}
         </span>
       )}
     </div>
+  );
+}
+
+function MenuItem({ active, onClick, children }: {
+  active: boolean; onClick: () => void; children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left rounded-lg px-3 py-1.5 text-xs transition
+                  ${active ? "bg-warm/20 text-warm font-semibold" : "text-white/85 hover:bg-white/[0.08]"}`}
+    >
+      {children}
+    </button>
   );
 }
 

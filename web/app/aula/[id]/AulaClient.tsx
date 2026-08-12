@@ -37,6 +37,9 @@ type Props = {
   audience?:        "host" | "student" | "lead";
   displayName:      string;
   backHref:         string;
+  /** Habilita la opción "Fondo Aprender-Aleman.de" en el selector de
+   *  fondo virtual. Rollout: admin/superadmin primero, luego profes. */
+  brandBackground?: boolean;
 };
 
 /**
@@ -296,7 +299,7 @@ export function AulaClient(p: Props) {
                 leave:       true,
               }}
             />
-            <VirtualBackgroundButton canCamera={userChoices.videoEnabled} />
+            <VirtualBackgroundButton canCamera={userChoices.videoEnabled} brandEnabled={p.brandBackground} />
           </div>
         </div>
         <RoomAudioRenderer />

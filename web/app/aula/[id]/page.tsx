@@ -133,6 +133,12 @@ export default async function AulaPage({
     : !session?.user        ? "lead"
     :                          "student";
 
+  // Fondo de marca: rollout gradual (Gelfis 2026-08-12). Fase 1:
+  // admin/superadmin para probar. Fase 2 (cuando Gelfis dé el OK):
+  // añadir "teacher" a la lista.
+  const sessionRole = (session?.user as { role?: string } | undefined)?.role;
+  const brandBackground = sessionRole === "admin" || sessionRole === "superadmin";
+
   return (
     <AulaClient
       classId={cls.id}
@@ -143,6 +149,7 @@ export default async function AulaPage({
       audience={audience}
       displayName={displayName}
       backHref={backHref}
+      brandBackground={brandBackground}
     />
   );
 }
