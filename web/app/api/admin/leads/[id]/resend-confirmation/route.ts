@@ -102,7 +102,7 @@ export async function POST(
         `Hallo ${leadFirst}! 👋\n\n` +
         `Hier nochmal die Bestätigung deiner kostenlosen Probestunde Deutsch — falls du sie zuvor nicht erhalten hast.\n\n` +
         `📅 ${startDate}\n` +
-        `👤 ${teacherName} · 30 Min\n` +
+        `👤 ${teacherName} · 40 Min\n` +
         `🔗 ${shortLinkUrl}\n\n` +
         `💡 Beim Klick auf den Link fragt dein Browser nach Mikrofon- und Kamerazugriff — bitte auf "Erlauben" klicken.\n\n` +
         `Bestätige mir bitte mit einem "Ja", dass du dabei bist. 🙌\n\n` +
@@ -112,7 +112,7 @@ export async function POST(
         `¡Hola ${leadFirst}! 👋\n\n` +
         `Te reenvío la confirmación de tu clase de prueba GRATUITA de alemán — por si no te llegó antes.\n\n` +
         `📅 ${startDate}\n` +
-        `👤 ${teacherName} · 30 min\n` +
+        `👤 ${teacherName} · 40 min\n` +
         `🔗 ${shortLinkUrl}\n\n` +
         `💡 Importante: al abrir el enlace, tu navegador te pedirá permiso para usar micrófono y cámara — pulsa "Permitir".\n\n` +
         `¿Me confirmas con un "Sí" que asistirás? 🙌\n\n` +

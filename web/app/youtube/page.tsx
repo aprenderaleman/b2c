@@ -15,7 +15,7 @@ import { LandingStep0 } from "@/components/landings/LandingStep0";
 export const metadata: Metadata = {
   title: "¿Te gustan los videos? Prueba una clase real gratis — Aprender-Aleman.de",
   description:
-    "Aprende alemán con un profesor nativo que habla español. Primera clase 100% gratis, 30 min, sin compromiso. Reserva tu horario.",
+    "Aprende alemán con un profesor nativo que habla español. Primera clase 100% gratis, 40 min, sin compromiso. Reserva tu horario.",
   alternates: { canonical: "/youtube" },
   robots: { index: false, follow: true },
 };
@@ -26,7 +26,7 @@ export default function Page() {
       h1="¿Viste el video? Da el siguiente paso 🎓"
       subtitle="Los videos están bien para empezar, pero hablar es lo que rompe la barrera. Reserva tu primera clase 100% gratis con un profesor nativo que habla español."
       bullets={[
-        { icon: "🎥", text: <><strong>De ver a hablar</strong> — 30 min conversacionales, no otro video</> },
+        { icon: "🎥", text: <><strong>De ver a hablar</strong> — 40 min conversacionales, no otro video</> },
         { icon: "🗣", text: <>Profesor <strong>nativo bilingüe</strong> — te explica en español cuando te trabas</> },
         { icon: "🎁", text: <><strong>Clase de prueba GRATIS</strong> — si no te convence, no vuelves</> },
       ]}

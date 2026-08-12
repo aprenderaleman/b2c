@@ -22,7 +22,7 @@ const COPY = {
     title:   "Así de fácil empieza tu alemán",
     steps: [
       { n: "01", title: "Reserva tu prueba gratis", body: "Eliges día y hora en menos de un minuto. Sin compromiso." },
-      { n: "02", title: "Conoce a tu profesor",    body: "30 minutos online: te evalúa el nivel y arma un plan a tu medida." },
+      { n: "02", title: "Conoce a tu profesor",    body: "40 minutos online: te evalúa el nivel y arma un plan a tu medida." },
       { n: "03", title: "Domina el alemán",         body: "Clases 1-a-1 + práctica guiada en SCHULE + diploma MCER al terminar." },
     ],
   },
@@ -31,7 +31,7 @@ const COPY = {
     title:   "So einfach startest du dein Deutsch",
     steps: [
       { n: "01", title: "Buche deine Probestunde", body: "Tag und Uhrzeit in unter einer Minute wählen. Keine Karte, unverbindlich." },
-      { n: "02", title: "Triff deine Lehrkraft",   body: "30 Minuten online: Niveau-Einschätzung + maßgeschneiderter Plan." },
+      { n: "02", title: "Triff deine Lehrkraft",   body: "40 Minuten online: Niveau-Einschätzung + maßgeschneiderter Plan." },
       { n: "03", title: "Beherrsche Deutsch",      body: "1-zu-1-Unterricht + geführtes Training auf SCHULE + Abschlussdiplom nach GER." },
     ],
   },

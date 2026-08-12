@@ -5,20 +5,20 @@ import { useLang } from "@/lib/lang-context";
 
 const COPY = {
   es: {
-    pill:    "100% gratis · 30 min · profesor nativo",
+    pill:    "100% gratis · 40 min · profesor nativo",
     titlePre: "Empieza tu alemán ",
     titleAccent: "esta semana",
-    sub:     "En 30 minutos un profesor nativo te evalúa el nivel, te arma un plan a medida y te dice exactamente cuánto vas a tardar en llegar a tu objetivo. Sin compromiso.",
+    sub:     "En 40 minutos un profesor nativo te evalúa el nivel, te arma un plan a medida y te dice exactamente cuánto vas a tardar en llegar a tu objetivo. Sin compromiso.",
     cta:     "Reservar mi clase de prueba",
     back:    "Volver arriba",
     guarantee: "Si no llegas a tu objetivo en el plazo acordado, repites las clases que falten sin coste.",
     guaranteeLabel: "Resultados garantizados.",
   },
   de: {
-    pill:    "100% gratis · 30 Min · keine Karte",
+    pill:    "100% gratis · 40 Min · keine Karte",
     titlePre: "Starte dein Deutsch ",
     titleAccent: "diese Woche",
-    sub:     "In 30 Minuten schätzt eine muttersprachliche Lehrkraft dein Niveau ein, erstellt einen Plan nach Maß und sagt dir, wie lange du brauchst, um dein Ziel zu erreichen. Unverbindlich.",
+    sub:     "In 40 Minuten schätzt eine muttersprachliche Lehrkraft dein Niveau ein, erstellt einen Plan nach Maß und sagt dir, wie lange du brauchst, um dein Ziel zu erreichen. Unverbindlich.",
     cta:     "Probestunde buchen",
     back:    "Nach oben",
     guarantee: "Erreichst du dein Ziel nicht im vereinbarten Zeitraum, holst du die fehlenden Stunden kostenlos nach.",

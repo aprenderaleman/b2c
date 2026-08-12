@@ -175,7 +175,7 @@ export default async function ConfirmacionPage({
                 {startDate}
               </p>
               <p className="mt-0.5 text-[11.5px] text-slate-500">
-                Hora de Berlín · {r.duration_minutes ?? 30} min
+                Hora de Berlín · {r.duration_minutes ?? 40} min
               </p>
             </div>
 

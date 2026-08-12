@@ -1041,7 +1041,7 @@ function ParticularesOfferStep({
               Primera clase
             </p>
             <p className="mt-0.5 text-[16px] md:text-[17px] font-bold text-amber-900 leading-snug">
-              GRATIS · 30 min con tu profesor nativo
+              GRATIS · 40 min con tu profesor nativo
             </p>
           </div>
         </div>
@@ -1746,7 +1746,7 @@ function CalendarStep({
       <p className="mt-2 text-[15px] md:text-[15px] lg:text-[16px] text-slate-700 leading-relaxed">
         Reserva ahora tu{" "}
         <strong className="bg-warm/15 text-warm-foreground rounded px-1 box-decoration-clone">
-          clase de prueba GRATIS de 30 min con un profesor nativo alemán que también habla español
+          clase de prueba GRATIS de 40 min con un profesor nativo alemán que también habla español
         </strong>
         .
       </p>

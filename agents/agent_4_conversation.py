@@ -970,28 +970,28 @@ def _motivation_reply(choice: str, name_first: str) -> str:
         return (
             f"¡Genial {name_first}! 💼\n\n"
             f"Trabajar en Alemania o Suiza puede cambiar tu vida. Los salarios son altos y el nivel de alemán que tengas determina cuánto puedes ganar.\n\n"
-            f"En tu clase de prueba GRATIS (30 min) te muestro el plan exacto para llegar al nivel que necesitas para tu sector.\n\n"
+            f"En tu clase de prueba GRATIS (40 min) te muestro el plan exacto para llegar al nivel que necesitas para tu sector.\n\n"
             f"📅 Agenda aquí: {_BOOK_URL}"
         )
     if choice == "2":   # Universidad
         return (
             f"¡Excelente {name_first}! 🎓\n\n"
             f"Las universidades alemanas son top mundial y GRATUITAS. Pero los plazos son estrictos y necesitas C1 + TestDaF.\n\n"
-            f"En tu clase de prueba GRATIS (30 min) te muestro el roadmap exacto para llegar a tiempo a la aplicación de tu carrera.\n\n"
+            f"En tu clase de prueba GRATIS (40 min) te muestro el roadmap exacto para llegar a tiempo a la aplicación de tu carrera.\n\n"
             f"📅 Agenda aquí: {_BOOK_URL}"
         )
     if choice == "3":   # Pareja
         return (
             f"¡Qué lindo {name_first}! 💕\n\n"
             f"Aprender alemán por tu pareja es una de las mejores razones. Te abre las puertas a su familia, su cultura y vuestro futuro juntos.\n\n"
-            f"En tu clase de prueba GRATIS (30 min) te muestro cómo llegar a hablar con su familia naturalmente en pocos meses.\n\n"
+            f"En tu clase de prueba GRATIS (40 min) te muestro cómo llegar a hablar con su familia naturalmente en pocos meses.\n\n"
             f"📅 Agenda aquí: {_BOOK_URL}"
         )
     # choice == "4" — Otra razón
     return (
         f"Cada motivación es válida {name_first} 😊\n\n"
         f"Cuéntame más cuando hablemos. Lo importante es que quieres aprender alemán y nosotros te ayudamos a lograrlo.\n\n"
-        f"En tu clase de prueba GRATIS (30 min) vemos tu nivel, te muestro el método y decides si encaja contigo.\n\n"
+        f"En tu clase de prueba GRATIS (40 min) vemos tu nivel, te muestro el método y decides si encaja contigo.\n\n"
         f"📅 Agenda aquí: {_BOOK_URL}"
     )
 

@@ -138,7 +138,7 @@ export async function POST(
     );
   }
 
-  const duration = b.duration_minutes ?? c.duration_minutes ?? 30;
+  const duration = b.duration_minutes ?? c.duration_minutes ?? 40;
   const slotEnd  = new Date(newStart.getTime() + duration * 60_000);
   const slotPrev = new Date(newStart.getTime() - duration * 60_000);
   // Si se pide cambio de profe, el race-guard aplica al NUEVO profe.

@@ -156,7 +156,7 @@ async function run(req: Request) {
         recipientName:   leadFirst,
         counterpartName: teacherName,
         startDate,
-        durationMin:     r.duration_minutes ?? 30,
+        durationMin:     r.duration_minutes ?? 40,
         joinUrl:         leadJoinUrl,
         rescheduleUrl:   buildEmailActionUrl({ leadId: lead.id, classId: r.id, action: "reschedule" }),
         language:        lead.language,
@@ -173,7 +173,7 @@ async function run(req: Request) {
         recipientName:   teacherFirst,
         counterpartName: lead.name || leadFirst,
         startDate,
-        durationMin:     r.duration_minutes ?? 30,
+        durationMin:     r.duration_minutes ?? 40,
         joinUrl:         teacherJoinUrl,
         language:        "es",
       });

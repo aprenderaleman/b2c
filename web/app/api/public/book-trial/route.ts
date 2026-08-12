@@ -54,7 +54,7 @@ export const runtime  = "nodejs";
 export const dynamic  = "force-dynamic";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
-const TRIAL_DURATION_MIN = 30;
+const TRIAL_DURATION_MIN = 40;
 
 // WhatsApp es OPCIONAL desde 2026-06-XX (Gelfis: todo lead debe poder
 // agendar incluso sin WA). Si el lead no lo da, la confirmación va

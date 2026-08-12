@@ -127,7 +127,7 @@ export const translations = {
       bookCtaBody:
         "Elige el horario que mejor te venga. Es 100% online, sin compromiso y sin tarjeta.",
       bookCtaButton: "Agendar mi clase ahora →",
-      bookCtaHint:   "Toma 1 minuto · clase de 30 min con un profesor nativo",
+      bookCtaHint:   "Toma 1 minuto · clase de 40 min con un profesor nativo",
       schuleHint:
         "Mientras tanto, empieza a practicar tu alemán gratis en SCHULE, nuestra aula virtual.",
       schuleCta: "Ir a SCHULE →",

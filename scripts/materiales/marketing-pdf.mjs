@@ -603,7 +603,7 @@ function ctaBox() {
           alignment: AlignmentType.CENTER,
           spacing: { after: 280, line: 320 },
           children: [new TextRun({
-            text: "30 minutos con un profesor nativo alemán que habla español. Sin compromiso, sin sorpresas. Sales con un plan claro.",
+            text: "40 minutos con un profesor nativo alemán que habla español. Sin compromiso, sin sorpresas. Sales con un plan claro.",
             size: 22, color: NAVY_50, font: "Calibri", italics: true,
           })],
         }),

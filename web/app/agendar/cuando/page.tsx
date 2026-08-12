@@ -498,7 +498,7 @@ function StepCuandoInner() {
       subtitle={
         showForm
           ? "El alemán te abre las puertas a los mejores salarios y la mejor calidad de vida de Europa."
-          : "30 min con profesor nativo + diagnóstico de nivel + plan de estudios personalizado"
+          : "40 min con profesor nativo + diagnóstico de nivel + plan de estudios personalizado"
       }
     >
       {/* Loading skeleton */}

@@ -595,7 +595,7 @@ async function runCron(req: Request) {
         // sermonea la decisión. Copy AUTHORING_RULES-compliant
         // (Gelfis 2026-08-01): sin sermón, sin escasez, propuesta clara.
         intendedChannel = "wa";
-        const text = `${firstName}, un dato real: nuestros alumnos empiezan con una clase de prueba gratis — 30 minutos, sin compromiso, y sales sabiendo tu nivel real y tu plan exacto. ¿Te la agendo? ${bookUrl}`;
+        const text = `${firstName}, un dato real: nuestros alumnos empiezan con una clase de prueba gratis — 40 minutos, sin compromiso, y sales sabiendo tu nivel real y tu plan exacto. ¿Te la agendo? ${bookUrl}`;
         sentBody = text;
         const r = await sendWA(lead.whatsapp_normalized, text);
         ok = r.ok; actualWa = r.ok;

@@ -110,7 +110,7 @@ Desde el click en el anuncio hasta el lead en el CRM con cita agendada + trackin
    - Actualiza `landing_intent` con el nuevo valor.
    - `motivo_inicial` derivado del body o `'direct'` si no viene.
    Si NO existe: INSERT normal.
-5. **Class insert**: fila en `classes` con `is_trial=true`, `duration_minutes=30`, `short_code` (8-char base36 para magic-link), `notify_after_at=NOW()`, `notified_at=NULL`.
+5. **Class insert**: fila en `classes` con `is_trial=true`, `duration_minutes=40`, `short_code` (8-char base36 para magic-link), `notify_after_at=NOW()`, `notified_at=NULL`.
 6. **Anti-double-booking / auto-reschedule**: si el lead ya tenía una trial futura, la re-usa o la cambia de slot con patch a Google Calendar + rollback si el patch falla.
 7. **`after()` (background tasks)**: crea el evento en el Google Calendar del profe, notifica por email al equipo (`NEW_LEAD_ALERT_EMAIL`), y crea el Zoom link para el aula.
 8. Devuelve `{ ok, classId, leadId, token, teacherName, startDate, magicLinkUrl }`.

@@ -35,7 +35,7 @@ function renderES(v: DiagnosticoFollowupVars): RenderedEmail {
       ${p(`<strong>→ ¿Sigues queriendo aprender alemán?</strong>`)}
       ${p(`Si <strong>SÍ</strong>: déjame ayudarte.`)}
       <div style="text-align:center;margin:18px 0 8px 0;">
-        ${button(v.bookUrl, "Agendar 30 min gratis →")}
+        ${button(v.bookUrl, "Agendar 40 min gratis →")}
       </div>
       ${p(`Si <strong>NO</strong>: respóndeme a este correo y te quito de la lista. No problem.`)}
       ${p(`Tu respuesta sincera me ayuda.`)}
@@ -45,7 +45,7 @@ function renderES(v: DiagnosticoFollowupVars): RenderedEmail {
       `Hola ${v.leadName},`, ``,
       `Solo una pregunta honesta:`, ``,
       `→ ¿Sigues queriendo aprender alemán?`, ``,
-      `Si SÍ: agenda 30 min gratis → ${v.bookUrl}`,
+      `Si SÍ: agenda 40 min gratis → ${v.bookUrl}`,
       `Si NO: respóndeme a este correo y te quito de la lista. No problem.`, ``,
       `Tu respuesta sincera me ayuda.`, ``,
       `Stiv`,
@@ -87,7 +87,7 @@ function renderES(v: DiagnosticoFollowupVars): RenderedEmail {
     const subject = `Tu clase de prueba sigue disponible`;
     const body = `
       ${h2(`Hola ${escapeHtml(v.leadName)} 👋`)}
-      ${p(`Tu <strong>plan personalizado de alemán</strong> sigue esperándote, y tu <strong>clase de prueba GRATIS de 30 min</strong> también.`)}
+      ${p(`Tu <strong>plan personalizado de alemán</strong> sigue esperándote, y tu <strong>clase de prueba GRATIS de 40 min</strong> también.`)}
       <div style="text-align:center;margin:20px 0 8px 0;">
         ${button(v.bookUrl, "Agendar ahora →")}
       </div>
@@ -96,7 +96,7 @@ function renderES(v: DiagnosticoFollowupVars): RenderedEmail {
     `;
     const text = [
       `Hola ${v.leadName}`, ``,
-      `Tu plan personalizado de alemán sigue esperándote, y tu clase de prueba GRATIS de 30 min también.`, ``,
+      `Tu plan personalizado de alemán sigue esperándote, y tu clase de prueba GRATIS de 40 min también.`, ``,
       `Agendar ahora: ${v.bookUrl}`, ``,
       `Si tienes dudas con el horario o cualquier otra cosa, responde a este correo y te ayudo.`, ``,
       `— Aprender-Aleman.de`,
@@ -144,7 +144,7 @@ function renderDE(v: DiagnosticoFollowupVars): RenderedEmail {
       ${p(`<strong>→ Willst du immer noch Deutsch lernen?</strong>`)}
       ${p(`Wenn <strong>JA</strong>: lass mich dir helfen.`)}
       <div style="text-align:center;margin:18px 0 8px 0;">
-        ${button(v.bookUrl, "30 Min gratis buchen →")}
+        ${button(v.bookUrl, "40 Min gratis buchen →")}
       </div>
       ${p(`Wenn <strong>NEIN</strong>: antworte auf diese Mail und ich nehme dich von der Liste. Kein Problem.`)}
       ${p(`<em style="color:#64748b;">Stiv</em>`)}
@@ -191,7 +191,7 @@ function renderDE(v: DiagnosticoFollowupVars): RenderedEmail {
     const subject = `Deine Probestunde wartet noch auf dich`;
     const body = `
       ${h2(`Hallo ${escapeHtml(v.leadName)} 👋`)}
-      ${p(`Dein <strong>persönlicher Deutschplan</strong> wartet auf dich, und deine <strong>kostenlose 30-Minuten-Probestunde</strong> auch.`)}
+      ${p(`Dein <strong>persönlicher Deutschplan</strong> wartet auf dich, und deine <strong>kostenlose 40-Minuten-Probestunde</strong> auch.`)}
       <div style="text-align:center;margin:20px 0 8px 0;">
         ${button(v.bookUrl, "Jetzt buchen →")}
       </div>
@@ -200,7 +200,7 @@ function renderDE(v: DiagnosticoFollowupVars): RenderedEmail {
     `;
     const text = [
       `Hallo ${v.leadName}`, ``,
-      `Dein persönlicher Deutschplan wartet auf dich, und deine kostenlose 30-Minuten-Probestunde auch.`, ``,
+      `Dein persönlicher Deutschplan wartet auf dich, und deine kostenlose 40-Minuten-Probestunde auch.`, ``,
       `Jetzt buchen: ${v.bookUrl}`, ``,
       `— Aprender-Aleman.de`,
     ].join("\n");

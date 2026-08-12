@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
   if (Number.isNaN(newStart.getTime())) {
     return NextResponse.json({ error: "invalid_iso" }, { status: 400 });
   }
-  const duration = body.duration_minutes ?? 30;
+  const duration = body.duration_minutes ?? 40;
 
   const sb = supabaseAdmin();
 

@@ -108,7 +108,7 @@ export async function createTrialEvent(a: CreateArgs): Promise<CreatedEvent | nu
   const lines: string[] = [
     "¿Quieres probar nuestro método antes de comprometerte?",
     "",
-    "Reserva una sesión individual de 30 minutos con un profesor bilingüe experto. Analizaremos tu nivel, definiremos tus objetivos y vivirás la experiencia de nuestra metodología.",
+    "Reserva una sesión individual de 40 minutos con un profesor bilingüe experto. Analizaremos tu nivel, definiremos tus objetivos y vivirás la experiencia de nuestra metodología.",
     "",
     `Aula: ${a.joinUrl}`,
     "",
