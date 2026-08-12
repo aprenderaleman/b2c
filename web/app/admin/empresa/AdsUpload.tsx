@@ -49,8 +49,8 @@ export function AdsUpload() {
         </button>
       </div>
       <p className="text-[11px] text-slate-400 dark:text-slate-500">
-        CSV diario de Google Ads con columnas: Day, Campaign, Cost, Clicks, Impressions, Conversions.
-        Debe tener columna de fecha — los reportes agregados (sin fecha por fila) no se aceptan.
+        CSV diario de Google Ads (columnas: Day, Campaign, Cost, Clicks, Impressions, Conversions).
+        Solo informes con columna de fecha — los agregados no se aceptan. Meta Ads se registra en gastos.
       </p>
       {status === "done" && result && (
         <p className="text-xs text-emerald-600 dark:text-emerald-400">

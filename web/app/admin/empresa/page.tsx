@@ -84,7 +84,7 @@ export default async function EmpresaPage({
             <h3 className="text-xs font-semibold uppercase tracking-wide text-red-500 dark:text-red-400 mb-2">Gastos</h3>
             <div className="space-y-1.5 text-sm">
               <CostLine label="Profesores" cents={m.teacher_payroll_cents} />
-              <CostLine label="Ads (Google)" cents={m.ads_spend_cents} />
+              <CostLine label="Ads (Google + Meta)" cents={m.ads_spend_cents} />
               <CostLine label="Herramientas (fijos)" cents={m.fixed_costs_cents} />
               <div className="pt-1.5 border-t border-slate-200 dark:border-slate-700 flex justify-between font-semibold">
                 <span>Total gastos</span>
@@ -170,8 +170,8 @@ export default async function EmpresaPage({
       <Panel title="Inversion Marketing">
         {adsStaleDays !== null && adsStaleDays > 2 && (
           <div className="mt-2 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
-            <span className="font-semibold">Datos desactualizados:</span> Último sync de Google Ads: {adsLastSync} ({adsStaleDays} días atrás).
-            El cron de sync puede estar fallando. Sube un CSV diario o revisa las credenciales de Google Ads API.
+            <span className="font-semibold">Google Ads pausado:</span> Último dato: {adsLastSync} ({adsStaleDays} días).
+            La inversión actual es solo Meta Ads. Los gastos de Meta se registran en business_expenses.
           </div>
         )}
         {m.marketing.has_ads_data ? (

@@ -207,8 +207,8 @@ export async function getEmpresaMetrics(
 
   const teacherPayrollCents = earnings;
   const fixedCostsCents = fixedCosts;
-  // Prefer Google Ads API data when available, fall back to manual expenses
-  const adsSpendCents = googleAdsSpend > 0 ? googleAdsSpend : adsSpend;
+  // Google Ads from google_ads_daily + Meta/other ads from business_expenses(ads)
+  const adsSpendCents = googleAdsSpend + adsSpend;
   // Exclude ads from variable expenses to avoid double-counting
   const variableExpensesCents = expenses.total_cents - adsSpend;
 
@@ -436,7 +436,7 @@ async function countActiveStudents(sb: SB): Promise<number> {
   const { count } = await sb
     .from("students")
     .select("id", { count: "exact", head: true })
-    .eq("subscription_status", "active");
+    .or("subscription_status.eq.active,classes_remaining.gt.0");
   return count ?? 0;
 }
 
@@ -694,7 +694,7 @@ function computeAlerts(
       severity: "green",
       title: "Puedes escalar inversion",
       detail: `LTV/CAC = ${(ltvCents / cacCents).toFixed(1)}x, ROAS = ${roas.toFixed(1)}x, margen neto = ${margenNetoPct.toFixed(1)}%.`,
-      recommendation: "Hay margen para aumentar el presupuesto de Google Ads entre 20-50% y seguir siendo rentable.",
+      recommendation: "Hay margen para aumentar el presupuesto de Meta Ads entre 20-50% y seguir siendo rentable.",
     });
   }
 
