@@ -9,6 +9,7 @@ import { PriorityBadges, summarizeQualification } from "@/components/admin/Prior
 import { fmtTrialDate } from "@/lib/closer-constants";
 import { AddNoteInput } from "./AddNoteInput";
 import { FollowupMessages } from "./FollowupMessages";
+import { TeacherLeadActions } from "./TeacherLeadActions";
 
 // Meta del lead en lenguaje natural para los mensajes del profe
 const META_LABEL: Record<string, string> = {
@@ -165,6 +166,19 @@ export default async function TeacherLeadDetailPage({
           <span className={`ml-2 font-medium ${attendance.cls}`}>{attendance.label}</span>
         </div>
       </header>
+
+      {/* Acciones — las mismas del closer, con los endpoints del profe */}
+      {lead.status !== "converted" && (
+        <TeacherLeadActions
+          leadId={lead.id}
+          leadName={lead.name ?? "Lead"}
+          leadEmail={lead.email}
+          leadPhone={lead.whatsapp_normalized}
+          leadLanguage={lead.language === "de" ? "de" : "es"}
+          leadGermanLevel={lead.german_level}
+          leadGoal={lead.goal}
+        />
+      )}
 
       {/* Mensajes de seguimiento del profe */}
       <FollowupMessages
