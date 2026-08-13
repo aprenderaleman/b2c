@@ -116,10 +116,9 @@ export async function getCloserTasks(
     .from("tareas_closer")
     .select("*, leads!inner(name, whatsapp_normalized, email, status, estado_cierre, qualification_answers, reserva_prioritaria, priority_deadline, deposit_intent_at, created_at, fecha_asignacion_closer, source, landing_intent, trial_scheduled_at, trial_attended_at, trial_absent_at)")
     .eq("closer_id", closerId)
-    // Regla Gelfis 2026-08-02: el closer solo ve tareas de leads DESPUÉS
-    // del trial (asistió o no asistió). Ampliado 2026-08-13: también los
-    // leads con Sesión de Plan agendada (pueden no tener trial).
-    .or("trial_attended_at.not.is.null,trial_absent_at.not.is.null,sesion_plan_at.not.is.null", { foreignTable: "leads" })
+    // Regla Gelfis 2026-08-13 (sustituye a la post-trial del 08-02): solo
+    // tareas de leads que agendaron por el funnel /sesion-plan.
+    .or("sesion_plan_at.not.is.null", { foreignTable: "leads" })
     .is("fecha_completada", null);
 
   if (filter === "hoy") {

@@ -26,9 +26,9 @@ export default async function CloserLeadPage({
     .single();
 
   if (!lead || lead.closer_id !== closerId) redirect("/closer/leads");
-  // El closer solo ve leads post-trial (asistió/no asistió) o con
-  // Sesión de Plan agendada (2026-08-13).
-  if (!lead.trial_attended_at && !lead.trial_absent_at && !lead.sesion_plan_at) redirect("/closer/leads");
+  // Regla Gelfis 2026-08-13: el closer solo ve leads del funnel
+  // /sesion-plan (sesion_plan_at seteado).
+  if (!lead.sesion_plan_at) redirect("/closer/leads");
 
   const [tasks, timelineResult, accionesResult, gelfisNotes] = await Promise.all([
     getLeadTasks(leadId),

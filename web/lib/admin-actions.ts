@@ -8,7 +8,6 @@ import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "
 import { getLeadTrialTeacher } from "./trial-compensation";
 import { startChain, cancelActiveChain } from "./chain-engine";
 import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
-import { autoAssignToActiveCloser } from "./closer-actions";
 import { deleteTrialEvent } from "./google-calendar";
 
 /**
@@ -150,8 +149,8 @@ export async function markTrialAttendedAwaitingConversion(
     })
     .eq("id", leadId);
 
-  await autoAssignToActiveCloser(leadId, "tipo_a", "teacher_post_trial")
-    .catch(err => console.warn("[markTrialAttendedAwaitingConversion] autoAssign error:", err));
+  // Decisión Gelfis 2026-08-13: los closers YA NO reciben leads post-trial —
+  // su cartera es solo el funnel /sesion-plan. (antes: autoAssignToActiveCloser tipo_a)
 
   // FIX bug Saul 2026-06-13: si entre la "no asistencia" + reactivacion
   // y el "asistio" final se encolaron mensajes auto-generados (revival,
@@ -356,8 +355,8 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
     })
     .eq("id", leadId);
 
-  await autoAssignToActiveCloser(leadId, "tipo_a", "teacher_post_trial")
-    .catch(err => console.warn("[markTrialAttendedNoLink] autoAssign error:", err));
+  // Decisión Gelfis 2026-08-13: sin auto-asignación post-trial a closers
+  // (cartera = solo funnel /sesion-plan). (antes: autoAssignToActiveCloser tipo_a)
 
   try {
     const phone = lead?.whatsapp_normalized ?? null;
@@ -521,8 +520,8 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     })
     .eq("id", leadId);
 
-  await autoAssignToActiveCloser(leadId, "tipo_b", "teacher_post_trial")
-    .catch(err => console.warn("[markTrialAbsent] autoAssign error:", err));
+  // Decisión Gelfis 2026-08-13: sin auto-asignación post-trial a closers
+  // (cartera = solo funnel /sesion-plan). (antes: autoAssignToActiveCloser tipo_b)
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
@@ -700,8 +699,8 @@ export async function markTrialAttendedWithObjection(
     })
     .eq("id", leadId);
 
-  await autoAssignToActiveCloser(leadId, "tipo_a", "teacher_post_trial")
-    .catch(err => console.warn("[markTrialAttendedWithObjection] autoAssign error:", err));
+  // Decisión Gelfis 2026-08-13: sin auto-asignación post-trial a closers
+  // (cartera = solo funnel /sesion-plan). (antes: autoAssignToActiveCloser tipo_a)
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
