@@ -167,6 +167,23 @@ export async function pauseAllOutbound(
   }
 }
 
+// ── Actividad Hans / SCHULE (para celebrationIfUsed) ──────────────────
+// STUB Gelfis 2026-08-14: los endpoints/tablas de actividad de Hans y
+// SCHULE aún no existen en el repo. Retornan false hoy → el motor
+// siempre servirá la variante base del welcome_week. Cuando integremos
+// el tracking de actividad (webhooks Hans/SCHULE → columnas
+// students.hans_first_used_at / schule_first_used_at o similar),
+// reemplazar el `return false` por la consulta real.
+export async function hasUsedHans(_leadId: string): Promise<boolean> {
+  // TODO: consultar students.hans_first_used_at cuando exista, o hacer
+  // fetch a endpoint interno de Hans que devuelva last_activity_at.
+  return false;
+}
+export async function hasUsedSchule(_leadId: string): Promise<boolean> {
+  // TODO: consultar exercise_results o schule_progress cuando exista.
+  return false;
+}
+
 // ── Check if lead paid after chain started ─────────────────────────────
 
 export async function hasLeadPaid(
@@ -255,24 +272,57 @@ export async function advanceChain(chain: ChainRow): Promise<{
     }
   }
 
-  // Resolve template — try bonus variant first, fall back to base
+  // Resolve template — orden de precedencia:
+  //   1. Celebration variant (si step.celebrationIfUsed y el usuario ya usó)
+  //   2. Bonus variant _bonus_vivo/_bonus_vencido (si aplica)
+  //   3. Base kind
   const baseTemplateKind = resolveTemplateKind(chain, step);
-  const bonusAlive = isBonusAlive(chain.started_at, chain.metadata);
-  const bonusSuffix = bonusAlive ? "_bonus_vivo" : "_bonus_vencido";
-  const bonusKind = `${baseTemplateKind}${bonusSuffix}`;
-
   let templateKind = baseTemplateKind;
-  const { data: bonusTpl } = await sb
-    .from("message_templates")
-    .select("body")
-    .eq("kind", bonusKind)
-    .eq("sub_n", step.templateSubN)
-    .eq("channel", "whatsapp")
-    .eq("active", true)
-    .maybeSingle();
+  let tplRow: { body?: string } | null = null;
 
-  let tplRow = bonusTpl;
-  if (!tplRow || !(tplRow as { body?: string }).body) {
+  // (1) Celebration variant — welcome_week Hans/SCHULE
+  if (step.celebrationIfUsed) {
+    const used = step.celebrationIfUsed === "hans"
+      ? await hasUsedHans(chain.lead_id)
+      : await hasUsedSchule(chain.lead_id);
+    if (used) {
+      const celebrationKind = `${baseTemplateKind}_celebration`;
+      const { data } = await sb
+        .from("message_templates")
+        .select("body")
+        .eq("kind", celebrationKind)
+        .eq("sub_n", step.templateSubN)
+        .eq("channel", "whatsapp")
+        .eq("active", true)
+        .maybeSingle();
+      if (data && (data as { body?: string }).body) {
+        templateKind = celebrationKind;
+        tplRow = data;
+      }
+    }
+  }
+
+  // (2) Bonus variant — post-trial chains
+  if (!tplRow) {
+    const bonusAlive = isBonusAlive(chain.started_at, chain.metadata);
+    const bonusSuffix = bonusAlive ? "_bonus_vivo" : "_bonus_vencido";
+    const bonusKind = `${baseTemplateKind}${bonusSuffix}`;
+    const { data: bonusTpl } = await sb
+      .from("message_templates")
+      .select("body")
+      .eq("kind", bonusKind)
+      .eq("sub_n", step.templateSubN)
+      .eq("channel", "whatsapp")
+      .eq("active", true)
+      .maybeSingle();
+    if (bonusTpl && (bonusTpl as { body?: string }).body) {
+      templateKind = bonusKind;
+      tplRow = bonusTpl;
+    }
+  }
+
+  // (3) Fallback: base kind
+  if (!tplRow) {
     const { data: baseTpl } = await sb
       .from("message_templates")
       .select("body")
@@ -282,8 +332,6 @@ export async function advanceChain(chain: ChainRow): Promise<{
       .eq("active", true)
       .maybeSingle();
     tplRow = baseTpl;
-  } else {
-    templateKind = bonusKind;
   }
 
   if (!tplRow || !(tplRow as { body?: string }).body) {
@@ -363,6 +411,21 @@ export async function advanceChain(chain: ChainRow): Promise<{
   // Create closer task if defined for this step
   if (step.closerTask) {
     await createCloserTask(sb, chain.lead_id, step.closerTask);
+  }
+
+  // Setear phase en reschedule_state si el step lo define. Esto lo
+  // usa Python (reschedule_flow) para reconocer respuestas contextuales
+  // — ej: welcome_week step 4 setea AWAITING_WELCOME_CHECKIN para que
+  // el handler capture "1"/"2"/"3" solo en ese estado.
+  if (step.setStatePhase) {
+    await sb.from("leads").update({
+      reschedule_state: {
+        phase: step.setStatePhase,
+        chain_type: chain.chain_type,
+        chain_step: stepIndex,
+        started_at: new Date().toISOString(),
+      },
+    }).eq("id", chain.lead_id);
   }
 
   // Advance to next step or complete

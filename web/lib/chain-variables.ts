@@ -16,6 +16,9 @@
  *   {ritmo}               — nombre del ritmo seleccionado por el closer
  *   {precio_ritmo}        — precio mensual del ritmo (e.g. "240 €/mes")
  *   {link_agenda}         — URL para agendar una nueva clase
+ *   {link_sesion}         — URL para agendar Sesión de Plan
+ *   {link_hans}           — URL de Hans (tutor IA) — welcome_week
+ *   {link_schule}         — URL de SCHULE (ejercicios) — welcome_week
  */
 
 import { supabaseAdmin } from "./supabase";
@@ -137,6 +140,9 @@ export async function resolveChainVariables(
     link_agenda: `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=closer`,
     // Reagendar una Sesión de Plan (funnel de closers, 2026-08-14)
     link_sesion: `${PLATFORM_URL}/sesion-plan`,
+    // welcome_week — activación primera semana (Gelfis 2026-08-14)
+    link_hans:   process.env.HANS_URL   || "https://hans.aprender-aleman.de",
+    link_schule: process.env.SCHULE_URL || "https://schule.aprender-aleman.de",
     nueva_fecha: (chainMeta.nueva_fecha as string) || "",
     hora: (chainMeta.hora as string) || "",
   };

@@ -126,6 +126,11 @@ const ALLOWED_WA_KINDS = new Set([
   "trial_teacher_reschedule_fu2",  // +24h sin rebook (único)
   // Welcome student al convertir lead → student
   "welcome_student",
+  // Cadena welcome_week (Gelfis 2026-08-14): activación primera semana
+  "welcome_week_t0",           // T+0 síncrono desde lead-conversion
+  "welcome_week",              // steps 2-4 del motor (Hans/SCHULE/checkin)
+  "welcome_week_celebration",  // variantes celebración Hans/SCHULE
+  "welcome_week_checkin_ack",  // ACK respuesta "1" al check-in
   // Celebración al referidor: su amigo se inscribió, +3 clases (2026-08-14)
   "referral_reward",
   // Absent-interest: mandamos pregunta, si dice SÍ → link, si NO → cierre

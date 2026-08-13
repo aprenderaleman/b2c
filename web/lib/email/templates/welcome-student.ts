@@ -10,6 +10,13 @@ export type WelcomeStudentVars = {
   subscriptionLabel: string;    // "Paquete de 20 clases" / "Suscripción mensual", rendered already in the caller's language
   subscriptionDetails: string;  // one-line detail, e.g. "20 clases restantes · 400 €"
   language: "es" | "de";
+  /**
+   * URL del video de bienvenida del fundador (Gelfis 2026-08-14).
+   * Si viene vacío/undefined, el bloque de video NO aparece en el email
+   * (evita bloquear el deploy esperando el asset). Se lee de
+   * system_config.url_video_bienvenida en el caller.
+   */
+  videoUrl?: string | null;
 };
 
 export function renderWelcomeStudent(v: WelcomeStudentVars): RenderedEmail {
@@ -27,6 +34,23 @@ function renderES(v: WelcomeStudentVars): RenderedEmail {
   const greeting = `¡Bienvenido/a ${v.name}! ☀️`;
   const intro    = "Tu cuenta en nuestra academia está lista. Desde hoy tienes acceso a todo:";
 
+  const videoBlock = (v.videoUrl && v.videoUrl.trim().length > 0)
+    ? `<div style="margin:24px 0;padding:16px;background:#fff7ed;border-left:4px solid #ea580c;border-radius:6px;">
+         <div style="font-weight:700;margin-bottom:8px;">🎥 Bienvenida del fundador (60 seg)</div>
+         <p style="margin:0 0 8px 0;">Un vídeo corto para explicarte cómo aprovechar tu primera semana:</p>
+         <a href="${escapeHtml(v.videoUrl)}" style="color:#ea580c;font-weight:700;text-decoration:none;">👉 Ver el vídeo</a>
+       </div>`
+    : "";
+
+  const primeraSemanaBlock = `
+    <div style="margin:24px 0 4px 0;font-size:13px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:0.06em;">Tu primera semana</div>
+    <ol style="padding-left:20px;line-height:1.6;">
+      <li><strong>Hoy:</strong> entra a la plataforma 5 minutos y familiarízate.</li>
+      <li><strong>Mañana:</strong> conoce a Hans, tu tutor de IA — te escribiré con el link.</li>
+      <li><strong>Esta semana:</strong> arranca con SCHULE (nuestro gimnasio de ejercicios).</li>
+    </ol>
+  `;
+
   const body = `
     ${h2(greeting)}
     ${p(intro)}
@@ -43,9 +67,13 @@ function renderES(v: WelcomeStudentVars): RenderedEmail {
       ${button(loginUrl, "Entrar a la plataforma →")}
     </div>
 
-    ${p("En tu panel podrás ver tus próximas clases, grabaciones, chat con tu profesor y todo lo que necesites.")}
+    ${videoBlock}
+
+    ${primeraSemanaBlock}
+
+    ${p("Tu <strong>Garantía de Nivel por escrito</strong> va adjunta a este correo.")}
     ${p("¡Bienvenido/a oficialmente! 🇩🇪")}
-    ${p(`<em style="color:#64748b;">El equipo de Aprender-Aleman.de</em>`)}
+    ${p(`<em style="color:#64748b;">Gelfis · Aprender-Aleman.de</em>`)}
   `;
 
   const footerNote = `Recibes este correo porque te has convertido en estudiante de Aprender-Aleman.de.`;

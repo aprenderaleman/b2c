@@ -456,6 +456,20 @@ def handle_inbound(lead: dict, text: str) -> bool:
     lead_id = lead["id"]
     state = _read_state(lead_id)
 
+    # Welcome week check-in (Gelfis 2026-08-14): el motor TS setea
+    # phase=AWAITING_WELCOME_CHECKIN cuando envía el step 4 del
+    # welcome_week (día 7 post-conversion). El lead responde "1", "2"
+    # o "3" con la opción. Solo interpretamos EXACTO 1/2/3 — cualquier
+    # otra respuesta cae a agent_4 normal (regla del sistema: nunca
+    # interpretación semántica más allá del token exacto).
+    if state and state.get("phase") == "AWAITING_WELCOME_CHECKIN":
+        stripped = (text or "").strip()
+        # Normalizar: puede venir "1️⃣" o "1" o "1." etc. Solo primer char dígito.
+        first = stripped[0] if stripped else ""
+        if first in ("1", "2", "3"):
+            return _handle_welcome_checkin_response(lead, first)
+        return False  # cualquier otra cosa → agent_4 la procesa
+
     # Absent-interest flow (Gelfis 2026-07-16): el lead no asistió y
     # le mandamos "¿sigues interesado?". Detectamos SÍ / NO en su
     # respuesta ANTES del resto de intents.
@@ -496,6 +510,85 @@ def handle_inbound(lead: dict, text: str) -> bool:
     if is_confirm:
         return _send_confirm_ack(lead, trial)
     return _send_link(lead, trial, intent="cancel" if is_cancel else "reschedule")
+
+
+def _handle_welcome_checkin_response(lead: dict, choice: str) -> bool:
+    """Lead respondió 1/2/3 al check-in de welcome_week (día 7).
+    1 = ack de celebración + limpiar state.
+    2 o 3 = needs_human + tarea al admin/profe con contexto.
+    Gelfis 2026-08-14 — regla: nunca interpretación más allá del token exacto.
+    """
+    lead_id = lead["id"]
+    name = (lead.get("name") or "").split()[0] or (lead.get("name") or "")
+
+    if choice == "1":
+        # ACK: leer template welcome_week sub_n=5 desde BD
+        try:
+            with get_conn() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT body FROM message_templates WHERE kind='welcome_week' AND sub_n=5 AND channel='whatsapp' AND active=true"
+                )
+                row = cur.fetchone()
+            body_tpl = (row["body"] if isinstance(row, dict) else row[0]) if row else None
+            text = body_tpl.replace("{nombre}", name) if body_tpl else (
+                f"¡Genial, {name}! 🎉 Sigue así — cualquier cosa, aquí estoy."
+            )
+            res = send_approved(lead, text, advance_followup=False, kind="welcome_week_checkin_ack")
+            if not res.success:
+                log.warning("[welcome-checkin] ack send failed for %s: %s", lead_id, res.reason)
+        except Exception:  # noqa: BLE001
+            log.exception("[welcome-checkin] failed to send ack")
+
+        # Limpiar state
+        _write_state(lead_id, None)
+        log_timeline(
+            lead_id, type="agent_note", author="system",
+            content="✅ Welcome week check-in: respondió 1 (todo bien)",
+            metadata={"kind": "welcome_week_checkin_answer", "choice": "1"},
+        )
+        return True
+
+    # choice in ("2", "3") → needs_human + tarea al admin
+    reasons = {
+        "2": "duda pendiente (respuesta 2 al check-in semana 1)",
+        "3": "necesita ayuda (respuesta 3 al check-in semana 1)",
+    }
+    reason = reasons.get(choice, "check-in semana 1")
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute("UPDATE leads SET status='needs_human' WHERE id=%s", (lead_id,))
+            # Crear tarea al admin/closer del lead (si existe)
+            cur.execute(
+                "SELECT closer_id FROM leads WHERE id=%s",
+                (lead_id,),
+            )
+            row = cur.fetchone()
+            closer_id = (row["closer_id"] if isinstance(row, dict) else row[0]) if row else None
+            if closer_id:
+                from datetime import datetime, timedelta, timezone
+                now = datetime.now(timezone.utc)
+                cur.execute(
+                    """
+                    INSERT INTO tareas_closer (closer_id, lead_id, paso, tipo, canal,
+                        plantilla, fecha_programada, prioridad, fecha_vence)
+                    VALUES (%s, %s, 1, 'welcome_checkin', 'whatsapp', %s, %s, 'alta', %s)
+                    """,
+                    (
+                        closer_id, lead_id,
+                        f"Check-in semana 1: {reason}. Responder al alumno hoy.",
+                        now, now + timedelta(hours=24),
+                    ),
+                )
+    except Exception:  # noqa: BLE001
+        log.exception("[welcome-checkin] failed to mark needs_human / create tarea")
+
+    _write_state(lead_id, None)
+    log_timeline(
+        lead_id, type="agent_note", author="system",
+        content=f"⚠️ Welcome week check-in: respondió {choice} — {reason} → needs_human + tarea",
+        metadata={"kind": "welcome_week_checkin_answer", "choice": choice},
+    )
+    return True
 
 
 def _handle_absent_interest_yes(lead: dict) -> bool:

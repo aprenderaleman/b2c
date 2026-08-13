@@ -11,6 +11,9 @@ import { sendWelcomeStudentEmail } from "./email/send";
 import { issueGarantiaCertificate, type GarantiaSource } from "./garantia-cert";
 import { sendWhatsappText } from "./whatsapp";
 import { getLeadTrialTeacher } from "./trial-compensation";
+import { startChain, cancelActiveChain } from "./chain-engine";
+import { resolveChainVariables } from "./chain-variables";
+import { renderTemplate } from "./message-stats";
 
 export const ConvertBody = z.object({
   email:             z.string().trim().toLowerCase().email(),
@@ -224,6 +227,16 @@ export async function convertLeadToStudent(
     console.error("[convert] garantia issuance failed (non-fatal):", e instanceof Error ? e.message : e);
   }
 
+  // Video de bienvenida (Gelfis 2026-08-14): config editable. Si está
+  // vacío, el bloque no aparece en el email (no bloquea el deploy
+  // esperando el asset).
+  const { data: videoCfg } = await sb
+    .from("system_config")
+    .select("value")
+    .eq("key", "url_video_bienvenida")
+    .maybeSingle();
+  const videoUrl = ((videoCfg as { value?: string } | null)?.value ?? "").trim() || null;
+
   const emailResult = await sendWelcomeStudentEmail(body.email, {
     name:                body.fullName.split(/\s+/)[0] || body.fullName,
     email:               body.email,
@@ -243,6 +256,7 @@ export async function convertLeadToStudent(
       body.language,
     ),
     language: body.language,
+    videoUrl,
   }, garantiaAttachment ? [garantiaAttachment] : undefined);
 
   // Guard anti-duplicados del email de garantía (caso Javier
@@ -267,20 +281,65 @@ export async function convertLeadToStudent(
     console.error("[convert] migrateLeadNotesToStudent failed:", e instanceof Error ? e.message : e);
   });
 
+  // ── Cadena welcome_week — activación primera semana (Gelfis 2026-08-14)
+  // Reemplaza al WA welcome_student hardcoded. El T+0 se envía síncrono
+  // aquí abajo (transaccional — el lead acaba de pagar) usando el
+  // template de BD; el motor arranca con skipFirstStep:true y continúa
+  // con los steps 2-5 (Hans T+1d, SCHULE T+3d, check-in T+7d).
+  //
+  // Idempotencia: cancelamos cualquier chain activa previa antes de
+  // arrancar (típicamente la lead_chain post-trial: chain1_attended,
+  // chain3_obj_*, chain2_link_sent) — el lead pagó, esas ya no aplican.
   const waPhone = body.phone ?? lead.whatsapp_normalized;
   if (waPhone) {
-    const firstName = body.fullName.split(/\s+/)[0] || body.fullName;
-    // body.language forzado a "es" en el schema (línea 25) — texto ES
-    // directo. Ternaria antigua rompía tsc porque nunca elige el 'de'.
-    const waText = `¡Bienvenido a la Academia, ${firstName}! 🎉\n\nRevisa tu email — te enviamos tus accesos a la plataforma.\nMientras preparamos tu primera clase, ya puedes entrar a SCHULE para empezar a practicar. ¡Vamos!`;
-
-    const waResult = await sendWhatsappText(waPhone, waText, { kind: "welcome_student" });
-    if (!waResult.ok) {
+    try {
+      await cancelActiveChain(lead.id, "converted_started_welcome_week");
+      const nowIso = new Date().toISOString();
+      const vars = await resolveChainVariables(lead.id, {}, nowIso);
+      const { data: tpl } = await sb
+        .from("message_templates")
+        .select("body")
+        .eq("kind", "welcome_week")
+        .eq("sub_n", 1)
+        .eq("channel", "whatsapp")
+        .eq("active", true)
+        .maybeSingle();
+      const bodyTpl = (tpl as { body?: string } | null)?.body;
+      if (bodyTpl) {
+        const waText = renderTemplate(bodyTpl, vars);
+        const waResult = await sendWhatsappText(waPhone, waText, { kind: "welcome_week_t0" });
+        if (!waResult.ok) {
+          await sb.from("lead_timeline").insert({
+            lead_id: lead.id, type: "agent_note", author: "system",
+            content: `welcome_week T+0 WA skipped: ${waResult.reason}`,
+          });
+        } else {
+          await sb.from("lead_timeline").insert({
+            lead_id: lead.id, type: "system_message_sent", author: "system",
+            content: waText,
+            metadata: { kind: "welcome_week_t0", channel: "whatsapp", chain_type: "welcome_week", chain_step: 0 },
+          });
+        }
+      }
+      // Arranca el motor desde el step 2 (Hans T+1d en adelante).
+      await startChain(lead.id, "welcome_week", {}, { skipFirstStep: false });
+      // skipFirstStep:false → el motor evalúa el step 0 pero como delayMs=0,
+      // next_fire_at = ahora → se dispararía inmediato. Para evitar
+      // duplicar con el envío síncrono de arriba, avanzamos manual a step 1.
+      await sb.from("lead_chains")
+        .update({
+          current_step: 1,
+          next_fire_at: new Date(Date.now() + 24 * 3600_000).toISOString(),
+          last_auto_sent_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("lead_id", lead.id)
+        .is("completed_at", null);
+    } catch (e) {
+      console.error("[convert] welcome_week startChain error:", e instanceof Error ? e.message : e);
       await sb.from("lead_timeline").insert({
-        lead_id: lead.id,
-        type:    "agent_note",
-        author:  "system",
-        content: `Welcome WhatsApp send skipped: ${waResult.reason}`,
+        lead_id: lead.id, type: "agent_note", author: "system",
+        content: `welcome_week arranque falló: ${e instanceof Error ? e.message : "unknown"}`,
       });
     }
   }

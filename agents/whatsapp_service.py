@@ -251,6 +251,11 @@ class WhatsAppService:
         "sesion_confirm_ack",
         "sesion_closer_booked",
         "sesion_closer_pre_15m",
+        # Cadena welcome_week (Gelfis 2026-08-14)
+        "welcome_week_t0",
+        "welcome_week",
+        "welcome_week_celebration",
+        "welcome_week_checkin_ack",
         "admin_manual",
     })
 

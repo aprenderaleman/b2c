@@ -28,7 +28,8 @@ export type ChainType =
   | "chain8e_seguimiento"
   | "chain8g_reactivacion"
   | "sesion_attended"
-  | "sesion_absent";
+  | "sesion_absent"
+  | "welcome_week";
 
 export type ObjectionChip = "precio" | "pensarlo" | "pareja" | "tiempo";
 
@@ -53,6 +54,19 @@ export type ChainStep = {
   templateSubN: number;
   channels: ("whatsapp" | "email")[];
   skipIfPaid?: boolean;
+  /**
+   * Si el lead ya usó la herramienta indicada, sustituye el template
+   * por `${templateKind}_celebration` (mensaje corto de reconocimiento).
+   * Requiere que existan helpers `hasUsedHans`/`hasUsedSchule` (hoy stub —
+   * TODO cuando integremos las tablas de actividad).
+   */
+  celebrationIfUsed?: "hans" | "schule";
+  /**
+   * Al enviar este step, setea la phase en leads.reschedule_state para
+   * que Python (reschedule_flow) reconozca respuestas contextuales
+   * (ej: "1"/"2"/"3" solo dentro del check-in de welcome_week).
+   */
+  setStatePhase?: string;
   onComplete?: {
     setStatus?: string;
   };
@@ -474,6 +488,44 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
         templateSubN: 3,
         channels: ["whatsapp"],
         onComplete: { setStatus: "en_reactivacion" },
+      },
+    ],
+  },
+
+  // Secuencia de activación de la primera semana post-conversión.
+  // Gelfis 2026-08-14. Step 0 (T+0) se envía SÍNCRONO desde
+  // lead-conversion.ts; el motor arranca con skipFirstStep:true y
+  // continúa con los steps 2-5 (Hans, SCHULE, check-in, ack).
+  welcome_week: {
+    type: "welcome_week",
+    label: "Bienvenida — primera semana",
+    steps: [
+      // Step 0 — placeholder (skipped en producción, se envía síncrono).
+      { delayMs: 0, templateKind: "welcome_week", templateSubN: 1, channels: ["whatsapp"] },
+      // T+1d — Hans (variante celebración si ya lo usó)
+      {
+        delayMs: 24 * H,
+        templateKind: "welcome_week",
+        templateSubN: 2,
+        channels: ["whatsapp"],
+        celebrationIfUsed: "hans",
+      },
+      // T+3d — SCHULE (variante celebración si ya lo usó)
+      {
+        delayMs: 3 * D,
+        templateKind: "welcome_week",
+        templateSubN: 3,
+        channels: ["whatsapp"],
+        celebrationIfUsed: "schule",
+      },
+      // T+7d — check-in 1/2/3 (setea phase para que Python detecte respuesta)
+      {
+        delayMs: 7 * D,
+        templateKind: "welcome_week",
+        templateSubN: 4,
+        channels: ["whatsapp"],
+        setStatePhase: "AWAITING_WELCOME_CHECKIN",
+        onComplete: { setStatus: "student_active" },
       },
     ],
   },
