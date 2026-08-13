@@ -24,7 +24,10 @@ import { berlinDayOfWeek, berlinClockToUtcMs, isWindowValid } from "./trial-slot
 const DEFAULT_HORIZON_DAYS = 15;
 const EXTENDED_HORIZON_DAYS = 30;
 
-export const SESION_MINUTES = 20;
+// Gelfis 2026-08-14: duración baja de 20 → 15 min (menos fricción para
+// agendar; el closer usa los 15 min restantes del bloque :00/:30 como
+// buffer entre sesiones). El grid de slots sigue en 30 min.
+export const SESION_MINUTES = 15;
 const GRID_MINUTES = 30;                 // slots en :00 y :30
 const MIN_LEAD_TIME_HOURS = 2;
 const MAX_RESULTS = 400;

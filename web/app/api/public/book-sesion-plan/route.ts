@@ -12,7 +12,7 @@ import { notifyCloserOnBooking } from "@/lib/sesion-notifications";
 
 /**
  * POST /api/public/book-sesion-plan — agenda una Sesión de Plan
- * (videollamada de 20 min con un CLOSER) desde el funnel /sesion-plan.
+ * (videollamada de 15 min con un CLOSER) desde el funnel /sesion-plan.
  *
  * Gemelo ligero de book-trial con las reglas de Gelfis 2026-08-13:
  *  (a) lead existente NO se duplica: upsert por email/WhatsApp con
@@ -326,7 +326,7 @@ export async function POST(req: Request) {
       paso: 1,
       tipo: "sesion_plan",
       canal: "llamada",
-      plantilla: "Sesión de Plan (20 min) — videollamada con el lead",
+      plantilla: "Sesión de Plan (15 min) — videollamada con el lead",
       fecha_programada: b.slot_iso,
       prioridad: "alta",
       origen: "manual",
@@ -355,7 +355,7 @@ export async function POST(req: Request) {
         author: "system",
         content: rescheduled
           ? `📋 Sesión de Plan reagendada a ${startDate} (Berlín) con el closer.`
-          : `📋 Sesión de Plan agendada para ${startDate} (Berlín) — 20 min por videollamada con el closer. Cadena pausada (R3).`,
+          : `📋 Sesión de Plan agendada para ${startDate} (Berlín) — 15 min por videollamada con el closer. Cadena pausada (R3).`,
         metadata: {
           kind: "sesion_plan_booked",
           class_id: classId,

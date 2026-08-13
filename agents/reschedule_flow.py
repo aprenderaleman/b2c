@@ -585,7 +585,7 @@ def _send_sesion_confirm_ack(lead: dict, sesion: dict) -> bool:
     """
     name = (lead.get("name") or "").split()[0] or (lead.get("name") or "")
     closer_full = sesion.get("closer_name") or ""
-    closer_first = closer_full.split()[0] if closer_full else "tu asesor"
+    closer_first = closer_full.split()[0] if closer_full else ""
 
     # Fecha formateada en español, hora de Berlin
     sched = sesion["scheduled_at"]
@@ -600,8 +600,9 @@ def _send_sesion_confirm_ack(lead: dict, sesion: dict) -> bool:
     except Exception:
         fecha = "la fecha agendada"
 
+    who = closer_first if closer_first else "Tu asesor"
     text = (
-        f"¡Perfecto, {name}! {closer_first} te espera el {fecha} 😊 "
+        f"¡Perfecto, {name}! {who} te espera el {fecha} 😊 "
         "Te recuerdo antes de la sesión."
     )
 

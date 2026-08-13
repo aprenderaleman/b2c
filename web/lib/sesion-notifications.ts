@@ -52,8 +52,8 @@ type SesionRow = {
                 qualification_answers: Record<string, unknown> | null;
                 meta: Record<string, unknown> | null;
                 reschedule_state: { phase?: string } | null; }>;
-  closer: { full_name: string | null; email: string; whatsapp_normalized: string | null } |
-          Array<{ full_name: string | null; email: string; whatsapp_normalized: string | null }>;
+  closer: { full_name: string | null; email: string; phone: string | null } |
+          Array<{ full_name: string | null; email: string; phone: string | null }>;
 };
 
 const flat = <T,>(x: T | T[] | null | undefined): T | null =>
@@ -79,8 +79,14 @@ function fmtBerlin(iso: string): { full: string; day: string; time: string; hour
  * sesion-plan lo llena siempre) → meta.last_offered_objective → fallback.
  * Mapea los enums cortos ("job", "citizenship"...) a labels legibles.
  */
+/**
+ * Devuelve el label de meta pensado para el template "para lograr tu {meta}".
+ * Los labels NO empiezan por "tu"/"el" (evita duplicación) y encajan con
+ * un pronombre posesivo delante. Fallback "camino con el alemán" lee
+ * natural: "para lograr tu camino con el alemán".
+ */
 function resolveMetaLabel(leadRow: { qualification_answers: Record<string, unknown> | null; meta: Record<string, unknown> | null } | null): string {
-  if (!leadRow) return "aprender alemán";
+  if (!leadRow) return "camino con el alemán";
   const qa = leadRow.qualification_answers;
   const goal = (qa && typeof qa === "object" ? qa.goal : null) as string | null;
   const fromMeta = leadRow.meta?.last_offered_objective as string | undefined;
@@ -88,7 +94,7 @@ function resolveMetaLabel(leadRow: { qualification_answers: Record<string, unkno
   const LABEL: Record<string, string> = {
     job:         "objetivo laboral en Alemania",
     ausbildung:  "Ausbildung o carrera",
-    citizenship: "meta con la ciudadanía",
+    citizenship: "ciudadanía",
     daily_life:  "día a día en alemán",
     moving:      "mudanza a un país germanohablante",
     work:        "objetivo laboral en Alemania",
@@ -97,14 +103,23 @@ function resolveMetaLabel(leadRow: { qualification_answers: Record<string, unkno
     travel:      "día a día en alemán",
     already_in_dach: "día a día en alemán",
   };
-  return LABEL[raw] || raw || "aprender alemán";
+  return LABEL[raw] || raw || "camino con el alemán";
+}
+
+/**
+ * Referencia al closer en el copy. Si hay nombre → "con {Nombre}, tu asesor".
+ * Si no → "con tu asesor" (evita duplicación "con tu asesor, tu asesor").
+ */
+function closerRef(closerFullName: string | null | undefined): string {
+  const f = firstName(closerFullName ?? null);
+  return f ? `con ${f}, tu asesor` : `con tu asesor`;
 }
 
 const SESION_SELECT = `
   id, lead_id, scheduled_at, duration_minutes, short_code, notes_admin,
   lead:leads!inner(name, email, whatsapp_normalized, status, ai_paused_until,
                     qualification_answers, meta, reschedule_state),
-  closer:users!classes_sesion_closer_id_fkey(full_name, email, whatsapp_normalized)
+  closer:users!classes_sesion_closer_id_fkey(full_name, email, phone)
 `;
 
 // ─────────────────────────────────────────────────────────
@@ -138,7 +153,9 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
     if (!lead || !row.lead_id) continue;
 
     const leadFirst = firstName(lead.name) || "¡Hola!";
-    const closerFirst = firstName(closer?.full_name) || "tu asesor";
+    const closerFirst = firstName(closer?.full_name);          // "" si no hay
+    const closerLabel = closerRef(closer?.full_name);          // "con Camila, tu asesor" | "con tu asesor"
+    const closerForIcs = closerFirst || "tu asesor";
     const when = fmtBerlin(row.scheduled_at);
     const meta = resolveMetaLabel(lead);
     const joinUrl = buildLeadJoinUrl({ classId: row.id, leadId: row.lead_id, shortCode: row.short_code, baseUrl: PLATFORM_URL });
@@ -153,7 +170,7 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
         startIso: row.scheduled_at,
         durationMin: row.duration_minutes ?? SESION_DURATION_MIN,
         summary: `${leadFirst} + Sesión de Plan de Alemán 📋`,
-        description: `Videollamada de ${SESION_DURATION_MIN} minutos con ${closerFirst} para armar tu plan de alemán.\n\nEntra aquí: ${joinUrl}`,
+        description: `Videollamada de ${SESION_DURATION_MIN} minutos con ${closerForIcs} para armar tu plan de alemán.\n\nEntra aquí: ${joinUrl}`,
         organizerName: "Aprender-Aleman.de",
         organizerEmail: "info@aprender-aleman.de",
         attendeeName: lead.name ?? undefined,
@@ -165,13 +182,13 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
         <p>¡Hola ${leadFirst}!</p>
         <p>Tu <strong>Sesión de Plan</strong> está confirmada:</p>
         <p style="font-size:18px;">📅 <strong>${when.full}</strong> (hora de Berlín)</p>
-        <p>🎥 Videollamada con <strong>${closerFirst}</strong>, tu asesor — ${SESION_DURATION_MIN} minutos</p>
+        <p>🎥 Videollamada ${closerLabel} — ${SESION_DURATION_MIN} minutos</p>
         <p>En la sesión sales con tu nivel real, tu ruta exacta y <strong>tu fecha</strong> para lograr tu ${meta}. Sin examen y sin compromiso 😉</p>
         <p><a href="${joinUrl}" style="color:#059669;font-weight:bold;">👉 Entra a la videollamada aquí</a></p>
         <p style="color:#64748b;font-size:13px;">Adjuntamos la invitación de calendario. Si te surge algo, respóndenos y la movemos.</p>
         <p><em style="color:#64748b;">El equipo de Aprender-Aleman.de</em></p>
       `;
-      const text = `¡Hola ${leadFirst}!\n\nTu Sesión de Plan está confirmada: ${when.full} (Berlín).\nVideollamada con ${closerFirst} — ${SESION_DURATION_MIN} min.\nSales con tu nivel, tu ruta y tu fecha para lograr tu ${meta}.\n\nEntra aquí: ${joinUrl}\n\n— Aprender-Aleman.de`;
+      const text = `¡Hola ${leadFirst}!\n\nTu Sesión de Plan está confirmada: ${when.full} (Berlín).\nVideollamada ${closerLabel} — ${SESION_DURATION_MIN} min.\nSales con tu nivel, tu ruta y tu fecha para lograr tu ${meta}.\n\nEntra aquí: ${joinUrl}\n\n— Aprender-Aleman.de`;
       const res = await sendRaw(lead.email, subject, html, text, [
         { filename: "sesion-de-plan.ics", content: Buffer.from(ics, "utf8"), contentType: "text/calendar" },
       ]);
@@ -183,7 +200,7 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
       const msg =
         `¡Hola ${leadFirst}! 😊 Tu Sesión de Plan quedó agendada:\n` +
         `📅 ${when.day} a las ${when.time}\n` +
-        `🎥 Videollamada con ${closerFirst}, tu asesor — ${SESION_DURATION_MIN} minutos\n\n` +
+        `🎥 Videollamada ${closerLabel} — ${SESION_DURATION_MIN} minutos\n\n` +
         `En la sesión sales con tu nivel real, tu ruta exacta y TU FECHA para lograr tu ${meta}. Sin examen y sin compromiso 😉\n\n` +
         `👉 Link de acceso: ${joinUrl}\n\n` +
         `Responde CONFIRMO para asegurar tu sesión — y si te surge algo, dímelo y la movemos sin problema.`;
@@ -272,7 +289,10 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
     if (lead.ai_paused_until && new Date(lead.ai_paused_until).getTime() > now) continue;
 
     const leadFirst = firstName(lead.name) || "¡Hola!";
-    const closerFirst = firstName(closer?.full_name) || "tu asesor";
+    const closerFirst = firstName(closer?.full_name);          // "" si no hay
+    // Referencia corta al closer para los recordatorios: "Camila" o
+    // "tu asesor" (sin coma — el copy ya trae la preposición).
+    const closerShort = closerFirst || "tu asesor";
     const when = fmtBerlin(row.scheduled_at);
     const meta = resolveMetaLabel(lead);
     const joinUrl = buildLeadJoinUrl({ classId: row.id, leadId: row.lead_id, shortCode: row.short_code, baseUrl: PLATFORM_URL });
@@ -280,7 +300,7 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
     let msg: string;
     if (kind === "24h") {
       msg =
-        `¡${leadFirst}! Mañana a las ${when.time} es tu Sesión de Plan con ${closerFirst} 📅\n` +
+        `¡${leadFirst}! Mañana a las ${when.time} es tu Sesión de Plan con ${closerShort} 📅\n` +
         `En ${SESION_DURATION_MIN} minutos tendrás tu ruta y tu fecha para tu ${meta}.\n\n` +
         `👉 ${joinUrl}\n\n` +
         `Si no puedes, dímelo y la movemos — el hueco es tuyo.`;
@@ -289,12 +309,12 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
       // cubre esa ventana y evitamos duplicar en horario temprano.
       if (when.hourNumber < 10) continue;
       msg =
-        `¡Buenos días, ${leadFirst}! Hoy a las ${when.time} tienes tu Sesión de Plan con ${closerFirst} 🎥\n\n` +
+        `¡Buenos días, ${leadFirst}! Hoy a las ${when.time} tienes tu Sesión de Plan con ${closerShort} 🎥\n\n` +
         `Un consejo: tenla donde puedas hablar tranquilo/a 5 minutos — es corta pero vale oro.\n\n` +
         `Link: ${joinUrl}`;
     } else {
       msg =
-        `⏰ ¡${leadFirst}! Tu sesión con ${closerFirst} empieza en 15 minutos.\n\n` +
+        `⏰ ¡${leadFirst}! Tu sesión con ${closerShort} empieza en 15 minutos.\n\n` +
         `Entra aquí cuando quieras: ${joinUrl} — te está esperando 😊`;
     }
 
@@ -337,7 +357,7 @@ export async function notifyCloserOnBooking(sb: SB, classId: string): Promise<bo
 
   const lead = flat(row.lead);
   const closer = flat(row.closer);
-  if (!closer?.whatsapp_normalized || !lead) return false;
+  if (!closer?.phone || !lead) return false;
 
   const closerFirst = firstName(closer.full_name) || "asesor";
   const leadFirst = firstName(lead.name) || "un lead";
@@ -351,7 +371,7 @@ export async function notifyCloserOnBooking(sb: SB, classId: string): Promise<bo
     `📅 ${when.full} (Berlín)\n\n` +
     `Tienes tu tarea sesion_plan en la cola HOY del panel closer.`;
 
-  const res = await sendWhatsappText(closer.whatsapp_normalized, msg, { kind: "sesion_closer_booked" });
+  const res = await sendWhatsappText(closer.phone, msg, { kind: "sesion_closer_booked" });
   return res.ok;
 }
 
@@ -385,7 +405,7 @@ export async function notifyCloserPreSession(sb: SB): Promise<number> {
 
     const lead = flat(row.lead);
     const closer = flat(row.closer);
-    if (!closer?.whatsapp_normalized || !lead || !row.lead_id) continue;
+    if (!closer?.phone || !lead || !row.lead_id) continue;
 
     const closerFirst = firstName(closer.full_name) || "asesor";
     const leadFirst = firstName(lead.name) || "el lead";
@@ -399,7 +419,7 @@ export async function notifyCloserPreSession(sb: SB): Promise<number> {
       `📅 ${when.time} (Berlín)\n\n` +
       `Entra aquí: ${joinUrl}`;
 
-    const res = await sendWhatsappText(closer.whatsapp_normalized, msg, { kind: "sesion_closer_pre_15m" });
+    const res = await sendWhatsappText(closer.phone, msg, { kind: "sesion_closer_pre_15m" });
     if (!res.ok) continue;
 
     await sb.from("classes")
