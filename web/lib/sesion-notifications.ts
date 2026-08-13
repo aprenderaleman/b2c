@@ -11,8 +11,17 @@
  * el nombre del closer SÍ se menciona: la sesión es una cita personal
  * con el asesor y el nombre reduce no-shows.
  *
- * Canales: confirmación = email (.ics) + WhatsApp; recordatorios =
- * WhatsApp (el .ics de la confirmación ya puso la cita en su calendario).
+ * Canales:
+ *   - Confirmación al lead: email (.ics) + WhatsApp
+ *   - Recordatorios al lead: WhatsApp
+ *   - Notificaciones al closer: WhatsApp (al agendarse + T-15m)
+ *
+ * Reglas AUTHORING_RULES vigentes (2026-08-14):
+ *   - Handlers no envían mensajes directamente — SOLO los crons vía
+ *     este helper. book-sesion-plan pasa notify_after_at=now() para
+ *     que el próximo tick del cron dispare la confirmación.
+ *   - Sin escasez inventada. CONFIRMO es señal, no condición.
+ *   - Copy en español único (task #36).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -22,6 +31,7 @@ import { buildTrialIcs } from "./ics";
 import { buildLeadJoinUrl } from "./trial-token";
 
 const PLATFORM_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+const SESION_DURATION_MIN = 15;
 
 type SB = SupabaseClient;
 
@@ -32,10 +42,18 @@ type SesionRow = {
   duration_minutes: number | null;
   short_code: string | null;
   notes_admin: string | null;
-  lead: { name: string | null; email: string | null; whatsapp_normalized: string | null; status: string } |
-        Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null; status: string }>;
-  closer: { full_name: string | null; email: string } |
-          Array<{ full_name: string | null; email: string }>;
+  lead: { name: string | null; email: string | null; whatsapp_normalized: string | null;
+          status: string; ai_paused_until: string | null;
+          qualification_answers: Record<string, unknown> | null;
+          meta: Record<string, unknown> | null;
+          reschedule_state: { phase?: string } | null; } |
+        Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null;
+                status: string; ai_paused_until: string | null;
+                qualification_answers: Record<string, unknown> | null;
+                meta: Record<string, unknown> | null;
+                reschedule_state: { phase?: string } | null; }>;
+  closer: { full_name: string | null; email: string; whatsapp_normalized: string | null } |
+          Array<{ full_name: string | null; email: string; whatsapp_normalized: string | null }>;
 };
 
 const flat = <T,>(x: T | T[] | null | undefined): T | null =>
@@ -45,19 +63,48 @@ function firstName(s: string | null | undefined): string {
   return (s ?? "").trim().split(/\s+/)[0] || "";
 }
 
-function fmtBerlin(iso: string): { full: string; day: string; time: string } {
+function fmtBerlin(iso: string): { full: string; day: string; time: string; hourNumber: number } {
   const d = new Date(iso);
+  const hourStr = d.toLocaleString("en-US", { timeZone: "Europe/Berlin", hour: "2-digit", hour12: false });
   return {
     full: d.toLocaleString("es-ES", { timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }),
     day:  d.toLocaleString("es-ES", { timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long" }),
     time: d.toLocaleString("es-ES", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" }),
+    hourNumber: parseInt(hourStr, 10),
   };
+}
+
+/**
+ * Resuelve {meta} desde el lead: qualification_answers.goal (funnel
+ * sesion-plan lo llena siempre) → meta.last_offered_objective → fallback.
+ * Mapea los enums cortos ("job", "citizenship"...) a labels legibles.
+ */
+function resolveMetaLabel(leadRow: { qualification_answers: Record<string, unknown> | null; meta: Record<string, unknown> | null } | null): string {
+  if (!leadRow) return "aprender alemán";
+  const qa = leadRow.qualification_answers;
+  const goal = (qa && typeof qa === "object" ? qa.goal : null) as string | null;
+  const fromMeta = leadRow.meta?.last_offered_objective as string | undefined;
+  const raw = goal || fromMeta || "";
+  const LABEL: Record<string, string> = {
+    job:         "objetivo laboral en Alemania",
+    ausbildung:  "Ausbildung o carrera",
+    citizenship: "meta con la ciudadanía",
+    daily_life:  "día a día en alemán",
+    moving:      "mudanza a un país germanohablante",
+    work:        "objetivo laboral en Alemania",
+    studies:     "objetivo académico",
+    visa:        "trámite del visado",
+    travel:      "día a día en alemán",
+    already_in_dach: "día a día en alemán",
+  };
+  return LABEL[raw] || raw || "aprender alemán";
 }
 
 const SESION_SELECT = `
   id, lead_id, scheduled_at, duration_minutes, short_code, notes_admin,
-  lead:leads!inner(name, email, whatsapp_normalized, status),
-  closer:users!classes_sesion_closer_id_fkey(full_name, email)
+  lead:leads!inner(name, email, whatsapp_normalized, status, ai_paused_until,
+                    qualification_answers, meta, reschedule_state),
+  closer:users!classes_sesion_closer_id_fkey(full_name, email, whatsapp_normalized)
 `;
 
 // ─────────────────────────────────────────────────────────
@@ -93,6 +140,7 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
     const leadFirst = firstName(lead.name) || "¡Hola!";
     const closerFirst = firstName(closer?.full_name) || "tu asesor";
     const when = fmtBerlin(row.scheduled_at);
+    const meta = resolveMetaLabel(lead);
     const joinUrl = buildLeadJoinUrl({ classId: row.id, leadId: row.lead_id, shortCode: row.short_code, baseUrl: PLATFORM_URL });
 
     let emailOk = false;
@@ -103,9 +151,9 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
       const ics = buildTrialIcs({
         uid: row.id,
         startIso: row.scheduled_at,
-        durationMin: row.duration_minutes ?? 20,
+        durationMin: row.duration_minutes ?? SESION_DURATION_MIN,
         summary: `${leadFirst} + Sesión de Plan de Alemán 📋`,
-        description: `Videollamada de 20 minutos con ${closerFirst} para armar tu plan de alemán.\n\nEntra aquí: ${joinUrl}`,
+        description: `Videollamada de ${SESION_DURATION_MIN} minutos con ${closerFirst} para armar tu plan de alemán.\n\nEntra aquí: ${joinUrl}`,
         organizerName: "Aprender-Aleman.de",
         organizerEmail: "info@aprender-aleman.de",
         attendeeName: lead.name ?? undefined,
@@ -116,27 +164,29 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
       const html = `
         <p>¡Hola ${leadFirst}!</p>
         <p>Tu <strong>Sesión de Plan</strong> está confirmada:</p>
-        <p style="font-size:18px;"><strong>${when.full}</strong> (hora de Berlín) · 20 minutos · videollamada</p>
-        <p>Hablarás con <strong>${closerFirst}</strong>, tu asesor: definiréis tu nivel real, tu meta y el camino más corto para lograrla — con fechas y precio claros.</p>
+        <p style="font-size:18px;">📅 <strong>${when.full}</strong> (hora de Berlín)</p>
+        <p>🎥 Videollamada con <strong>${closerFirst}</strong>, tu asesor — ${SESION_DURATION_MIN} minutos</p>
+        <p>En la sesión sales con tu nivel real, tu ruta exacta y <strong>tu fecha</strong> para lograr tu ${meta}. Sin examen y sin compromiso 😉</p>
         <p><a href="${joinUrl}" style="color:#059669;font-weight:bold;">👉 Entra a la videollamada aquí</a></p>
-        <p style="color:#64748b;font-size:13px;">Adjuntamos la invitación de calendario. Si el horario no te viene bien, responde a este correo y lo cambiamos.</p>
+        <p style="color:#64748b;font-size:13px;">Adjuntamos la invitación de calendario. Si te surge algo, respóndenos y la movemos.</p>
         <p><em style="color:#64748b;">El equipo de Aprender-Aleman.de</em></p>
       `;
-      const text = `¡Hola ${leadFirst}!\n\nTu Sesión de Plan está confirmada: ${when.full} (hora de Berlín) · 20 min · videollamada con ${closerFirst}.\n\nEntra aquí: ${joinUrl}\n\nEl equipo de Aprender-Aleman.de`;
+      const text = `¡Hola ${leadFirst}!\n\nTu Sesión de Plan está confirmada: ${when.full} (Berlín).\nVideollamada con ${closerFirst} — ${SESION_DURATION_MIN} min.\nSales con tu nivel, tu ruta y tu fecha para lograr tu ${meta}.\n\nEntra aquí: ${joinUrl}\n\n— Aprender-Aleman.de`;
       const res = await sendRaw(lead.email, subject, html, text, [
         { filename: "sesion-de-plan.ics", content: Buffer.from(ics, "utf8"), contentType: "text/calendar" },
       ]);
       emailOk = res.ok;
     }
 
-    // WhatsApp
+    // WhatsApp (copy Gelfis 2026-08-14)
     if (lead.whatsapp_normalized) {
       const msg =
-        `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\n` +
-        `📋 Tu *Sesión de Plan* está confirmada para *${when.full}* (hora de Berlín) con ${closerFirst}, tu asesor.\n\n` +
-        `Son 20 minutos por videollamada para armar tu plan de alemán: nivel, meta y precio claros.\n\n` +
-        `🔗 Entras aquí el día de la sesión: ${joinUrl}\n\n` +
-        `Responde CONFIRMO para asegurar tu plaza 😊`;
+        `¡Hola ${leadFirst}! 😊 Tu Sesión de Plan quedó agendada:\n` +
+        `📅 ${when.day} a las ${when.time}\n` +
+        `🎥 Videollamada con ${closerFirst}, tu asesor — ${SESION_DURATION_MIN} minutos\n\n` +
+        `En la sesión sales con tu nivel real, tu ruta exacta y TU FECHA para lograr tu ${meta}. Sin examen y sin compromiso 😉\n\n` +
+        `👉 Link de acceso: ${joinUrl}\n\n` +
+        `Responde CONFIRMO para asegurar tu sesión — y si te surge algo, dímelo y la movemos sin problema.`;
       const res = await sendWhatsappText(lead.whatsapp_normalized, msg, { kind: "sesion_confirmation" });
       waOk = res.ok;
     }
@@ -162,7 +212,7 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
 }
 
 // ─────────────────────────────────────────────────────────
-// Recordatorios (desde los crons trial-reminders-*)
+// Recordatorios al lead (desde los crons trial-reminders-*)
 // ─────────────────────────────────────────────────────────
 export type SesionReminderKind = "24h" | "morning" | "15m";
 
@@ -212,20 +262,40 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
     const lead = flat(row.lead);
     const closer = flat(row.closer);
     if (!lead || !row.lead_id || !lead.whatsapp_normalized) continue;
+
+    // Guards (Gelfis 2026-08-14, espejo de los recordatorios de trials):
+    //   - lead converted → cerró, no molestar
+    //   - reschedule pendiente → mensaje sería incoherente con el reagendamiento
+    //   - ai_paused_until activo → "tomo yo desde aquí" del admin
     if (lead.status === "converted") continue;
+    if (lead.reschedule_state?.phase?.startsWith("AWAITING_")) continue;
+    if (lead.ai_paused_until && new Date(lead.ai_paused_until).getTime() > now) continue;
 
     const leadFirst = firstName(lead.name) || "¡Hola!";
     const closerFirst = firstName(closer?.full_name) || "tu asesor";
     const when = fmtBerlin(row.scheduled_at);
+    const meta = resolveMetaLabel(lead);
     const joinUrl = buildLeadJoinUrl({ classId: row.id, leadId: row.lead_id, shortCode: row.short_code, baseUrl: PLATFORM_URL });
 
     let msg: string;
     if (kind === "24h") {
-      msg = `¡Hola ${leadFirst}! Mañana ${when.day} a las *${when.time}* (Berlín) es tu *Sesión de Plan* con ${closerFirst} 📋\n\n20 minutos por videollamada — sales con tu plan de alemán listo.\n\n🔗 Entras aquí: ${joinUrl}`;
+      msg =
+        `¡${leadFirst}! Mañana a las ${when.time} es tu Sesión de Plan con ${closerFirst} 📅\n` +
+        `En ${SESION_DURATION_MIN} minutos tendrás tu ruta y tu fecha para tu ${meta}.\n\n` +
+        `👉 ${joinUrl}\n\n` +
+        `Si no puedes, dímelo y la movemos — el hueco es tuyo.`;
     } else if (kind === "morning") {
-      msg = `¡Buenos días ${leadFirst}! Hoy a las *${when.time}* (Berlín) tienes tu *Sesión de Plan* con ${closerFirst} 📋\n\nSolo necesitas 20 minutos y un lugar tranquilo.\n\n🔗 Entras aquí: ${joinUrl}`;
+      // Skip si la sesión es antes de las 10:00 Berlin — el T-15m ya
+      // cubre esa ventana y evitamos duplicar en horario temprano.
+      if (when.hourNumber < 10) continue;
+      msg =
+        `¡Buenos días, ${leadFirst}! Hoy a las ${when.time} tienes tu Sesión de Plan con ${closerFirst} 🎥\n\n` +
+        `Un consejo: tenla donde puedas hablar tranquilo/a 5 minutos — es corta pero vale oro.\n\n` +
+        `Link: ${joinUrl}`;
     } else {
-      msg = `⏰ ¡${leadFirst}! Tu *Sesión de Plan* con ${closerFirst} empieza en 15 minutos.\n\nÚnete ahora: ${joinUrl}`;
+      msg =
+        `⏰ ¡${leadFirst}! Tu sesión con ${closerFirst} empieza en 15 minutos.\n\n` +
+        `Entra aquí cuando quieras: ${joinUrl} — te está esperando 😊`;
     }
 
     const res = await sendWhatsappText(lead.whatsapp_normalized, msg, { kind: `sesion_reminder_${kind}` });
@@ -242,6 +312,99 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
       content: `📋 Recordatorio de Sesión de Plan (${kind}) enviado por WhatsApp`,
       metadata: { kind: `sesion_reminder_${kind}`, class_id: row.id },
     });
+    sent++;
+  }
+  return sent;
+}
+
+// ─────────────────────────────────────────────────────────
+// Notificaciones al CLOSER
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Al agendarse una sesión — WhatsApp inmediato al closer con lead,
+ * meta y hora. Espejo de la notificación al profesor en trials.
+ * Llamado desde book-sesion-plan (dentro de after()).
+ */
+export async function notifyCloserOnBooking(sb: SB, classId: string): Promise<boolean> {
+  const { data } = await sb
+    .from("classes")
+    .select(SESION_SELECT)
+    .eq("id", classId)
+    .maybeSingle();
+  const row = data as unknown as SesionRow | null;
+  if (!row) return false;
+
+  const lead = flat(row.lead);
+  const closer = flat(row.closer);
+  if (!closer?.whatsapp_normalized || !lead) return false;
+
+  const closerFirst = firstName(closer.full_name) || "asesor";
+  const leadFirst = firstName(lead.name) || "un lead";
+  const when = fmtBerlin(row.scheduled_at);
+  const meta = resolveMetaLabel(lead);
+
+  const msg =
+    `📋 ${closerFirst}, nueva Sesión de Plan agendada:\n\n` +
+    `👤 ${lead.name ?? leadFirst}\n` +
+    `🎯 Meta: ${meta}\n` +
+    `📅 ${when.full} (Berlín)\n\n` +
+    `Tienes tu tarea sesion_plan en la cola HOY del panel closer.`;
+
+  const res = await sendWhatsappText(closer.whatsapp_normalized, msg, { kind: "sesion_closer_booked" });
+  return res.ok;
+}
+
+/**
+ * T-15m — WhatsApp al closer para que se prepare. Llamado desde el mismo
+ * cron trial-reminders-15m, DESPUÉS de sendSesionReminders. Marca
+ * idempotente separado del recordatorio al lead.
+ */
+const CLOSER_PRE_15M_MARKER = "[sesion_closer_pre_15m_sent]";
+
+export async function notifyCloserPreSession(sb: SB): Promise<number> {
+  const now = Date.now();
+  const fromIso = new Date(now).toISOString();
+  const toIso   = new Date(now + 20 * 60_000).toISOString();
+
+  const { data } = await sb
+    .from("classes")
+    .select(SESION_SELECT)
+    .not("sesion_closer_id", "is", null)
+    .eq("status", "scheduled")
+    .is("deleted_at", null)
+    .gte("scheduled_at", fromIso)
+    .lte("scheduled_at", toIso)
+    .limit(30);
+
+  let sent = 0;
+  for (const row of (data ?? []) as unknown as SesionRow[]) {
+    if ((row.notes_admin ?? "").includes(CLOSER_PRE_15M_MARKER)) continue;
+    const minsTo = (new Date(row.scheduled_at).getTime() - now) / 60_000;
+    if (minsTo < 12 || minsTo > 18) continue;
+
+    const lead = flat(row.lead);
+    const closer = flat(row.closer);
+    if (!closer?.whatsapp_normalized || !lead || !row.lead_id) continue;
+
+    const closerFirst = firstName(closer.full_name) || "asesor";
+    const leadFirst = firstName(lead.name) || "el lead";
+    const when = fmtBerlin(row.scheduled_at);
+    const meta = resolveMetaLabel(lead);
+    const joinUrl = buildLeadJoinUrl({ classId: row.id, leadId: row.lead_id, shortCode: row.short_code, baseUrl: PLATFORM_URL });
+
+    const msg =
+      `⏰ ${closerFirst}, tu Sesión de Plan con ${lead.name ?? leadFirst} empieza en 15 min.\n\n` +
+      `🎯 Meta: ${meta}\n` +
+      `📅 ${when.time} (Berlín)\n\n` +
+      `Entra aquí: ${joinUrl}`;
+
+    const res = await sendWhatsappText(closer.whatsapp_normalized, msg, { kind: "sesion_closer_pre_15m" });
+    if (!res.ok) continue;
+
+    await sb.from("classes")
+      .update({ notes_admin: `${row.notes_admin ?? ""} ${CLOSER_PRE_15M_MARKER}`.trim() })
+      .eq("id", row.id);
     sent++;
   }
   return sent;

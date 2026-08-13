@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { sendSesionReminders } from "@/lib/sesion-notifications";
+import { sendSesionReminders, notifyCloserPreSession } from "@/lib/sesion-notifications";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { sendTrialReminderEmail } from "@/lib/email/send";
 import { buildLeadJoinUrl } from "@/lib/trial-token";
@@ -155,8 +155,11 @@ async function run(req: Request) {
     }
   }
 
-  // Sesiones de Plan (closers) comparten este cron (2026-08-13)
+  // Sesiones de Plan (closers) comparten este cron (2026-08-13).
+  // Al T-15m también avisamos al closer (espejo del recordatorio al
+  // lead — Gelfis 2026-08-14).
   const sesiones = await sendSesionReminders(sb, "15m").catch(() => 0);
+  const closers_pre = await notifyCloserPreSession(sb).catch(() => 0);
 
   return NextResponse.json({
     ok: true,
@@ -166,5 +169,6 @@ async function run(req: Request) {
     skipped,
     failed,
     sesiones,
+    closers_pre,
   });
 }

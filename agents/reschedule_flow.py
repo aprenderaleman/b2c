@@ -171,6 +171,37 @@ def _write_state(lead_id: str, state: dict | None) -> None:
         )
 
 
+def _get_active_sesion_plan(lead_id: str) -> dict | None:
+    """Devuelve la Sesion de Plan futura mas cercana del lead (funnel
+    /sesion-plan con closer, no clase de prueba). Solo status='scheduled'
+    y aun futura — si ya pasó, no la traemos: el rescate del no-show es
+    tarea del closer, no de este flow.
+    Devuelve dict con id, scheduled_at, closer_name (para el ACK)."""
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT c.id, c.scheduled_at, u.full_name AS closer_name
+              FROM classes c
+              LEFT JOIN users u ON u.id = c.sesion_closer_id
+             WHERE c.lead_id = %s
+               AND c.sesion_closer_id IS NOT NULL
+               AND c.status = 'scheduled'
+               AND c.scheduled_at > NOW()
+             ORDER BY c.scheduled_at ASC
+             LIMIT 1
+            """,
+            (lead_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+    return {
+        "id":            row["id"],
+        "scheduled_at":  row["scheduled_at"],
+        "closer_name":   row["closer_name"],
+    }
+
+
 def _get_active_trial(lead_id: str) -> dict | None:
     """Devuelve la clase de prueba 'activa' del lead. Ampliado 2026-06-14
     (caso Nadyn): tambien matchea clases con status != 'scheduled' si
@@ -448,6 +479,15 @@ def handle_inbound(lead: dict, text: str) -> bool:
     if not is_confirm and not is_reschedule and not is_cancel:
         return False
 
+    # Sesion de Plan tiene prioridad sobre trial en el ACK CONFIRMO
+    # (Gelfis 2026-08-14): si el lead tiene sesion futura, responder
+    # CONFIRMO se refiere a la sesion. reschedule/cancel de sesion no
+    # se manejan aqui — el closer las mueve manualmente desde su panel.
+    if is_confirm:
+        sesion = _get_active_sesion_plan(lead_id)
+        if sesion:
+            return _send_sesion_confirm_ack(lead, sesion)
+
     trial = _get_active_trial(lead_id)
     if not trial:
         # No hay trial pendiente → no es nuestra responsabilidad.
@@ -537,6 +577,63 @@ def _handle_absent_interest_no(lead: dict) -> bool:
 # ─────────────────────────────────────────────────────────
 # Acciones
 # ─────────────────────────────────────────────────────────
+
+def _send_sesion_confirm_ack(lead: dict, sesion: dict) -> bool:
+    """Lead respondió CONFIRMO a la Sesion de Plan (funnel /sesion-plan).
+    Copy Gelfis 2026-08-14: menciona al closer por nombre + fecha corta.
+    Persiste badge de confirmacion en leads.meta.sesion_confirmed_at.
+    """
+    name = (lead.get("name") or "").split()[0] or (lead.get("name") or "")
+    closer_full = sesion.get("closer_name") or ""
+    closer_first = closer_full.split()[0] if closer_full else "tu asesor"
+
+    # Fecha formateada en español, hora de Berlin
+    sched = sesion["scheduled_at"]
+    try:
+        # Formato "sábado, 8 de agosto" (sin hora — el copy es informal)
+        import zoneinfo
+        berlin = sched.astimezone(zoneinfo.ZoneInfo("Europe/Berlin"))
+        dias = ["lunes","martes","miércoles","jueves","viernes","sábado","domingo"]
+        meses = ["enero","febrero","marzo","abril","mayo","junio",
+                 "julio","agosto","septiembre","octubre","noviembre","diciembre"]
+        fecha = f"{dias[berlin.weekday()]}, {berlin.day} de {meses[berlin.month-1]}"
+    except Exception:
+        fecha = "la fecha agendada"
+
+    text = (
+        f"¡Perfecto, {name}! {closer_first} te espera el {fecha} 😊 "
+        "Te recuerdo antes de la sesión."
+    )
+
+    res = send_approved(lead, text, advance_followup=False, kind="sesion_confirm_ack")
+    if not res.success:
+        log.warning("[sesion-confirm] ack send blocked/failed for %s: %s", lead["id"], res.reason)
+        return True   # mantenemos control aunque el envio falle
+
+    # Persistir badge en leads.meta.sesion_confirmed_at
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE leads
+                   SET meta = COALESCE(meta, '{}'::jsonb)
+                                || jsonb_build_object('sesion_confirmed_at', NOW()::text)
+                 WHERE id = %s
+                """,
+                (lead["id"],),
+            )
+    except Exception:  # noqa: BLE001
+        log.exception("[sesion-confirm] could not persist sesion_confirmed_at")
+
+    log_timeline(
+        lead["id"],
+        type="agent_note",
+        author="system",
+        content=f"✅ Lead confirmó asistencia a Sesion de Plan con {closer_first}",
+        metadata={"class_id": sesion["id"], "kind": "sesion_confirmed"},
+    )
+    return True
+
 
 def _send_confirm_ack(lead: dict, trial: dict) -> bool:
     """Lead respondió CONFIRMO al trial confirmation. Mandamos ack breve,

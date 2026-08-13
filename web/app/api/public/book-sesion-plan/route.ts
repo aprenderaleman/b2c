@@ -8,6 +8,7 @@ import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { pauseChain } from "@/lib/chain-engine";
 import { sanitizeE164 } from "@/lib/phone";
 import { createAdminNotification } from "@/lib/admin-notifications";
+import { notifyCloserOnBooking } from "@/lib/sesion-notifications";
 
 /**
  * POST /api/public/book-sesion-plan — agenda una Sesión de Plan
@@ -373,6 +374,15 @@ export async function POST(req: Request) {
         action_url: `/admin/leads/${leadId}`,
         dedupeHours: false,
       });
+
+      // Notificación WA al closer con nombre, meta y hora (Gelfis 2026-08-14).
+      // Espejo de la notificación al profe en trials. Solo en booking nuevo;
+      // en reschedule ya recibió la primera notif y el T-15m del cron cubre.
+      if (!rescheduled) {
+        await notifyCloserOnBooking(sb, classId).catch(err => {
+          console.error("[book-sesion-plan] notifyCloserOnBooking error:", err);
+        });
+      }
     } catch (err) {
       console.error("[book-sesion-plan] after() error:", err);
     }

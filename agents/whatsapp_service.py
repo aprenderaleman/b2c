@@ -243,6 +243,14 @@ class WhatsAppService:
         # ausente si sigue interesado antes de mandarle el link.
         "trial_absent_interest_yes",   # respuesta SÍ → link a /agendar/cuando
         "trial_absent_interest_close", # respuesta NO → cierre amable
+        # Funnel /sesion-plan (Gelfis 2026-08-14)
+        "sesion_confirmation",
+        "sesion_reminder_24h",
+        "sesion_reminder_morning",
+        "sesion_reminder_15m",
+        "sesion_confirm_ack",
+        "sesion_closer_booked",
+        "sesion_closer_pre_15m",
         "admin_manual",
     })
 
