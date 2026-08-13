@@ -9,6 +9,7 @@
  */
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
 import { SOURCE_META, fmtRelative, fmtTrialDate } from "@/lib/closer-constants";
@@ -33,28 +34,68 @@ export type TeacherLead = {
   absent: boolean;
 };
 
+type AttFilter = "todos" | "pendiente" | "asistio" | "no_asistio";
+
+function attOf(l: { attended: boolean; absent: boolean }): Exclude<AttFilter, "todos"> {
+  return l.attended ? "asistio" : l.absent ? "no_asistio" : "pendiente";
+}
+
 export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
   const [search, setSearch] = useState("");
+  const [attFilter, setAttFilter] = useState<AttFilter>("todos");
+
+  const counts = useMemo(() => {
+    const c = { pendiente: 0, asistio: 0, no_asistio: 0 };
+    for (const l of leads) c[attOf(l)]++;
+    return c;
+  }, [leads]);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return leads;
-    const q = search.trim().toLowerCase();
-    return leads.filter((l) =>
-      (l.name ?? "").toLowerCase().includes(q) ||
-      (l.email ?? "").toLowerCase().includes(q) ||
-      (l.whatsapp ?? "").includes(q)
-    );
-  }, [leads, search]);
+    let result = attFilter === "todos" ? leads : leads.filter((l) => attOf(l) === attFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter((l) =>
+        (l.name ?? "").toLowerCase().includes(q) ||
+        (l.email ?? "").toLowerCase().includes(q) ||
+        (l.whatsapp ?? "").includes(q)
+      );
+    }
+    return result;
+  }, [leads, search, attFilter]);
+
+  const CHIPS: Array<{ key: AttFilter; label: string; activeCls: string }> = [
+    { key: "todos",      label: `Todos (${leads.length})`,              activeCls: "bg-brand-600 text-white border-brand-600" },
+    { key: "pendiente",  label: `🗓 Clase pendiente (${counts.pendiente})`, activeCls: "bg-blue-600 text-white border-blue-600" },
+    { key: "asistio",    label: `✓ Asistió (${counts.asistio})`,        activeCls: "bg-emerald-600 text-white border-emerald-600" },
+    { key: "no_asistio", label: `✗ No asistió (${counts.no_asistio})`,  activeCls: "bg-red-600 text-white border-red-600" },
+  ];
 
   return (
     <div className="space-y-4">
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Buscar nombre, email o WA..."
-        className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-brand-400 dark:focus:border-brand-500 w-full sm:w-80"
-      />
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex gap-2 flex-wrap flex-1">
+          {CHIPS.map((c) => (
+            <button
+              key={c.key}
+              onClick={() => setAttFilter(c.key)}
+              className={`text-xs font-medium rounded-full border px-3 py-1.5 transition-colors ${
+                attFilter === c.key
+                  ? c.activeCls
+                  : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar nombre, email o WA..."
+          className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-brand-400 dark:focus:border-brand-500 w-full sm:w-64"
+        />
+      </div>
 
       {filtered.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
@@ -87,8 +128,13 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
                   return (
                     <tr key={l.leadId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                       <td className="py-2 px-3">
-                        <div className="font-medium text-slate-800 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
-                          {l.name ?? "Lead"}
+                        <div className="font-medium flex items-center gap-1.5 flex-wrap">
+                          <Link
+                            href={`/profesor/leads/${l.leadId}`}
+                            className="text-slate-800 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 hover:underline"
+                          >
+                            {l.name ?? "Lead"}
+                          </Link>
                           <PriorityBadges flags={{
                             reservaPrioritaria: l.reservaPrioritaria,
                             priorityDeadline:   l.priorityDeadline,
@@ -147,8 +193,13 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
               return (
                 <div key={l.leadId} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="font-semibold text-slate-900 dark:text-slate-50 flex items-center gap-1.5 flex-wrap">
-                      {l.name ?? "Lead"}
+                    <div className="font-semibold flex items-center gap-1.5 flex-wrap">
+                      <Link
+                        href={`/profesor/leads/${l.leadId}`}
+                        className="text-slate-900 dark:text-slate-50 hover:text-brand-600 dark:hover:text-brand-400 hover:underline"
+                      >
+                        {l.name ?? "Lead"}
+                      </Link>
                       <PriorityBadges flags={{
                         reservaPrioritaria: l.reservaPrioritaria,
                         priorityDeadline:   l.priorityDeadline,

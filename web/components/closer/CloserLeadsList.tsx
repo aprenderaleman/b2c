@@ -44,32 +44,71 @@ type Props = {
   teacherByLead: Record<string, string>;
 };
 
+type AttFilter = "todos" | "pendiente" | "asistio" | "no_asistio";
+
+function attOf(l: { trial_attended_at: string | null; trial_absent_at: string | null }): Exclude<AttFilter, "todos"> {
+  return l.trial_attended_at ? "asistio" : l.trial_absent_at ? "no_asistio" : "pendiente";
+}
+
 export function CloserLeadsList({ leads, teacherByLead }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [attFilter, setAttFilter] = useState<AttFilter>("todos");
 
-  // Poda de UI (Gelfis 2026-08-03): sin filtros por estado — la cola HOY
-  // ya prioriza el trabajo. Aquí solo queda el buscador.
+  const counts = useMemo(() => {
+    const c = { pendiente: 0, asistio: 0, no_asistio: 0 };
+    for (const l of leads) c[attOf(l)]++;
+    return c;
+  }, [leads]);
+
+  // Filtro por asistencia (Gelfis 2026-08-13) + buscador
   const filtered = useMemo(() => {
-    if (!search.trim()) return leads;
-    const q = search.trim().toLowerCase();
-    return leads.filter((l) =>
-      (l.name ?? "").toLowerCase().includes(q) ||
-      (l.email ?? "").toLowerCase().includes(q) ||
-      (l.whatsapp_normalized ?? "").includes(q)
-    );
-  }, [leads, search]);
+    let result = attFilter === "todos" ? leads : leads.filter((l) => attOf(l) === attFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      result = result.filter((l) =>
+        (l.name ?? "").toLowerCase().includes(q) ||
+        (l.email ?? "").toLowerCase().includes(q) ||
+        (l.whatsapp_normalized ?? "").includes(q)
+      );
+    }
+    return result;
+  }, [leads, search, attFilter]);
+
+  const CHIPS: Array<{ key: AttFilter; label: string; activeCls: string }> = [
+    { key: "todos",      label: `Todos (${leads.length})`,                  activeCls: "bg-brand-600 text-white border-brand-600" },
+    { key: "pendiente",  label: `🗓 Clase pendiente (${counts.pendiente})`, activeCls: "bg-blue-600 text-white border-blue-600" },
+    { key: "asistio",    label: `✓ Asistió (${counts.asistio})`,            activeCls: "bg-emerald-600 text-white border-emerald-600" },
+    { key: "no_asistio", label: `✗ No asistió (${counts.no_asistio})`,      activeCls: "bg-red-600 text-white border-red-600" },
+  ];
 
   return (
     <div className="space-y-4">
-      {/* Buscador */}
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Buscar nombre, email o WA..."
-        className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-brand-400 dark:focus:border-brand-500 w-full sm:w-80"
-      />
+      {/* Filtros de asistencia + buscador */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex gap-2 flex-wrap flex-1">
+          {CHIPS.map((c) => (
+            <button
+              key={c.key}
+              onClick={() => setAttFilter(c.key)}
+              className={`text-xs font-medium rounded-full border px-3 py-1.5 transition-colors ${
+                attFilter === c.key
+                  ? c.activeCls
+                  : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar nombre, email o WA..."
+          className="h-9 px-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:border-brand-400 dark:focus:border-brand-500 w-full sm:w-64"
+        />
+      </div>
 
       {filtered.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
