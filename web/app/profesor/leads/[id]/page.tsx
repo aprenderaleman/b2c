@@ -8,6 +8,17 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
 import { fmtTrialDate } from "@/lib/closer-constants";
 import { AddNoteInput } from "./AddNoteInput";
+import { FollowupMessages } from "./FollowupMessages";
+
+// Meta del lead en lenguaje natural para los mensajes del profe
+const META_LABEL: Record<string, string> = {
+  work:            "conseguir un mejor trabajo",
+  visa:            "tus trámites y tu visa",
+  studies:         "tus estudios",
+  exam:            "tu examen oficial",
+  travel:          "tu meta con el alemán",
+  already_in_dach: "desenvolverte en tu día a día",
+};
 
 /**
  * /profesor/leads/[id] — perfil del lead para el profesor (Gelfis
@@ -154,6 +165,17 @@ export default async function TeacherLeadDetailPage({
           <span className={`ml-2 font-medium ${attendance.cls}`}>{attendance.label}</span>
         </div>
       </header>
+
+      {/* Mensajes de seguimiento del profe */}
+      <FollowupMessages
+        leadFirstName={(lead.name ?? "").trim().split(/\s+/)[0] || ""}
+        whatsapp={lead.whatsapp_normalized}
+        estado={lead.trial_attended_at ? "asistio" : lead.trial_absent_at ? "no_asistio" : "pendiente"}
+        metaLabel={META_LABEL[lead.goal ?? ""] ?? "tu meta con el alemán"}
+        trialTime={new Date(myTrial.scheduled_at).toLocaleTimeString("es-ES", {
+          timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit",
+        })}
+      />
 
       {/* Notas unificadas */}
       <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
