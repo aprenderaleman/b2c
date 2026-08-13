@@ -117,6 +117,7 @@ const SRC_INSTAGRAM = "bg-pink-500/15    text-pink-300    border-pink-500/30";
 const SRC_TIKTOK    = "bg-slate-800      text-slate-100   border-slate-500/30";
 const SRC_FACEBOOK  = "bg-blue-500/15    text-blue-300    border-blue-500/30";
 const SRC_META_ADS  = "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30";
+const SRC_SESION    = "bg-amber-500/15   text-amber-300   border-amber-500/30";
 const SRC_OTHER     = "bg-white/5        text-white/60    border-white/10";
 const LANDING_META: Record<string, LandingMeta> = {
   "socialmedia":            { label: "Home (redes sociales)",       sourceLabel: "Social",   sourceIcon: "📱", sourceCls: SRC_SOCIAL    },
@@ -135,6 +136,7 @@ const LANDING_META: Record<string, LandingMeta> = {
   "meta-ads":               { label: "Meta Ads (FB + IG pagado)",   sourceLabel: "Meta Ads", sourceIcon: "💰", sourceCls: SRC_META_ADS  },
   "meta-ads-paid":          { label: "Meta Ads · 10€ depósito",     sourceLabel: "Meta Paid",sourceIcon: "💎", sourceCls: SRC_META_ADS  },
   "agendar-directo":        { label: "Atajo CTA verde",             sourceLabel: "Directo",  sourceIcon: "⚡", sourceCls: SRC_DIRECT    },
+  "sesion-plan":            { label: "Sesión de Plan (closer)",     sourceLabel: "Sesión",   sourceIcon: "📋", sourceCls: SRC_SESION    },
   "(sin landing)":          { label: "(sin atribución)",            sourceLabel: "Otro",     sourceIcon: "❓", sourceCls: SRC_OTHER     },
 };
 
@@ -278,7 +280,33 @@ export default async function FunnelControlPage({
   // lead_ids de la página actual — no hace N+1.
   // Result: Map<leadId, teacherName>.
   const teacherByLead = new Map<string, string>();
-  const leadIdsWithTrial = leads.filter(l => l.trial_scheduled_at).map(l => l.id);
+  // Ídem para Sesiones de Plan: Map<leadId, closerFirstName>.
+  const closerByLead = new Map<string, string>();
+  const leadIdsWithTrial  = leads.filter(l => l.trial_scheduled_at).map(l => l.id);
+  const leadIdsWithSesion = leads.filter(l => l.sesion_plan_at).map(l => l.id);
+  if (leadIdsWithSesion.length > 0) {
+    const { supabaseAdmin } = await import("@/lib/supabase");
+    const sb = supabaseAdmin();
+    const { data: sesionRows } = await sb
+      .from("classes")
+      .select("lead_id, closer:users!classes_sesion_closer_id_fkey(full_name, email)")
+      .in("lead_id", leadIdsWithSesion)
+      .not("sesion_closer_id", "is", null)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    type SRow = {
+      lead_id: string;
+      closer: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
+    };
+    const flatS = <T,>(x: T | T[] | null | undefined): T | null =>
+      !x ? null : Array.isArray(x) ? x[0] ?? null : x;
+    for (const r of (sesionRows ?? []) as SRow[]) {
+      if (closerByLead.has(r.lead_id)) continue;
+      const u = flatS(r.closer);
+      const name = (u?.full_name ?? u?.email ?? "").trim();
+      if (name) closerByLead.set(r.lead_id, name.split(/\s+/)[0]);
+    }
+  }
   if (leadIdsWithTrial.length > 0) {
     const { supabaseAdmin } = await import("@/lib/supabase");
     const sb = supabaseAdmin();
@@ -835,7 +863,27 @@ export default async function FunnelControlPage({
                           {attState === "absent" && <span className="text-[10px] text-red-300">✗ no asistió</span>}
                           {attState === "scheduled" && <span className="text-[10px] text-white/40">pendiente</span>}
                         </>
-                      ) : <span className="text-white/30">—</span>}
+                      ) : !l.sesion_plan_at ? <span className="text-white/30">—</span> : null}
+                      {/* Sesión de Plan con closer — se muestra ADEMÁS del
+                          trial si el lead tiene ambos (lead existente que
+                          agendó sesión conserva su trial histórico). */}
+                      {l.sesion_plan_at && (
+                        <>
+                          <div className={`text-amber-200/90 tabular-nums whitespace-nowrap ${l.trial_scheduled_at ? "mt-1" : ""}`}>
+                            📋 {fmtTrialDate(l.sesion_plan_at)}
+                          </div>
+                          {closerByLead.get(l.id) && (
+                            <div className="text-[10px] text-amber-300/85">🎧 {closerByLead.get(l.id)}</div>
+                          )}
+                          {!l.trial_scheduled_at && (
+                            l.trial_attended_at
+                              ? <span className="text-[10px] text-emerald-300">✓ asistió</span>
+                              : l.trial_absent_at
+                                ? <span className="text-[10px] text-red-300">✗ no asistió</span>
+                                : <span className="text-[10px] text-white/40">pendiente</span>
+                          )}
+                        </>
+                      )}
                     </td>
                     <td className="py-2 px-3 text-[12px]">
                       {l.next_contact_date ? (
@@ -936,7 +984,20 @@ export default async function FunnelControlPage({
                           <div className="text-[10.5px] text-sky-300/85 mt-0.5">👨‍🏫 {teacherByLead.get(l.id)}</div>
                         )}
                       </>
-                    ) : <span className="text-white/30">sin trial</span>}
+                    ) : !l.sesion_plan_at ? <span className="text-white/30">sin trial</span> : null}
+                    {l.sesion_plan_at && (
+                      <div className={l.trial_scheduled_at ? "mt-0.5" : ""}>
+                        <span className="text-amber-200/90">
+                          📋 {fmtTrialDate(l.sesion_plan_at)}
+                          {!l.trial_scheduled_at && l.trial_attended_at && <span className="ml-1.5 text-emerald-300">✓</span>}
+                          {!l.trial_scheduled_at && !l.trial_attended_at && l.trial_absent_at && <span className="ml-1.5 text-red-300">✗</span>}
+                          {!l.trial_scheduled_at && !l.trial_attended_at && !l.trial_absent_at && <span className="ml-1.5 text-white/40">…</span>}
+                        </span>
+                        {closerByLead.get(l.id) && (
+                          <div className="text-[10.5px] text-amber-300/85 mt-0.5">🎧 {closerByLead.get(l.id)}</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <ColdCallPill leadId={l.id} coldCallDoneAt={l.cold_call_done_at} />
