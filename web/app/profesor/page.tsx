@@ -7,7 +7,6 @@ import { getUserIcalToken, icalUrlFor } from "@/lib/user-extras";
 import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
 import { GoogleCalendarConnectButton } from "@/components/calendar/GoogleCalendarConnectButton";
 import { OpenSchuleTeacherButton } from "@/components/entitlements/OpenSchuleTeacherButton";
-import { HansTeacherCard } from "@/components/dashboard/HansTeacherCard";
 
 export const dynamic = "force-dynamic";
 
@@ -84,9 +83,6 @@ export default async function TeacherHome() {
         <EmptyNext />
       )}
 
-      {/* Hans (asistente IA para preparar clases) — encima de SCHULE
-          decisión Gelfis 2026-05-04. URL específica de profes: /lehrer. */}
-      <HansTeacherCard />
 
       {/* Acceso a SCHULE — el profesor entra como su alumno para ver
           el material y poder asignar tareas concretas. */}
