@@ -25,9 +25,12 @@ type Block = {
 export function AvailabilityEditor({
   initialBlocks,
   targetTeacherId,
+  apiUrl,
 }: {
   initialBlocks: Block[];
   targetTeacherId?: string;
+  /** Override del endpoint (ej. /api/closer/availability). Default: teacher. */
+  apiUrl?: string;
 }) {
   const [blocks, setBlocks] = useState<Block[]>(initialBlocks);
   const [pending, startTransition] = useTransition();
@@ -68,10 +71,11 @@ export function AvailabilityEditor({
       }
     }
     startTransition(async () => {
-      const apiUrl = targetTeacherId
-        ? `/api/teacher/availability?teacherId=${encodeURIComponent(targetTeacherId)}`
-        : `/api/teacher/availability`;
-      const res = await fetch(apiUrl, {
+      const url = apiUrl
+        ?? (targetTeacherId
+          ? `/api/teacher/availability?teacherId=${encodeURIComponent(targetTeacherId)}`
+          : `/api/teacher/availability`);
+      const res = await fetch(url, {
         method:  "PUT",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ blocks }),
