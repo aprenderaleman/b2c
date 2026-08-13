@@ -135,6 +135,8 @@ export async function resolveChainVariables(
     link_pago: (chainMeta.fullUrl as string) || `${INSCRIPCIONES_URL}?ref=${leadId}`,
     link_reagenda: `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=chain`,
     link_agenda: `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=closer`,
+    // Reagendar una Sesión de Plan (funnel de closers, 2026-08-14)
+    link_sesion: `${PLATFORM_URL}/sesion-plan`,
     nueva_fecha: (chainMeta.nueva_fecha as string) || "",
     hora: (chainMeta.hora as string) || "",
   };

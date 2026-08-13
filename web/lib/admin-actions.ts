@@ -649,7 +649,12 @@ export async function sendRescheduleLinkMessage(
   const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
   const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=teacher_reschedule`;
 
-  const waText = `¡Hola ${firstName}! 👋\n\nHe cancelado tu clase de prueba actual. Puedes elegir un nuevo horario con este enlace, tardarás solo 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu nuevo horario. 😊\n\n— Stiv · Aprender-Aleman.de`;
+  // Fix auditoría 2026-08-14: "He cancelado tu clase actual" solo es
+  // cierto si HABÍA una clase futura que cancelar. Sin ella (lead
+  // post-trial o de sesión), el copy invita a agendar, no a reagendar.
+  const waText = trial
+    ? `¡Hola ${firstName}! 👋\n\nHe cancelado tu clase de prueba actual. Puedes elegir un nuevo horario con este enlace, tardarás solo 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu nuevo horario. 😊\n\n— Stiv · Aprender-Aleman.de`
+    : `¡Hola ${firstName}! 👋\n\nTe comparto el enlace para agendar tu clase de prueba de alemán — eliges tu horario en 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu horario. 😊\n\n— Stiv · Aprender-Aleman.de`;
 
   const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "trial_reschedule_link" });
   await sb.from("lead_timeline").insert({

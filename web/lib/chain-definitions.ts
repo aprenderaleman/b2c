@@ -26,7 +26,9 @@ export type ChainType =
   | "chain8c_info"
   | "chain8d_propuesta"
   | "chain8e_seguimiento"
-  | "chain8g_reactivacion";
+  | "chain8g_reactivacion"
+  | "sesion_attended"
+  | "sesion_absent";
 
 export type ObjectionChip = "precio" | "pensarlo" | "pareja" | "tiempo";
 
@@ -432,6 +434,44 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
         delayMs: 4 * D,
         templateKind: "chain8g_reactivacion",
         templateSubN: 2,
+        channels: ["whatsapp"],
+        onComplete: { setStatus: "en_reactivacion" },
+      },
+    ],
+  },
+
+  // ── Sesión de Plan (closers, 2026-08-14) — gemelas de chain1/chain4
+  //    pero sin {profe}, hablando de "Sesión de Plan" y reagendando
+  //    hacia /sesion-plan ({link_sesion}). Las dispara el closer al
+  //    marcar el resultado de la sesión en su ficha.
+  sesion_attended: {
+    type: "sesion_attended",
+    label: "Sesión de Plan: asistió",
+    steps: [
+      { delayMs: 2 * H,  templateKind: "sesion_attended", templateSubN: 1, channels: ["whatsapp"], skipIfPaid: true },
+      { delayMs: 24 * H, templateKind: "sesion_attended", templateSubN: 2, channels: ["whatsapp"], skipIfPaid: true },
+      { delayMs: 3 * D,  templateKind: "sesion_attended", templateSubN: 3, channels: ["whatsapp"], skipIfPaid: true },
+      {
+        delayMs: 7 * D,
+        templateKind: "sesion_attended",
+        templateSubN: 4,
+        channels: ["whatsapp"],
+        skipIfPaid: true,
+        onComplete: { setStatus: "en_reactivacion" },
+      },
+    ],
+  },
+
+  sesion_absent: {
+    type: "sesion_absent",
+    label: "Sesión de Plan: no asistió",
+    steps: [
+      { delayMs: 20 * 60_000, templateKind: "sesion_absent", templateSubN: 1, channels: ["whatsapp"] },
+      { delayMs: 24 * H,      templateKind: "sesion_absent", templateSubN: 2, channels: ["whatsapp"] },
+      {
+        delayMs: 3 * D,
+        templateKind: "sesion_absent",
+        templateSubN: 3,
         channels: ["whatsapp"],
         onComplete: { setStatus: "en_reactivacion" },
       },

@@ -131,6 +131,32 @@ export function CloserLeadDetail({
   const router = useRouter();
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [registrarTaskId, setRegistrarTaskId] = useState<string | null | "sin_tarea">(null);
+  const [marcandoSesion, setMarcandoSesion] = useState(false);
+
+  // Resultado de la Sesión de Plan → dispara sesion_attended/sesion_absent
+  const marcarSesion = async (resultado: "asistio" | "no_asistio") => {
+    const msg = resultado === "asistio"
+      ? "Marcar como ASISTIÓ a la Sesión de Plan.\n\n• Se inicia la cadena de seguimiento automática (primer mensaje en ~2h).\n\n¿Continuar?"
+      : "Marcar como NO ASISTIÓ a la Sesión de Plan.\n\n• Se inicia la cadena de rescate (primer mensaje en ~20 min, reagenda hacia /sesion-plan).\n\n¿Continuar?";
+    if (!confirm(msg)) return;
+    setMarcandoSesion(true);
+    try {
+      const res = await fetch(`/api/closer/leads/${lead.id}/sesion-resultado`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resultado }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error ?? `HTTP ${res.status}`);
+      }
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error");
+    } finally {
+      setMarcandoSesion(false);
+    }
+  };
 
   const pendingTasks = tasks.filter((t) => !t.fecha_completada);
   const nextTask = pendingTasks.length > 0
@@ -371,6 +397,35 @@ export function CloserLeadDetail({
                 ))}
               </div>
             </Panel>
+          )}
+
+          {/* Resultado de la Sesión de Plan — dispara las cadenas de sesión */}
+          {lead.sesion_plan_at && !lead.trial_attended_at && !lead.trial_absent_at &&
+            lead.estado_cierre !== "convertido" && lead.estado_cierre !== "perdido" && (
+            <section className="rounded-3xl bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 p-4">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                ¿Cómo fue la Sesión de Plan?
+              </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                Marca el resultado — inicia la cadena de seguimiento automática y alimenta tu tasa de cierre.
+              </p>
+              <div className="mt-3 flex gap-2 flex-wrap">
+                <button
+                  onClick={() => marcarSesion("asistio")}
+                  disabled={marcandoSesion}
+                  className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3.5 py-1.5 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25 disabled:opacity-50"
+                >
+                  {marcandoSesion ? "..." : "✓ Asistió"}
+                </button>
+                <button
+                  onClick={() => marcarSesion("no_asistio")}
+                  disabled={marcandoSesion}
+                  className="text-xs font-semibold rounded-full border border-red-300 dark:border-red-500/40 bg-red-100 dark:bg-red-500/15 px-3.5 py-1.5 text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-500/25 disabled:opacity-50"
+                >
+                  {marcandoSesion ? "..." : "✗ No asistió"}
+                </button>
+              </div>
+            </section>
           )}
 
           {/* Mensajes de seguimiento del closer */}
