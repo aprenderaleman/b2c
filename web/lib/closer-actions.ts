@@ -116,11 +116,12 @@ export async function getCloserLeads(closerId: string, estadoCierre?: string) {
   const sb = supabaseAdmin();
   let query = sb
     .from("leads")
-    .select("id, name, email, whatsapp_normalized, status, estado_cierre, motivo_perdido, fecha_asignacion_closer, created_at, meta, source, language, german_level, goal, urgency, budget, landing_intent, qualification_answers, reserva_prioritaria, priority_deadline, deposit_intent_at, next_contact_date, current_followup_number, messages_seen_count, trial_scheduled_at, trial_attended_at, trial_absent_at")
+    .select("id, name, email, whatsapp_normalized, status, estado_cierre, motivo_perdido, fecha_asignacion_closer, created_at, meta, source, language, german_level, goal, urgency, budget, landing_intent, qualification_answers, reserva_prioritaria, priority_deadline, deposit_intent_at, next_contact_date, current_followup_number, messages_seen_count, trial_scheduled_at, trial_attended_at, trial_absent_at, sesion_plan_at")
     .eq("closer_id", closerId)
     // Regla Gelfis 2026-08-02: el closer solo ve leads DESPUÉS del trial
-    // (asistió o no asistió). Los pre-trial los maneja Stiv/admin.
-    .or("trial_attended_at.not.is.null,trial_absent_at.not.is.null")
+    // (asistió o no asistió). Ampliado 2026-08-13: también los leads con
+    // Sesión de Plan agendada (pueden no tener trial).
+    .or("trial_attended_at.not.is.null,trial_absent_at.not.is.null,sesion_plan_at.not.is.null")
     .order("fecha_asignacion_closer", { ascending: false });
 
   if (estadoCierre) {

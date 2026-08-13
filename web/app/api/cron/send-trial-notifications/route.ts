@@ -5,6 +5,7 @@ import { sendWhatsappText } from "@/lib/whatsapp";
 import { buildEmailActionUrl } from "@/lib/email-action-token";
 import { buildLeadJoinUrl } from "@/lib/trial-token";
 import { buildTrialIcs } from "@/lib/ics";
+import { sendSesionConfirmations } from "@/lib/sesion-notifications";
 
 /**
  * GET/POST /api/cron/send-trial-notifications
@@ -81,7 +82,9 @@ async function run(req: Request) {
     return NextResponse.json({ error: "query_failed", reason: pendErr.message }, { status: 500 });
   }
   if (!pending || pending.length === 0) {
-    return NextResponse.json({ ok: true, processed: 0 });
+    // Sesiones de Plan (closers) comparten este cron (2026-08-13)
+    const sesiones = await sendSesionConfirmations(sb).catch(() => 0);
+    return NextResponse.json({ ok: true, processed: 0, sesiones });
   }
 
   type ClassRow = {
@@ -249,7 +252,10 @@ async function run(req: Request) {
     if (bothFailed || noneAttempted) console.log(`[send-trial-notifications] ${c.id} rolled back for retry`);
   }
 
-  return NextResponse.json({ ok: true, processed: results.length, results });
+  // Sesiones de Plan (closers) comparten este cron (2026-08-13)
+  const sesiones = await sendSesionConfirmations(sb).catch(() => 0);
+
+  return NextResponse.json({ ok: true, processed: results.length, results, sesiones });
 }
 
 /**

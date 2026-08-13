@@ -55,7 +55,7 @@ export async function POST(
 
   if (session?.user) {
     const userId = (session.user as { id: string }).id;
-    const role   = (session.user as { role: "superadmin" | "admin" | "teacher" | "student" }).role;
+    const role   = (session.user as { role: "superadmin" | "admin" | "teacher" | "student" | "closer" }).role;
     access = await authorizeAulaAccess(id, userId, role);
     // Unique identity per mint: userId + suffix. Permite múltiples
     // dispositivos a la vez sin que LiveKit los expulse mutuamente.

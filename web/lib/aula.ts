@@ -28,20 +28,21 @@ export async function authorizeTrialAulaAccess(
   const sb = supabaseAdmin();
   const { data: cls } = await sb
     .from("classes")
-    .select("id, status, scheduled_at, duration_minutes, livekit_room_id, is_trial, lead_id, deleted_at")
+    .select("id, status, scheduled_at, duration_minutes, livekit_room_id, is_trial, lead_id, deleted_at, sesion_closer_id")
     .eq("id", classId)
     .maybeSingle();
   if (!cls) return { ok: false, reason: "not_found" };
   const c = cls as {
     status: string; scheduled_at: string; duration_minutes: number;
     livekit_room_id: string; is_trial: boolean; lead_id: string | null;
-    deleted_at: string | null;
+    deleted_at: string | null; sesion_closer_id: string | null;
   };
   // Soft-delete guard: si un admin eliminó la clase, tratarla como
   // cancelada. Sin este check el lead entraba a un aula sin profe.
   if (c.deleted_at !== null)             return { ok: false, reason: "cancelled" };
   if (c.status === "cancelled")          return { ok: false, reason: "cancelled" };
-  if (!c.is_trial || c.lead_id !== leadId) return { ok: false, reason: "not_authorized" };
+  // Válido para trials y Sesiones de Plan (closer, 2026-08-13)
+  if ((!c.is_trial && !c.sesion_closer_id) || c.lead_id !== leadId) return { ok: false, reason: "not_authorized" };
 
   // Trials: ventana más amplia que clases regulares — 15 min antes,
   // 20 min de grace tras terminar (Gelfis 2026-07-28: hemos perdido
@@ -69,7 +70,7 @@ export async function authorizeTrialAulaAccess(
 export async function authorizeAulaAccess(
   classId: string,
   userId:  string,
-  role:    "superadmin" | "admin" | "teacher" | "student",
+  role:    "superadmin" | "admin" | "teacher" | "student" | "closer",
   now = new Date(),
 ): Promise<AulaAccess> {
   const sb = supabaseAdmin();
@@ -78,7 +79,7 @@ export async function authorizeAulaAccess(
     .from("classes")
     .select(`
       id, status, scheduled_at, duration_minutes, livekit_room_id,
-      teacher_id,
+      teacher_id, sesion_closer_id,
       teacher:teachers(user_id)
     `)
     .eq("id", classId)
@@ -121,6 +122,16 @@ export async function authorizeAulaAccess(
   // Teachers: must be THE teacher of this class.
   if (role === "teacher") {
     if (tFlat?.user_id === userId) {
+      return { ok: true, role: "host", roomName, canEnterNow, opensAt, closesAt };
+    }
+    return { ok: false, reason: "not_authorized" };
+  }
+
+  // Closers: host de SU Sesión de Plan (misma regla que el profe con
+  // su clase — solo el closer asignado, 2026-08-13).
+  if (role === "closer") {
+    const sesionCloserId = (cls as { sesion_closer_id: string | null }).sesion_closer_id;
+    if (sesionCloserId && sesionCloserId === userId) {
       return { ok: true, role: "host", roomName, canEnterNow, opensAt, closesAt };
     }
     return { ok: false, reason: "not_authorized" };

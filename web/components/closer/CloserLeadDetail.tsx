@@ -39,6 +39,7 @@ type Lead = {
   trial_scheduled_at?: string | null;
   trial_attended_at?: string | null;
   trial_absent_at?: string | null;
+  sesion_plan_at?: string | null;
 };
 
 type VentaPendiente = {
@@ -270,6 +271,9 @@ export function CloserLeadDetail({
                 k="Clase de prueba"
                 v={activeTrial ? fmtTrialDate(activeTrial.scheduled_at) : fmtTrialDate(lead.trial_scheduled_at as string)}
               />
+            )}
+            {lead.sesion_plan_at && (
+              <Kv k="📋 Sesión de Plan" v={fmtTrialDate(lead.sesion_plan_at)} />
             )}
             {teacherName && <Kv k="Profe del trial" v={teacherName} />}
             {attState && (

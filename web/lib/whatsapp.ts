@@ -102,6 +102,11 @@ const ALLOWED_WA_KINDS = new Set([
   "trial_reminder_24h",
   "trial_reminder_15m",
   "trial_reminder_morning",
+  // Sesión de Plan con closer (funnel /sesion-plan, 2026-08-13)
+  "sesion_confirmation",
+  "sesion_reminder_24h",
+  "sesion_reminder_morning",
+  "sesion_reminder_15m",
   // Eliminados 2026-08-01: trial_reminder_2h (fusionado en morning),
   // trial_reminder_30m (redundante con 15m).
   "trial_attended_initial",

@@ -47,12 +47,13 @@ export async function GET(
   const sb = supabaseAdmin();
   const { data: cls } = await sb
     .from("classes")
-    .select("id, lead_id, is_trial, status")
+    .select("id, lead_id, is_trial, status, sesion_closer_id")
     .eq("id", classId)
     .maybeSingle();
   if (!cls) return expiredRedirect(req, "class_missing");
-  const c = cls as { lead_id: string | null; is_trial: boolean; status: string };
-  if (!c.is_trial)                    return expiredRedirect(req, "not_a_trial");
+  const c = cls as { lead_id: string | null; is_trial: boolean; status: string; sesion_closer_id: string | null };
+  // Válido para trials y para Sesiones de Plan (closer, 2026-08-13)
+  if (!c.is_trial && !c.sesion_closer_id) return expiredRedirect(req, "not_a_trial");
   if (c.lead_id !== payload.lead_id)  return expiredRedirect(req, "lead_mismatch");
   if (c.status === "cancelled")       return expiredRedirect(req, "class_cancelled");
 

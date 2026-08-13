@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { sendSesionReminders } from "@/lib/sesion-notifications";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { sendTrialReminderEmail } from "@/lib/email/send";
 import { buildLeadJoinUrl } from "@/lib/trial-token";
@@ -154,6 +155,9 @@ async function run(req: Request) {
     }
   }
 
+  // Sesiones de Plan (closers) comparten este cron (2026-08-13)
+  const sesiones = await sendSesionReminders(sb, "15m").catch(() => 0);
+
   return NextResponse.json({
     ok: true,
     candidates: classes?.length ?? 0,
@@ -161,5 +165,6 @@ async function run(req: Request) {
     sent_email: sentEmail,
     skipped,
     failed,
+    sesiones,
   });
 }

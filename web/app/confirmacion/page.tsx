@@ -41,14 +41,16 @@ export default async function ConfirmacionPage({
   const { data: cls } = await sb
     .from("classes")
     .select(`
-      id, scheduled_at, duration_minutes, lead_id, is_trial, short_code,
-      teacher:teachers!inner(users!inner(full_name, email)),
+      id, scheduled_at, duration_minutes, lead_id, is_trial, short_code, sesion_closer_id,
+      teacher:teachers(users(full_name, email)),
+      closer:users!classes_sesion_closer_id_fkey(full_name, email),
       lead:leads!inner(name, email, whatsapp_normalized, reserva_prioritaria)
     `)
     .eq("id", classId)
     .maybeSingle();
 
-  if (!cls || !(cls as { is_trial: boolean }).is_trial) redirect("/");
+  const isSesion = !!(cls as { sesion_closer_id?: string | null } | null)?.sesion_closer_id;
+  if (!cls || (!(cls as { is_trial: boolean }).is_trial && !isSesion)) redirect("/");
 
   type Row = {
     scheduled_at: string;
@@ -58,7 +60,9 @@ export default async function ConfirmacionPage({
     teacher: { users: { full_name: string | null; email: string } |
                        Array<{ full_name: string | null; email: string }> } |
              Array<{ users: { full_name: string | null; email: string } |
-                            Array<{ full_name: string | null; email: string }> }>;
+                            Array<{ full_name: string | null; email: string }> }> | null;
+    closer: { full_name: string | null; email: string } |
+            Array<{ full_name: string | null; email: string }> | null;
     lead: { name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null } |
           Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null }>;
   };
@@ -68,6 +72,8 @@ export default async function ConfirmacionPage({
   const r = cls as Row;
   const teacherWrap = flat(r.teacher);
   const tu = teacherWrap ? flat(teacherWrap.users) : null;
+  const closerFlat = flat(r.closer);
+  const closerName = (closerFlat?.full_name ?? closerFlat?.email ?? "tu asesor/a").split(/\s+/)[0];
   const teacherName = tu?.full_name ?? tu?.email ?? "tu profesor/a";
   const leadFlat    = flat(r.lead);
   const leadName    = leadFlat?.name ?? "";
@@ -90,17 +96,19 @@ export default async function ConfirmacionPage({
          style={{ overscrollBehavior: "contain" }}>
       {/* Google Ads conversion tracker — se dispara al montar, con
           transaction_id=classId para dedup nativa. */}
-      <ConfirmacionPixel classId={classId} leadEmail={leadEmail} leadPhone={leadPhone} />
+      {/* Pixels de conversión: solo trials. La Sesión de Plan tendrá su
+          propio evento cuando se enciendan campañas (fase 2). */}
+      {!isSesion && <ConfirmacionPixel classId={classId} leadEmail={leadEmail} leadPhone={leadPhone} />}
       {/* Reserva Prioritaria: si volvemos de Stripe con ?deposito=ok,
           dispara Purchase por los 3 canales (Google + fbq + CAPI).
           NO se solapa con ConfirmacionPixel — cada uno tiene su propio
           eventID y sessionStorage guard. */}
-      <ConfirmacionDepositPurchase
+      {!isSesion && <ConfirmacionDepositPurchase
         classId={classId}
         leadEmail={leadEmail}
         leadPhone={leadPhone}
         active={depositoOk}
-      />
+      />}
       <IllustrationPanel step="success">
         <div className="flex flex-col min-h-[100dvh]">
           {/* Header sticky — sólo brand + back a inicio, sin progress bar. */}
@@ -133,7 +141,7 @@ export default async function ConfirmacionPage({
                 del H1. Cuando no ha pagado, no se muestra y la sección
                 normal "Mejora a Reserva Prioritaria" aparece bajo el
                 summary con el botón. ═══ */}
-            {(priorityActive || depositoOk) && (
+            {!isSesion && (priorityActive || depositoOk) && (
               <div className="rounded-2xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 via-emerald-100 to-teal-50 p-4 md:p-5 shadow-lg shadow-emerald-500/15 mb-5">
                 <div className="flex items-center gap-3 md:gap-4">
                   <span className="text-4xl md:text-5xl leading-none shrink-0" aria-hidden>🌟</span>
@@ -162,9 +170,15 @@ export default async function ConfirmacionPage({
             <h1 className="mt-1.5 text-[26px] sm:text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 leading-tight">
               ¡Todo listo{firstName ? `, ${firstName}` : ""}!
             </h1>
-            <p className="mt-2.5 text-[15px] md:text-[16px] text-slate-600 leading-relaxed">
-              Tu clase de prueba con el/la profesor/a <strong className="text-slate-900">{teacherName}</strong> está reservada, <strong className="text-slate-900">revisa tu correo electrónico</strong>, ahí te enviamos toda la información para unirte a tu clase de alemán.
-            </p>
+            {isSesion ? (
+              <p className="mt-2.5 text-[15px] md:text-[16px] text-slate-600 leading-relaxed">
+                Tu <strong className="text-slate-900">Sesión de Plan</strong> con <strong className="text-slate-900">{closerName}</strong> está reservada: 20 minutos por videollamada para armar tu plan de alemán. <strong className="text-slate-900">Revisa tu correo electrónico</strong>, ahí te enviamos el enlace para unirte.
+              </p>
+            ) : (
+              <p className="mt-2.5 text-[15px] md:text-[16px] text-slate-600 leading-relaxed">
+                Tu clase de prueba con el/la profesor/a <strong className="text-slate-900">{teacherName}</strong> está reservada, <strong className="text-slate-900">revisa tu correo electrónico</strong>, ahí te enviamos toda la información para unirte a tu clase de alemán.
+              </p>
+            )}
 
             {/* Summary card — info clave (fecha/hora + duración). */}
             <div className="mt-5 rounded-2xl bg-gradient-to-br from-slate-50 to-white border border-slate-200 shadow-sm px-5 py-4">
@@ -183,7 +197,7 @@ export default async function ConfirmacionPage({
                 Solo se muestra cuando el lead NO ha pagado aún; el
                 estado "activada" se muestra como banner celebratorio
                 arriba del H1 (ver bloque anterior). ═══ */}
-            {!(priorityActive || depositoOk) && (
+            {!isSesion && !(priorityActive || depositoOk) && (
               <section className="mt-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 md:p-5">
                 <h2 className="text-[16px] md:text-[17px] font-bold text-slate-900 flex items-center gap-2 flex-wrap">
                   <span aria-hidden>🌟</span>

@@ -63,11 +63,12 @@ export default async function AulaPage({
   let backHref:    string;
 
   if (session?.user) {
-    const role   = (session.user as { role: "superadmin" | "admin" | "teacher" | "student" }).role;
+    const role   = (session.user as { role: "superadmin" | "admin" | "teacher" | "student" | "closer" }).role;
     const userId = (session.user as { id: string }).id;
     const homeHref =
       role === "teacher" ? "/profesor"   :
       role === "student" ? "/estudiante" :
+      role === "closer"  ? "/closer"     :
                            "/admin";
 
     access = await authorizeAulaAccess(id, userId, role);
@@ -80,6 +81,7 @@ export default async function AulaPage({
     backHref =
       role === "student"  ? `/estudiante/clases/${cls.id}` :
       role === "teacher"  ? `/profesor/clases/${cls.id}`   :
+      role === "closer"   ? `/closer`                      :
                             `/admin/clases/${cls.id}`;
 
     if (!access.canEnterNow) {

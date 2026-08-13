@@ -21,13 +21,14 @@ export default async function CloserLeadPage({
 
   const { data: lead } = await sb
     .from("leads")
-    .select("id, name, email, whatsapp_normalized, status, estado_cierre, motivo_perdido, closer_id, fecha_asignacion_closer, created_at, meta, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent, source, language, german_level, goal, urgency, budget, messages_seen_count, current_followup_number, next_contact_date, gdpr_accepted, gdpr_accepted_at, trial_scheduled_at, trial_attended_at, trial_absent_at")
+    .select("id, name, email, whatsapp_normalized, status, estado_cierre, motivo_perdido, closer_id, fecha_asignacion_closer, created_at, meta, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent, source, language, german_level, goal, urgency, budget, messages_seen_count, current_followup_number, next_contact_date, gdpr_accepted, gdpr_accepted_at, trial_scheduled_at, trial_attended_at, trial_absent_at, sesion_plan_at")
     .eq("id", leadId)
     .single();
 
   if (!lead || lead.closer_id !== closerId) redirect("/closer/leads");
-  // El closer solo ve leads post-trial (asistió o no asistió).
-  if (!lead.trial_attended_at && !lead.trial_absent_at) redirect("/closer/leads");
+  // El closer solo ve leads post-trial (asistió/no asistió) o con
+  // Sesión de Plan agendada (2026-08-13).
+  if (!lead.trial_attended_at && !lead.trial_absent_at && !lead.sesion_plan_at) redirect("/closer/leads");
 
   const [tasks, timelineResult, accionesResult, gelfisNotes] = await Promise.all([
     getLeadTasks(leadId),
