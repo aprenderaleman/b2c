@@ -8,7 +8,7 @@ import { renderEnvelope, h2, p, button, escapeHtml } from "@/lib/email/templates
 
 export async function POST(req: Request, { params }: { params: Promise<{ leadId: string }> }) {
   let user;
-  try { user = await requireTeacherSession(); }
+  try { user = await requireTeacherSession({ allowCloser: true }); }
   catch { return NextResponse.json({ error: "unauthorized" }, { status: 401 }); }
 
   const { leadId } = await params;

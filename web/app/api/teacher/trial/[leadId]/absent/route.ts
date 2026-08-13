@@ -4,7 +4,7 @@ import { markTrialAbsent } from "@/lib/admin-actions";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ leadId: string }> }) {
   let user;
-  try { user = await requireTeacherSession(); }
+  try { user = await requireTeacherSession({ allowCloser: true }); }
   catch (err) {
     return NextResponse.json({
       error:  "unauthorized",
