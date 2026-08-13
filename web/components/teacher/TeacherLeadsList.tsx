@@ -70,8 +70,34 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
     { key: "no_asistio", label: `✗ No asistió (${counts.no_asistio})`,  activeCls: "bg-red-600 text-white border-red-600" },
   ];
 
+  // Tasa de cierre: convertidos ÷ asistieron (solo cuentan los que
+  // SÍ asistieron a la clase de prueba — decisión Gelfis 2026-08-13).
+  const asistieron = useMemo(() => leads.filter((l) => l.attended), [leads]);
+  const convertidos = useMemo(() => asistieron.filter((l) => l.status === "converted"), [asistieron]);
+  const closeRate = asistieron.length > 0 ? (convertidos.length / asistieron.length) * 100 : null;
+
   return (
     <div className="space-y-4">
+      {/* Tasa de cierre */}
+      <div className="rounded-2xl border border-emerald-200 dark:border-emerald-500/25 bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-500/10 dark:to-slate-900 px-4 py-3 flex items-baseline gap-3 flex-wrap">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+          🎯 Tu tasa de cierre
+        </span>
+        {closeRate !== null ? (
+          <>
+            <span className="text-2xl font-extrabold text-slate-900 dark:text-slate-50 tabular-nums">
+              {closeRate.toFixed(1)}%
+            </span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {convertidos.length} de {asistieron.length} asistentes se inscribieron
+            </span>
+          </>
+        ) : (
+          <span className="text-sm text-slate-500 dark:text-slate-400">
+            Aún sin asistentes — se calcula sobre los leads que sí asistieron
+          </span>
+        )}
+      </div>
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex gap-2 flex-wrap flex-1">
           {CHIPS.map((c) => (
