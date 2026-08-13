@@ -12,6 +12,7 @@ type Closer = {
   active: boolean;
   rango: string | null;
   flujo_activo: boolean;
+  acepta_sesiones?: boolean;
   created_at: string;
 };
 
@@ -32,6 +33,7 @@ export function ClosersTable({ closers, leadCounts }: Props) {
               <th className="px-4 py-3 font-medium">Rango</th>
               <th className="px-4 py-3 font-medium text-right">Leads</th>
               <th className="px-4 py-3 font-medium">Recibe leads</th>
+              <th className="px-4 py-3 font-medium">Sesiones</th>
               <th className="px-4 py-3 font-medium">Estado</th>
             </tr>
           </thead>
@@ -41,7 +43,7 @@ export function ClosersTable({ closers, leadCounts }: Props) {
             ))}
             {closers.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-sm">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-sm">
                   No hay closers. Crea el primero.
                 </td>
               </tr>
@@ -56,7 +58,9 @@ export function ClosersTable({ closers, leadCounts }: Props) {
 function CloserRow({ closer, leadCount }: { closer: Closer; leadCount: number }) {
   const router = useRouter();
   const [flujo, setFlujo] = useState(closer.flujo_activo);
+  const [sesiones, setSesiones] = useState(closer.acepta_sesiones ?? false);
   const [pending, startTransition] = useTransition();
+  const [pendingSesiones, startSesiones] = useTransition();
 
   const toggleFlujo = () => {
     startTransition(async () => {
@@ -66,6 +70,19 @@ function CloserRow({ closer, leadCount }: { closer: Closer; leadCount: number })
       if (res.ok) {
         const data = await res.json();
         setFlujo(data.flujo_activo);
+        router.refresh();
+      }
+    });
+  };
+
+  const toggleSesiones = () => {
+    startSesiones(async () => {
+      const res = await fetch(`/api/admin/closers/${closer.id}/toggle-sesiones`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSesiones(data.acepta_sesiones);
         router.refresh();
       }
     });
@@ -113,6 +130,36 @@ function CloserRow({ closer, leadCount }: { closer: Closer; leadCount: number })
             flujo ? "text-emerald-700 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400"
           }`}>
             {pending ? "..." : flujo ? "Sí" : "No"}
+          </span>
+        </button>
+      </td>
+      <td className="px-4 py-3">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={sesiones}
+          onClick={toggleSesiones}
+          disabled={pendingSesiones}
+          title={sesiones
+            ? "Acepta Sesiones de Plan: sus franjas aparecen en el funnel /sesion-plan. Clic para pausar."
+            : "NO acepta Sesiones de Plan (sus franjas no se ofrecen). Clic para activar."}
+          className="inline-flex items-center gap-2 cursor-pointer disabled:opacity-50 group"
+        >
+          <span
+            className={`relative inline-flex h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+              sesiones ? "bg-violet-500" : "bg-slate-300 dark:bg-slate-600"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                sesiones ? "left-[18px]" : "left-0.5"
+              }`}
+            />
+          </span>
+          <span className={`text-xs font-medium ${
+            sesiones ? "text-violet-700 dark:text-violet-400" : "text-slate-500 dark:text-slate-400"
+          }`}>
+            {pendingSesiones ? "..." : sesiones ? "Sí" : "No"}
           </span>
         </button>
       </td>

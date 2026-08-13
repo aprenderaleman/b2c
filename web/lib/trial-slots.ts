@@ -306,7 +306,7 @@ async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
 // jumps that affect this app.
 // ─────────────────────────────────────────────────────────
 
-function berlinDayOfWeek(d: Date): number {
+export function berlinDayOfWeek(d: Date): number {
   // 0=Sun … 6=Sat in the Berlin calendar.
   const fmt = new Intl.DateTimeFormat("en-GB", {
     timeZone: BERLIN_TZ, weekday: "short",
@@ -318,7 +318,7 @@ function berlinDayOfWeek(d: Date): number {
 }
 
 /** Convert a "clock time in Berlin on the same date as `anchor`" → UTC ms. */
-function berlinClockToUtcMs(anchor: Date, hhmmss: string): number {
+export function berlinClockToUtcMs(anchor: Date, hhmmss: string): number {
   const [hh, mm] = hhmmss.split(":").map(s => parseInt(s, 10));
   // Pull the Berlin Y/M/D for the anchor.
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -347,7 +347,10 @@ function berlinOffsetMinutes(d: Date): number {
   return Math.round((berlinNow.getTime() - utcNow.getTime()) / 60_000);
 }
 
-function isWindowValid(w: AvailabilityRow, day: Date): boolean {
+export function isWindowValid(
+  w: { valid_from: string | null; valid_until: string | null },
+  day: Date,
+): boolean {
   const dayIso = day.toISOString().slice(0, 10);
   if (w.valid_from   && dayIso < w.valid_from)  return false;
   if (w.valid_until  && dayIso > w.valid_until) return false;

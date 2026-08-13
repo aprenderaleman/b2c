@@ -11,7 +11,7 @@ export default async function ClosersPage() {
   const sb = supabaseAdmin();
   const { data: closers } = await sb
     .from("users")
-    .select("id, email, full_name, phone, active, rango, flujo_activo, created_at")
+    .select("id, email, full_name, phone, active, rango, flujo_activo, acepta_sesiones, created_at")
     .eq("role", "closer")
     .order("created_at", { ascending: false });
 
@@ -23,6 +23,7 @@ export default async function ClosersPage() {
     active: boolean;
     rango: string | null;
     flujo_activo: boolean;
+    acepta_sesiones: boolean;
     created_at: string;
   }>;
 
