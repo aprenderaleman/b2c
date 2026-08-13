@@ -77,7 +77,7 @@ export function CloserLeadsList({ leads, teacherByLead }: Props) {
 
   const CHIPS: Array<{ key: AttFilter; label: string; activeCls: string }> = [
     { key: "todos",      label: `Todos (${leads.length})`,                  activeCls: "bg-brand-600 text-white border-brand-600" },
-    { key: "pendiente",  label: `🗓 Clase pendiente (${counts.pendiente})`, activeCls: "bg-blue-600 text-white border-blue-600" },
+    { key: "pendiente",  label: `🗓 Sesión pendiente (${counts.pendiente})`, activeCls: "bg-blue-600 text-white border-blue-600" },
     { key: "asistio",    label: `✓ Asistió (${counts.asistio})`,            activeCls: "bg-emerald-600 text-white border-emerald-600" },
     { key: "no_asistio", label: `✗ No asistió (${counts.no_asistio})`,      activeCls: "bg-red-600 text-white border-red-600" },
   ];

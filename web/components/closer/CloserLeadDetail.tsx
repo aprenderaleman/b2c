@@ -6,6 +6,7 @@ import type { TareaCloser } from "@/lib/closer-cadence";
 import { MarkSaleModal } from "./MarkSaleModal";
 import { RegistrarModal } from "./RegistrarModal";
 import { Layer2Actions } from "./Layer2Actions";
+import { CloserFollowupMessages, CLOSER_META_LABEL } from "./CloserFollowupMessages";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
 import { SOURCE_META, fmtRelative, fmtTrialDate } from "@/lib/closer-constants";
@@ -370,6 +371,17 @@ export function CloserLeadDetail({
                 ))}
               </div>
             </Panel>
+          )}
+
+          {/* Mensajes de seguimiento del closer */}
+          {lead.estado_cierre !== "convertido" && lead.estado_cierre !== "perdido" && (
+            <CloserFollowupMessages
+              leadFirstName={(lead.name ?? "").trim().split(/\s+/)[0] || ""}
+              whatsapp={lead.whatsapp_normalized}
+              estado={lead.trial_attended_at ? "asistio" : lead.trial_absent_at ? "no_asistio" : "pendiente"}
+              metaLabel={CLOSER_META_LABEL[lead.goal ?? ""] ?? "tu meta con el alemán"}
+              sesionAt={lead.sesion_plan_at ?? null}
+            />
           )}
 
           {/* Layer 2 Actions */}
