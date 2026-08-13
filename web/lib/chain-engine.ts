@@ -125,6 +125,48 @@ export async function pauseChain(
   return (data ?? []).length > 0;
 }
 
+/**
+ * Silencia TODOS los envíos automáticos al lead hasta `pauseUntil`:
+ *   - Pausa la chain activa (via pauseChain arriba)
+ *   - Setea leads.ai_paused_until → los crons que lo respetan skip:
+ *     trial-reminders-*, teacher-reschedule-followup, sesion-notifications,
+ *     diagnostico-followups (tras el fix 2026-08-14), chain-processor
+ *     (advanceChain lee ai_paused_until desde este mismo commit).
+ *
+ * Uso: cuando el lead agenda una sesión de plan, evita que le lleguen
+ * mensajes de otras cadenas (chain1, chain8x) o del drip diagnóstico
+ * mientras espera su sesión (+ 24h de gracia post-sesión).
+ *
+ * Gelfis 2026-08-14 — Opción B del análisis "garantía anti-bombardeo".
+ */
+export async function pauseAllOutbound(
+  leadId: string,
+  pauseUntil: Date,
+): Promise<void> {
+  const sb = supabaseAdmin();
+  const ms = pauseUntil.getTime() - Date.now();
+  if (ms <= 0) return;
+
+  // 1. Pausa chains del motor
+  await pauseChain(leadId, ms);
+
+  // 2. Setea ai_paused_until en el lead — solo si el actual es menor
+  //    (no acortar una pausa manual del admin que ya expira más tarde).
+  const { data: cur } = await sb
+    .from("leads")
+    .select("ai_paused_until")
+    .eq("id", leadId)
+    .maybeSingle();
+  const curTs = (cur as { ai_paused_until: string | null } | null)?.ai_paused_until;
+  const curMs = curTs ? new Date(curTs).getTime() : 0;
+  if (pauseUntil.getTime() > curMs) {
+    await sb
+      .from("leads")
+      .update({ ai_paused_until: pauseUntil.toISOString() })
+      .eq("id", leadId);
+  }
+}
+
 // ── Check if lead paid after chain started ─────────────────────────────
 
 export async function hasLeadPaid(
@@ -253,13 +295,26 @@ export async function advanceChain(chain: ChainRow): Promise<{
   const vars = await resolveChainVariables(chain.lead_id, chain.metadata, chain.started_at);
   const text = renderTemplate((tplRow as { body: string }).body, vars);
 
-  // Get lead's WhatsApp
+  // Get lead's WhatsApp + ai_paused_until
   const { data: lead } = await sb
     .from("leads")
-    .select("whatsapp_normalized, language")
+    .select("whatsapp_normalized, language, ai_paused_until")
     .eq("id", chain.lead_id)
     .maybeSingle();
   const phone = (lead as { whatsapp_normalized: string | null } | null)?.whatsapp_normalized;
+  const pausedUntil = (lead as { ai_paused_until: string | null } | null)?.ai_paused_until;
+
+  // Guard Gelfis 2026-08-14: si el lead tiene ai_paused_until activa
+  // (típicamente por haber agendado una sesión de plan), posponer la
+  // chain hasta que expire — evita bombardear al lead con múltiples
+  // cadenas mientras espera su sesión.
+  if (pausedUntil && new Date(pausedUntil).getTime() > Date.now()) {
+    await sb.from("lead_chains").update({
+      next_fire_at: pausedUntil,
+      updated_at: new Date().toISOString(),
+    }).eq("id", chain.id);
+    return { action: "skipped_paid", templateKind };
+  }
 
   if (phone) {
     // R4: 3h minimum between automatic messages (transactional chains exempt)

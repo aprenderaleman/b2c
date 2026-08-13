@@ -266,12 +266,19 @@ async function runCron(req: Request) {
   // Pulla leads en status 'registered' con menos de 6 mensajes enviados.
   // Filtramos en SQL por last_drip_msg_n < 8 — los de 8 ya están 'lost'
   // pero defendemos en cliente igual.
+  // Fix Gelfis 2026-08-14 (garantía anti-bombardeo, Opción B):
+  // Filtramos leads con ai_paused_until activa. pauseAllOutbound()
+  // (llamada desde book-sesion-plan) setea este campo para que el
+  // lead que acabó de agendar una sesión no reciba también el drip
+  // diagnóstico mientras espera.
+  const nowIso = new Date().toISOString();
   const { data, error } = await sb
     .from("leads")
     .select("id, name, email, whatsapp_normalized, language, german_level, diagnostico_completed_at, last_drip_msg_n, last_drip_sent_at")
     .eq("status", "registered")
     .lt("last_drip_msg_n", 8)
-    .not("diagnostico_completed_at", "is", null);
+    .not("diagnostico_completed_at", "is", null)
+    .or(`ai_paused_until.is.null,ai_paused_until.lte.${nowIso}`);
 
   if (error) {
     console.error("[diagnostico-followups] query failed:", error.message);

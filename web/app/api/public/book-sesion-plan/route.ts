@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { listSesionSlots, SESION_MINUTES } from "@/lib/sesion-slots";
 import { buildTrialToken, buildLeadJoinUrl } from "@/lib/trial-token";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
-import { pauseChain } from "@/lib/chain-engine";
+import { pauseAllOutbound } from "@/lib/chain-engine";
 import { sanitizeE164 } from "@/lib/phone";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { notifyCloserOnBooking } from "@/lib/sesion-notifications";
@@ -333,9 +333,15 @@ export async function POST(req: Request) {
     });
   }
 
-  // ── (c) R3: la sesión es una respuesta → pausar cadena activa ──
-  const pauseMs = new Date(b.slot_iso).getTime() - Date.now() + 24 * 3600_000;
-  await pauseChain(leadId, Math.max(pauseMs, 3600_000)).catch(() => {});
+  // ── (c) R3: la sesión es una respuesta → pausar TODOS los outbounds.
+  // Gelfis 2026-08-14 (Opción B "garantía anti-bombardeo"): antes solo
+  // pausaba lead_chains vía pauseChain. Ahora pauseAllOutbound también
+  // setea leads.ai_paused_until, que respetan los crons trial-reminders-*,
+  // teacher-reschedule, sesion-notifications, diagnostico-followups y
+  // el motor lead_chains (advanceChain). Un lead con sesión agendada
+  // NO recibe mensajes de otras cadenas hasta 24h post-sesión.
+  const pauseUntil = new Date(new Date(b.slot_iso).getTime() + 24 * 3600_000);
+  await pauseAllOutbound(leadId, pauseUntil).catch(() => {});
 
   // ── Magic link ──
   const token = buildTrialToken(leadId, classId);
