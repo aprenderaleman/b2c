@@ -10,13 +10,6 @@ export type WelcomeStudentVars = {
   subscriptionLabel: string;    // "Paquete de 20 clases" / "Suscripción mensual", rendered already in the caller's language
   subscriptionDetails: string;  // one-line detail, e.g. "20 clases restantes · 400 €"
   language: "es" | "de";
-  /**
-   * URL del video de bienvenida del fundador (Gelfis 2026-08-14).
-   * Si viene vacío/undefined, el bloque de video NO aparece en el email
-   * (evita bloquear el deploy esperando el asset). Se lee de
-   * system_config.url_video_bienvenida en el caller.
-   */
-  videoUrl?: string | null;
 };
 
 export function renderWelcomeStudent(v: WelcomeStudentVars): RenderedEmail {
@@ -33,14 +26,6 @@ function renderES(v: WelcomeStudentVars): RenderedEmail {
 
   const greeting = `¡Bienvenido/a ${v.name}! ☀️`;
   const intro    = "Tu cuenta en nuestra academia está lista. Desde hoy tienes acceso a todo:";
-
-  const videoBlock = (v.videoUrl && v.videoUrl.trim().length > 0)
-    ? `<div style="margin:24px 0;padding:16px;background:#fff7ed;border-left:4px solid #ea580c;border-radius:6px;">
-         <div style="font-weight:700;margin-bottom:8px;">🎥 Bienvenida del fundador (60 seg)</div>
-         <p style="margin:0 0 8px 0;">Un vídeo corto para explicarte cómo aprovechar tu primera semana:</p>
-         <a href="${escapeHtml(v.videoUrl)}" style="color:#ea580c;font-weight:700;text-decoration:none;">👉 Ver el vídeo</a>
-       </div>`
-    : "";
 
   const primeraSemanaBlock = `
     <div style="margin:24px 0 4px 0;font-size:13px;font-weight:700;color:#ea580c;text-transform:uppercase;letter-spacing:0.06em;">Tu primera semana</div>
@@ -66,8 +51,6 @@ function renderES(v: WelcomeStudentVars): RenderedEmail {
     <div style="text-align:center;margin:24px 0 28px 0;">
       ${button(loginUrl, "Entrar a la plataforma →")}
     </div>
-
-    ${videoBlock}
 
     ${primeraSemanaBlock}
 

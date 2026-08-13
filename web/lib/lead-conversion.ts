@@ -227,16 +227,6 @@ export async function convertLeadToStudent(
     console.error("[convert] garantia issuance failed (non-fatal):", e instanceof Error ? e.message : e);
   }
 
-  // Video de bienvenida (Gelfis 2026-08-14): config editable. Si está
-  // vacío, el bloque no aparece en el email (no bloquea el deploy
-  // esperando el asset).
-  const { data: videoCfg } = await sb
-    .from("system_config")
-    .select("value")
-    .eq("key", "url_video_bienvenida")
-    .maybeSingle();
-  const videoUrl = ((videoCfg as { value?: string } | null)?.value ?? "").trim() || null;
-
   const emailResult = await sendWelcomeStudentEmail(body.email, {
     name:                body.fullName.split(/\s+/)[0] || body.fullName,
     email:               body.email,
@@ -256,7 +246,6 @@ export async function convertLeadToStudent(
       body.language,
     ),
     language: body.language,
-    videoUrl,
   }, garantiaAttachment ? [garantiaAttachment] : undefined);
 
   // Guard anti-duplicados del email de garantía (caso Javier
