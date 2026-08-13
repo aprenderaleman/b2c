@@ -84,6 +84,7 @@ function adminItems(): NavItem[] {
     { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 7 },
     { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
     { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },
+    { label: "Referidos",   href: "/admin/referidos",   icon: "heart",         priority: 8.7 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
     { label: "Closers",     href: "/admin/closers",     icon: "userCheck",     priority: 9.5 },
     { label: "Reactivacion",href: "/admin/reactivacion", icon: "refreshCw",   priority: 9.55 },

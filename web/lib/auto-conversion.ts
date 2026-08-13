@@ -5,6 +5,7 @@ import { calculateCommissions } from "./closer-commissions";
 import { cancelActiveChain } from "./chain-engine";
 import { runPostConversionFlow, detectScenario } from "./post-conversion-flow";
 import { sendMetaPurchaseCapi } from "./meta-capi-server";
+import { applyReferralReward } from "./referrals";
 
 type AutoConvertOpts = {
   leadId: string;
@@ -113,6 +114,11 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
       studentId: es.id,
       skipPostConversionFlow: true,   // el welcome ya salió con la conversión manual
     });
+    try {
+      await applyReferralReward(ld.id);
+    } catch (err) {
+      console.warn("[auto-conversion] applyReferralReward (late) failed:", err);
+    }
     return;
   }
 
@@ -180,6 +186,15 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
       studentId: result.studentId,
       skipPostConversionFlow: false,
     });
+  }
+
+  // Recompensa de referido (si el lead vino con ?ref). DEBE ir después
+  // del update de clases_desbloqueadas de arriba — la recompensa suma
+  // encima del balance ya fijado. Idempotente en lib/referrals.
+  try {
+    await applyReferralReward(ld.id);
+  } catch (err) {
+    console.warn("[auto-conversion] applyReferralReward failed (non-fatal):", err);
   }
 
   console.log(`[auto-conversion] lead ${ld.id} → student ${result.studentId} via oferta ${opts.ofertaId}`);

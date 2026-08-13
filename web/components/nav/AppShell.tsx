@@ -9,6 +9,7 @@ import { BottomNavMobile } from "./BottomNavMobile";
 import { ImpersonatePicker } from "./ImpersonatePicker";
 import { SystemHealthDot } from "@/components/admin/SystemHealthDot";
 import { LmsHealthDot } from "@/components/admin/LmsHealthDot";
+import { ReferralWidget } from "@/components/referrals/ReferralWidget";
 import { bottomNavItems, drawerExtras, type NavItem } from "@/lib/nav-items";
 import type { Role } from "@/lib/rbac";
 
@@ -56,6 +57,7 @@ export function AppShell({
             <Logo variant="compact" href={defaultHome(role)} size={32} />
           </div>
           <div className="flex-1" />
+          {role === "student" && <ReferralWidget />}
           {(role === "admin" || role === "superadmin") && (
             <>
               <SystemHealthDot />

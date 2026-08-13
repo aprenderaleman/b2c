@@ -29,11 +29,13 @@ export type AttributionKey =
   | "utm_medium"
   | "utm_campaign"
   | "utm_term"
-  | "utm_content";
+  | "utm_content"
+  | "ref";        // código de referido de estudiante (sistema "Regala una clase")
 
 const ALL_KEYS: AttributionKey[] = [
   "gclid", "gbraid", "wbraid",
   "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+  "ref",
 ];
 
 /**

@@ -29,6 +29,9 @@ export type NotificationType =
   | "retention_no_classes"
   | "retention_low_pace"
   | "retention_inactive"
+  // Recompensa del sistema de referidos: el amigo del estudiante se
+  // inscribió y las +3 clases de regalo ya están en su cuenta.
+  | "referral_reward"
   | "generic";
 
 export type NotificationRow = {

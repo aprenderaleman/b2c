@@ -14,7 +14,7 @@
  * que Google sí indexa el H1 + subtítulo + bullets aunque la lógica
  * de "click → funnel" sea cliente.
  */
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
 import { captureAttributionFromUrl } from "@/lib/ads-attribution";
@@ -84,6 +84,25 @@ export function LandingStep0({
     trackFunnel("landing_view", { landingIntent });
   }, [landingIntent]);
 
+  // Banner de referido: si llega ?ref={code} válido, mostramos quién
+  // invita (solo nombre de pila, por privacidad). Código inválido →
+  // landing normal, sin banner y sin error. El copy promete la clase
+  // extra SOLO al inscribirse (honestidad del incentivo).
+  const [referrerName, setReferrerName] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const code = new URLSearchParams(window.location.search).get("ref")
+        ?? sessionStorage.getItem("b2c.attr.ref");
+      if (!code) return;
+      fetch(`/api/public/referral-info?code=${encodeURIComponent(code)}`)
+        .then(r => r.ok ? r.json() : null)
+        .then((d: { valid: boolean; first_name?: string } | null) => {
+          if (d?.valid && d.first_name) setReferrerName(d.first_name);
+        })
+        .catch(() => {});
+    } catch { /* sessionStorage bloqueado */ }
+  }, []);
+
   // Href único (evita duplicar la URL entre el CTA inline y el sticky).
   const ctaHref = ctaHrefOverride
     ?? `/agendar/cuando?landing=${encodeURIComponent(landingIntent)}${presetMotivo ? `&motivo=${encodeURIComponent(presetMotivo)}` : ""}`;
@@ -134,6 +153,15 @@ export function LandingStep0({
         <main className="flex-1 px-5 md:px-8 lg:px-10 py-6 md:py-10
                          mx-auto max-w-xl w-full
                          pb-28 md:pb-10">
+
+          {/* Banner de referido — solo cuando ?ref es válido. */}
+          {referrerName && (
+            <div className="mb-4 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-3 text-sm text-amber-900 leading-relaxed">
+              🎁 <strong>{referrerName} te invitó a Aprender-Alemán</strong> — agenda
+              tu clase de prueba gratis y, si te inscribes, llévate una clase
+              extra de regalo en tu programa.
+            </div>
+          )}
 
           {/* Tagline píldora opcional (variante paid: "Clase de prueba · 10€"). */}
           {tagline && (

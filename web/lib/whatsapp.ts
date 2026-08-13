@@ -126,6 +126,8 @@ const ALLOWED_WA_KINDS = new Set([
   "trial_teacher_reschedule_fu2",  // +24h sin rebook (único)
   // Welcome student al convertir lead → student
   "welcome_student",
+  // Celebración al referidor: su amigo se inscribió, +3 clases (2026-08-14)
+  "referral_reward",
   // Absent-interest: mandamos pregunta, si dice SÍ → link, si NO → cierre
   "trial_absent_interest_yes",
   "trial_absent_interest_close",

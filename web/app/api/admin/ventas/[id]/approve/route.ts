@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { ConvertBody, convertLeadToStudent } from "@/lib/lead-conversion";
 import { calculateCommissions } from "@/lib/closer-commissions";
 import { recalculateRank } from "@/lib/ranking";
+import { applyReferralReward } from "@/lib/referrals";
 
 const Body = ConvertBody;
 
@@ -97,6 +98,10 @@ export async function POST(
   if (teacherId) {
     try { await recalculateRank(teacherId, "teacher"); } catch { /* non-fatal */ }
   }
+
+  // 6. Recompensa de referido (si el lead vino con ?ref) — idempotente.
+  try { await applyReferralReward(leadId); }
+  catch (e) { console.warn("[approve] applyReferralReward failed:", e instanceof Error ? e.message : e); }
 
   return NextResponse.json({
     ok: true,

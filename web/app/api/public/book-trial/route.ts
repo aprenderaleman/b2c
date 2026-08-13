@@ -17,6 +17,7 @@ import { notifyTeacherOfTrial } from "@/lib/teacher-trial-notification";
 import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
 import { createTeacherTrialEvent } from "@/lib/google-calendar-oauth";
 import { sendRaw } from "@/lib/email/send";
+import { attributeReferral } from "@/lib/referrals";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
 function generateShortCode(): string {
@@ -102,6 +103,10 @@ const Body = z.object({
   utm_campaign:  z.string().trim().max(200).nullable().optional(),
   utm_term:      z.string().trim().max(200).nullable().optional(),
   utm_content:   z.string().trim().max(200).nullable().optional(),
+  // Código de referido de estudiante (sistema "Regala una clase —
+  // gana 3", 2026-08-14). First-touch: attributeReferral() nunca
+  // sobrescribe un referred_by previo; código inválido se ignora.
+  ref:           z.string().trim().max(20).nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -340,6 +345,22 @@ export async function POST(req: Request) {
         motivo:         "direct",
         landing_intent: b.landing_intent,
       });
+    }
+  }
+
+  // ── Atribución de referido (first-touch, best-effort). Código
+  // inválido o auto-referido se ignoran en silencio — nunca rompen el
+  // booking del lead.
+  if (b.ref) {
+    try {
+      await attributeReferral({
+        leadId,
+        code:         b.ref,
+        leadEmail:    b.email ?? null,
+        leadWhatsapp: b.whatsapp_e164 ?? null,
+      });
+    } catch (e) {
+      console.warn("[book-trial] attributeReferral failed (non-fatal):", e instanceof Error ? e.message : e);
     }
   }
 
