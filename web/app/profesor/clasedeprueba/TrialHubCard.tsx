@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   formatBerlinDate, formatBerlinTime, formatGoalEs, formatStatusEs,
@@ -11,7 +11,7 @@ import { PriorityBadges, summarizeQualification } from "@/components/admin/Prior
 import { DeleteTrialClassButton } from "@/components/DeleteTrialClassButton";
 import Link from "next/link";
 import { ConfirmPaymentModal } from "@/components/teacher/ConfirmPaymentModal";
-import { NotesField } from "./NotesField";
+import { NotesField, type NotesFieldHandle } from "./NotesField";
 import { PaymentLinkModal } from "./PaymentLinkModal";
 import { ScheduleClassModal } from "./ScheduleClassModal";
 import { PresentationLinks } from "./PresentationLinks";
@@ -32,6 +32,7 @@ export function TrialHubCard({
   canDelete?: boolean;
 }) {
   const router = useRouter();
+  const notesRef = useRef<NotesFieldHandle>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [confirmPaymentOpen, setConfirmPaymentOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -278,7 +279,7 @@ export function TrialHubCard({
             )}
 
             {/* Notes */}
-            <NotesField classId={row.classId} initialNotes={row.scriptTeacherNotes} />
+            <NotesField ref={notesRef} classId={row.classId} initialNotes={row.scriptTeacherNotes} />
 
             {/* Presentations */}
             <div>
@@ -297,6 +298,7 @@ export function TrialHubCard({
                     onClick={async () => {
                       if (!row.leadId) return;
                       if (!confirm("Marcar como ASISTIO.\n\n¿Continuar?")) return;
+                      await notesRef.current?.flush();
                       try {
                         const res = await fetch(`/api/teacher/trial/${row.leadId}/attended-no-link`, {
                           method: "POST",
@@ -361,6 +363,7 @@ export function TrialHubCard({
                         "• Si responde → se escala.\n\n" +
                         "¿Continuar?"
                       )) return;
+                      await notesRef.current?.flush();
                       try {
                         const res = await fetch(`/api/teacher/trial/${row.leadId}/absent`, {
                           method: "POST",
@@ -400,6 +403,7 @@ export function TrialHubCard({
                         "¿Continuar?"
                       )) return;
                       setReschedulingSend(true);
+                      await notesRef.current?.flush();
                       try {
                         const res = await fetch(`/api/teacher/trial/${row.leadId}/send-reschedule-link`, {
                           method: "POST",
@@ -476,6 +480,7 @@ export function TrialHubCard({
                           "¿Continuar?"
                         )) return;
                         setObjectionSending(chip);
+                        await notesRef.current?.flush();
                         try {
                           const res = await fetch(`/api/teacher/trial/${row.leadId}/attended-objection`, {
                             method: "POST",
@@ -523,6 +528,7 @@ export function TrialHubCard({
                     disabled={escalateMsg.trim().length < 3 || escalating}
                     onClick={async () => {
                       setEscalating(true);
+                      await notesRef.current?.flush();
                       try {
                         const res = await fetch(`/api/teacher/trial/${row.leadId}/escalate`, {
                           method: "POST",
