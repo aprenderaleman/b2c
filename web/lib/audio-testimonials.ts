@@ -52,17 +52,22 @@ export async function pickTestimonial(
     .eq("lead_id", leadId);
   const sentIds = new Set((sentRows ?? []).map(r => (r as { testimonial_id: string }).testimonial_id));
 
+  // Orden BD: created_at ASC → el testimonial subido primero se sirve
+  // primero cuando hay empate por meta_tag. Sirve para "priorizar"
+  // manualmente: sube en el orden en que quieres que salgan.
   const { data: pool } = await sb
     .from("testimonials")
-    .select("id, nombre_estudiante, audio_url, audio_key, meta_tag, active")
-    .eq("active", true);
+    .select("id, nombre_estudiante, audio_url, audio_key, meta_tag, active, created_at")
+    .eq("active", true)
+    .order("created_at", { ascending: true });
 
-  const rows = (pool ?? []) as AudioTestimonialRow[];
+  const rows = (pool ?? []) as (AudioTestimonialRow & { created_at: string })[];
   if (rows.length === 0) return null;
 
   const notSent = rows.filter(r => !sentIds.has(r.id));
   const available = notSent.length > 0 ? notSent : rows;
 
+  // Tuple sort: (match-goal ASC, general ASC, created_at ASC preservado por stable sort)
   const priority = (r: AudioTestimonialRow): number => {
     if (goal && r.meta_tag === goal) return 0;
     if (r.meta_tag === "general") return 1;
