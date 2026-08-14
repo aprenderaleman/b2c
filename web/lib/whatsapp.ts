@@ -131,6 +131,8 @@ const ALLOWED_WA_KINDS = new Set([
   "welcome_week",              // steps 2-4 del motor (Hans/SCHULE/checkin)
   "welcome_week_celebration",  // variantes celebración Hans/SCHULE
   "welcome_week_checkin_ack",  // ACK respuesta "1" al check-in
+  // Testimonios en audio (Gelfis 2026-08-14): social proof
+  "testimonial_chain2",        // preludio texto + audio en chain2 step 3
   // Celebración al referidor: su amigo se inscribió, +3 clases (2026-08-14)
   "referral_reward",
   // Absent-interest: mandamos pregunta, si dice SÍ → link, si NO → cierre
@@ -431,6 +433,111 @@ export async function sendWhatsappDocument(
     }
     const data = (await res.json().catch(() => ({}))) as { messageId?: string };
     return { ok: true, messageId: data.messageId ?? null };
+  } catch (e) {
+    return { ok: false, reason: e instanceof Error ? e.message : "unknown" };
+  }
+}
+
+/**
+ * Envía un audio por WhatsApp (nota de voz o audio file) via Evolution API.
+ * Espejo de sendWhatsappText: aplica blocklist, kill switch, gate nocturno,
+ * cap diario y rate limit.
+ *
+ * @param phoneE164   Destinatario en E.164.
+ * @param audioUrl    URL pública/firmada del MP3/OGG. Evolution la descarga.
+ * @param opts.kind   Etiqueta whitelist (ej: 'testimonial_chain2').
+ *
+ * Nota: WhatsApp NO soporta caption en audio-mensajes (limitación del
+ * protocolo). Si necesitas texto de contexto, envía primero un
+ * sendWhatsappText y luego este audio.
+ */
+export async function sendWhatsappAudio(
+  phoneE164: string | null | undefined,
+  audioUrl: string,
+  opts: SendWaOpts = {},
+): Promise<WhatsappResult> {
+  if (!phoneE164 || phoneE164.trim().length === 0) {
+    return { ok: false, reason: "no_whatsapp_on_lead" };
+  }
+  if (isWhatsappBlocked(phoneE164)) {
+    console.warn("[whatsapp] número en blocklist, audio suprimido:", phoneE164);
+    return { ok: false, reason: "blocklisted" };
+  }
+  const killMode = await getWhatsappDisableMode();
+  if (killMode !== "off" && !opts.bypassKillSwitch) {
+    const kind = opts.kind ?? "";
+    if (!(killMode === "partial" && ALLOWED_WA_KINDS.has(kind))) {
+      return { ok: false, reason: "whatsapp_globally_disabled" };
+    }
+  }
+  if (!opts.bypassKillSwitch && isBerlinNight()) {
+    const gateOn = await isNightGateEnabled();
+    if (gateOn && !NIGHT_EXEMPT_KINDS.has(opts.kind ?? "")) {
+      return { ok: false, reason: "night_gate" };
+    }
+  }
+  if (!opts.bypassKillSwitch) {
+    const { limit, sent } = await getDailySendState();
+    if (sent >= limit && !ALLOWED_WA_KINDS.has(opts.kind ?? "")) {
+      return { ok: false, reason: "daily_cap_reached" };
+    }
+  }
+  // Rate limit — 15s tras último send de este proceso
+  const now = Date.now();
+  const elapsed = now - _lastWaSentAt;
+  if (elapsed < MIN_GAP_MS && _lastWaSentAt > 0) {
+    await new Promise(r => setTimeout(r, MIN_GAP_MS - elapsed));
+  }
+  _lastWaSentAt = Date.now();
+
+  const evoUrl = process.env.EVOLUTION_API_URL?.replace(/\/$/, "");
+  const evoKey = process.env.EVOLUTION_API_KEY;
+  if (!evoUrl || !evoKey) return { ok: false, reason: "missing_evolution_env" };
+
+  let instance: string;
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const sb = supabaseAdmin();
+    const { data } = await sb
+      .from("system_config")
+      .select("value")
+      .eq("key", "active_whatsapp_instance")
+      .maybeSingle();
+    instance = ((data as { value?: string } | null)?.value)
+      ?? process.env.EVOLUTION_INSTANCE_MAIN
+      ?? "aprender-aleman-main";
+  } catch {
+    instance = process.env.EVOLUTION_INSTANCE_MAIN ?? "aprender-aleman-main";
+  }
+
+  const digits = phoneE164.replace(/^\+/, "").replace(/\D/g, "");
+  // Evolution v1.8 / v2 shape para audio como voice note
+  const payload = {
+    number: digits,
+    options: { delay: 1200, presence: "recording" },
+    audioMessage: { audio: audioUrl },
+  };
+
+  try {
+    const res = await fetch(`${evoUrl}/message/sendWhatsAppAudio/${instance}`, {
+      method: "POST",
+      headers: {
+        "apikey":       evoKey,
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(120_000),  // 2 min — descarga + envío
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return { ok: false, reason: `http_${res.status}:${body.slice(0, 200)}` };
+    }
+    const data = (await res.json().catch(() => ({}))) as {
+      key?: { id?: string };
+      messageId?: string;
+    };
+    const messageId = data.key?.id ?? data.messageId ?? null;
+    return { ok: true, messageId };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : "unknown" };
   }

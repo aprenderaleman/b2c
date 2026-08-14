@@ -67,6 +67,12 @@ export type ChainStep = {
    * (ej: "1"/"2"/"3" solo dentro del check-in de welcome_week).
    */
   setStatePhase?: string;
+  /**
+   * Si true, antes de enviar el texto del template envía un testimonial
+   * en audio (social proof) elegido con pickTestimonial(leadId).
+   * Si no hay testimonials disponibles, el step envía solo el texto.
+   */
+  preludeTestimonial?: boolean;
   onComplete?: {
     setStatus?: string;
   };
@@ -148,6 +154,10 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
         channels: ["whatsapp"],
         skipIfPaid: true,
         adminAlert: true,
+        // Gelfis 2026-08-14: adjunta testimonial en audio de un estudiante
+        // real ANTES del texto. Es el último intento antes de perder al
+        // lead — el social proof mueve más que otro copy de rescate.
+        preludeTestimonial: true,
       },
     ],
   },
