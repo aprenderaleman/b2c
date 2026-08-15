@@ -85,7 +85,19 @@ export default async function TeacherStudentDetail({
             </h1>
             <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 flex-wrap">
               <span className="font-mono">{student.email}</span>
-              {student.phone && <><span>·</span><span>{student.phone}</span></>}
+              {student.phone && (
+                <>
+                  <span>·</span>
+                  <a
+                    href={`https://wa.me/${student.phone.replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-mono text-brand-600 dark:text-brand-400 hover:underline"
+                  >
+                    {student.phone}
+                  </a>
+                </>
+              )}
               <span>·</span>
               <span>Nivel {student.current_level}</span>
               {student.goal && <><span>·</span><span>Meta: {student.goal}</span></>}
