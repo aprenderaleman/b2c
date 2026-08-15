@@ -414,6 +414,11 @@ export async function advanceChain(chain: ChainRow): Promise<{
           await logDebug("no_testimonial_available");
         } else {
           await logDebug(`picked: ${t.nombre_estudiante}`, { testimonial_id: t.id });
+          // ⚠️ DEBUG TEMPORAL: firmar URL antes que enviar y persistir completa.
+          //    Así aunque kill switch bloquee el send, tenemos la URL para probarla manual.
+          const signed = await signTestimonialUrl(t);
+          await logDebug("signed url", { signed_url_full: signed });
+
           const introVars = { ...vars, nombre_estudiante: t.nombre_estudiante };
           const introTpl = `Hola {nombre}, oye — antes de que le des más vueltas, escúchate esto de {nombre_estudiante}. Le pasó igual que a ti 👂`;
           const introText = renderTemplate(introTpl, introVars);
@@ -421,10 +426,6 @@ export async function advanceChain(chain: ChainRow): Promise<{
           await logDebug(`intro: ok=${introRes.ok} reason=${(introRes as { reason?: string }).reason ?? ""}`);
 
           if (introRes.ok) {
-            const signed = await signTestimonialUrl(t);
-            // ⚠️ DEBUG TEMPORAL: persistir URL firmada COMPLETA para diagnosticar
-            //    problema descarga desde Evolution. Retirar tras diagnóstico.
-            await logDebug("signed url ok", { signed_url_full: signed });
             const audioRes = await sendWhatsappAudio(phone, signed, { kind: "testimonial_chain2" });
             await logDebug(`audio: ok=${audioRes.ok} reason=${(audioRes as { reason?: string }).reason ?? ""}`);
             if (audioRes.ok) {
