@@ -443,9 +443,11 @@ export async function sendWhatsappDocument(
  * Espejo de sendWhatsappText: aplica blocklist, kill switch, gate nocturno,
  * cap diario y rate limit.
  *
- * @param phoneE164   Destinatario en E.164.
- * @param audioUrl    URL pública/firmada del MP3/OGG. Evolution la descarga.
- * @param opts.kind   Etiqueta whitelist (ej: 'testimonial_chain2').
+ * @param phoneE164     Destinatario en E.164.
+ * @param audioSource   URL pública HTTP(S) del MP3/OGG (Evolution descarga)
+ *                      O Buffer con el contenido crudo (se envía base64,
+ *                      evita problemas de firma R2 → 403 en Evolution).
+ * @param opts.kind     Etiqueta whitelist (ej: 'testimonial_chain2').
  *
  * Nota: WhatsApp NO soporta caption en audio-mensajes (limitación del
  * protocolo). Si necesitas texto de contexto, envía primero un
@@ -453,7 +455,7 @@ export async function sendWhatsappDocument(
  */
 export async function sendWhatsappAudio(
   phoneE164: string | null | undefined,
-  audioUrl: string,
+  audioSource: string | Buffer,
   opts: SendWaOpts = {},
 ): Promise<WhatsappResult> {
   if (!phoneE164 || phoneE164.trim().length === 0) {
@@ -511,11 +513,18 @@ export async function sendWhatsappAudio(
   }
 
   const digits = phoneE164.replace(/^\+/, "").replace(/\D/g, "");
-  // Evolution v1.8 / v2 shape para audio como voice note
+  // Evolution v1.8 / v2 shape para audio como voice note. El campo
+  // `audio` acepta URL HTTP(S) pública O base64 crudo. Preferimos
+  // base64 para bypassar problemas de descarga desde el server Evolution
+  // (URLs firmadas de R2 devuelven 403 por mismatch virtual-hosted vs
+  // path-style — bug encontrado 2026-08-15 con testimonial Marcela).
+  const audioField = Buffer.isBuffer(audioSource)
+    ? audioSource.toString("base64")
+    : audioSource;
   const payload = {
     number: digits,
     options: { delay: 1200, presence: "recording" },
-    audioMessage: { audio: audioUrl },
+    audioMessage: { audio: audioField },
   };
 
   try {

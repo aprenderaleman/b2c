@@ -1,4 +1,4 @@
-import { S3Client, GetObjectCommand, DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, GetObjectCommand, DeleteObjectCommand, PutObjectCommand, type GetObjectCommandOutput } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
@@ -140,6 +140,43 @@ export async function uploadObject(
     const accountId = process.env.R2_ACCOUNT_ID!;
     const url = `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${key}`;
     return { ok: true, url, bucket, key };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "unknown" };
+  }
+}
+
+/**
+ * Descarga un objeto de R2 y devuelve el Buffer + Content-Type.
+ * Usa GetObjectCommand directo (server-side, con credenciales) — NO
+ * requiere URL firmada. Ideal para enviar el contenido como base64 a
+ * APIs externas que fallan al descargar URLs firmadas (ej. Evolution
+ * WhatsApp con audio testimonial).
+ *
+ * @param key   Object key dentro del bucket, p.ej.
+ *              "testimonials/<uuid>-Marcela.ogg".
+ * @returns Buffer del contenido + contentType, o error.
+ */
+export async function downloadObject(
+  key: string,
+): Promise<{ ok: true; buffer: Buffer; contentType: string } | { ok: false; error: string }> {
+  const c = client();
+  if (!c) return { ok: false, error: "r2_not_configured" };
+  const bucket = process.env.R2_BUCKET || DEFAULT_BUCKET;
+  try {
+    const res: GetObjectCommandOutput = await c.send(new GetObjectCommand({
+      Bucket: bucket,
+      Key:    key,
+    }));
+    if (!res.Body) return { ok: false, error: "empty_body" };
+    // AWS SDK v3 Body es un stream; hay que colectarlo a Buffer
+    const chunks: Uint8Array[] = [];
+    // @ts-expect-error stream typing es opaco en v3
+    for await (const chunk of res.Body) chunks.push(chunk);
+    return {
+      ok: true,
+      buffer: Buffer.concat(chunks),
+      contentType: res.ContentType || "application/octet-stream",
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "unknown" };
   }

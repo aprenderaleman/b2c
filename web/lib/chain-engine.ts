@@ -13,7 +13,7 @@ import { supabaseAdmin } from "./supabase";
 import { sendWhatsappText, sendWhatsappAudio } from "./whatsapp";
 import { renderTemplate } from "./message-stats";
 import { resolveChainVariables, isBonusAlive } from "./chain-variables";
-import { pickTestimonial, markTestimonialSent, signTestimonialUrl } from "./audio-testimonials";
+import { pickTestimonial, markTestimonialSent, fetchTestimonialAudio } from "./audio-testimonials";
 import {
   CHAIN_DEFINITIONS,
   type ChainType,
@@ -389,59 +389,48 @@ export async function advanceChain(chain: ChainRow): Promise<{
       return { action: "skipped_paid", templateKind };
     }
 
-    // Preludio testimonial (Gelfis 2026-08-14): antes del texto del
-    // step, envía el mensaje de contexto + audio del estudiante.
-    // Si no hay testimonials disponibles, el step envía solo el texto
-    // (fallback gracioso — no bloquea la cadena).
-    // Instrumentado con logs persistentes en lead_timeline para atrapar
-    // cualquier fallo silencioso (Gelfis 2026-08-15).
+    // Preludio testimonial (Gelfis 2026-08-14, fix base64 2026-08-15):
+    // antes del texto del step, envía el mensaje de contexto + audio del
+    // estudiante. Descarga el audio server-side (Buffer via R2 GetObject)
+    // y lo manda como base64 a Evolution — bypasea el bug de URLs R2
+    // firmadas que devolvían 403 en Evolution (mismatch virtual-hosted
+    // vs path-style en la firma AWS SDK v3).
+    //
+    // Fallback gracioso: si no hay testimonials activos, descarga falla,
+    // o cualquier send falla → sigue con el texto principal del step
+    // sin bloquear la cadena.
     if (step.preludeTestimonial) {
-      const logDebug = async (note: string, extra: Record<string, unknown> = {}) => {
-        try {
-          await sb.from("lead_timeline").insert({
-            lead_id: chain.lead_id,
-            type: "agent_note",
-            author: "system",
-            content: `🔍 preludeTestimonial: ${note}`,
-            metadata: { kind: "prelude_debug", chain_id: chain.id, ...extra },
-          });
-        } catch { /* nunca fallar por el log */ }
-      };
       try {
-        await logDebug("start");
         const t = await pickTestimonial(chain.lead_id);
-        if (!t) {
-          await logDebug("no_testimonial_available");
-        } else {
-          await logDebug(`picked: ${t.nombre_estudiante}`, { testimonial_id: t.id });
-          // ⚠️ DEBUG TEMPORAL: firmar URL antes que enviar y persistir completa.
-          //    Así aunque kill switch bloquee el send, tenemos la URL para probarla manual.
-          const signed = await signTestimonialUrl(t);
-          await logDebug("signed url", { signed_url_full: signed });
-
+        if (t) {
           const introVars = { ...vars, nombre_estudiante: t.nombre_estudiante };
           const introTpl = `Hola {nombre}, oye — antes de que le des más vueltas, escúchate esto de {nombre_estudiante}. Le pasó igual que a ti 👂`;
           const introText = renderTemplate(introTpl, introVars);
           const introRes = await sendWhatsappText(phone, introText, { kind: "testimonial_chain2" });
-          await logDebug(`intro: ok=${introRes.ok} reason=${(introRes as { reason?: string }).reason ?? ""}`);
 
           if (introRes.ok) {
-            const audioRes = await sendWhatsappAudio(phone, signed, { kind: "testimonial_chain2" });
-            await logDebug(`audio: ok=${audioRes.ok} reason=${(audioRes as { reason?: string }).reason ?? ""}`);
-            if (audioRes.ok) {
-              await markTestimonialSent(t.id, chain.lead_id, chain.chain_type, stepIndex);
-              await sb.from("lead_timeline").insert({
-                lead_id: chain.lead_id,
-                type: "system_message_sent",
-                author: "system",
-                content: `🎤 Testimonial de ${t.nombre_estudiante} enviado (chain ${chain.chain_type} paso ${stepIndex + 1})`,
-                metadata: { kind: "testimonial_chain2", testimonial_id: t.id, chain_id: chain.id, channel: "whatsapp" },
-              });
+            const fetched = await fetchTestimonialAudio(t);
+            if (fetched.ok) {
+              const audioRes = await sendWhatsappAudio(phone, fetched.buffer, { kind: "testimonial_chain2" });
+              if (audioRes.ok) {
+                await markTestimonialSent(t.id, chain.lead_id, chain.chain_type, stepIndex);
+                await sb.from("lead_timeline").insert({
+                  lead_id: chain.lead_id,
+                  type: "system_message_sent",
+                  author: "system",
+                  content: `🎤 Testimonial de ${t.nombre_estudiante} enviado (chain ${chain.chain_type} paso ${stepIndex + 1})`,
+                  metadata: { kind: "testimonial_chain2", testimonial_id: t.id, chain_id: chain.id, channel: "whatsapp" },
+                });
+              } else {
+                console.warn(`[chain-engine] testimonial audio send failed for lead ${chain.lead_id}: ${audioRes.reason}`);
+              }
+            } else {
+              console.warn(`[chain-engine] testimonial audio fetch failed for lead ${chain.lead_id}: ${fetched.error}`);
             }
           }
         }
       } catch (e) {
-        await logDebug(`EXCEPTION: ${e instanceof Error ? e.message : String(e)}`);
+        console.error("[chain-engine] preludeTestimonial error:", e instanceof Error ? e.message : e);
       }
     }
 

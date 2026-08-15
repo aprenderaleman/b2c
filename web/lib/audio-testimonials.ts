@@ -12,7 +12,7 @@
  */
 
 import { supabaseAdmin } from "./supabase";
-import { signRecordingUrl } from "./r2";
+import { downloadObject } from "./r2";
 
 export type AudioTestimonialRow = {
   id: string;
@@ -96,10 +96,18 @@ export async function markTestimonialSent(
 }
 
 /**
- * Firma la URL del audio para envío. R2 es privado, Evolution necesita
- * URL accesible durante ~2 min (descarga y forward al lead). Firmamos
- * por 1h por seguridad.
+ * Descarga el audio del testimonial desde R2 (server-side, con credenciales).
+ * Devuelve Buffer para enviarlo como base64 a Evolution.
+ *
+ * Antes usábamos signRecordingUrl (URL firmada) pero Evolution recibía
+ * 403 por mismatch virtual-hosted vs path-style en la firma R2. Base64
+ * bypasea completamente el problema — Evolution ni siquiera intenta
+ * descargar, recibe el contenido directo.
+ *
+ * Bug encontrado 2026-08-15 con testimonial de Marcela.
  */
-export async function signTestimonialUrl(t: AudioTestimonialRow): Promise<string> {
-  return signRecordingUrl(t.audio_url, 3600);
+export async function fetchTestimonialAudio(
+  t: AudioTestimonialRow,
+): Promise<{ ok: true; buffer: Buffer; contentType: string } | { ok: false; error: string }> {
+  return downloadObject(t.audio_key);
 }
