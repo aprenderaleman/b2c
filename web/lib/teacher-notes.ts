@@ -55,7 +55,10 @@ export async function listNotesForStudent(studentId: string, _teacherId?: string
     });
   }
 
+  const seenContent = new Set(rows.map(r => `${r.content}::${new Date(r.created_at).getTime()}`));
   for (const an of (adminNotes.data ?? []) as Array<{ id: string; author_id: string | null; content: string; created_at: string }>) {
+    const key = `${an.content}::${new Date(an.created_at).getTime()}`;
+    if (seenContent.has(key)) continue;
     rows.push({
       id:           an.id,
       teacher_id:   "",
