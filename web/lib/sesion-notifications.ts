@@ -198,7 +198,7 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
     // WhatsApp (copy Gelfis 2026-08-15: sin pitch de valor, con firma)
     if (lead.whatsapp_normalized) {
       const msg =
-        `¡Hola ${leadFirst}! 😊 Tu Sesión de Plan quedó agendada:\n\n` +
+        `¡Hola ${leadFirst}! 😊 Tu Sesión de Plan-Alemán quedó agendada:\n\n` +
         `📅 ${when.day} a las ${when.time}\n` +
         `🎥 Videollamada ${closerLabel} — ${SESION_DURATION_MIN} minutos\n\n` +
         `👉 Link de acceso: ${joinUrl}\n\n` +
