@@ -427,4 +427,17 @@ async function migrateLeadNotesToStudent(
   if (rows.length > 0) {
     await sb.from("admin_notes").insert(rows);
   }
+
+  const teacherIdForNotes = trialClass?.teacher_id as string | undefined;
+  if (teacherIdForNotes && rows.length > 0) {
+    const teacherNoteRows = rows.map(r => ({
+      teacher_id: teacherIdForNotes,
+      student_id: studentId,
+      class_id:   null,
+      note_type:  "general" as const,
+      content:    r.content,
+      created_at: r.created_at,
+    }));
+    await sb.from("teacher_student_notes").insert(teacherNoteRows);
+  }
 }

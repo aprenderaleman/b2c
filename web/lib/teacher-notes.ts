@@ -14,29 +14,35 @@ export type TeacherStudentNote = {
   class_title: string | null;
 };
 
-export async function listNotesForStudent(studentId: string, teacherId?: string): Promise<TeacherStudentNote[]> {
+export async function listNotesForStudent(studentId: string, _teacherId?: string): Promise<TeacherStudentNote[]> {
   const sb = supabaseAdmin();
-  let q = sb
-    .from("teacher_student_notes")
-    .select(`
-      id, teacher_id, student_id, class_id, note_type, content, created_at,
-      teacher:teachers!inner(users!inner(full_name)),
-      class:classes(title)
-    `)
-    .eq("student_id", studentId)
-    .order("created_at", { ascending: false });
-  if (teacherId) q = q.eq("teacher_id", teacherId);
-  const { data, error } = await q;
-  if (error) return [];
 
-  return (data ?? []).map(r => {
+  const [teacherNotes, adminNotes] = await Promise.all([
+    sb.from("teacher_student_notes")
+      .select(`
+        id, teacher_id, student_id, class_id, note_type, content, created_at,
+        teacher:teachers!inner(users!inner(full_name)),
+        class:classes(title)
+      `)
+      .eq("student_id", studentId)
+      .order("created_at", { ascending: false }),
+    sb.from("admin_notes")
+      .select("id, author_id, content, created_at")
+      .eq("target_type", "student")
+      .eq("target_id", studentId)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const rows: TeacherStudentNote[] = [];
+
+  for (const r of (teacherNotes.data ?? [])) {
     const t = (r as { teacher: unknown }).teacher;
     const tFlat = Array.isArray(t) ? t[0] : t;
     const u = (tFlat as { users: unknown } | null)?.users;
     const uu = (Array.isArray(u) ? u[0] : u) as { full_name: string | null } | undefined;
     const c = (r as { class: unknown }).class;
     const cFlat = Array.isArray(c) ? c[0] : c;
-    return {
+    rows.push({
       id:           (r as { id: string }).id,
       teacher_id:   (r as { teacher_id: string }).teacher_id,
       student_id:   (r as { student_id: string }).student_id,
@@ -46,8 +52,25 @@ export async function listNotesForStudent(studentId: string, teacherId?: string)
       created_at:   (r as { created_at: string }).created_at,
       teacher_name: uu?.full_name ?? null,
       class_title:  (cFlat as { title?: string } | null)?.title ?? null,
-    };
-  });
+    });
+  }
+
+  for (const an of (adminNotes.data ?? []) as Array<{ id: string; author_id: string | null; content: string; created_at: string }>) {
+    rows.push({
+      id:           an.id,
+      teacher_id:   "",
+      student_id:   studentId,
+      class_id:     null,
+      note_type:    "general",
+      content:      an.content,
+      created_at:   an.created_at,
+      teacher_name: "Admin",
+      class_title:  null,
+    });
+  }
+
+  rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  return rows;
 }
 
 export async function createTeacherNote(args: {
