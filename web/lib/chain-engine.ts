@@ -393,20 +393,38 @@ export async function advanceChain(chain: ChainRow): Promise<{
     // step, envía el mensaje de contexto + audio del estudiante.
     // Si no hay testimonials disponibles, el step envía solo el texto
     // (fallback gracioso — no bloquea la cadena).
+    // Instrumentado con logs persistentes en lead_timeline para atrapar
+    // cualquier fallo silencioso (Gelfis 2026-08-15).
     if (step.preludeTestimonial) {
+      const logDebug = async (note: string, extra: Record<string, unknown> = {}) => {
+        try {
+          await sb.from("lead_timeline").insert({
+            lead_id: chain.lead_id,
+            type: "agent_note",
+            author: "system",
+            content: `🔍 preludeTestimonial: ${note}`,
+            metadata: { kind: "prelude_debug", chain_id: chain.id, ...extra },
+          });
+        } catch { /* nunca fallar por el log */ }
+      };
       try {
+        await logDebug("start");
         const t = await pickTestimonial(chain.lead_id);
-        if (t) {
-          // 1) Texto de entrada corto
+        if (!t) {
+          await logDebug("no_testimonial_available");
+        } else {
+          await logDebug(`picked: ${t.nombre_estudiante}`, { testimonial_id: t.id });
           const introVars = { ...vars, nombre_estudiante: t.nombre_estudiante };
           const introTpl = `Hola {nombre}, oye — antes de que le des más vueltas, escúchate esto de {nombre_estudiante}. Le pasó igual que a ti 👂`;
           const introText = renderTemplate(introTpl, introVars);
           const introRes = await sendWhatsappText(phone, introText, { kind: "testimonial_chain2" });
+          await logDebug(`intro: ok=${introRes.ok} reason=${(introRes as { reason?: string }).reason ?? ""}`);
 
           if (introRes.ok) {
-            // 2) Audio (con URL R2 firmada — Evolution la descarga y forward)
             const signed = await signTestimonialUrl(t);
+            await logDebug("signed url ok", { signed_url_prefix: signed.slice(0, 60) });
             const audioRes = await sendWhatsappAudio(phone, signed, { kind: "testimonial_chain2" });
+            await logDebug(`audio: ok=${audioRes.ok} reason=${(audioRes as { reason?: string }).reason ?? ""}`);
             if (audioRes.ok) {
               await markTestimonialSent(t.id, chain.lead_id, chain.chain_type, stepIndex);
               await sb.from("lead_timeline").insert({
@@ -416,14 +434,11 @@ export async function advanceChain(chain: ChainRow): Promise<{
                 content: `🎤 Testimonial de ${t.nombre_estudiante} enviado (chain ${chain.chain_type} paso ${stepIndex + 1})`,
                 metadata: { kind: "testimonial_chain2", testimonial_id: t.id, chain_id: chain.id, channel: "whatsapp" },
               });
-            } else {
-              console.warn(`[chain-engine] testimonial audio failed for lead ${chain.lead_id}: ${audioRes.reason}`);
             }
           }
         }
       } catch (e) {
-        console.error("[chain-engine] preludeTestimonial error:", e instanceof Error ? e.message : e);
-        // Continúa con el texto principal aunque el prelude falle.
+        await logDebug(`EXCEPTION: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
 
