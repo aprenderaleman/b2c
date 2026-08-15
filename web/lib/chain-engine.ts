@@ -422,7 +422,9 @@ export async function advanceChain(chain: ChainRow): Promise<{
 
           if (introRes.ok) {
             const signed = await signTestimonialUrl(t);
-            await logDebug("signed url ok", { signed_url_prefix: signed.slice(0, 60) });
+            // ⚠️ DEBUG TEMPORAL: persistir URL firmada COMPLETA para diagnosticar
+            //    problema descarga desde Evolution. Retirar tras diagnóstico.
+            await logDebug("signed url ok", { signed_url_full: signed });
             const audioRes = await sendWhatsappAudio(phone, signed, { kind: "testimonial_chain2" });
             await logDebug(`audio: ok=${audioRes.ok} reason=${(audioRes as { reason?: string }).reason ?? ""}`);
             if (audioRes.ok) {
