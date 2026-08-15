@@ -85,6 +85,7 @@ export default async function TeacherStudentDetail({
             </h1>
             <div className="mt-1 flex items-center gap-3 text-sm text-slate-600 dark:text-slate-300 flex-wrap">
               <span className="font-mono">{student.email}</span>
+              {student.phone && <><span>·</span><span>{student.phone}</span></>}
               <span>·</span>
               <span>Nivel {student.current_level}</span>
               {student.goal && <><span>·</span><span>Meta: {student.goal}</span></>}
