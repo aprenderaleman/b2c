@@ -195,15 +195,15 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
       emailOk = res.ok;
     }
 
-    // WhatsApp (copy Gelfis 2026-08-14)
+    // WhatsApp (copy Gelfis 2026-08-15: sin pitch de valor, con firma)
     if (lead.whatsapp_normalized) {
       const msg =
-        `¡Hola ${leadFirst}! 😊 Tu Sesión de Plan quedó agendada:\n` +
+        `¡Hola ${leadFirst}! 😊 Tu Sesión de Plan quedó agendada:\n\n` +
         `📅 ${when.day} a las ${when.time}\n` +
         `🎥 Videollamada ${closerLabel} — ${SESION_DURATION_MIN} minutos\n\n` +
-        `En la sesión sales con tu nivel real, tu ruta exacta y TU FECHA para lograr tu ${meta}. Sin examen y sin compromiso 😉\n\n` +
         `👉 Link de acceso: ${joinUrl}\n\n` +
-        `Responde CONFIRMO para asegurar tu sesión — y si te surge algo, dímelo y la movemos sin problema.`;
+        `Responde CONFIRMO para asegurar tu sesión — y si te surge algo, dímelo y la movemos sin problema.\n\n` +
+        `— Stiv · Aprender-Aleman.de`;
       const res = await sendWhatsappText(lead.whatsapp_normalized, msg, { kind: "sesion_confirmation" });
       waOk = res.ok;
     }
