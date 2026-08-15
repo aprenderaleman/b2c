@@ -443,15 +443,36 @@ export async function advanceChain(chain: ChainRow): Promise<{
       }).eq("id", chain.id);
     }
 
+    // Gelfis 2026-08-15: persistir el body RENDERIZADO en timeline en vez
+    // de un log corto ("💬 Cadena X paso N enviado"). Permite diagnosticar
+    // envíos aparentemente vacíos o con placeholders sin resolver, ver
+    // exactamente qué recibió el lead. Bug detectado post-conversión Kelly.
     await sb.from("lead_timeline").insert({
       lead_id: chain.lead_id,
       type: res.ok ? "system_message_sent" : "send_failed",
       author: "system",
       content: res.ok
-        ? `💬 Cadena ${chain.chain_type} paso ${stepIndex + 1} enviado`
+        ? text
         : `💬 Falló cadena ${chain.chain_type} paso ${stepIndex + 1}: ${res.reason}`,
-      metadata: { kind: templateKind, channel: "whatsapp", chain_id: chain.id },
+      metadata: {
+        kind: templateKind,
+        channel: "whatsapp",
+        chain_id: chain.id,
+        chain_type: chain.chain_type,
+        chain_step: stepIndex,
+        template_len: text.length,
+      },
     });
+
+    // Alerta si el body renderizado tiene longitud sospechosamente corta
+    // — señal de placeholders sin resolver o template mal armado.
+    if (res.ok && text.trim().length < 20) {
+      console.error(
+        `[chain-engine] ⚠️ Cuerpo sospechoso corto (${text.length} chars) ` +
+        `enviado a lead ${chain.lead_id} en ${chain.chain_type} paso ${stepIndex + 1}. ` +
+        `Body: ${JSON.stringify(text)}`,
+      );
+    }
   }
 
   // Create closer task if defined for this step
