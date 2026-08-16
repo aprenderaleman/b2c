@@ -8,15 +8,16 @@ import { logClassHoursAndRollup } from "@/lib/finance";
 /**
  * POST /api/aula/[id]/end
  *
- * Body: { actualDurationMinutes: number }
+ * Body: { actualDurationMinutes?: number }
  *
- * Called by the teacher after confirming how long the class actually
- * ran. Sets status='completed', ended_at, actual_duration_minutes.
+ * Called by the teacher to end a class. Duration is auto-calculated
+ * from started_at → now. The optional field is accepted for backwards
+ * compatibility but ignored — the real duration comes from the timer.
  *
  * Only the host teacher (or admin) can end a class.
  */
 const Body = z.object({
-  actualDurationMinutes: z.coerce.number().int().min(1).max(240),
+  actualDurationMinutes: z.coerce.number().int().min(1).max(240).optional(),
 });
 
 export async function POST(
@@ -44,27 +45,35 @@ export async function POST(
 
   const sb = supabaseAdmin();
 
-  // Fetch teacher_id from the class so we can log hours.
+  // Fetch class details including started_at for auto-duration.
   const { data: cls } = await sb
     .from("classes")
-    .select("teacher_id, status, is_content_recording")
+    .select("teacher_id, status, is_content_recording, started_at")
     .eq("id", id)
     .maybeSingle();
   if (!cls) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // Mark attendance: any participant who never marked "joined" stays as null
-  // (admin can flip later). Every participant who DID appear in the room is
-  // already set via LiveKit webhooks (Phase 6 wiring). For now just mark
-  // the class completed.
+  // Auto-calculate duration from started_at to now (no manual input needed).
+  const now = new Date();
+  const startedAt = (cls as { started_at: string | null }).started_at;
+  let actualMinutes: number;
+  if (startedAt) {
+    actualMinutes = Math.round((now.getTime() - new Date(startedAt).getTime()) / 60000);
+    if (actualMinutes < 1) actualMinutes = 1;
+    if (actualMinutes > 240) actualMinutes = 240;
+  } else {
+    actualMinutes = parsed.data.actualDurationMinutes ?? 50;
+  }
+
   const { error } = await sb
     .from("classes")
     .update({
       status:                  "completed",
-      ended_at:                new Date().toISOString(),
-      actual_duration_minutes: parsed.data.actualDurationMinutes,
+      ended_at:                now.toISOString(),
+      actual_duration_minutes: actualMinutes,
     })
     .eq("id", id)
-    .in("status", ["live", "scheduled"]);   // allow end-without-start too
+    .in("status", ["live", "scheduled"]);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
@@ -75,7 +84,7 @@ export async function POST(
       await logClassHoursAndRollup({
         classId:         id,
         teacherId:       (cls as { teacher_id: string }).teacher_id,
-        durationMinutes: parsed.data.actualDurationMinutes,
+        durationMinutes: actualMinutes,
       });
     } catch (e) {
       console.error("logClassHoursAndRollup failed:", e);
