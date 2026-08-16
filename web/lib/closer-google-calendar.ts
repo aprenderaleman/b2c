@@ -20,6 +20,7 @@
 import { createHmac } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 import type { calendar_v3 } from "@googleapis/calendar";
+import type { BusyInterval } from "./google-calendar";
 
 // ── Config ──────────────────────────────────────────────────────
 
@@ -353,6 +354,71 @@ export async function patchCloserSesionEvent(
     }
     console.error("[gcal-closer] patch failed:", msg);
     return false;
+  }
+}
+
+// ── FreeBusy con cache in-memory ────────────────────────────────
+
+type BusyCacheEntry = { intervals: BusyInterval[]; expiresAtMs: number };
+const closerBusyCache = new Map<string, BusyCacheEntry>();
+const CLOSER_BUSY_CACHE_TTL_MS = 60_000;
+
+function closerCacheKey(closerId: string, min: string, max: string): string {
+  const round = (iso: string) => {
+    const d = new Date(iso);
+    const m = d.getUTCMinutes();
+    d.setUTCMinutes(m - (m % 5), 0, 0);
+    return d.toISOString();
+  };
+  return `${closerId}:${round(min)}|${round(max)}`;
+}
+
+/**
+ * Intervalos ocupados del calendar personal del closer entre dos ISOs.
+ * Cache de 60s (mismo patrón que teachers). Devuelve [] si el closer no
+ * vinculó calendar o la API falla — fail-open para no bloquear el picker.
+ */
+export async function getCloserCalendarBusy(
+  closerId: string,
+  timeMinIso: string,
+  timeMaxIso: string,
+): Promise<BusyInterval[]> {
+  const key = closerCacheKey(closerId, timeMinIso, timeMaxIso);
+  const now = Date.now();
+  const cached = closerBusyCache.get(key);
+  if (cached && cached.expiresAtMs > now) return cached.intervals;
+
+  const cal = await getCloserCalendarClient(closerId);
+  if (!cal) return [];
+
+  try {
+    const res = await cal.freebusy.query({
+      requestBody: {
+        timeMin: timeMinIso,
+        timeMax: timeMaxIso,
+        items: [{ id: "primary" }],
+      },
+    });
+    const cals = res.data.calendars ?? {};
+    const entry = cals["primary"];
+    const busy = entry?.busy ?? [];
+    const intervals: BusyInterval[] = busy
+      .filter(b => b.start && b.end)
+      .map(b => ({
+        startMs: new Date(b.start as string).getTime(),
+        endMs:   new Date(b.end as string).getTime(),
+      }));
+
+    closerBusyCache.set(key, { intervals, expiresAtMs: now + CLOSER_BUSY_CACHE_TTL_MS });
+    if (closerBusyCache.size > 200) {
+      const oldest = [...closerBusyCache.entries()]
+        .sort((a, b) => a[1].expiresAtMs - b[1].expiresAtMs)[0];
+      if (oldest) closerBusyCache.delete(oldest[0]);
+    }
+    return intervals;
+  } catch (e) {
+    console.error(`[gcal-closer] freeBusy failed for closer ${closerId}:`, e instanceof Error ? e.message : e);
+    return [];
   }
 }
 

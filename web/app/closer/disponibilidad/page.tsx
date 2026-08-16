@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getCloserAvailability } from "@/lib/availability";
 import { AvailabilityEditor } from "@/app/profesor/disponibilidad/AvailabilityEditor";
+import { GoogleCalendarConnectButton } from "@/components/calendar/GoogleCalendarConnectButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Disponibilidad · Closer" };
@@ -35,6 +36,18 @@ export default async function CloserAvailabilityPage() {
       </header>
 
       <AvailabilityEditor initialBlocks={initial} apiUrl="/api/closer/availability" />
+
+      <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Google Calendar
+        </h2>
+        <p className="text-sm text-slate-600 dark:text-slate-300 max-w-2xl">
+          Vincula tu Google Calendar para que:
+          <br />· las Sesiones de Plan que agenden contigo se te añadan automáticamente,
+          <br />· el sistema respete tus eventos personales al ofrecer horarios a los leads (así nadie te agenda una sesión encima de una reunión que tengas ya en Google Calendar).
+        </p>
+        <GoogleCalendarConnectButton basePath="/api/closer/google-calendar" />
+      </section>
     </main>
   );
 }

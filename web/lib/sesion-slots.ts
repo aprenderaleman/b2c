@@ -20,6 +20,7 @@
 
 import { supabaseAdmin } from "./supabase";
 import { berlinDayOfWeek, berlinClockToUtcMs, isWindowValid } from "./trial-slots";
+import { getBusyForClosers } from "./closer-calendar-sync";
 
 const DEFAULT_HORIZON_DAYS = 15;
 const EXTENDED_HORIZON_DAYS = 30;
@@ -119,6 +120,22 @@ async function computeSlots(horizonDays: number): Promise<SesionSlot[]> {
     const arr = busyByCloser.get(b.sesion_closer_id) ?? [];
     arr.push({ startMs, endMs: startMs + (b.duration_minutes ?? SESION_MINUTES) * 60_000 });
     busyByCloser.set(b.sesion_closer_id, arr);
+  }
+
+  // Añadir eventos externos del Google Calendar del closer (personal para
+  // OAuth; shared SA para admin/Gelfis). Silent no-op si no vinculó calendar.
+  // Cache de 60s dentro del dispatcher amortiza llamadas concurrentes del
+  // slot picker.
+  const externalBusy = await getBusyForClosers(
+    poolIds,
+    now.toISOString(),
+    horizonEnd.toISOString(),
+  );
+  for (const [closerId, intervals] of externalBusy) {
+    if (intervals.length === 0) continue;
+    const arr = busyByCloser.get(closerId) ?? [];
+    arr.push(...intervals);
+    busyByCloser.set(closerId, arr);
   }
 
   // ── 4. Candidatos: grid :00/:30 hora Berlín dentro de cada ventana ──

@@ -10,10 +10,11 @@ import { sanitizeE164 } from "@/lib/phone";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { notifyCloserOnBooking } from "@/lib/sesion-notifications";
 import {
-  createCloserSesionEvent,
-  patchCloserSesionEvent,
-  deleteCloserSesionEvent,
-} from "@/lib/closer-google-calendar";
+  createSesionEventForCloser,
+  patchSesionEventForCloser,
+  deleteSesionEventForCloser,
+  getBusyForCloser,
+} from "@/lib/closer-calendar-sync";
 
 /**
  * POST /api/public/book-sesion-plan — agenda una Sesión de Plan
@@ -239,6 +240,22 @@ export async function POST(req: Request) {
     .limit(1)
     .maybeSingle();
 
+  // ── FreeBusy check just-in-time contra Google Calendar del closer ──
+  // listSesionSlots ya filtra ocupación externa, pero cachea 60s por lo
+  // que un evento agendado en Google en los últimos ~60s puede pasar el
+  // filtro. Revalidamos aquí para no crear una doble reserva. Fail-open
+  // si el closer no vinculó calendar (getBusyForCloser devuelve []).
+  const slotStartMs = new Date(b.slot_iso).getTime();
+  const slotEndMs   = slotStartMs + SESION_MINUTES * 60_000;
+  async function externalBlocked(cid: string): Promise<boolean> {
+    const busy = await getBusyForCloser(
+      cid,
+      new Date(slotStartMs - 60_000).toISOString(),
+      new Date(slotEndMs + 60_000).toISOString(),
+    );
+    return busy.some((it) => slotStartMs < it.endMs && slotEndMs > it.startMs);
+  }
+
   let classId: string;
   let shortCode: string | null;
   let rescheduled = false;
@@ -248,6 +265,12 @@ export async function POST(req: Request) {
     classId = activeSesion.id as string;
     shortCode = activeSesion.short_code as string | null;
   } else if (activeSesion) {
+    // Reagendamiento: revalidar que el nuevo horario no choca con el
+    // Google Calendar del closer preferido (evento externo añadido a mano
+    // después de que el picker cacheara).
+    if (await externalBlocked(preferredCloserId)) {
+      return NextResponse.json({ error: "slot_taken", reason: "closer_calendar_conflict" }, { status: 409 });
+    }
     // Reagendamiento: mover la sesión existente
     const { error: updErr } = await sb.from("classes").update({
       scheduled_at: b.slot_iso,
@@ -271,6 +294,17 @@ export async function POST(req: Request) {
   } else {
     // Insert nuevo — intenta el closer preferido; si su horario exacto
     // choca (unique index 105), cae al closer del slot.
+    // Antes del insert: si preferido está bloqueado en su Google Calendar,
+    // saltamos directo al closer del slot para no chocar contra un evento
+    // externo (ej: reunión personal añadida en Google después del picker).
+    let effectivePreferred = preferredCloserId;
+    if (preferredCloserId !== b.closer_id && await externalBlocked(preferredCloserId)) {
+      effectivePreferred = b.closer_id;
+    }
+    // Si incluso el closer del slot está bloqueado por evento externo → 409
+    if (effectivePreferred === b.closer_id && await externalBlocked(b.closer_id)) {
+      return NextResponse.json({ error: "slot_taken", reason: "closer_calendar_conflict" }, { status: 409 });
+    }
     const baseRow = {
       type: "individual" as const,
       teacher_id: null,
@@ -285,10 +319,10 @@ export async function POST(req: Request) {
     };
 
     let inserted = await sb.from("classes")
-      .insert({ ...baseRow, sesion_closer_id: preferredCloserId })
+      .insert({ ...baseRow, sesion_closer_id: effectivePreferred })
       .select("id, short_code").single();
 
-    if (inserted.error && preferredCloserId !== b.closer_id &&
+    if (inserted.error && effectivePreferred !== b.closer_id &&
         (inserted.error.code === "23505" || /no_double_booking_closer/.test(inserted.error.message))) {
       // El closer del lead está ocupado a esa hora → closer del slot
       inserted = await sb.from("classes")
@@ -369,54 +403,47 @@ export async function POST(req: Request) {
     const closerChanged = rescheduled && prevCloserId !== null && prevCloserId !== finalCloserId;
     const idempotent = Boolean(activeSesion && activeSesion.scheduled_at === b.slot_iso);
 
+    const eventArgs = {
+      leadName: b.name,
+      startIso: b.slot_iso,
+      durationMinutes: SESION_MINUTES,
+      leadEmail: b.email,
+      leadWhatsapp: whatsapp,
+      germanLevel: b.qualification.level,
+      goal: b.qualification.goal,
+      deadline: b.qualification.deadline,
+      joinUrl,
+      confirmacionUrl,
+    };
+
     if (!idempotent) {
       if (rescheduled && prevEventId && !closerChanged) {
         // mismo closer, distinto slot → patch
-        const patched = await patchCloserSesionEvent(
+        const patched = await patchSesionEventForCloser(
           finalCloserId, prevEventId, b.slot_iso, SESION_MINUTES,
         );
         if (!patched) {
           // el evento no existe (lo borraron a mano) → crear uno nuevo
-          const ev = await createCloserSesionEvent(finalCloserId, {
-            leadName: b.name,
-            startIso: b.slot_iso,
-            durationMinutes: SESION_MINUTES,
-            leadEmail: b.email,
-            leadWhatsapp: whatsapp,
-            germanLevel: b.qualification.level,
-            goal: b.qualification.goal,
-            deadline: b.qualification.deadline,
-            joinUrl,
-            confirmacionUrl,
-          });
-          if (ev) {
-            await sb.from("classes").update({ closer_gcal_event_id: ev.eventId }).eq("id", classId);
-          } else {
-            await sb.from("classes").update({ closer_gcal_event_id: null }).eq("id", classId);
-          }
+          const eventId = await createSesionEventForCloser(finalCloserId, eventArgs);
+          await sb.from("classes")
+            .update({ closer_gcal_event_id: eventId })
+            .eq("id", classId);
         }
       } else {
         // insert nuevo, o reagenda con cambio de closer, o no había event id
         if (closerChanged && prevEventId && prevCloserId) {
-          await deleteCloserSesionEvent(prevCloserId, prevEventId).catch(() => {});
+          await deleteSesionEventForCloser(prevCloserId, prevEventId).catch(() => {});
         }
-        const ev = await createCloserSesionEvent(finalCloserId, {
-          leadName: b.name,
-          startIso: b.slot_iso,
-          durationMinutes: SESION_MINUTES,
-          leadEmail: b.email,
-          leadWhatsapp: whatsapp,
-          germanLevel: b.qualification.level,
-          goal: b.qualification.goal,
-          deadline: b.qualification.deadline,
-          joinUrl,
-          confirmacionUrl,
-        });
-        if (ev) {
-          await sb.from("classes").update({ closer_gcal_event_id: ev.eventId }).eq("id", classId);
+        const eventId = await createSesionEventForCloser(finalCloserId, eventArgs);
+        if (eventId) {
+          await sb.from("classes")
+            .update({ closer_gcal_event_id: eventId })
+            .eq("id", classId);
         } else if (closerChanged) {
           // limpiar id del closer anterior; nuevo closer no vinculó calendar
-          await sb.from("classes").update({ closer_gcal_event_id: null }).eq("id", classId);
+          await sb.from("classes")
+            .update({ closer_gcal_event_id: null })
+            .eq("id", classId);
         }
       }
     }
