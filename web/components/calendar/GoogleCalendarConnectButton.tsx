@@ -2,16 +2,21 @@
 
 import { useEffect, useState } from "react";
 
-export function GoogleCalendarConnectButton() {
+type Props = {
+  /** Prefijo de la ruta API: "/api/teacher/google-calendar" o "/api/closer/google-calendar". */
+  basePath?: string;
+};
+
+export function GoogleCalendarConnectButton({ basePath = "/api/teacher/google-calendar" }: Props = {}) {
   const [status, setStatus] = useState<{ connected: boolean; email: string | null } | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
-    fetch("/api/teacher/google-calendar/status")
+    fetch(`${basePath}/status`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setStatus(d); })
       .catch(() => {});
-  }, []);
+  }, [basePath]);
 
   if (status === null) return null;
 
@@ -19,7 +24,7 @@ export function GoogleCalendarConnectButton() {
     if (!confirm("¿Desvincular tu Google Calendar?")) return;
     setDisconnecting(true);
     try {
-      const res = await fetch("/api/teacher/google-calendar/disconnect", { method: "POST" });
+      const res = await fetch(`${basePath}/disconnect`, { method: "POST" });
       if (res.ok) setStatus({ connected: false, email: null });
     } catch { /* ignore */ }
     setDisconnecting(false);
@@ -46,7 +51,7 @@ export function GoogleCalendarConnectButton() {
 
   return (
     <a
-      href="/api/teacher/google-calendar/connect"
+      href={`${basePath}/connect`}
       className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors"
     >
       <GoogleIcon />

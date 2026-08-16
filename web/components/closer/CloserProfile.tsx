@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { GoogleCalendarConnectButton } from "@/components/calendar/GoogleCalendarConnectButton";
 
 type Profile = {
   id: string;
@@ -123,6 +124,17 @@ export function CloserProfile({ profile }: { profile: Profile }) {
         <button onClick={saveProfile} disabled={pendingProfile} className="btn-primary">
           {pendingProfile ? "Guardando..." : "Guardar cambios"}
         </button>
+      </section>
+
+      {/* Google Calendar */}
+      <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Google Calendar
+        </h2>
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          Vincula tu Google Calendar para que las Sesiones de Plan que agenden contigo se te añadan automáticamente en tu calendario personal.
+        </p>
+        <GoogleCalendarConnectButton basePath="/api/closer/google-calendar" />
       </section>
 
       {/* Change password */}
