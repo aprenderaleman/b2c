@@ -57,15 +57,27 @@ async function resolveCloserCalendarKind(closerId: string): Promise<CalendarKind
     .maybeSingle();
   if (creds) return "oauth";
 
-  // 2. Shared SA calendar: admin/superadmin. Gelfis (CEO+closer)
-  //    reutiliza el mismo calendar personal donde ya viven los trials.
+  // 2. Shared SA calendar. Aplica en dos casos:
+  //    (a) role admin/superadmin (uso del CEO desde consola admin).
+  //    (b) el user es el propio Gelfis actuando como closer: mismo
+  //        email que ADMIN_EMAIL o que GOOGLE_CALENDAR_ID. Esto cubre
+  //        el perfil "Gelfis Closer" (info@aprender-aleman.de, role
+  //        closer) para que sus sesiones se agenden en el mismo
+  //        calendar personal donde viven los trials, sin OAuth aparte.
   const { data: user } = await sb
     .from("users")
-    .select("role")
+    .select("role, email")
     .eq("id", closerId)
     .maybeSingle();
-  const role = (user as { role: string | null } | null)?.role;
-  if ((role === "admin" || role === "superadmin") && googleCalendarConfigured()) {
+  const row  = user as { role: string | null; email: string | null } | null;
+  const role = row?.role  ?? null;
+  const mail = (row?.email ?? "").toLowerCase();
+  const sharedEmails = new Set<string>([
+    (process.env.ADMIN_EMAIL         ?? "").toLowerCase(),
+    (process.env.GOOGLE_CALENDAR_ID  ?? "").toLowerCase(),
+  ].filter(Boolean));
+  const isSharedUser = role === "admin" || role === "superadmin" || sharedEmails.has(mail);
+  if (isSharedUser && googleCalendarConfigured()) {
     return "shared";
   }
 
