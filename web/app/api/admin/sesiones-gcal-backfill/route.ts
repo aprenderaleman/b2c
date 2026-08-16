@@ -19,14 +19,20 @@ import { SESION_MINUTES } from "@/lib/sesion-slots";
 
 const PLATFORM_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
-export async function POST() {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-  const user = session.user as { id: string; role?: string };
-  if (!user.role || !["admin", "superadmin"].includes(user.role)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+export async function POST(req: Request) {
+  // Aceptamos dos formas de auth: sesión admin (desde DevTools del navegador)
+  // o CRON_SECRET (script). El endpoint es idempotente — segura la doble vía.
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const cronOk = Boolean(process.env.CRON_SECRET) && bearer === process.env.CRON_SECRET;
+  if (!cronOk) {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const user = session.user as { id: string; role?: string };
+    if (!user.role || !["admin", "superadmin"].includes(user.role)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
   }
 
   const sb = supabaseAdmin();
