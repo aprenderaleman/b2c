@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
 import { markTrialAttendedWithObjection } from "@/lib/admin-actions";
+import { registerContact, actorFromPanelUser } from "@/lib/contacts";
 
 const VALID_CHIPS = ["precio", "pensarlo", "pareja", "tiempo"] as const;
 
@@ -27,5 +28,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   }
 
   await markTrialAttendedWithObjection(leadId, chip as typeof VALID_CHIPS[number]);
+  await registerContact({
+    leadId,
+    actor: await actorFromPanelUser(user),
+    actionType: "asistio",
+    channel: "aula",
+    note: `Objeción: ${chip}`,
+  });
   return NextResponse.json({ ok: true });
 }

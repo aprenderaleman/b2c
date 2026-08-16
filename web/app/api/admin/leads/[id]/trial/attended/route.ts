@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { markTrialAttendedAwaitingConversion, type AttendedOptions } from "@/lib/admin-actions";
 import { TRIAL_PACKS, type PackId, type PaymentType } from "@/lib/trial-packs";
+import { registerContact, actorFromPanelUser } from "@/lib/contacts";
 
 const VALID_PACKS = new Set<string>(TRIAL_PACKS.map(p => p.id));
 
@@ -44,6 +45,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   await markTrialAttendedAwaitingConversion(id, opts);
+
+  const u = session.user as { id: string; email?: string | null; role?: string };
+  await registerContact({
+    leadId: id,
+    actor: await actorFromPanelUser({ id: u.id, email: u.email, role: u.role ?? "admin" }),
+    actionType: opts ? "enviar_enlace" : "asistio",
+    channel: opts ? "whatsapp" : "aula",
+    note: opts?.packLabel ? `Oferta: ${opts.packLabel}` : null,
+  });
 
   // If client sent JSON we return JSON; if a classic form submitted, redirect.
   if (ct.includes("application/json")) {

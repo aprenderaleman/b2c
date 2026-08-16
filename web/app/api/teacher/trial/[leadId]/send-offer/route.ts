@@ -3,6 +3,7 @@ import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher
 import { markTrialAttendedAwaitingConversion, type AttendedOptions } from "@/lib/admin-actions";
 import { supabaseAdmin } from "@/lib/supabase";
 import { buildPagoUrl } from "@/lib/enrollment-checkout";
+import { registerContact, actorFromPanelUser } from "@/lib/contacts";
 import {
   RITMOS, ONE_TIME_PACKS, KIDS_PACK,
   type RitmoId, type GoalId, type PlanCategory, type PaymentType,
@@ -200,6 +201,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   };
 
   await markTrialAttendedAwaitingConversion(leadId, attendedOpts);
+
+  await registerContact({
+    leadId,
+    actor: await actorFromPanelUser(user),
+    actionType: "enviar_enlace",
+    channel: "whatsapp",
+    note: `Oferta: ${packLabel} · ${(importe_cents / 100).toLocaleString("es-ES")} €`,
+  });
 
   return NextResponse.json({ ok: true, ofertaId, checkoutUrl });
 }

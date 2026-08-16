@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
 import { sendRescheduleLinkMessage } from "@/lib/admin-actions";
 import { supabaseAdmin } from "@/lib/supabase";
+import { registerContact, actorFromPanelUser } from "@/lib/contacts";
 
 /**
  * POST /api/teacher/trial/[leadId]/send-reschedule-link
@@ -29,5 +30,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ leadId
   if (!result.ok) {
     return NextResponse.json({ ok: false, reason: result.reason }, { status: 400 });
   }
+  await registerContact({
+    leadId,
+    actor: await actorFromPanelUser(user),
+    actionType: "agendar_prueba",
+    channel: "whatsapp",
+    note: "Enlace de agendar clase de prueba enviado",
+  });
   return NextResponse.json({ ok: true });
 }

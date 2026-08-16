@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
 import { markTrialAttendedAwaitingConversion, type AttendedOptions } from "@/lib/admin-actions";
 import { TRIAL_PACKS, type PackId, type PaymentType } from "@/lib/trial-packs";
+import { registerContact, actorFromPanelUser } from "@/lib/contacts";
 
 const VALID_PACKS = new Set<string>(TRIAL_PACKS.map(p => p.id));
 
@@ -41,5 +42,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   }
 
   await markTrialAttendedAwaitingConversion(leadId, opts);
+  await registerContact({
+    leadId,
+    actor: await actorFromPanelUser(user),
+    actionType: opts ? "enviar_enlace" : "asistio",
+    channel: opts ? "whatsapp" : "aula",
+    note: opts?.packLabel ? `Oferta: ${opts.packLabel}` : null,
+  });
   return NextResponse.json({ ok: true });
 }

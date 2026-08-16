@@ -3,6 +3,7 @@ import { z } from "zod";
 import { resolveCloserActor } from "@/lib/closer-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { startChain } from "@/lib/chain-engine";
+import { registerContact } from "@/lib/contacts";
 
 /**
  * POST /api/closer/leads/[id]/sesion-resultado — el closer marca el
@@ -73,6 +74,14 @@ export async function POST(
       closer_id: actor.id,
       chain_id: chainId,
     },
+  });
+
+  await registerContact({
+    leadId,
+    actor: { type: "closer", id: actor.id, name: actor.name },
+    actionType: asistio ? "asistio" : "no_show",
+    channel: "aula",
+    note: "Sesión de Plan",
   });
 
   return NextResponse.json({ ok: true, chainStarted: !!chainId });

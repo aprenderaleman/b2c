@@ -10,6 +10,8 @@ import { fmtTrialDate } from "@/lib/closer-constants";
 import { AddNoteInput } from "./AddNoteInput";
 import { FollowupMessages } from "./FollowupMessages";
 import { TeacherLeadActions } from "./TeacherLeadActions";
+import { getLastContacts, fmtLastContact } from "@/lib/contacts";
+import { RegistrarContactoButton } from "@/components/contacts/RegistrarContactoButton";
 
 // Meta del lead en lenguaje natural para los mensajes del profe
 const META_LABEL: Record<string, string> = {
@@ -107,6 +109,8 @@ export default async function TeacherLeadDetailPage({
     })),
   ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+  const lastContact = (await getLastContacts([lead.id])).get(lead.id) ?? null;
+
   const phoneDigits = lead.whatsapp_normalized?.replace(/\D/g, "") ?? "";
   const attendance = lead.trial_attended_at
     ? { label: "✓ Asistió", cls: "text-emerald-600 dark:text-emerald-400" }
@@ -164,6 +168,12 @@ export default async function TeacherLeadDetailPage({
           <span className="text-slate-500 dark:text-slate-400">Clase de prueba contigo: </span>
           <strong className="text-slate-900 dark:text-slate-100">{fmtTrialDate(myTrial.scheduled_at)}</strong>
           <span className={`ml-2 font-medium ${attendance.cls}`}>{attendance.label}</span>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3 flex-wrap text-sm">
+          <span className="text-slate-500 dark:text-slate-400">
+            Último contacto: <strong className="text-slate-800 dark:text-slate-200">{fmtLastContact(lastContact)}</strong>
+          </span>
+          <RegistrarContactoButton leadId={lead.id} />
         </div>
       </header>
 

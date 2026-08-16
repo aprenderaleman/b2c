@@ -10,6 +10,8 @@ import { ColdCallToggle } from "@/components/admin/ColdCallToggle";
 import { WaQuickActions } from "@/components/admin/WaQuickActions";
 import { RescheduleTrialButton } from "./RescheduleTrialButton";
 import { AssignCloserButton } from "./AssignCloserButton";
+import { getLastContacts, fmtLastContact } from "@/lib/contacts";
+import { RegistrarContactoButton } from "@/components/contacts/RegistrarContactoButton";
 
 export const dynamic = "force-dynamic";
 
@@ -128,11 +130,20 @@ export default async function LeadDetail({
     }
   }
 
+  const lastContact = (await getLastContacts([lead.id])).get(lead.id) ?? null;
+
   return (
     <main className="space-y-5">
       <Link href="/admin/leads" className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400">
         ← Volver a todos los leads
       </Link>
+
+      <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm">
+        <span className="text-slate-500 dark:text-slate-400">
+          Último contacto: <strong className="text-slate-800 dark:text-slate-200">{fmtLastContact(lastContact)}</strong>
+        </span>
+        <RegistrarContactoButton leadId={lead.id} />
+      </div>
 
       {/* Header */}
       <header className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">

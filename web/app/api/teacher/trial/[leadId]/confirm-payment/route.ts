@@ -4,6 +4,7 @@ import { ConvertBody, convertLeadToStudent } from "@/lib/lead-conversion";
 import { supabaseAdmin } from "@/lib/supabase";
 import { cancelActiveChain } from "@/lib/chain-engine";
 import { applyReferralReward } from "@/lib/referrals";
+import { registerContact, actorFromPanelUser } from "@/lib/contacts";
 
 export async function POST(req: Request, { params }: { params: Promise<{ leadId: string }> }) {
   let user;
@@ -55,6 +56,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     // Recompensa de referido (si el lead vino con ?ref) — idempotente.
     await applyReferralReward(leadId).catch((e) =>
       console.warn("[confirm-payment] applyReferralReward failed:", e instanceof Error ? e.message : e));
+
+    await registerContact({
+      leadId,
+      actor: await actorFromPanelUser(user),
+      actionType: "confirmar_pago",
+      channel: "otro",
+      note: "Pago confirmado desde el panel",
+    });
 
     return NextResponse.json(result);
   } catch (e) {
