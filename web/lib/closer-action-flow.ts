@@ -2,6 +2,7 @@ import { supabaseAdmin } from "./supabase";
 import { completeTask, cancelPendingTasks } from "./closer-cadence";
 import { logCloserAction, markLeadLostByCloser } from "./closer-actions";
 import { cancelActiveChain, pauseChain } from "./chain-engine";
+import { ensureFuturePlay } from "./semaforo";
 
 export type ActionResultado =
   | "contactado"
@@ -95,6 +96,13 @@ export async function processActionResult(args: ProcessActionArgs): Promise<void
     case "venta":
       await cancelActiveChain(args.leadId, "closer_action_r2").catch(() => {});
       break;
+  }
+
+  // Anti-limbo (semáforo global, spec sección 3): si tras la acción el
+  // lead activo queda sin tarea futura ni cadena ni cita → auto-tarea
+  // "Seguimiento" +3d. Constraint del flujo de guardado, no sugerencia.
+  if (args.resultado !== "no_interesado") {
+    await ensureFuturePlay(args.leadId).catch(() => {});
   }
 }
 

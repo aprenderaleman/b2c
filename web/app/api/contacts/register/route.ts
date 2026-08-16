@@ -99,5 +99,11 @@ export async function POST(req: Request) {
     const status = res.error === "db_error" ? 500 : 400;
     return NextResponse.json({ error: res.error }, { status });
   }
+
+  // Anti-limbo: registrar un contacto también es "guardar una acción" —
+  // si el lead queda sin próxima jugada, el sistema crea la auto-tarea.
+  const { ensureFuturePlay } = await import("@/lib/semaforo");
+  await ensureFuturePlay(leadId).catch(() => {});
+
   return NextResponse.json({ ok: true, id: res.id });
 }
