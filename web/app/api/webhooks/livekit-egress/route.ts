@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { WebhookReceiver } from "livekit-server-sdk";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
+import { handleRoomEvent } from "../livekit-room/route";
 
 /**
  * LiveKit Egress webhook. Configured in livekit.yaml:
@@ -71,6 +72,13 @@ export async function POST(req: Request) {
   } catch (e) {
     console.warn("egress webhook signature invalid:", e);
     return NextResponse.json({ error: "bad_signature" }, { status: 401 });
+  }
+
+  // Room lifecycle events (room_started, room_finished) arrive here too
+  // because LiveKit sends all event types to every configured webhook URL.
+  // Delegate them to the room handler.
+  if (event.event === "room_started" || event.event === "room_finished") {
+    return handleRoomEvent(event as Parameters<typeof handleRoomEvent>[0]);
   }
 
   const info = event.egress_info;
