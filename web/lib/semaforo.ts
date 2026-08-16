@@ -44,6 +44,16 @@ const UMBRAL_NUEVO_MS     = 30 * MIN;     // R4
 const UMBRAL_POSTCLASE_MS = 2 * H;        // R5
 export const AUTO_SEGUIMIENTO_DIAS = 3;   // anti-limbo
 
+/**
+ * Epoch del semáforo (check C6): los disparadores ANTERIORES al
+ * arranque del sistema no generan rojo — la deuda histórica no se
+ * puede atender retroactivamente y un muro de rojos falsos el día 1
+ * mata la credibilidad. El reloj de la deuda empieza aquí.
+ */
+export const SEMAFORO_EPOCH_MS = new Date(
+  process.env.SEMAFORO_EPOCH ?? "2026-08-17T00:00:00+02:00",
+).getTime();
+
 const berlinDateFmt = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit",
 });
@@ -165,12 +175,16 @@ export type SemaforoInput = {
   chain: ChainRow | null;
   /** Venta pendiente más antigua o null. */
   ventaPendiente: VentaRow | null;
+  /** Suelo temporal para R1/R3/R4/R5 — default SEMAFORO_EPOCH_MS.
+   *  Los tests pasan 0 para evaluar sin suelo. */
+  epochMs?: number;
 };
 
 // ── Evaluación PURA (testeable sin BD) ───────────────────────────────
 
 export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
   const { now, lead, tareas, chain, ventaPendiente } = input;
+  const epochMs = input.epochMs ?? SEMAFORO_EPOCH_MS;
   const ev: Evidencia[] = [];
   const R = (partial: Omit<SemaforoResult, "leadId" | "evidencias" | "limbo"> & { limbo?: boolean }): SemaforoResult =>
     ({ leadId: lead.id, evidencias: ev, limbo: partial.limbo ?? false, ...partial });
@@ -214,7 +228,7 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
   const rojos: Rojo[] = [];
 
   // R3 💰 enlace de pago >3h hábiles sin pago ni saliente posterior
-  if (enlaceAt && !pagado) {
+  if (enlaceAt && !pagado && T(enlaceAt) >= epochMs) {
     const enlaceMs = new Date(enlaceAt).getTime();
     const habil = businessMsBetween(enlaceMs, now);
     const salientePosterior = salientes.some(c => T(c.occurred_at) > enlaceMs);
@@ -225,7 +239,7 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
   }
 
   // R1 💬 inbound sin saliente posterior >2h hábiles
-  if (lastInbound) {
+  if (lastInbound && T(lastInbound.occurred_at) >= epochMs) {
     const inMs = new Date(lastInbound.occurred_at).getTime();
     const atendido = salientes.some(c => T(c.occurred_at) > inMs);
     const habil = businessMsBetween(inMs, now);
@@ -237,7 +251,7 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
 
   // R4 🆕 lead nuevo sin NINGÚN saliente (humano o Stiv) >30min hábiles.
   // No aplica a convertidos (leads backfilled/manuales sin contactos).
-  if (salientes.length === 0 && !pagado) {
+  if (salientes.length === 0 && !pagado && T(lead.created_at) >= epochMs) {
     const createdMs = new Date(lead.created_at).getTime();
     const habil = businessMsBetween(createdMs, now);
     ev.push({ tipo: "nuevo", detalle: `sin ningún contacto saliente, ${fmtHabil(habil)} hábiles desde el alta`, at: lead.created_at });
@@ -247,7 +261,7 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
   }
 
   // R5 🎓 asistió (trial/sesión) >2h hábiles sin propuesta NI tarea futura
-  if (lead.trial_attended_at && !pagado) {
+  if (lead.trial_attended_at && !pagado && T(lead.trial_attended_at) >= epochMs) {
     const attMs = new Date(lead.trial_attended_at).getTime();
     const habil = businessMsBetween(attMs, now);
     const propuestaDespues = salientes.some(c =>
@@ -417,11 +431,14 @@ export function feedbackPendienteProfe(args: {
   attendedAt: string | null;
   absentAt: string | null;
   now?: number;
+  epochMs?: number;
 }): { badge: string; detalle: string } | null {
   if (!args.scheduledAt || args.attendedAt || args.absentAt) return null;
   const now = args.now ?? Date.now();
   const endMs = new Date(args.scheduledAt).getTime() + (args.durationMin ?? 40) * MIN;
   if (endMs > now) return null;
+  // Epoch C6: clases anteriores al arranque no generan rojo retroactivo.
+  if (endMs < (args.epochMs ?? SEMAFORO_EPOCH_MS)) return null;
   const habil = businessMsBetween(endMs, now);
   if (habil <= UMBRAL_POSTCLASE_MS) return null;
   return {

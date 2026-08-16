@@ -10,9 +10,11 @@ import { describe, it, expect } from "vitest";
 import {
   evaluateSemaforo,
   businessMsBetween,
+  feedbackPendienteProfe,
   type SemaforoInput,
   type SemaforoLead,
 } from "./semaforo";
+import { registerContact } from "./contacts";
 
 const ms = (iso: string) => new Date(iso).getTime();
 
@@ -43,6 +45,7 @@ const tarea = (at: string, tipo = "tipo_a") => ({
 function input(partial: Partial<SemaforoInput> & { now: number }): SemaforoInput {
   return {
     lead: BASE_LEAD, contacts: [], tareas: [], chain: null, ventaPendiente: null,
+    epochMs: 0,   // los tests usan fechas fijas anteriores al epoch real
     ...partial,
   };
 }
@@ -278,5 +281,96 @@ describe("V2 / V3 / FUERA / LIMBO", () => {
     }));
     expect(r.regla).toBe("LIMBO");
     expect(r.limbo).toBe(true);
+  });
+});
+
+describe("Check 5 — rojo 🎓 del profesor (feedback post-clase)", () => {
+  // Clase 09:00-09:40; el reloj de 2h hábiles corre desde las 09:40.
+  const base = {
+    scheduledAt: "2026-08-13T09:00:00+02:00",
+    durationMin: 40,
+    attendedAt: null,
+    absentAt: null,
+    epochMs: 0,
+  };
+
+  it("a 1h59 hábiles del fin de clase → aún no", () => {
+    expect(feedbackPendienteProfe({ ...base, now: ms("2026-08-13T11:39:00+02:00") })).toBeNull();
+  });
+
+  it("a 2h01 hábiles → rojo 🎓", () => {
+    const r = feedbackPendienteProfe({ ...base, now: ms("2026-08-13T11:41:00+02:00") });
+    expect(r).not.toBeNull();
+    expect(r!.badge).toContain("🎓");
+  });
+
+  it("asistencia registrada lo apaga", () => {
+    expect(feedbackPendienteProfe({
+      ...base, attendedAt: "2026-08-13T10:00:00+02:00", now: ms("2026-08-13T15:00:00+02:00"),
+    })).toBeNull();
+  });
+
+  it("clase anterior al epoch no genera rojo retroactivo", () => {
+    expect(feedbackPendienteProfe({
+      ...base,
+      epochMs: ms("2026-08-17T00:00:00+02:00"),
+      now: ms("2026-08-18T12:00:00+02:00"),
+    })).toBeNull();
+  });
+});
+
+describe("Check 8 — validaciones de Registrar contacto", () => {
+  const actor = { type: "closer" as const, id: "00000000-0000-0000-0000-000000000000", name: "Test" };
+
+  it("nota_libre con 3 caracteres → rechazado", async () => {
+    const r = await registerContact({
+      leadId: "lead-x", actor, actionType: "nota_libre", channel: "whatsapp", note: "abc",
+    });
+    expect(r).toEqual({ ok: false, error: "nota_corta" });
+  });
+
+  it("occurred_at hace 49h → rechazado", async () => {
+    const r = await registerContact({
+      leadId: "lead-x", actor, actionType: "enviar_info", channel: "whatsapp",
+      occurredAt: new Date(Date.now() - 49 * 3_600_000).toISOString(),
+    });
+    expect(r).toEqual({ ok: false, error: "occurred_at_invalido" });
+  });
+
+  it("occurred_at en el futuro → rechazado", async () => {
+    const r = await registerContact({
+      leadId: "lead-x", actor, actionType: "enviar_info", channel: "whatsapp",
+      occurredAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    expect(r).toEqual({ ok: false, error: "occurred_at_invalido" });
+  });
+});
+
+describe("Epoch C6 — la deuda histórica no genera rojos el día 1", () => {
+  const epoch = ms("2026-08-17T00:00:00+02:00");
+
+  it("inbound de antes del arranque no dispara R1", () => {
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-18T12:00:00+02:00"),
+      epochMs: epoch,
+      contacts: [
+        saliente("2026-08-10T10:00:00+02:00"),
+        entrante("2026-08-12T09:00:00+02:00"),   // pre-epoch
+      ],
+      tareas: [tarea("2026-08-20T10:00:00+02:00")],
+    }));
+    expect(r.color).toBe("verde");
+  });
+
+  it("inbound posterior al arranque SÍ dispara R1", () => {
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-18T12:00:00+02:00"),
+      epochMs: epoch,
+      contacts: [
+        saliente("2026-08-17T08:30:00+02:00"),
+        entrante("2026-08-18T08:00:00+02:00"),
+      ],
+    }));
+    expect(r.regla).toBe("R1");
   });
 });
