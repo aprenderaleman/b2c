@@ -81,6 +81,7 @@ function adminItems(): NavItem[] {
     // sola página (KPIs + lista de leads + atribución por landing). Las
     // rutas viejas siguen redirigiendo aquí, pero el menú apunta directo.
     { label: "Funnel",      href: "/admin/funnel",      icon: "users",         priority: 6 },
+    { label: "Semáforo",    href: "/admin/semaforo",    icon: "clock",         priority: 6.5 },
     { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 7 },
     { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
     { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },

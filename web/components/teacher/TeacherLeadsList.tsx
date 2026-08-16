@@ -30,8 +30,17 @@ export type TeacherLead = {
   /** Fecha de la clase de prueba (la más reciente con este profe) */
   trialAt: string;
   trialStatus: string;
+  trialDurationMin: number | null;
   attended: boolean;
   absent: boolean;
+  /** Semáforo global + rojo propio 🎓 (calculado server-side) */
+  semaforo: { color: "rojo" | "amarillo" | "verde"; badge: string; detalle: string } | null;
+};
+
+const SEMAFORO_DOT: Record<"rojo" | "amarillo" | "verde", string> = {
+  rojo: "bg-red-500",
+  amarillo: "bg-amber-400",
+  verde: "bg-emerald-500",
 };
 
 type AttFilter = "todos" | "pendiente" | "asistio" | "no_asistio";
@@ -155,6 +164,12 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
                     <tr key={l.leadId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                       <td className="py-2 px-3">
                         <div className="font-medium flex items-center gap-1.5 flex-wrap">
+                          {l.semaforo && (
+                            <span
+                              className={`w-2 h-2 rounded-full flex-shrink-0 ${SEMAFORO_DOT[l.semaforo.color]}`}
+                              title={l.semaforo.detalle}
+                            />
+                          )}
                           <Link
                             href={`/profesor/leads/${l.leadId}`}
                             className="text-slate-800 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 hover:underline"
@@ -200,6 +215,11 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
                         {l.attended && <span className="text-[10px] text-emerald-600 dark:text-emerald-400">✓ asistió</span>}
                         {l.absent && !l.attended && <span className="text-[10px] text-red-600 dark:text-red-400">✗ no asistió</span>}
                         {!l.attended && !l.absent && <span className="text-[10px] text-slate-400 dark:text-slate-500">pendiente</span>}
+                        {l.semaforo?.color === "rojo" && (
+                          <div className="text-[10px] font-bold text-red-600 dark:text-red-400 mt-0.5" title={l.semaforo.detalle}>
+                            {l.semaforo.badge}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2 px-3">
                         <StatusBadge status={l.status} />
@@ -220,6 +240,12 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
                 <div key={l.leadId} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="font-semibold flex items-center gap-1.5 flex-wrap">
+                      {l.semaforo && (
+                        <span
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${SEMAFORO_DOT[l.semaforo.color]}`}
+                          title={l.semaforo.detalle}
+                        />
+                      )}
                       <Link
                         href={`/profesor/leads/${l.leadId}`}
                         className="text-slate-900 dark:text-slate-50 hover:text-brand-600 dark:hover:text-brand-400 hover:underline"
@@ -246,6 +272,11 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
                     {l.absent && !l.attended && <span className="ml-2 text-red-600 dark:text-red-400">✗ no asistió</span>}
                     {!l.attended && !l.absent && <span className="ml-2 text-slate-400">pendiente</span>}
                   </div>
+                  {l.semaforo?.color === "rojo" && (
+                    <div className="mt-1 text-[11px] font-bold text-red-600 dark:text-red-400">
+                      {l.semaforo.badge} — {l.semaforo.detalle}
+                    </div>
+                  )}
                   {waDigits && (
                     <a
                       href={`https://wa.me/${waDigits}`}

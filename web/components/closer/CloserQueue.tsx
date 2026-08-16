@@ -40,10 +40,14 @@ const REASON_CLS: Record<SemaforoColor, string> = {
 export function CloserQueue({ items }: Props) {
   const [registrar, setRegistrar] = useState<QueueItem | null>(null);
   const [saleLeadId, setSaleLeadId] = useState<string | null>(null);
+  const [verVerdes, setVerVerdes] = useState(false);
 
-  const rojos = items.filter((i) => i.color === "rojo").length;
-  const amarillos = items.filter((i) => i.color === "amarillo").length;
+  const activos = items.filter((i) => i.color !== "verde");
+  const verdes = items.filter((i) => i.color === "verde");
+  const rojos = activos.filter((i) => i.color === "rojo").length;
+  const amarillos = activos.filter((i) => i.color === "amarillo").length;
   const alDia = rojos === 0 && amarillos === 0;
+  const visibles = verVerdes ? items : activos;
 
   return (
     <div className="space-y-4">
@@ -57,9 +61,9 @@ export function CloserQueue({ items }: Props) {
         </div>
       </div>
 
-      {/* Cola única */}
+      {/* Cola única — verdes colapsados en "✅ Al día (N)" */}
       <div className="space-y-2">
-        {items.map((item) => (
+        {visibles.map((item) => (
           <div
             key={item.leadId}
             className={`rounded-2xl border border-slate-200 dark:border-slate-800 border-l-4 ${CARD_BORDER[item.color]} bg-white dark:bg-slate-900 p-4`}
@@ -98,8 +102,11 @@ export function CloserQueue({ items }: Props) {
                     </span>
                   )}
                 </div>
-                {/* Por qué está aquí */}
+                {/* Por qué está aquí — badge tipado + detalle */}
                 <p className={`text-[12.5px] mt-0.5 ${REASON_CLS[item.color]}`}>
+                  {item.color === "rojo" && (
+                    <span className="font-bold mr-1.5">{item.badge}</span>
+                  )}
                   {item.reason}
                 </p>
               </div>
@@ -132,6 +139,16 @@ export function CloserQueue({ items }: Props) {
             </div>
           </div>
         ))}
+
+        {verdes.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setVerVerdes(!verVerdes)}
+            className="w-full rounded-2xl border border-dashed border-emerald-200 dark:border-emerald-500/30 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/5 transition-colors text-left"
+          >
+            ✅ Al día ({verdes.length}) {verVerdes ? "— ocultar" : "— ver"}
+          </button>
+        )}
 
         {items.length === 0 && (
           <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-10 text-center">

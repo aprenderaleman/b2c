@@ -404,6 +404,32 @@ export async function getSemaforo(leadId: string): Promise<SemaforoResult | null
   return (await getSemaforoBatch([leadId])).get(leadId) ?? null;
 }
 
+// ── Rojo propio del PROFESOR (spec sección 4, variante 🎓 de R5) ─────
+
+/**
+ * El único generador de rojo propio del profe: la clase de prueba ya
+ * pasó hace >2h hábiles y no registró asistencia (✓/✗). Devuelve el
+ * badge o null si está al día.
+ */
+export function feedbackPendienteProfe(args: {
+  scheduledAt: string | null;
+  durationMin?: number | null;
+  attendedAt: string | null;
+  absentAt: string | null;
+  now?: number;
+}): { badge: string; detalle: string } | null {
+  if (!args.scheduledAt || args.attendedAt || args.absentAt) return null;
+  const now = args.now ?? Date.now();
+  const endMs = new Date(args.scheduledAt).getTime() + (args.durationMin ?? 40) * MIN;
+  if (endMs > now) return null;
+  const habil = businessMsBetween(endMs, now);
+  if (habil <= UMBRAL_POSTCLASE_MS) return null;
+  return {
+    badge: `🎓 Post-clase ${fmtHabil(habil)}`,
+    detalle: `La clase terminó hace ${fmtHabil(habil)} hábiles — registra ✓ Asistió / ✗ No asistió`,
+  };
+}
+
 // ── Anti-limbo: constraint del flujo de guardado (spec sección 3) ────
 
 /**

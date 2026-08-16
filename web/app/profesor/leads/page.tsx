@@ -2,6 +2,7 @@ import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { TeacherLeadsList, type TeacherLead } from "@/components/teacher/TeacherLeadsList";
+import { getSemaforoBatch, feedbackPendienteProfe } from "@/lib/semaforo";
 
 /**
  * /profesor/leads — "Mis leads" del profesor (Gelfis 2026-08-13).
@@ -18,6 +19,7 @@ export const metadata = { title: "Mis leads · Profesor" };
 type Row = {
   scheduled_at: string;
   status: string;
+  duration_minutes: number | null;
   lead: {
     id: string; name: string | null; email: string | null;
     whatsapp_normalized: string | null; status: string; created_at: string;
@@ -62,7 +64,7 @@ export default async function TeacherLeadsPage() {
   const { data } = await sb
     .from("classes")
     .select(`
-      scheduled_at, status,
+      scheduled_at, status, duration_minutes,
       lead:leads!inner(
         id, name, email, whatsapp_normalized, status, created_at,
         german_level, landing_intent, qualification_answers,
@@ -97,12 +99,34 @@ export default async function TeacherLeadsPage() {
       depositIntentAt: lead.deposit_intent_at,
       trialAt: r.scheduled_at,
       trialStatus: r.status,
+      trialDurationMin: r.duration_minutes,
       attended: !!lead.trial_attended_at,
       absent: !!lead.trial_absent_at && !lead.trial_attended_at,
+      semaforo: null,
     });
   }
 
   const leads = [...byLead.values()];
+
+  // Semáforo global por lead + rojo propio del profe (🎓 feedback
+  // post-clase sin registrar en 2h hábiles — spec sección 4).
+  const semaforos = await getSemaforoBatch(leads.map(l => l.leadId));
+  for (const l of leads) {
+    const fb = feedbackPendienteProfe({
+      scheduledAt: l.trialAt,
+      durationMin: l.trialDurationMin,
+      attendedAt: l.attended ? l.trialAt : null,   // marcador: attended flag
+      absentAt: l.absent ? l.trialAt : null,
+    });
+    if (fb && l.trialStatus !== "cancelled") {
+      l.semaforo = { color: "rojo", badge: fb.badge, detalle: fb.detalle };
+      continue;
+    }
+    const s = semaforos.get(l.leadId);
+    if (s && s.color !== "fuera") {
+      l.semaforo = { color: s.color, badge: s.badge, detalle: s.detalle };
+    }
+  }
 
   return (
     <main className="space-y-5">

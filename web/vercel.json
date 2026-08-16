@@ -135,6 +135,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/cron/semaforo-observer",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/retention-alerts",
       "schedule": "0 8 * * *"
     },
