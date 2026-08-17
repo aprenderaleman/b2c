@@ -149,7 +149,7 @@ const LANDING_META: Record<string, LandingMeta> = {
   "meta-ads":               { label: "Meta Ads (FB + IG pagado)",   sourceLabel: "Meta Ads", sourceIcon: "💰", sourceCls: SRC_META_ADS  },
   "meta-ads-paid":          { label: "Meta Ads · 10€ depósito",     sourceLabel: "Meta Paid",sourceIcon: "💎", sourceCls: SRC_META_ADS  },
   "agendar-directo":        { label: "Atajo CTA verde",             sourceLabel: "Directo",  sourceIcon: "⚡", sourceCls: SRC_DIRECT    },
-  "sesion-plan":            { label: "Sesión de Plan (closer)",     sourceLabel: "Sesión",   sourceIcon: "📋", sourceCls: SRC_SESION    },
+  "sesion-plan":            { label: "Sesión de Plan-Alemán (closer)",     sourceLabel: "Sesión",   sourceIcon: "📋", sourceCls: SRC_SESION    },
   "(sin landing)":          { label: "(sin atribución)",            sourceLabel: "Otro",     sourceIcon: "❓", sourceCls: SRC_OTHER     },
 };
 
@@ -898,7 +898,7 @@ export default async function FunnelControlPage({
                           {attState === "scheduled" && <span className="text-[10px] text-white/40">pendiente</span>}
                         </>
                       ) : !l.sesion_plan_at ? <span className="text-white/30">—</span> : null}
-                      {/* Sesión de Plan con closer — se muestra ADEMÁS del
+                      {/* Sesión de Plan-Alemán con closer — se muestra ADEMÁS del
                           trial si el lead tiene ambos (lead existente que
                           agendó sesión conserva su trial histórico). */}
                       {l.sesion_plan_at && (

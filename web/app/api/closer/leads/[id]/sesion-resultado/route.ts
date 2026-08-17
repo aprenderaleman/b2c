@@ -7,7 +7,7 @@ import { registerContact } from "@/lib/contacts";
 
 /**
  * POST /api/closer/leads/[id]/sesion-resultado — el closer marca el
- * resultado de la Sesión de Plan (Gelfis 2026-08-14).
+ * resultado de la Sesión de Plan-Alemán (Gelfis 2026-08-14).
  *
  *  asistio    → trial_attended_at + cadena sesion_attended
  *               (T+2h / +24h / +3d / +7d, sin {profe}, cierre → en_reactivacion)
@@ -67,7 +67,7 @@ export async function POST(
     .update({
       fecha_completada: now,
       resultado: "contactado",
-      notas: asistio ? "Sesión de Plan: asistió" : "Sesión de Plan: no asistió",
+      notas: asistio ? "Sesión de Plan-Alemán: asistió" : "Sesión de Plan-Alemán: no asistió",
     })
     .eq("lead_id", leadId)
     .eq("tipo", "sesion_plan")
@@ -81,8 +81,8 @@ export async function POST(
     type: "status_change",
     author: "closer",
     content: asistio
-      ? `📋 Sesión de Plan: ASISTIÓ (marcado por ${actor.name}). Cadena de seguimiento iniciada.`
-      : `📋 Sesión de Plan: NO ASISTIÓ (marcado por ${actor.name}). Cadena de rescate iniciada (primer mensaje en ~20 min).`,
+      ? `📋 Sesión de Plan-Alemán: ASISTIÓ (marcado por ${actor.name}). Cadena de seguimiento iniciada.`
+      : `📋 Sesión de Plan-Alemán: NO ASISTIÓ (marcado por ${actor.name}). Cadena de rescate iniciada (primer mensaje en ~20 min).`,
     metadata: {
       kind: asistio ? "sesion_attended_marked" : "sesion_absent_marked",
       closer_id: actor.id,
@@ -95,7 +95,7 @@ export async function POST(
     actor: { type: "closer", id: actor.id, name: actor.name },
     actionType: asistio ? "asistio" : "no_show",
     channel: "aula",
-    note: "Sesión de Plan",
+    note: "Sesión de Plan-Alemán",
   });
 
   return NextResponse.json({ ok: true, chainStarted: !!chainId });

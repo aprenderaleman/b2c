@@ -1,5 +1,5 @@
 /**
- * Sesión de Plan — cálculo de slots según disponibilidad de CLOSERS.
+ * Sesión de Plan-Alemán — cálculo de slots según disponibilidad de CLOSERS.
  *
  * Gemelo de lib/trial-slots.ts con el mismo pipeline (pool → ventanas
  * semanales → restar ocupación → candidatos → round-robin) pero:
@@ -7,8 +7,8 @@
  *   · Anfitrión: closers (users con role=closer, active, acepta_sesiones)
  *     — grifo independiente de flujo_activo (decisión Gelfis 2026-08-13).
  *   · Ventanas: closer_availability (migración 104).
- *   · Sesión de 20 min en grid :00/:30 hora Berlín — el colchón de
- *     10 min entre sesiones es deliberado (registrar en CRM + respirar),
+ *   · Sesión de 25 min en grid :00/:30 hora Berlín — el colchón de
+ *     5 min entre sesiones es deliberado (registrar en CRM + respirar),
  *     y las horas redondas reducen no-shows.
  *   · Lead-time mínimo 2h (los trials usan 4h): la sesión vende
  *     inmediatez — un lead caliente a las 10:00 agenda a las 12:00.
@@ -25,10 +25,9 @@ import { getBusyForClosers } from "./closer-calendar-sync";
 const DEFAULT_HORIZON_DAYS = 15;
 const EXTENDED_HORIZON_DAYS = 30;
 
-// Gelfis 2026-08-14: duración baja de 20 → 15 min (menos fricción para
-// agendar; el closer usa los 15 min restantes del bloque :00/:30 como
-// buffer entre sesiones). El grid de slots sigue en 30 min.
-export const SESION_MINUTES = 15;
+// Gelfis 2026-08-17: duración sube a 25 min. El grid de slots sigue en
+// 30 min (5 min de buffer entre sesiones).
+export const SESION_MINUTES = 25;
 const GRID_MINUTES = 30;                 // slots en :00 y :30
 const MIN_LEAD_TIME_HOURS = 2;
 const MAX_RESULTS = 400;

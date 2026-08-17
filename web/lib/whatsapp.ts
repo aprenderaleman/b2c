@@ -102,7 +102,7 @@ const ALLOWED_WA_KINDS = new Set([
   "trial_reminder_24h",
   "trial_reminder_15m",
   "trial_reminder_morning",
-  // Sesión de Plan con closer (funnel /sesion-plan, 2026-08-13)
+  // Sesión de Plan-Alemán con closer (funnel /sesion-plan, 2026-08-13)
   "sesion_confirmation",
   "sesion_reminder_24h",
   "sesion_reminder_morning",

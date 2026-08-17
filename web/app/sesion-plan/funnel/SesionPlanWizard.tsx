@@ -13,7 +13,7 @@ import { trackFunnel } from "@/lib/track-funnel";
  * Wizard /sesion-plan — clon de PaidFunnelWizard (meta-ads-paid) con:
  *  · slots de CLOSERS (/api/public/sesion-slots) en vez de profesores
  *  · booking gratuito (/api/public/book-sesion-plan) — sin Stripe
- *  · copies de "Sesión de Plan" (20 min, videollamada con asesor)
+ *  · copies de "Sesión de Plan-Alemán" (25 min, videollamada con asesor)
  *
  * Los slots del endpoint traen {closerId, closerName}; se mapean al
  * shape SlotItem de TimeList (teacherId/teacherName) para reutilizar
@@ -261,10 +261,10 @@ function CalendarStep({ onPick }: { onPick: (s: SlotItem) => void }) {
   return (
     <div>
       <h1 className="text-[22px] sm:text-[26px] md:text-[30px] font-extrabold tracking-tight text-slate-900 leading-tight mb-4">
-        ¿Cuándo hacemos tu Sesión de Plan?
+        ¿Cuándo hacemos tu Sesión de Plan-Alemán?
       </h1>
       <p className="text-[13px] text-slate-500 mb-4">
-        20 minutos por videollamada. Todos los horarios en tu zona ({displayTz.replace(/_/g, " ")}). Toca un día → elige la hora.
+        25 minutos por videollamada. Todos los horarios en tu zona ({displayTz.replace(/_/g, " ")}). Toca un día → elige la hora.
       </p>
 
       <MobileDayStrip
@@ -381,10 +381,10 @@ function FormStep({
   return (
     <div>
       <h1 className="text-[22px] sm:text-[26px] md:text-[30px] font-extrabold tracking-tight text-slate-900 leading-tight mb-2">
-        Confirma tu Sesión de Plan
+        Confirma tu Sesión de Plan-Alemán
       </h1>
       <p className="text-[13.5px] text-slate-600 mb-5 capitalize">
-        {slotStr} <span className="text-slate-400 lowercase">(Berlín) · 20 min · gratis</span>
+        {slotStr} <span className="text-slate-400 lowercase">(Berlín) · 25 min · gratis</span>
       </p>
 
       <form
@@ -471,7 +471,7 @@ function FormStep({
               : "bg-slate-200 text-slate-400 cursor-not-allowed",
           ].join(" ")}
         >
-          {submitting ? "Reservando…" : "Reservar mi Sesión de Plan"}
+          {submitting ? "Reservando…" : "Reservar mi Sesión de Plan-Alemán"}
         </button>
 
         {error && (

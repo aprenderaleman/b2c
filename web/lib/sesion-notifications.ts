@@ -1,5 +1,5 @@
 /**
- * Notificaciones de Sesión de Plan (funnel /sesion-plan, 2026-08-13).
+ * Notificaciones de Sesión de Plan-Alemán (funnel /sesion-plan, 2026-08-13).
  *
  * Confirmación + recordatorios para las citas con CLOSERS (classes con
  * sesion_closer_id). Se invocan desde los MISMOS crons de trials
@@ -31,7 +31,7 @@ import { buildTrialIcs } from "./ics";
 import { buildLeadJoinUrl } from "./trial-token";
 
 const PLATFORM_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
-const SESION_DURATION_MIN = 15;
+const SESION_DURATION_MIN = 25;
 
 type SB = SupabaseClient;
 
@@ -169,7 +169,7 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
         uid: row.id,
         startIso: row.scheduled_at,
         durationMin: row.duration_minutes ?? SESION_DURATION_MIN,
-        summary: `${leadFirst} + Sesión de Plan de Alemán 📋`,
+        summary: `${leadFirst} + Sesión de Plan-Alemán 📋`,
         description: `Videollamada de ${SESION_DURATION_MIN} minutos con ${closerForIcs} para armar tu plan de alemán.\n\nEntra aquí: ${joinUrl}`,
         organizerName: "Aprender-Aleman.de",
         organizerEmail: "info@aprender-aleman.de",
@@ -177,10 +177,10 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
         attendeeEmail: lead.email,
         location: joinUrl,
       });
-      const subject = `${leadFirst}, tu Sesión de Plan está confirmada — ${when.full}`;
+      const subject = `${leadFirst}, tu Sesión de Plan-Alemán está confirmada — ${when.full}`;
       const html = `
         <p>¡Hola ${leadFirst}!</p>
-        <p>Tu <strong>Sesión de Plan</strong> está confirmada:</p>
+        <p>Tu <strong>Sesión de Plan-Alemán</strong> está confirmada:</p>
         <p style="font-size:18px;">📅 <strong>${when.full}</strong> (hora de Berlín)</p>
         <p>🎥 Videollamada ${closerLabel} — ${SESION_DURATION_MIN} minutos</p>
         <p>En la sesión sales con tu nivel real, tu ruta exacta y <strong>tu fecha</strong> para lograr tu ${meta}. Sin examen y sin compromiso 😉</p>
@@ -188,7 +188,7 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
         <p style="color:#64748b;font-size:13px;">Adjuntamos la invitación de calendario. Si te surge algo, respóndenos y la movemos.</p>
         <p><em style="color:#64748b;">El equipo de Aprender-Aleman.de</em></p>
       `;
-      const text = `¡Hola ${leadFirst}!\n\nTu Sesión de Plan está confirmada: ${when.full} (Berlín).\nVideollamada ${closerLabel} — ${SESION_DURATION_MIN} min.\nSales con tu nivel, tu ruta y tu fecha para lograr tu ${meta}.\n\nEntra aquí: ${joinUrl}\n\n— Aprender-Aleman.de`;
+      const text = `¡Hola ${leadFirst}!\n\nTu Sesión de Plan-Alemán está confirmada: ${when.full} (Berlín).\nVideollamada ${closerLabel} — ${SESION_DURATION_MIN} min.\nSales con tu nivel, tu ruta y tu fecha para lograr tu ${meta}.\n\nEntra aquí: ${joinUrl}\n\n— Aprender-Aleman.de`;
       const res = await sendRaw(lead.email, subject, html, text, [
         { filename: "sesion-de-plan.ics", content: Buffer.from(ics, "utf8"), contentType: "text/calendar" },
       ]);
@@ -213,8 +213,8 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
       type: emailOk || waOk ? "system_message_sent" : "send_failed",
       author: "system",
       content: emailOk || waOk
-        ? `📋 Confirmación de Sesión de Plan enviada (email: ${emailOk ? "✓" : "✗"} · WA: ${waOk ? "✓" : "✗"})`
-        : "✗ Falló la confirmación de Sesión de Plan en ambos canales",
+        ? `📋 Confirmación de Sesión de Plan-Alemán enviada (email: ${emailOk ? "✓" : "✗"} · WA: ${waOk ? "✓" : "✗"})`
+        : "✗ Falló la confirmación de Sesión de Plan-Alemán en ambos canales",
       metadata: { kind: "sesion_confirmation", class_id: row.id, email_ok: emailOk, wa_ok: waOk },
     });
 
@@ -300,7 +300,7 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
     let msg: string;
     if (kind === "24h") {
       msg =
-        `¡${leadFirst}! Mañana a las ${when.time} es tu Sesión de Plan con ${closerShort} 📅\n` +
+        `¡${leadFirst}! Mañana a las ${when.time} es tu Sesión de Plan-Alemán con ${closerShort} 📅\n` +
         `En ${SESION_DURATION_MIN} minutos tendrás tu ruta y tu fecha para tu ${meta}.\n\n` +
         `👉 ${joinUrl}\n\n` +
         `Si no puedes, dímelo y la movemos — el hueco es tuyo.`;
@@ -309,7 +309,7 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
       // cubre esa ventana y evitamos duplicar en horario temprano.
       if (when.hourNumber < 10) continue;
       msg =
-        `¡Buenos días, ${leadFirst}! Hoy a las ${when.time} tienes tu Sesión de Plan con ${closerShort} 🎥\n\n` +
+        `¡Buenos días, ${leadFirst}! Hoy a las ${when.time} tienes tu Sesión de Plan-Alemán con ${closerShort} 🎥\n\n` +
         `Un consejo: tenla donde puedas hablar tranquilo/a 5 minutos — es corta pero vale oro.\n\n` +
         `Link: ${joinUrl}`;
     } else {
@@ -329,7 +329,7 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
       lead_id: row.lead_id,
       type: "system_message_sent",
       author: "system",
-      content: `📋 Recordatorio de Sesión de Plan (${kind}) enviado por WhatsApp`,
+      content: `📋 Recordatorio de Sesión de Plan-Alemán (${kind}) enviado por WhatsApp`,
       metadata: { kind: `sesion_reminder_${kind}`, class_id: row.id },
     });
     sent++;
@@ -365,7 +365,7 @@ export async function notifyCloserOnBooking(sb: SB, classId: string): Promise<bo
   const meta = resolveMetaLabel(lead);
 
   const msg =
-    `📋 ${closerFirst}, nueva Sesión de Plan agendada:\n\n` +
+    `📋 ${closerFirst}, nueva Sesión de Plan-Alemán agendada:\n\n` +
     `👤 ${lead.name ?? leadFirst}\n` +
     `🎯 Meta: ${meta}\n` +
     `📅 ${when.full} (Berlín)\n\n` +
@@ -414,7 +414,7 @@ export async function notifyCloserPreSession(sb: SB): Promise<number> {
     const joinUrl = buildLeadJoinUrl({ classId: row.id, leadId: row.lead_id, shortCode: row.short_code, baseUrl: PLATFORM_URL });
 
     const msg =
-      `⏰ ${closerFirst}, tu Sesión de Plan con ${lead.name ?? leadFirst} empieza en 15 min.\n\n` +
+      `⏰ ${closerFirst}, tu Sesión de Plan-Alemán con ${lead.name ?? leadFirst} empieza en 15 min.\n\n` +
       `🎯 Meta: ${meta}\n` +
       `📅 ${when.time} (Berlín)\n\n` +
       `Entra aquí: ${joinUrl}`;

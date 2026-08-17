@@ -174,7 +174,7 @@ export default async function ConfirmacionPage({
             </h1>
             {isSesion ? (
               <p className="mt-2.5 text-[15px] md:text-[16px] text-slate-600 leading-relaxed">
-                Tu <strong className="text-slate-900">Sesión de Plan</strong> con <strong className="text-slate-900">{closerName}</strong> está reservada: 20 minutos por videollamada para armar tu plan de alemán. <strong className="text-slate-900">Revisa tu correo electrónico</strong>, ahí te enviamos el enlace para unirte.
+                Tu <strong className="text-slate-900">Sesión de Plan-Alemán</strong> con <strong className="text-slate-900">{closerName}</strong> está reservada: 25 minutos por videollamada para armar tu plan de alemán. <strong className="text-slate-900">Revisa tu correo electrónico</strong>, ahí te enviamos el enlace para unirte.
               </p>
             ) : (
               <p className="mt-2.5 text-[15px] md:text-[16px] text-slate-600 leading-relaxed">

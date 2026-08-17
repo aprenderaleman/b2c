@@ -4,7 +4,7 @@
  * Gemelo de `google-calendar-oauth.ts` (que es para teachers) pero para
  * closers, cuya identidad vive directamente en `users` (no en `teachers`).
  *
- * Uso principal: agendar la Sesión de Plan (funnel /sesion-plan) en el
+ * Uso principal: agendar la Sesión de Plan-Alemán (funnel /sesion-plan) en el
  * calendar personal del closer que la recibe. Cuando el lead reagenda,
  * hacemos patch del evento; cuando cambia el closer asignado, borramos
  * el del anterior y creamos uno nuevo en el del nuevo.
@@ -276,7 +276,7 @@ type SesionEventArgs = {
 };
 
 /**
- * Crea el evento de la Sesión de Plan en el calendar personal del closer.
+ * Crea el evento de la Sesión de Plan-Alemán en el calendar personal del closer.
  * Devuelve `{ eventId }` o `null` si el closer no vinculó calendar o el
  * insert falló — en ambos casos la sesión sigue funcionando, solo se pierde
  * el espejo en GCal.
@@ -293,7 +293,7 @@ export async function createCloserSesionEvent(
   const leadFirst = (a.leadName || "").split(/\s+/)[0] || "Lead";
 
   const lines: string[] = [
-    `Sesión de Plan (${a.durationMinutes} min) con ${a.leadName}.`,
+    `Sesión de Plan-Alemán (${a.durationMinutes} min) con ${a.leadName}.`,
     "",
     `Aula: ${a.joinUrl}`,
     a.confirmacionUrl ? `Ficha del lead: ${a.confirmacionUrl}` : null,
@@ -311,7 +311,7 @@ export async function createCloserSesionEvent(
     const res = await cal.events.insert({
       calendarId: "primary",
       requestBody: {
-        summary:     `📋 Sesión de Plan — ${leadFirst}`,
+        summary:     `📋 Sesión de Plan-Alemán — ${leadFirst}`,
         description: lines.join("\n"),
         // location = enlace a la videollamada → clic directo desde el evento
         location:    a.joinUrl,

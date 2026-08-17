@@ -464,13 +464,13 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
     ],
   },
 
-  // ── Sesión de Plan (closers, 2026-08-14) — gemelas de chain1/chain4
-  //    pero sin {profe}, hablando de "Sesión de Plan" y reagendando
+  // ── Sesión de Plan-Alemán (closers, 2026-08-14) — gemelas de chain1/chain4
+  //    pero sin {profe}, hablando de "Sesión de Plan-Alemán" y reagendando
   //    hacia /sesion-plan ({link_sesion}). Las dispara el closer al
   //    marcar el resultado de la sesión en su ficha.
   sesion_attended: {
     type: "sesion_attended",
-    label: "Sesión de Plan: asistió",
+    label: "Sesión de Plan-Alemán: asistió",
     steps: [
       { delayMs: 0,       templateKind: "sesion_attended", templateSubN: 1, channels: ["whatsapp"], skipIfPaid: true },
       { delayMs: 24 * H, templateKind: "sesion_attended", templateSubN: 2, channels: ["whatsapp"], skipIfPaid: true },
@@ -488,7 +488,7 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
 
   sesion_absent: {
     type: "sesion_absent",
-    label: "Sesión de Plan: no asistió",
+    label: "Sesión de Plan-Alemán: no asistió",
     steps: [
       { delayMs: 20 * 60_000, templateKind: "sesion_absent", templateSubN: 1, channels: ["whatsapp"] },
       { delayMs: 24 * H,      templateKind: "sesion_absent", templateSubN: 2, channels: ["whatsapp"] },

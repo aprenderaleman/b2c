@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { listSesionSlots } from "@/lib/sesion-slots";
 
 /**
- * GET /api/public/sesion-slots — slots de Sesión de Plan (20 min con un
+ * GET /api/public/sesion-slots — slots de Sesión de Plan-Alemán (25 min con un
  * closer) según closer_availability. Público, sin auth. Gemelo de
  * /api/public/trial-slots.
  */

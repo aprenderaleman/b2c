@@ -172,7 +172,7 @@ def _write_state(lead_id: str, state: dict | None) -> None:
 
 
 def _get_active_sesion_plan(lead_id: str) -> dict | None:
-    """Devuelve la Sesion de Plan futura mas cercana del lead (funnel
+    """Devuelve la Sesion de Plan-Alemán futura mas cercana del lead (funnel
     /sesion-plan con closer, no clase de prueba). Solo status='scheduled'
     y aun futura — si ya pasó, no la traemos: el rescate del no-show es
     tarea del closer, no de este flow.
@@ -493,7 +493,7 @@ def handle_inbound(lead: dict, text: str) -> bool:
     if not is_confirm and not is_reschedule and not is_cancel:
         return False
 
-    # Sesion de Plan tiene prioridad sobre trial en el ACK CONFIRMO
+    # Sesion de Plan-Alemán tiene prioridad sobre trial en el ACK CONFIRMO
     # (Gelfis 2026-08-14): si el lead tiene sesion futura, responder
     # CONFIRMO se refiere a la sesion. reschedule/cancel de sesion no
     # se manejan aqui — el closer las mueve manualmente desde su panel.
@@ -672,7 +672,7 @@ def _handle_absent_interest_no(lead: dict) -> bool:
 # ─────────────────────────────────────────────────────────
 
 def _send_sesion_confirm_ack(lead: dict, sesion: dict) -> bool:
-    """Lead respondió CONFIRMO a la Sesion de Plan (funnel /sesion-plan).
+    """Lead respondió CONFIRMO a la Sesion de Plan-Alemán (funnel /sesion-plan).
     Copy Gelfis 2026-08-14: menciona al closer por nombre + fecha corta.
     Persiste badge de confirmacion en leads.meta.sesion_confirmed_at.
     """
@@ -723,7 +723,7 @@ def _send_sesion_confirm_ack(lead: dict, sesion: dict) -> bool:
         lead["id"],
         type="agent_note",
         author="system",
-        content=f"✅ Lead confirmó asistencia a Sesion de Plan con {closer_first}",
+        content=f"✅ Lead confirmó asistencia a Sesion de Plan-Alemán con {closer_first}",
         metadata={"class_id": sesion["id"], "kind": "sesion_confirmed"},
     )
     return True

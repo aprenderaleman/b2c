@@ -17,8 +17,8 @@ import {
 } from "@/lib/closer-calendar-sync";
 
 /**
- * POST /api/public/book-sesion-plan — agenda una Sesión de Plan
- * (videollamada de 15 min con un CLOSER) desde el funnel /sesion-plan.
+ * POST /api/public/book-sesion-plan — agenda una Sesión de Plan-Alemán
+ * (videollamada de 25 min con un CLOSER) desde el funnel /sesion-plan.
  *
  * Gemelo ligero de book-trial con las reglas de Gelfis 2026-08-13:
  *  (a) lead existente NO se duplica: upsert por email/WhatsApp con
@@ -310,7 +310,7 @@ export async function POST(req: Request) {
       teacher_id: null,
       scheduled_at: b.slot_iso,
       duration_minutes: SESION_MINUTES,
-      title: `Sesión de Plan — ${b.name.split(/\s+/)[0]}`,
+      title: `Sesión de Plan-Alemán — ${b.name.split(/\s+/)[0]}`,
       status: "scheduled" as const,
       is_trial: false,
       lead_id: leadId,
@@ -365,7 +365,7 @@ export async function POST(req: Request) {
       paso: 1,
       tipo: "sesion_plan",
       canal: "llamada",
-      plantilla: "Sesión de Plan (15 min) — videollamada con el lead",
+      plantilla: "Sesión de Plan-Alemán (25 min) — videollamada con el lead",
       fecha_programada: b.slot_iso,
       prioridad: "alta",
       origen: "manual",
@@ -464,8 +464,8 @@ export async function POST(req: Request) {
         type: "status_change",
         author: "system",
         content: rescheduled
-          ? `📋 Sesión de Plan reagendada a ${startDate} (Berlín) con el closer.`
-          : `📋 Sesión de Plan agendada para ${startDate} (Berlín) — 15 min por videollamada con el closer. Cadena pausada (R3).`,
+          ? `📋 Sesión de Plan-Alemán reagendada a ${startDate} (Berlín) con el closer.`
+          : `📋 Sesión de Plan-Alemán agendada para ${startDate} (Berlín) — 15 min por videollamada con el closer. Cadena pausada (R3).`,
         metadata: {
           kind: "sesion_plan_booked",
           class_id: classId,
@@ -478,8 +478,8 @@ export async function POST(req: Request) {
       await createAdminNotification({
         type: "sesion_plan_booked",
         severity: "info",
-        title: rescheduled ? "Sesión de Plan reagendada" : "Nueva Sesión de Plan",
-        body: `${b.name} agendó Sesión de Plan para ${startDate} (Berlín).`,
+        title: rescheduled ? "Sesión de Plan-Alemán reagendada" : "Nueva Sesión de Plan-Alemán",
+        body: `${b.name} agendó Sesión de Plan-Alemán para ${startDate} (Berlín).`,
         lead_id: leadId,
         action_url: `/admin/leads/${leadId}`,
         dedupeHours: false,

@@ -48,7 +48,7 @@ export type LeadRow = {
   reserva_prioritaria: boolean | null;
   reserva_prioritaria_paid_at: string | null;
   reserva_prioritaria_amount_cents: number | null;
-  // Sesión de Plan con closer (funnel /sesion-plan, migration 105).
+  // Sesión de Plan-Alemán con closer (funnel /sesion-plan, migration 105).
   // Fecha de la cita agendada — marca de visibilidad para el CRM del
   // closer y para la columna Trial/Sesión de /admin/funnel.
   sesion_plan_at: string | null;

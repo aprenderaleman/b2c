@@ -165,7 +165,7 @@ export async function createInfoCallEvent(a: {
   germanLevel:     string | null;
   goal:            string | null;
   motivoInicial:   string | null;
-  /** Enlace a la videollamada (Sesión de Plan) — va en location +
+  /** Enlace a la videollamada (Sesión de Plan-Alemán) — va en location +
    *  primera línea de la descripción para acceso de un clic. */
   joinUrl?:        string | null;
 }): Promise<CreatedEvent | null> {

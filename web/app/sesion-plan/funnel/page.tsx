@@ -7,7 +7,7 @@ import { SesionPlanWizard } from "./SesionPlanWizard";
  * Reutiliza MobileDayStrip, TimeList, IllustrationPanel y lib/phone.
  */
 export const metadata = {
-  title: "Reserva tu Sesión de Plan · Aprender-Aleman.de",
+  title: "Reserva tu Sesión de Plan-Alemán · Aprender-Aleman.de",
   robots: { index: false, follow: false },
 };
 

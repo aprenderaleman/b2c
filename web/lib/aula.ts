@@ -127,7 +127,7 @@ export async function authorizeAulaAccess(
     return { ok: false, reason: "not_authorized" };
   }
 
-  // Closers: host de SU Sesión de Plan (misma regla que el profe con
+  // Closers: host de SU Sesión de Plan-Alemán (misma regla que el profe con
   // su clase — solo el closer asignado, 2026-08-13).
   if (role === "closer") {
     const sesionCloserId = (cls as { sesion_closer_id: string | null }).sesion_closer_id;

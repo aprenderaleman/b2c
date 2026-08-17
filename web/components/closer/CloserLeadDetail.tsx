@@ -133,11 +133,11 @@ export function CloserLeadDetail({
   const [registrarTaskId, setRegistrarTaskId] = useState<string | null | "sin_tarea">(null);
   const [marcandoSesion, setMarcandoSesion] = useState(false);
 
-  // Resultado de la Sesión de Plan → dispara sesion_attended/sesion_absent
+  // Resultado de la Sesión de Plan-Alemán → dispara sesion_attended/sesion_absent
   const marcarSesion = async (resultado: "asistio" | "no_asistio") => {
     const msg = resultado === "asistio"
-      ? "Marcar como ASISTIÓ a la Sesión de Plan.\n\n• Se inicia la cadena de seguimiento automática (primer mensaje en ~2h).\n\n¿Continuar?"
-      : "Marcar como NO ASISTIÓ a la Sesión de Plan.\n\n• Se inicia la cadena de rescate (primer mensaje en ~20 min, reagenda hacia /sesion-plan).\n\n¿Continuar?";
+      ? "Marcar como ASISTIÓ a la Sesión de Plan-Alemán.\n\n• Se inicia la cadena de seguimiento automática (primer mensaje en ~2h).\n\n¿Continuar?"
+      : "Marcar como NO ASISTIÓ a la Sesión de Plan-Alemán.\n\n• Se inicia la cadena de rescate (primer mensaje en ~20 min, reagenda hacia /sesion-plan).\n\n¿Continuar?";
     if (!confirm(msg)) return;
     setMarcandoSesion(true);
     try {
@@ -300,7 +300,7 @@ export function CloserLeadDetail({
               />
             )}
             {lead.sesion_plan_at && (
-              <Kv k="📋 Sesión de Plan" v={fmtTrialDate(lead.sesion_plan_at)} />
+              <Kv k="📋 Sesión de Plan-Alemán" v={fmtTrialDate(lead.sesion_plan_at)} />
             )}
             {teacherName && <Kv k="Profe del trial" v={teacherName} />}
             {attState && (
@@ -399,12 +399,12 @@ export function CloserLeadDetail({
             </Panel>
           )}
 
-          {/* Resultado de la Sesión de Plan — dispara las cadenas de sesión */}
+          {/* Resultado de la Sesión de Plan-Alemán — dispara las cadenas de sesión */}
           {lead.sesion_plan_at && !lead.trial_attended_at && !lead.trial_absent_at &&
             lead.estado_cierre !== "convertido" && lead.estado_cierre !== "perdido" && (
             <section className="rounded-3xl bg-amber-50/60 dark:bg-amber-500/5 border border-amber-200 dark:border-amber-500/20 p-4">
               <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                ¿Cómo fue la Sesión de Plan?
+                ¿Cómo fue la Sesión de Plan-Alemán?
               </p>
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">
                 Marca el resultado — inicia la cadena de seguimiento automática y alimenta tu tasa de cierre.

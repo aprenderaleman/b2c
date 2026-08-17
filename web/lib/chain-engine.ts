@@ -152,7 +152,7 @@ export async function pauseChain(
  *     diagnostico-followups (tras el fix 2026-08-14), chain-processor
  *     (advanceChain lee ai_paused_until desde este mismo commit).
  *
- * Uso: cuando el lead agenda una sesión de plan, evita que le lleguen
+ * Uso: cuando el lead agenda una sesión de plan-alemán, evita que le lleguen
  * mensajes de otras cadenas (chain1, chain8x) o del drip diagnóstico
  * mientras espera su sesión (+ 24h de gracia post-sesión).
  *
@@ -372,7 +372,7 @@ export async function advanceChain(chain: ChainRow): Promise<{
   const pausedUntil = (lead as { ai_paused_until: string | null } | null)?.ai_paused_until;
 
   // Guard Gelfis 2026-08-14: si el lead tiene ai_paused_until activa
-  // (típicamente por haber agendado una sesión de plan), posponer la
+  // (típicamente por haber agendado una sesión de plan-alemán), posponer la
   // chain hasta que expire — evita bombardear al lead con múltiples
   // cadenas mientras espera su sesión.
   if (pausedUntil && new Date(pausedUntil).getTime() > Date.now()) {

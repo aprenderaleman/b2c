@@ -4,7 +4,7 @@
  * Mensajes de seguimiento del CLOSER (Gelfis 2026-08-13) — copiables y
  * con envío directo por WhatsApp, en la ficha /closer/leads/[id].
  *
- * Voz de asesor ("tu Sesión de Plan", "tu plan"), distinta de la del
+ * Voz de asesor ("tu Sesión de Plan-Alemán", "tu plan"), distinta de la del
  * profe y de Stiv. Se muestra SOLO el set que aplica al estado del
  * lead: sesión pendiente / asistió / no asistió.
  * Cambios de copy: editar aquí.
@@ -20,7 +20,7 @@ type Props = {
   estado: Estado;
   /** Meta del lead en lenguaje natural, ej. "conseguir un mejor trabajo" */
   metaLabel: string;
-  /** ISO de la Sesión de Plan (para hora/día en el set pendiente) */
+  /** ISO de la Sesión de Plan-Alemán (para hora/día en el set pendiente) */
   sesionAt: string | null;
 };
 
@@ -62,17 +62,17 @@ function buildMessages(
       {
         id: "b1",
         label: "Mismo día — sin reproche, reagendar",
-        text: `¡Hola ${v.nombre}! Te esperé en tu Sesión de Plan 😊 Sé que a veces el día se complica — ¿la movemos? Dime qué día y hora te van mejor y te reservo el hueco.`,
+        text: `¡Hola ${v.nombre}! Te esperé en tu Sesión de Plan-Alemán 😊 Sé que a veces el día se complica — ¿la movemos? Dime qué día y hora te van mejor y te reservo el hueco.`,
       },
       {
         id: "b2",
         label: "Al día siguiente — valor + facilidad",
-        text: `${v.nombre}, tu Sesión de Plan sigue disponible — son solo 20 minutos y sales sabiendo exactamente cómo llegar a ${v.meta}, con fechas y precio claros. ¿Hoy o mañana te viene bien?`,
+        text: `${v.nombre}, tu Sesión de Plan-Alemán sigue disponible — son solo 25 minutos y sales sabiendo exactamente cómo llegar a ${v.meta}, con fechas y precio claros. ¿Hoy o mañana te viene bien?`,
       },
       {
         id: "b3",
         label: "Cierre suave",
-        text: `Última de mi parte, ${v.nombre} 😊 Tu sesión queda guardada. Cuando tengas 20 minutos, me escribes y la hacemos — sin vueltas. ¡Que vaya bien! 🍀`,
+        text: `Última de mi parte, ${v.nombre} 😊 Tu sesión queda guardada. Cuando tengas 25 minutos, me escribes y la hacemos — sin vueltas. ¡Que vaya bien! 🍀`,
       },
     ];
   }
@@ -81,12 +81,12 @@ function buildMessages(
     {
       id: "c1",
       label: "Confirmación personal — antes de la sesión",
-      text: `¡Hola ${v.nombre}! Soy tu asesor de Aprender-Aleman.de 😊 Te espero el ${v.dia} a las ${v.hora} (hora de Berlín) en tu Sesión de Plan — 20 minutos y sales con tu plan de alemán listo. ¡Nos vemos en la videollamada!`,
+      text: `¡Hola ${v.nombre}! Soy tu asesor de Aprender-Aleman.de 😊 Te espero el ${v.dia} a las ${v.hora} (hora de Berlín) en tu Sesión de Plan-Alemán — 25 minutos y sales con tu plan de alemán listo. ¡Nos vemos en la videollamada!`,
     },
     {
       id: "c2",
       label: "El día de la sesión",
-      text: `¡${v.nombre}! Hoy a las ${v.hora} (Berlín) tenemos tu Sesión de Plan 😊 Ten a mano tus dudas — en 20 minutos armamos tu plan con fechas y precio claros.`,
+      text: `¡${v.nombre}! Hoy a las ${v.hora} (Berlín) tenemos tu Sesión de Plan-Alemán 😊 Ten a mano tus dudas — en 25 minutos armamos tu plan con fechas y precio claros.`,
     },
   ];
 }

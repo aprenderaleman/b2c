@@ -16,7 +16,7 @@
  *   {ritmo}               — nombre del ritmo seleccionado por el closer
  *   {precio_ritmo}        — precio mensual del ritmo (e.g. "240 €/mes")
  *   {link_agenda}         — URL para agendar una nueva clase
- *   {link_sesion}         — URL para agendar Sesión de Plan
+ *   {link_sesion}         — URL para agendar Sesión de Plan-Alemán
  *   {link_hans}           — URL de Hans (tutor IA) — welcome_week
  *   {link_schule}         — URL de SCHULE (ejercicios) — welcome_week
  */
@@ -138,7 +138,7 @@ export async function resolveChainVariables(
     link_pago: (chainMeta.fullUrl as string) || `${INSCRIPCIONES_URL}?ref=${leadId}`,
     link_reagenda: `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=chain`,
     link_agenda: `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=closer`,
-    // Reagendar una Sesión de Plan (funnel de closers, 2026-08-14)
+    // Reagendar una Sesión de Plan-Alemán (funnel de closers, 2026-08-14)
     link_sesion: `${PLATFORM_URL}/sesion-plan`,
     // welcome_week — activación primera semana (Gelfis 2026-08-14)
     link_hans:   process.env.HANS_URL   || "https://hans.aprender-aleman.de",

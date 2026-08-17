@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Card de Sesión de Plan en /closer/sesiones.
+ * Card de Sesión de Plan-Alemán en /closer/sesiones.
  *
  * Solo lectura + accesos rápidos (WhatsApp, Aula, Ficha). Las acciones
  * del closer (Registrar, Asistió/No asistió, enlace de inscripción,
