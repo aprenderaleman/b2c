@@ -17,6 +17,8 @@
  *   {precio_ritmo}        — precio mensual del ritmo (e.g. "240 €/mes")
  *   {link_agenda}         — URL para agendar una nueva clase
  *   {link_sesion}         — URL para agendar Sesión de Plan-Alemán
+ *   {link}                — alias corto de {link_sesion} (cadenas sesion_*)
+ *   {closer}              — primer nombre del closer asignado a la última sesión
  *   {link_hans}           — URL de Hans (tutor IA) — welcome_week
  *   {link_schule}         — URL de SCHULE (ejercicios) — welcome_week
  */
@@ -97,6 +99,23 @@ export async function resolveChainVariables(
     if (teacher?.full_name) profeName = firstName(teacher.full_name);
   }
 
+  // Closer asignado a la última sesión (Sesión de Plan-Alemán). Usado por
+  // cadenas sesion_* — {closer} en el copy. Si el lead no tiene sesión con
+  // closer aún, fallback neutro para no romper templates.
+  let closerName = "tu asesor";
+  const { data: sesionRow } = await sb
+    .from("classes")
+    .select("users!classes_sesion_closer_id_fkey(full_name)")
+    .eq("lead_id", leadId)
+    .not("sesion_closer_id", "is", null)
+    .order("scheduled_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (sesionRow) {
+    const closer = (sesionRow as Record<string, unknown>).users as { full_name: string } | null;
+    if (closer?.full_name) closerName = firstName(closer.full_name);
+  }
+
   // Goal/meta resolution.
   // Fallback "aprender alemán": lee natural en "lograr {meta}" y "llegas a
   // {meta}". Antes era "tu nivel objetivo" → producía "tu tu nivel objetivo"
@@ -140,6 +159,8 @@ export async function resolveChainVariables(
     link_agenda: `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=closer`,
     // Reagendar una Sesión de Plan-Alemán (funnel de closers, 2026-08-14)
     link_sesion: `${PLATFORM_URL}/sesion-plan`,
+    link: `${PLATFORM_URL}/sesion-plan`,
+    closer: closerName,
     // welcome_week — activación primera semana (Gelfis 2026-08-14)
     link_hans:   process.env.HANS_URL   || "https://hans.aprender-aleman.de",
     link_schule: process.env.SCHULE_URL || "https://schule.aprender-aleman.de",
