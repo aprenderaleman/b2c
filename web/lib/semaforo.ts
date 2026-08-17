@@ -266,7 +266,7 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
     const habil = businessMsBetween(attMs, now);
     const propuestaDespues = salientes.some(c =>
       T(c.occurred_at) >= attMs &&
-      (c.action_type === "enviar_propuesta" || c.action_type === "enviar_enlace"));
+      (c.action_type === "enviar_propuesta" || c.action_type === "enviar_enlace" || c.action_type === "agendar_prueba"));
     // Una cadena activa YA es la jugada de cierre en marcha (su paso 1
     // manda el enlace de inscripción). Contarla evita que TODO lead que
     // asiste se ponga 🎓 rojo mientras Stiv trabaja — ruido que entrena
