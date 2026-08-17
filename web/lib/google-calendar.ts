@@ -165,6 +165,9 @@ export async function createInfoCallEvent(a: {
   germanLevel:     string | null;
   goal:            string | null;
   motivoInicial:   string | null;
+  /** Enlace a la videollamada (Sesión de Plan) — va en location +
+   *  primera línea de la descripción para acceso de un clic. */
+  joinUrl?:        string | null;
 }): Promise<CreatedEvent | null> {
   const cal = await getCalendarClient();
   if (!cal) return null;
@@ -178,6 +181,8 @@ export async function createInfoCallEvent(a: {
   const lines: string[] = [
     `Llamada informativa de ${a.durationMinutes} min con un lead que se registró pero aún no agendó clase de prueba.`,
     "",
+    a.joinUrl ? `🎥 Videollamada: ${a.joinUrl}` : null,
+    a.joinUrl ? "" : null,
     "—",
     `Lead: ${a.leadName}`,
     a.leadEmail    ? `Email: ${a.leadEmail}` : null,
@@ -193,6 +198,7 @@ export async function createInfoCallEvent(a: {
       requestBody: {
         summary:     `📞 Llamada ${leadFirst} (${a.durationMinutes} min)`,
         description: lines.join("\n"),
+        ...(a.joinUrl ? { location: a.joinUrl } : {}),
         start: { dateTime: start.toISOString(), timeZone: "Europe/Berlin" },
         end:   { dateTime: end.toISOString(),   timeZone: "Europe/Berlin" },
         reminders: { useDefault: false, overrides: [] },

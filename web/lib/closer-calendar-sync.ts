@@ -110,6 +110,7 @@ export async function createSesionEventForCloser(
       germanLevel:     args.germanLevel,
       goal:            args.goal,
       motivoInicial:   `Sesión de Plan — ${args.goal ?? "?"} · plazo ${args.deadline ?? "?"}`,
+      joinUrl:         args.joinUrl,
     });
     return ev?.eventId ?? null;
   }

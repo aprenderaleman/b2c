@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useMemo } from "react";
 import { PriorityBadges } from "@/components/admin/PriorityBadge";
-import { fmtRelative, fmtTrialDate } from "@/lib/closer-constants";
+import { fmtRelative } from "@/lib/closer-constants";
 
 const GOAL_LABEL: Record<string, string> = {
   work: "trabajo", study: "estudios", partner: "pareja",
@@ -88,10 +88,42 @@ function attOf(l: { trial_attended_at: string | null; trial_absent_at: string | 
   return l.trial_attended_at ? "asistio" : l.trial_absent_at ? "no_asistio" : "pendiente";
 }
 
-export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {}, lastContactByLead = {} }: Props) {
+export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead = {} }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [attFilter, setAttFilter] = useState<AttFilter>("todos");
+  // Popup "Notas" — nota rápida sin salir de la lista. Se guarda vía el
+  // mismo endpoint de acciones (tipo nota) → acciones_closer → espejo en
+  // lead_contacts → cuenta como último contacto.
+  const [notasLead, setNotasLead] = useState<CloserLead | null>(null);
+  const [notaText, setNotaText] = useState("");
+  const [notaSaving, setNotaSaving] = useState(false);
+  const [notaError, setNotaError] = useState<string | null>(null);
+
+  async function guardarNota() {
+    if (!notasLead || notaText.trim().length < 5) {
+      setNotaError("La nota necesita al menos 5 caracteres.");
+      return;
+    }
+    setNotaSaving(true);
+    setNotaError(null);
+    try {
+      const res = await fetch(`/api/closer/leads/${notasLead.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tipo: "nota", contenido: notaText.trim() }),
+      });
+      if (!res.ok) {
+        setNotaError("No se pudo guardar. Inténtalo de nuevo.");
+        return;
+      }
+      setNotasLead(null);
+      setNotaText("");
+      router.refresh();
+    } finally {
+      setNotaSaving(false);
+    }
+  }
 
   const counts = useMemo(() => {
     const c = { pendiente: 0, asistio: 0, no_asistio: 0 };
@@ -209,7 +241,7 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {}, las
                   <th className="text-left py-2 px-3">Meta</th>
                   <th className="text-left py-2 px-3">Nivel</th>
                   <th className="text-left py-2 px-3">Plazo</th>
-                  <th className="text-left py-2 px-3">Trial</th>
+                  <th className="text-left py-2 px-3">Notas</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -223,7 +255,6 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {}, las
                     priorityDeadline: l.priority_deadline,
                     depositIntentAt: l.deposit_intent_at,
                   };
-                  const teacher = teacherByLead[l.id];
                   const sem = semaforoByLead[l.id];
                   const q = l.qualification_answers;
                   const goalRaw = q?.goal;
@@ -297,20 +328,14 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {}, las
                           </span>
                         ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
                       </td>
-                      <td className="py-2.5 px-3 text-[12px]">
-                        {l.trial_scheduled_at ? (
-                          <>
-                            <div className="text-slate-700 dark:text-slate-200 tabular-nums whitespace-nowrap">
-                              {fmtTrialDate(l.trial_scheduled_at)}
-                            </div>
-                            {teacher && (
-                              <div className="text-[10px] text-sky-600 dark:text-sky-400">👨‍🏫 {teacher}</div>
-                            )}
-                            {attState === "attended" && <span className="text-[10px] text-emerald-600 dark:text-emerald-400">✓ asistió</span>}
-                            {attState === "absent" && <span className="text-[10px] text-red-600 dark:text-red-400">✗ no asistió</span>}
-                            {attState === "scheduled" && <span className="text-[10px] text-slate-400 dark:text-slate-500">pendiente</span>}
-                          </>
-                        ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                      <td className="py-2.5 px-3">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setNotasLead(l); }}
+                          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          📝 Notas
+                        </button>
                       </td>
                     </tr>
                   );
@@ -331,7 +356,6 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {}, las
                 priorityDeadline: l.priority_deadline,
                 depositIntentAt: l.deposit_intent_at,
               };
-              const teacher = teacherByLead[l.id];
               const sem = semaforoByLead[l.id];
               const q = l.qualification_answers;
               const goalRaw = q?.goal;
@@ -399,26 +423,71 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {}, las
                     </a>
                   ) : null}
 
-                  <div className="mt-2 flex items-center gap-2 text-[11px]">
-                    {l.trial_scheduled_at ? (
-                      <>
-                        <span className="text-slate-600 dark:text-slate-300">
-                          🗓 {fmtTrialDate(l.trial_scheduled_at)}
-                          {attState === "attended" && <span className="ml-1.5 text-emerald-600 dark:text-emerald-400">✓</span>}
-                          {attState === "absent"   && <span className="ml-1.5 text-red-600 dark:text-red-400">✗</span>}
-                          {attState === "scheduled" && <span className="ml-1.5 text-slate-400 dark:text-slate-500">…</span>}
-                        </span>
-                        {teacher && (
-                          <span className="text-[10.5px] text-sky-600 dark:text-sky-400">👨‍🏫 {teacher}</span>
-                        )}
-                      </>
-                    ) : <span className="text-slate-300 dark:text-slate-600">sin trial</span>}
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setNotasLead(l); }}
+                      className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      📝 Notas
+                    </button>
                   </div>
                 </div>
               );
             })}
           </div>
         </>
+      )}
+
+      {/* Popup Notas — nota rápida que queda en el lead y cuenta como
+          último contacto */}
+      {notasLead && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !notaSaving && setNotasLead(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">
+              📝 Nota sobre {notasLead.name ?? "el lead"}
+            </h3>
+            <p className="mt-0.5 text-[11.5px] text-slate-500 dark:text-slate-400">
+              Queda guardada en su ficha y actualiza el último contacto.
+            </p>
+            <textarea
+              autoFocus
+              value={notaText}
+              onChange={(e) => setNotaText(e.target.value)}
+              rows={4}
+              placeholder="Qué hablaron, qué quedó pendiente… (mín. 5 caracteres)"
+              className="mt-3 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) guardarNota();
+              }}
+            />
+            {notaError && <div className="mt-2 text-[12px] text-red-500">{notaError}</div>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={notaSaving}
+                onClick={() => { setNotasLead(null); setNotaText(""); setNotaError(null); }}
+                className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={notaSaving || notaText.trim().length < 5}
+                onClick={guardarNota}
+                className="rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white transition-colors"
+              >
+                {notaSaving ? "Guardando…" : "Guardar nota"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

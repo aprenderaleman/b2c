@@ -313,6 +313,8 @@ export async function createCloserSesionEvent(
       requestBody: {
         summary:     `📋 Sesión de Plan — ${leadFirst}`,
         description: lines.join("\n"),
+        // location = enlace a la videollamada → clic directo desde el evento
+        location:    a.joinUrl,
         start: { dateTime: start.toISOString(), timeZone: "Europe/Berlin" },
         end:   { dateTime: end.toISOString(),   timeZone: "Europe/Berlin" },
         reminders: { useDefault: true },
