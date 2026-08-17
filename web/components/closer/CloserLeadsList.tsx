@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useMemo } from "react";
 import { PriorityBadges } from "@/components/admin/PriorityBadge";
-import { fmtRelative } from "@/lib/closer-constants";
+import { fmtRelative, fmtTrialDate } from "@/lib/closer-constants";
 
 const GOAL_LABEL: Record<string, string> = {
   work: "trabajo", study: "estudios", partner: "pareja",
@@ -44,7 +44,16 @@ export type CloserLead = {
   trial_scheduled_at: string | null;
   trial_attended_at: string | null;
   trial_absent_at: string | null;
+  sesion_plan_at: string | null;
 };
+
+/** Cita pendiente del lead (sesión o clase sin resultado registrado). */
+function citaPendiente(l: CloserLead): { label: string; at: string } | null {
+  if (l.trial_attended_at || l.trial_absent_at) return null;
+  if (l.sesion_plan_at) return { label: "📋 Sesión", at: l.sesion_plan_at };
+  if (l.trial_scheduled_at) return { label: "🗓 Clase", at: l.trial_scheduled_at };
+  return null;
+}
 
 
 export type LeadSemaforo = {
@@ -283,6 +292,11 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
                             {sem.badge}
                           </div>
                         )}
+                        {citaPendiente(l) && (
+                          <div className="text-[10.5px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5 whitespace-nowrap">
+                            {citaPendiente(l)!.label}: {fmtTrialDate(citaPendiente(l)!.at)}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2.5 px-3">
                         <span className={`text-[12px] whitespace-nowrap ${lastContactByLead[l.id]?.at ? "text-slate-600 dark:text-slate-300" : "text-red-500 dark:text-red-400 font-semibold"}`}>
@@ -386,6 +400,11 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
                       <div className={`text-[11px] mt-0.5 ${lastContactByLead[l.id]?.at ? "text-slate-500 dark:text-slate-400" : "text-red-500 dark:text-red-400 font-semibold"}`}>
                         Último contacto: {lastContactByLead[l.id]?.label ?? "—"}
                       </div>
+                      {citaPendiente(l) && (
+                        <div className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 mt-0.5">
+                          {citaPendiente(l)!.label}: {fmtTrialDate(citaPendiente(l)!.at)}
+                        </div>
+                      )}
                     </div>
                     {(levelRaw || l.german_level) && (
                       <span className="inline-flex items-center rounded-md bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/25 px-2 py-0.5 text-[12px] font-bold text-sky-700 dark:text-sky-300 shrink-0">

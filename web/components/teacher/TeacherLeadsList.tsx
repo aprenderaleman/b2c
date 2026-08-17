@@ -278,7 +278,7 @@ export function TeacherLeadsList({
                         {l.germanLevel ?? "—"}
                       </td>
                       <td className="py-2 px-3 text-[12px]">
-                        <div className="text-slate-700 dark:text-slate-200 tabular-nums whitespace-nowrap">
+                        <div className={`tabular-nums whitespace-nowrap ${!l.attended && !l.absent ? "font-semibold text-amber-600 dark:text-amber-400" : "text-slate-700 dark:text-slate-200"}`}>
                           {fmtTrialDate(l.trialAt)}
                         </div>
                         {l.attended && <span className="text-[10px] text-emerald-600 dark:text-emerald-400">✓ asistió</span>}
@@ -344,7 +344,7 @@ export function TeacherLeadsList({
                     </span>
                     {l.germanLevel && <span className="text-slate-500 dark:text-slate-400 font-mono">{l.germanLevel}</span>}
                   </div>
-                  <div className="mt-1.5 text-[12px] text-slate-600 dark:text-slate-300">
+                  <div className={`mt-1.5 text-[12px] ${!l.attended && !l.absent ? "font-semibold text-amber-600 dark:text-amber-400" : "text-slate-600 dark:text-slate-300"}`}>
                     🗓 {fmtTrialDate(l.trialAt)}
                     {l.attended && <span className="ml-2 text-emerald-600 dark:text-emerald-400">✓ asistió</span>}
                     {l.absent && !l.attended && <span className="ml-2 text-red-600 dark:text-red-400">✗ no asistió</span>}
