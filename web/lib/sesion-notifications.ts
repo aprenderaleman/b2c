@@ -280,13 +280,19 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
     const closer = flat(row.closer);
     if (!lead || !row.lead_id || !lead.whatsapp_normalized) continue;
 
-    // Guards (Gelfis 2026-08-14, espejo de los recordatorios de trials):
+    // Guards:
     //   - lead converted → cerró, no molestar
     //   - reschedule pendiente → mensaje sería incoherente con el reagendamiento
-    //   - ai_paused_until activo → "tomo yo desde aquí" del admin
+    //
+    // NO chequeamos ai_paused_until (bug corregido Gelfis 2026-08-17):
+    // book-sesion-plan llama pauseAllOutbound(leadId, sesion+24h) para
+    // silenciar OTRAS cadenas mientras el lead espera su sesión. Si
+    // aplicamos ese guard aquí también, autocanibalizamos los recordatorios
+    // de la propia sesión que motivó la pausa → el lead solo recibe T+0
+    // y ningún recordatorio (24h/morning/15m). Los reminders de sesión son
+    // transaccionales para esa cita concreta — deben llegar siempre.
     if (lead.status === "converted") continue;
     if (lead.reschedule_state?.phase?.startsWith("AWAITING_")) continue;
-    if (lead.ai_paused_until && new Date(lead.ai_paused_until).getTime() > now) continue;
 
     const leadFirst = firstName(lead.name) || "¡Hola!";
     const closerFirst = firstName(closer?.full_name);          // "" si no hay
