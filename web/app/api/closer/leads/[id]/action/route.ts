@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveCloserActor } from "@/lib/closer-auth";
 import { logCloserAction } from "@/lib/closer-actions";
+import { ensureFuturePlay } from "@/lib/semaforo";
 
 const Body = z.object({
   tipo: z.enum(["llamada", "whatsapp", "email", "nota", "otro"]),
@@ -34,6 +35,12 @@ export async function POST(
     leadId,
     ...parsed.data,
   });
+
+  // Anti-limbo: registrar una nota/contacto ES guardar una acción — si
+  // el lead queda sin próxima jugada (p.ej. su cadena se canceló), el
+  // sistema le crea la auto-tarea de seguimiento +3d. Sin esto, notas
+  // rápidas dejaban al lead sin jugada y en rojo (caso Alicia 2026-08-17).
+  await ensureFuturePlay(leadId).catch(() => {});
 
   return NextResponse.json({ ok: true, accionId });
 }

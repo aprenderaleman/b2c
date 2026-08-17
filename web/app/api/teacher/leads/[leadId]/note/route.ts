@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { registerContact, actorFromPanelUser } from "@/lib/contacts";
+import { ensureFuturePlay } from "@/lib/semaforo";
 
 /**
  * POST /api/teacher/leads/[leadId]/note — nota del profesor sobre un
@@ -63,6 +64,9 @@ export async function POST(
       note: parsed.data.content,
     });
   }
+
+  // Anti-limbo: si el lead queda sin próxima jugada, auto-tarea +3d.
+  await ensureFuturePlay(leadId).catch(() => {});
 
   return NextResponse.json({ ok: true });
 }
