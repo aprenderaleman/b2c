@@ -51,12 +51,14 @@ export function TrialHubCard({
   const aulaUrl = `/aula/${row.classId}`;
   const isConverted = row.leadStatus === "converted";
   const isProcessed = !!row.scriptFinalOutcome;
+  const attended = !!row.trialAttendedAt;
+  const absent = !!row.trialAbsentAt && !attended;
 
   const normalizedLevel = normalizeLevel(row.leadGermanLevel);
 
   return (
     <>
-      <article className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+      <article className={`rounded-2xl border shadow-sm overflow-hidden ${attended ? "border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-500/5" : absent ? "border-red-300 dark:border-red-500/30 bg-red-50/30 dark:bg-red-500/5" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`}>
         {/* ── Header (always visible) ── */}
         <div className="p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">

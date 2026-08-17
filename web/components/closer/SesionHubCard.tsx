@@ -52,9 +52,11 @@ export function SesionHubCard({ row }: { row: SesionRow }) {
   const waDigits = row.leadWhatsapp ? row.leadWhatsapp.replace(/[^\d]/g, "") : null;
   const isConverted = row.leadStatus === "converted";
   const pill = STATUS_PILL[row.status] ?? { label: row.status, cls: "bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700" };
+  const attended = !!row.trialAttendedAt;
+  const absent = !!row.trialAbsentAt && !attended;
 
   return (
-    <article className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm overflow-hidden">
+    <article className={`rounded-2xl border shadow-sm overflow-hidden ${attended ? "border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-500/5" : absent ? "border-red-300 dark:border-red-500/30 bg-red-50/30 dark:bg-red-500/5" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`}>
       <div className="p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">

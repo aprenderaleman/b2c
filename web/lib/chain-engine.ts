@@ -69,6 +69,24 @@ export async function startChain(
     metadata: { kind: "chain_started", chain_type: chainType, chain_id: data.id },
   });
 
+  if (firstStep.delayMs === 0 && !opts?.skipFirstStep) {
+    const chainRow: ChainRow = {
+      id: data.id,
+      lead_id: leadId,
+      chain_type: chainType,
+      objection_chip: opts?.objectionChip ?? null,
+      current_step: 0,
+      started_at: new Date().toISOString(),
+      next_fire_at: nextFireAt,
+      paused_until: null,
+      last_auto_sent_at: null,
+      metadata,
+    };
+    await advanceChain(chainRow).catch((err) =>
+      console.error(`[chain-engine] instant advance error for chain ${data.id}:`, err),
+    );
+  }
+
   return data.id;
 }
 

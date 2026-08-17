@@ -43,6 +43,8 @@ export default async function TeacherEarningsPage() {
   const totalClasses = months.reduce((s, m) => s + m.classes_count, 0);
   const monthsWithData = months.filter(m => m.classes_count > 0).length;
   const avgMonthly = monthsWithData > 0 ? Math.round(totalEarned / monthsWithData) : 0;
+  const pendingAmount = months.filter(m => !m.paid && m.amount_cents > 0).reduce((s, m) => s + m.amount_cents, 0);
+  const pendingMonths = months.filter(m => !m.paid && m.amount_cents > 0).length;
 
   // Datos para gráficos (últimos 6 meses, orden cronológico)
   const chartMonths = [...months].reverse().slice(-6);
@@ -67,12 +69,20 @@ export default async function TeacherEarningsPage() {
       </header>
 
       {/* ── Stats principales ── */}
-      <section className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 grid-cols-2 lg:grid-cols-5">
         <StatCard
           label="Este mes"
           value={moneyFromCents(current.amount_cents, current.currency)}
           sub={`${current.classes_count} clase${current.classes_count === 1 ? "" : "s"}`}
           accent
+        />
+        <StatCard
+          label="Saldo pendiente"
+          value={moneyFromCents(pendingAmount, current.currency)}
+          sub={pendingAmount > 0
+            ? `${pendingMonths} mes${pendingMonths === 1 ? "" : "es"} sin pagar`
+            : "Todo al día"}
+          pending={pendingAmount > 0}
         />
         <StatCard
           label="Total acumulado"
@@ -473,15 +483,23 @@ function HoursChart({ months, maxHours }: {
 
 /* ── Componentes auxiliares ── */
 
-function StatCard({ label, value, sub, accent }: {
-  label: string; value: string; sub: string; accent?: boolean;
+function StatCard({ label, value, sub, accent, pending }: {
+  label: string; value: string; sub: string; accent?: boolean; pending?: boolean;
 }) {
-  return (
-    <div className={`rounded-2xl border p-4 ${accent
+  const bg = pending
+    ? "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/30"
+    : accent
       ? "bg-brand-50 dark:bg-brand-500/10 border-brand-200 dark:border-brand-500/30"
-      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"}`}>
+      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800";
+  const textColor = pending
+    ? "text-amber-700 dark:text-amber-300"
+    : accent
+      ? "text-brand-700 dark:text-brand-300"
+      : "text-slate-900 dark:text-slate-50";
+  return (
+    <div className={`rounded-2xl border p-4 ${bg}`}>
       <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{label}</div>
-      <div className={`mt-1.5 text-2xl font-bold tabular-nums ${accent ? "text-brand-700 dark:text-brand-300" : "text-slate-900 dark:text-slate-50"}`}>
+      <div className={`mt-1.5 text-2xl font-bold tabular-nums ${textColor}`}>
         {value}
       </div>
       <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{sub}</div>

@@ -41,6 +41,8 @@ export type TrialClassRow = {
   depositIntentAt:    string | null;
   qualificationAnswers: { goal?: string; level?: string; deadline?: string } | null;
   landingIntent:      string | null;
+  trialAttendedAt:    string | null;
+  trialAbsentAt:      string | null;
   closerNotes:        Array<{ author: string; content: string; created_at: string }>;
 };
 
@@ -57,7 +59,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       id, scheduled_at, duration_minutes, status, short_code, notes_admin,
       teacher_id,
       teacher:teachers!inner(users!inner(full_name, email)),
-      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent),
+      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at, trial_attended_at, trial_absent_at, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent),
       script:trial_class_scripts(teacher_notes, final_outcome, voice_note_sent_at)
     `)
     .eq("is_trial", true)
@@ -95,6 +97,8 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       status: string | null;
       converted_to_user_id: string | null;
       trial_confirmed_at: string | null;
+      trial_attended_at: string | null;
+      trial_absent_at: string | null;
       reserva_prioritaria: boolean | null;
       priority_deadline: string | null;
       deposit_intent_at: string | null;
@@ -111,6 +115,8 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       status: string | null;
       converted_to_user_id: string | null;
       trial_confirmed_at: string | null;
+      trial_attended_at: string | null;
+      trial_absent_at: string | null;
       reserva_prioritaria: boolean | null;
       priority_deadline: string | null;
       deposit_intent_at: string | null;
@@ -209,6 +215,8 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       teacherName:     tu?.full_name ?? tu?.email ?? "—",
       teacherEmail:    tu?.email ?? "",
       trialConfirmedAt: lead?.trial_confirmed_at ?? null,
+      trialAttendedAt:  lead?.trial_attended_at ?? null,
+      trialAbsentAt:    lead?.trial_absent_at ?? null,
       voiceNoteSentAt:  script?.voice_note_sent_at ?? null,
       reservaPrioritaria:  lead?.reserva_prioritaria ?? null,
       priorityDeadline:    lead?.priority_deadline ?? null,

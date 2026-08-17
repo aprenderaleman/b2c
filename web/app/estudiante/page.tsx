@@ -174,19 +174,62 @@ export default async function StudentHome() {
             </h2>
             <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">
               Nivel actual: <strong>{student.current_level}</strong>
-              {student.subscription_type === "monthly_subscription"
-                ? <> · {student.classes_per_month ?? "?"} clases/mes (suscripción mensual)</>
-                : <> · {student.classes_remaining} clases restantes</>
-              }
             </p>
           </div>
           <div className="flex items-center gap-2">
             {icalToken && <CalendarSyncButton icalUrl={icalUrlFor(icalToken)} />}
           </div>
         </div>
-        {student.subscription_type === "monthly_subscription" && (
-          <div className="mt-4">
+
+        {student.subscription_type === "monthly_subscription" ? (
+          <div className="mt-4 flex items-center gap-3">
+            <span className="text-sm text-slate-600 dark:text-slate-300">
+              {student.classes_per_month ?? "?"} clases/mes (suscripción mensual)
+            </span>
             <RenewButton />
+          </div>
+        ) : (
+          <div className="mt-4">
+            {student.classes_purchased != null && student.classes_purchased > 0 ? (
+              <>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="rounded-2xl bg-brand-50 dark:bg-brand-500/10 p-3">
+                    <div className="text-2xl font-bold tabular-nums text-brand-700 dark:text-brand-300">
+                      {student.classes_purchased - student.classes_remaining}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Completadas</div>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-500/10 p-3">
+                    <div className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                      {student.classes_remaining}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Restantes</div>
+                  </div>
+                  <div className="rounded-2xl bg-slate-100 dark:bg-slate-800 p-3">
+                    <div className="text-2xl font-bold tabular-nums text-slate-700 dark:text-slate-200">
+                      {student.classes_purchased}
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Total plan</div>
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 mb-1">
+                    <span>Progreso del programa</span>
+                    <span>{Math.round(((student.classes_purchased - student.classes_remaining) / student.classes_purchased) * 100)}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-brand-500"
+                      style={{ width: `${Math.round(((student.classes_purchased - student.classes_remaining) / student.classes_purchased) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                {student.classes_remaining} clases restantes
+              </p>
+            )}
           </div>
         )}
       </section>

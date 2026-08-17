@@ -19,6 +19,7 @@ export type StudentRow = {
   subscription_type:     string;
   subscription_status:   string;
   classes_remaining:     number;
+  classes_purchased:     number | null;
   classes_per_month:     number | null;
   monthly_price_cents:   number | null;
   currency:              string;
@@ -124,7 +125,7 @@ export async function getStudentByUserId(userId: string): Promise<StudentRow | n
     .from("students")
     .select(`
       id, user_id, lead_id, current_level, goal,
-      subscription_type, subscription_status, classes_remaining,
+      subscription_type, subscription_status, classes_remaining, classes_purchased,
       classes_per_month, monthly_price_cents, currency,
       schule_access, hans_access, notes, converted_at, document_url,
       attendance_rate, schule_completion_pct, garantia_status,
@@ -152,6 +153,7 @@ export async function getStudentByUserId(userId: string): Promise<StudentRow | n
     subscription_type:    data.subscription_type as string,
     subscription_status:  data.subscription_status as string,
     classes_remaining:    (data.classes_remaining as number) ?? 0,
+    classes_purchased:    (data.classes_purchased as number | null) ?? null,
     classes_per_month:    (data.classes_per_month as number | null) ?? null,
     monthly_price_cents:  (data.monthly_price_cents as number | null) ?? null,
     currency:             (data.currency as string) ?? "EUR",
@@ -194,7 +196,7 @@ export async function getStudents(
     .select(
       `
         id, user_id, lead_id, current_level, goal,
-        subscription_type, subscription_status, classes_remaining,
+        subscription_type, subscription_status, classes_remaining, classes_purchased,
         classes_per_month, monthly_price_cents, currency,
         schule_access, hans_access, notes, converted_at, document_url,
         attendance_rate, schule_completion_pct, garantia_status,
@@ -249,6 +251,7 @@ export async function getStudents(
       subscription_type:    r.subscription_type as string,
       subscription_status:  r.subscription_status as string,
       classes_remaining:    (r.classes_remaining as number) ?? 0,
+      classes_purchased:    (r.classes_purchased as number | null) ?? null,
       classes_per_month:    (r.classes_per_month as number | null) ?? null,
       monthly_price_cents:  (r.monthly_price_cents as number | null) ?? null,
       currency:             (r.currency as string) ?? "EUR",
@@ -278,7 +281,7 @@ export async function getStudentById(id: string): Promise<StudentRow | null> {
     .from("students")
     .select(`
       id, user_id, lead_id, current_level, goal,
-      subscription_type, subscription_status, classes_remaining,
+      subscription_type, subscription_status, classes_remaining, classes_purchased,
       classes_per_month, monthly_price_cents, currency,
       schule_access, hans_access, notes, converted_at, document_url,
       attendance_rate, schule_completion_pct, garantia_status,
@@ -306,6 +309,7 @@ export async function getStudentById(id: string): Promise<StudentRow | null> {
     subscription_type:    data.subscription_type as string,
     subscription_status:  data.subscription_status as string,
     classes_remaining:    (data.classes_remaining as number) ?? 0,
+    classes_purchased:    (data.classes_purchased as number | null) ?? null,
     classes_per_month:    (data.classes_per_month as number | null) ?? null,
     monthly_price_cents:  (data.monthly_price_cents as number | null) ?? null,
     currency:             (data.currency as string) ?? "EUR",

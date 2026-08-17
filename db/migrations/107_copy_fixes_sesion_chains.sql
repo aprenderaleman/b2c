@@ -39,13 +39,13 @@ UPDATE message_templates
        updated_at = NOW()
  WHERE kind = 'chain2_link_sent' AND sub_n = 4 AND channel = 'whatsapp';
 
--- ── Cadena SESIÓN — ASISTIÓ (T+2h / +24h / +3d / +7d) ───────────────
+-- ── Cadena SESIÓN — ASISTIÓ (instantáneo / +24h / +3d / +7d) ─────────
 INSERT INTO message_templates (kind, sub_n, channel, name, description, body, placeholders) VALUES
 ('sesion_attended', 1, 'whatsapp',
- 'Sesión asistió · Paso 1 (T+2h)',
- 'Lead asistió a su Sesión de Plan. Primer follow-up de Stiv.',
- E'¡{nombre}! 😊 Gracias por la Sesión de Plan de hoy — quedó claro tu camino hacia {meta} 💪\nTu plan recomendado: {ritmo_recomendado} → llegas a {meta} en {fecha_llegada}.\nY con tu inscripción activas la Garantía de Nivel por escrito.\n👉 {link_inscripciones}',
- ARRAY['nombre','meta','ritmo_recomendado','fecha_llegada','link_inscripciones']),
+ 'Sesión asistió · Paso 1 (instantáneo)',
+ 'Lead asistió a su Sesión de Plan. Primer follow-up instantáneo.',
+ E'¡{nombre}! \U0001F60A Gracias por la llamada de hoy — fue un gusto conocerte.\n\nY felicidades por dar el primer paso: la mayoría se queda solo pensándolo, tú ya te moviste \U0001F4AA\n\nAquí tienes toda la información con detalle para que la revises con calma:\n\U0001F449 {link_inscripciones}\n\nCualquier duda que te salga, por pequeña que sea, escríbeme por aquí — estoy pendiente.\n\nY un último empujón: mientras antes empieces, antes terminas \U0001F609',
+ ARRAY['nombre','link_inscripciones']),
 
 ('sesion_attended', 2, 'whatsapp',
  'Sesión asistió · Paso 2 (T+24h)',
