@@ -1,4 +1,4 @@
--- 111: FK de tareas_closer con ON DELETE CASCADE (Gelfis 2026-08-15)
+-- 112: FK de tareas_closer con ON DELETE CASCADE (Gelfis 2026-08-15)
 --
 -- Borrar un lead desde admin fallaba con "viola la restricción
 -- tareas_closer_lead_id_fkey" — la FK era NO ACTION. Una tarea de
