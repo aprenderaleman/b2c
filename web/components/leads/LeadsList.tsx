@@ -72,6 +72,9 @@ export type LeadSemaforo = {
   color: "rojo" | "amarillo" | "verde";
   badge: string;
   detalle: string;
+  /** true = lead activo SIN próxima jugada (limbo) — verde por omisión,
+   *  no por mérito. Se pinta gris "⚠️ Sin jugada" para no disfrazarlo. */
+  limbo?: boolean;
 };
 
 const SEM_BORDER: Record<LeadSemaforo["color"], string> = {
@@ -84,6 +87,9 @@ const SEM_DOT: Record<LeadSemaforo["color"], string> = {
   amarillo: "bg-amber-400",
   verde: "bg-emerald-500",
 };
+
+const semBorder = (s: LeadSemaforo) => (s.limbo ? "border-l-slate-400" : SEM_BORDER[s.color]);
+const semDot    = (s: LeadSemaforo) => (s.limbo ? "bg-slate-400" : SEM_DOT[s.color]);
 
 export type LastContactInfo = {
   label: string;
@@ -189,9 +195,17 @@ export function LeadsList({ role, leads, semaforoByLead = {}, lastContactByLead 
         (l.whatsapp_normalized ?? "").includes(q)
       );
     }
+    // Rank: rojo 0 · amarillo 1 · limbo 2 (sin jugada — antes que los
+    // verdes reales) · verde 3 · sin semáforo 4.
+    const rank = (id: string) => {
+      const s = semaforoByLead[id];
+      if (!s) return 4;
+      if (s.limbo) return 2;
+      return s.color === "verde" ? 3 : COLOR_RANK[s.color];
+    };
     return [...result].sort((a, b) => {
-      const ra = semaforoByLead[a.id] ? COLOR_RANK[semaforoByLead[a.id].color] : 3;
-      const rb = semaforoByLead[b.id] ? COLOR_RANK[semaforoByLead[b.id].color] : 3;
+      const ra = rank(a.id);
+      const rb = rank(b.id);
       if (ra !== rb) return ra - rb;
       const ca = lastContactByLead[a.id]?.at ?? "";
       const cb = lastContactByLead[b.id]?.at ?? "";
@@ -310,10 +324,10 @@ export function LeadsList({ role, leads, semaforoByLead = {}, lastContactByLead 
                       onClick={() => router.push(`${cfg.fichaBase}/${l.id}`)}
                       className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer transition-colors ${attState === "attended" ? "bg-emerald-50/50 dark:bg-emerald-500/5" : attState === "absent" ? "bg-red-50/30 dark:bg-red-500/5" : ""}`}
                     >
-                      <td className={`py-2.5 px-3 border-l-4 ${sem ? SEM_BORDER[sem.color] : "border-l-transparent"}`}>
+                      <td className={`py-2.5 px-3 border-l-4 ${sem ? semBorder(sem) : "border-l-transparent"}`}>
                         <span className="inline-flex items-center gap-1.5">
                           {sem && (
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SEM_DOT[sem.color]}`} title={sem.detalle} />
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${semDot(sem)}`} title={sem.detalle} />
                           )}
                           <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                             {l.name ?? "(sin nombre)"}
@@ -324,6 +338,11 @@ export function LeadsList({ role, leads, semaforoByLead = {}, lastContactByLead 
                         {sem?.color === "rojo" && (
                           <div className="text-[10.5px] font-bold text-red-600 dark:text-red-400 mt-0.5" title={sem.detalle}>
                             {sem.badge}
+                          </div>
+                        )}
+                        {sem?.limbo && (
+                          <div className="text-[10.5px] font-bold text-slate-500 dark:text-slate-400 mt-0.5" title={sem.detalle}>
+                            ⚠️ Sin jugada
                           </div>
                         )}
                         {citaPendiente(l) && (
@@ -413,13 +432,13 @@ export function LeadsList({ role, leads, semaforoByLead = {}, lastContactByLead 
                 <div
                   key={l.id}
                   onClick={() => router.push(`${cfg.fichaBase}/${l.id}`)}
-                  className={`rounded-2xl border border-l-4 p-3 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${sem ? SEM_BORDER[sem.color] : "border-l-transparent"} ${attState === "attended" ? "border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5" : attState === "absent" ? "border-red-300 dark:border-red-500/30 bg-red-50/30 dark:bg-red-500/5" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`}
+                  className={`rounded-2xl border border-l-4 p-3 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${sem ? semBorder(sem) : "border-l-transparent"} ${attState === "attended" ? "border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5" : attState === "absent" ? "border-red-300 dark:border-red-500/30 bg-red-50/30 dark:bg-red-500/5" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <span className="inline-flex items-center gap-1.5">
                         {sem && (
-                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SEM_DOT[sem.color]}`} title={sem.detalle} />
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${semDot(sem)}`} title={sem.detalle} />
                         )}
                         <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">
                           {l.name ?? "(sin nombre)"}
@@ -429,6 +448,9 @@ export function LeadsList({ role, leads, semaforoByLead = {}, lastContactByLead 
                       <div className="text-[11px] text-slate-400 dark:text-slate-500">{fmtRelative(l.created_at)}</div>
                       {sem?.color === "rojo" && (
                         <div className="text-[11px] font-bold text-red-600 dark:text-red-400 mt-0.5">{sem.badge}</div>
+                      )}
+                      {sem?.limbo && (
+                        <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">⚠️ Sin jugada</div>
                       )}
                       <div className={`text-[11px] mt-0.5 ${lastContactByLead[l.id]?.at ? "text-slate-500 dark:text-slate-400" : "text-red-500 dark:text-red-400 font-semibold"}`}>
                         Último contacto: {lastContactByLead[l.id]?.label ?? "—"}

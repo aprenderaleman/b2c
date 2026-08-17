@@ -105,7 +105,10 @@ export default async function SemaforoDashboard() {
         </div>
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4">
           <div className="text-[10.5px] uppercase tracking-wider text-emerald-200/70">🟢 Verdes</div>
-          <div className="mt-1 text-3xl font-extrabold text-emerald-300 tabular-nums">{verdes}</div>
+          <div className="mt-1 text-3xl font-extrabold text-emerald-300 tabular-nums">{verdes - limbos}</div>
+          {limbos > 0 && (
+            <div className="text-[10.5px] text-white/45">+ {limbos} ⚠️ sin jugada</div>
+          )}
         </div>
         <div className="rounded-xl border border-white/10 bg-white/5 p-4">
           <div className="text-[10.5px] uppercase tracking-wider text-white/45">⏱ Prom. en rojo (7d)</div>

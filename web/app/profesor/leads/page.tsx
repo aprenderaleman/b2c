@@ -126,7 +126,7 @@ export default async function TeacherLeadsPage() {
     }
     const s = semaforos.get(l.id);
     if (s && s.color !== "fuera") {
-      semaforoByLead[l.id] = { color: s.color, badge: s.badge, detalle: s.detalle };
+      semaforoByLead[l.id] = { color: s.color, badge: s.badge, detalle: s.detalle, limbo: s.limbo };
     }
   }
   const lastContactByLead: Record<string, LastContactInfo> = {};

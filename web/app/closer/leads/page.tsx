@@ -24,7 +24,7 @@ export default async function CloserLeadsPage() {
   const semaforoByLead: Record<string, LeadSemaforo> = {};
   for (const [id, s] of semaforos) {
     if (s.color === "fuera") continue;
-    semaforoByLead[id] = { color: s.color, badge: s.badge, detalle: s.detalle };
+    semaforoByLead[id] = { color: s.color, badge: s.badge, detalle: s.detalle, limbo: s.limbo };
   }
   const lastContactByLead: Record<string, LastContactInfo> = {};
   for (const l of leads) {

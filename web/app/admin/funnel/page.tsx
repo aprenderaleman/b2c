@@ -57,6 +57,9 @@ const SEM_BORDER: Record<string, string> = {
 const SEM_DOT: Record<string, string> = {
   rojo: "bg-red-500", amarillo: "bg-amber-400", verde: "bg-emerald-500",
 };
+// Limbo (activo sin jugada) se pinta gris — verde por omisión, no por mérito.
+const semBorderCls = (s: SemaforoResult) => (s.limbo ? "border-l-slate-500" : SEM_BORDER[s.color]);
+const semDotCls    = (s: SemaforoResult) => (s.limbo ? "bg-slate-500" : SEM_DOT[s.color]);
 
 const PAGE_SIZE = 50;
 
@@ -825,10 +828,10 @@ export default async function FunnelControlPage({
                 const semVisible = sem && sem.color !== "fuera" ? sem : null;
                 return (
                   <tr key={l.id} className={`hover:bg-white/[0.03] ${priorityRowClass(prioFlags)}`}>
-                    <td className={`py-2 px-3 border-l-4 ${semVisible ? SEM_BORDER[semVisible.color] : "border-l-transparent"}`}>
+                    <td className={`py-2 px-3 border-l-4 ${semVisible ? semBorderCls(semVisible) : "border-l-transparent"}`}>
                       {semVisible && (
                         <span
-                          className={`inline-block w-2 h-2 rounded-full mr-1.5 align-middle ${SEM_DOT[semVisible.color]}`}
+                          className={`inline-block w-2 h-2 rounded-full mr-1.5 align-middle ${semDotCls(semVisible)}`}
                           title={`${semVisible.badge} — ${semVisible.detalle}`}
                         />
                       )}
@@ -843,6 +846,11 @@ export default async function FunnelControlPage({
                       {semVisible?.color === "rojo" && (
                         <div className="text-[10px] font-bold text-red-300 mt-0.5" title={semVisible.detalle}>
                           {semVisible.badge}
+                        </div>
+                      )}
+                      {semVisible?.limbo && (
+                        <div className="text-[10px] font-bold text-white/45 mt-0.5" title={semVisible.detalle}>
+                          ⚠️ Sin jugada
                         </div>
                       )}
                       <div className="mt-0.5"><PriorityBadges flags={prioFlags} /></div>
@@ -960,7 +968,7 @@ export default async function FunnelControlPage({
             return (
               <div
                 key={l.id}
-                className={`rounded-xl border border-l-4 border-white/10 bg-white/[0.03] p-3 ${semMVisible ? SEM_BORDER[semMVisible.color] : "border-l-transparent"} ${priorityRowClass(prioFlagsM)}`}
+                className={`rounded-xl border border-l-4 border-white/10 bg-white/[0.03] p-3 ${semMVisible ? semBorderCls(semMVisible) : "border-l-transparent"} ${priorityRowClass(prioFlagsM)}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
