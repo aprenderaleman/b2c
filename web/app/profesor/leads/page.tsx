@@ -1,18 +1,16 @@
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
-import { TeacherLeadsList, type TeacherLead } from "@/components/teacher/TeacherLeadsList";
+import { LeadsList, type LeadItem, type LeadSemaforo, type LastContactInfo } from "@/components/leads/LeadsList";
 import { getSemaforoBatch, feedbackPendienteProfe } from "@/lib/semaforo";
 import { getLastContacts, fmtLastContact } from "@/lib/contacts";
 
 /**
- * /profesor/leads — "Mis leads" del profesor (Gelfis 2026-08-13).
- *
- * Misma lógica que la lista del closer pero con el criterio del profe:
- * leads que agendaron una CLASE DE PRUEBA con este profesor, con la
- * fecha del trial y la asistencia visibles. Objetivo: que el profe
- * contacte sus leads y convierta más estudiantes (comisión por
- * conversión).
+ * /profesor/leads — "Mis leads" del profesor. MISMA página que la del
+ * closer (components/leads/LeadsList, decisión Gelfis 2026-08-17):
+ * misma lógica, mismo orden por semáforo, mismo popup de notas — cada
+ * rol con sus leads. Criterio del profe: leads que agendaron una CLASE
+ * DE PRUEBA con él.
  */
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mis leads · Profesor" };
@@ -21,23 +19,18 @@ type Row = {
   scheduled_at: string;
   status: string;
   duration_minutes: number | null;
-  lead: {
-    id: string; name: string | null; email: string | null;
-    whatsapp_normalized: string | null; status: string; created_at: string;
-    german_level: string | null; landing_intent: string | null;
-    qualification_answers: { goal?: string; level?: string; deadline?: string } | null;
-    reserva_prioritaria: boolean | null; priority_deadline: string | null;
-    deposit_intent_at: string | null;
-    trial_attended_at: string | null; trial_absent_at: string | null;
-  } | Array<{
-    id: string; name: string | null; email: string | null;
-    whatsapp_normalized: string | null; status: string; created_at: string;
-    german_level: string | null; landing_intent: string | null;
-    qualification_answers: { goal?: string; level?: string; deadline?: string } | null;
-    reserva_prioritaria: boolean | null; priority_deadline: string | null;
-    deposit_intent_at: string | null;
-    trial_attended_at: string | null; trial_absent_at: string | null;
-  }>;
+  lead: LeadRow | LeadRow[];
+};
+
+type LeadRow = {
+  id: string; name: string | null; email: string | null;
+  whatsapp_normalized: string | null; status: string; estado_cierre: string | null;
+  created_at: string; german_level: string | null;
+  qualification_answers: { goal?: string; level?: string; deadline?: string } | null;
+  reserva_prioritaria: boolean | null; priority_deadline: string | null;
+  deposit_intent_at: string | null;
+  trial_attended_at: string | null; trial_absent_at: string | null;
+  sesion_plan_at: string | null;
 };
 
 const flat = <T,>(x: T | T[] | null | undefined): T | null =>
@@ -67,10 +60,10 @@ export default async function TeacherLeadsPage() {
     .select(`
       scheduled_at, status, duration_minutes,
       lead:leads!inner(
-        id, name, email, whatsapp_normalized, status, created_at,
-        german_level, landing_intent, qualification_answers,
+        id, name, email, whatsapp_normalized, status, estado_cierre, created_at,
+        german_level, qualification_answers,
         reserva_prioritaria, priority_deadline, deposit_intent_at,
-        trial_attended_at, trial_absent_at
+        trial_attended_at, trial_absent_at, sesion_plan_at
       )
     `)
     .eq("teacher_id", teacher.id)
@@ -80,62 +73,66 @@ export default async function TeacherLeadsPage() {
     .order("scheduled_at", { ascending: false })
     .limit(300);
 
-  // Dedupe por lead: nos quedamos con su trial más reciente con este profe
-  const byLead = new Map<string, TeacherLead>();
+  // Dedupe por lead (su trial más reciente con este profe) y mapeo al
+  // shape compartido. trial_scheduled_at = la clase con ESTE profe.
+  const byLead = new Map<string, LeadItem>();
+  const trialInfo = new Map<string, { scheduledAt: string; durationMin: number | null; status: string }>();
   for (const r of ((data ?? []) as unknown as Row[])) {
     const lead = flat(r.lead);
     if (!lead || byLead.has(lead.id)) continue;
     byLead.set(lead.id, {
-      leadId: lead.id,
+      id: lead.id,
       name: lead.name,
       email: lead.email,
-      whatsapp: lead.whatsapp_normalized,
+      whatsapp_normalized: lead.whatsapp_normalized,
       status: lead.status,
-      germanLevel: lead.german_level,
-      landingIntent: lead.landing_intent,
-      createdAt: lead.created_at,
-      qualification: lead.qualification_answers,
-      reservaPrioritaria: lead.reserva_prioritaria,
-      priorityDeadline: lead.priority_deadline,
-      depositIntentAt: lead.deposit_intent_at,
-      trialAt: r.scheduled_at,
-      trialStatus: r.status,
-      trialDurationMin: r.duration_minutes,
-      attended: !!lead.trial_attended_at,
-      absent: !!lead.trial_absent_at && !lead.trial_attended_at,
-      semaforo: null,
+      estado_cierre: lead.estado_cierre,
+      created_at: lead.created_at,
+      german_level: lead.german_level,
+      qualification_answers: lead.qualification_answers,
+      reserva_prioritaria: lead.reserva_prioritaria,
+      priority_deadline: lead.priority_deadline,
+      deposit_intent_at: lead.deposit_intent_at,
+      trial_scheduled_at: r.scheduled_at,
+      trial_attended_at: lead.trial_attended_at,
+      trial_absent_at: lead.trial_absent_at,
+      sesion_plan_at: lead.sesion_plan_at,
     });
+    trialInfo.set(lead.id, { scheduledAt: r.scheduled_at, durationMin: r.duration_minutes, status: r.status });
   }
 
   const leads = [...byLead.values()];
 
-  // Semáforo global por lead + rojo propio del profe (🎓 feedback
-  // post-clase sin registrar en 2h hábiles — spec sección 4) +
-  // último contacto (misma lógica que /closer/leads).
+  // Semáforo global + rojo propio del profe (🎓 feedback post-clase sin
+  // registrar en 2h hábiles) + último contacto.
   const [semaforos, lastContacts] = await Promise.all([
-    getSemaforoBatch(leads.map(l => l.leadId)),
-    getLastContacts(leads.map(l => l.leadId)),
+    getSemaforoBatch(leads.map(l => l.id)),
+    getLastContacts(leads.map(l => l.id)),
   ]);
-  const lastContactByLead: Record<string, { label: string; at: string | null }> = {};
+  const semaforoByLead: Record<string, LeadSemaforo> = {};
   for (const l of leads) {
-    const c = lastContacts.get(l.leadId) ?? null;
-    lastContactByLead[l.leadId] = { label: fmtLastContact(c), at: c?.occurred_at ?? null };
-  }
-  for (const l of leads) {
-    const fb = feedbackPendienteProfe({
-      scheduledAt: l.trialAt,
-      durationMin: l.trialDurationMin,
-      attendedAt: l.attended ? l.trialAt : null,   // marcador: attended flag
-      absentAt: l.absent ? l.trialAt : null,
-    });
-    if (fb && l.trialStatus !== "cancelled") {
-      l.semaforo = { color: "rojo", badge: fb.badge, detalle: fb.detalle };
+    const t = trialInfo.get(l.id);
+    const fb = t && t.status !== "cancelled"
+      ? feedbackPendienteProfe({
+          scheduledAt: t.scheduledAt,
+          durationMin: t.durationMin,
+          attendedAt: l.trial_attended_at,
+          absentAt: l.trial_absent_at,
+        })
+      : null;
+    if (fb) {
+      semaforoByLead[l.id] = { color: "rojo", badge: fb.badge, detalle: fb.detalle };
       continue;
     }
-    const s = semaforos.get(l.leadId);
+    const s = semaforos.get(l.id);
     if (s && s.color !== "fuera") {
-      l.semaforo = { color: s.color, badge: s.badge, detalle: s.detalle };
+      semaforoByLead[l.id] = { color: s.color, badge: s.badge, detalle: s.detalle };
     }
+  }
+  const lastContactByLead: Record<string, LastContactInfo> = {};
+  for (const l of leads) {
+    const c = lastContacts.get(l.id) ?? null;
+    lastContactByLead[l.id] = { label: fmtLastContact(c), at: c?.occurred_at ?? null };
   }
 
   return (
@@ -151,7 +148,12 @@ export default async function TeacherLeadsPage() {
         </p>
       </header>
 
-      <TeacherLeadsList leads={leads} lastContactByLead={lastContactByLead} />
+      <LeadsList
+        role="profesor"
+        leads={leads}
+        semaforoByLead={semaforoByLead}
+        lastContactByLead={lastContactByLead}
+      />
     </main>
   );
 }

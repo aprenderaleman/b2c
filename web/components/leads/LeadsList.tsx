@@ -1,5 +1,23 @@
 "use client";
 
+/**
+ * Lista de leads COMPARTIDA entre closer y profesor (Gelfis 2026-08-17):
+ * "tiene que ser la misma página, con la misma lógica — cada uno con
+ * sus leads correspondientes".
+ *
+ * Misma UI y reglas para ambos roles:
+ *   · Orden: semáforo rojo → amarillo → verde; dentro de cada color el
+ *     último contacto más viejo primero (sin contacto = arriba).
+ *   · Borde izquierdo + punto con el color del estado, badge de causa
+ *     en rojos, cita pendiente (sesión/clase) en ámbar.
+ *   · Columna "Último contacto" + popup "Notas" (queda en la ficha y
+ *     cuenta como contacto → actualiza último contacto y semáforo).
+ *   · Filtros de asistencia, buscador y tasa de cierre.
+ *
+ * Lo único que cambia por rol: a dónde lleva la fila (su ficha), el
+ * endpoint de notas y el label del chip pendiente.
+ */
+
 import { useRouter } from "next/navigation";
 import { useState, useMemo } from "react";
 import { PriorityBadges } from "@/components/admin/PriorityBadge";
@@ -23,20 +41,15 @@ const DEADLINE_CLS: Record<string, string> = {
   no_rush: "text-slate-400 dark:text-slate-500",
 };
 
-export type CloserLead = {
+export type LeadItem = {
   id: string;
   name: string | null;
   email: string | null;
   whatsapp_normalized: string | null;
   status: string;
-  estado_cierre: string;
-  motivo_perdido: string | null;
-  fecha_asignacion_closer: string | null;
+  estado_cierre: string | null;
   created_at: string;
-  source: string | null;
-  language: string | null;
   german_level: string | null;
-  landing_intent: string | null;
   qualification_answers: { goal?: string; level?: string; deadline?: string } | null;
   reserva_prioritaria: boolean | null;
   priority_deadline: string | null;
@@ -48,13 +61,12 @@ export type CloserLead = {
 };
 
 /** Cita pendiente del lead (sesión o clase sin resultado registrado). */
-function citaPendiente(l: CloserLead): { label: string; at: string } | null {
+function citaPendiente(l: LeadItem): { label: string; at: string } | null {
   if (l.trial_attended_at || l.trial_absent_at) return null;
   if (l.sesion_plan_at) return { label: "📋 Sesión", at: l.sesion_plan_at };
   if (l.trial_scheduled_at) return { label: "🗓 Clase", at: l.trial_scheduled_at };
   return null;
 }
-
 
 export type LeadSemaforo = {
   color: "rojo" | "amarillo" | "verde";
@@ -62,8 +74,6 @@ export type LeadSemaforo = {
   detalle: string;
 };
 
-// Borde izquierdo con el color del semáforo — el "estado actual" del
-// lead visible de un vistazo en cada fila/card.
 const SEM_BORDER: Record<LeadSemaforo["color"], string> = {
   rojo: "border-l-red-500",
   amarillo: "border-l-amber-400",
@@ -76,15 +86,41 @@ const SEM_DOT: Record<LeadSemaforo["color"], string> = {
 };
 
 export type LastContactInfo = {
-  /** "hace 3h (Lorenz, WhatsApp)" — formateado server-side */
   label: string;
-  /** ISO del último saliente, null si nunca hubo contacto */
   at: string | null;
 };
 
+type Role = "closer" | "profesor";
+
+const ROLE_CONFIG: Record<Role, {
+  fichaBase: string;
+  pendienteChip: string;
+  emptyMsg: string;
+  saveNote: (leadId: string, text: string) => { url: string; body: unknown };
+}> = {
+  closer: {
+    fichaBase: "/closer/leads",
+    pendienteChip: "🗓 Sesión pendiente",
+    emptyMsg: "Aún no tienes leads asignados.",
+    saveNote: (leadId, text) => ({
+      url: `/api/closer/leads/${leadId}/action`,
+      body: { tipo: "nota", contenido: text },
+    }),
+  },
+  profesor: {
+    fichaBase: "/profesor/leads",
+    pendienteChip: "🗓 Clase pendiente",
+    emptyMsg: "Aún no tienes leads con clase de prueba agendada.",
+    saveNote: (leadId, text) => ({
+      url: `/api/teacher/leads/${leadId}/note`,
+      body: { content: text },
+    }),
+  },
+};
+
 type Props = {
-  leads: CloserLead[];
-  teacherByLead: Record<string, string>;
+  role: Role;
+  leads: LeadItem[];
   semaforoByLead?: Record<string, LeadSemaforo>;
   lastContactByLead?: Record<string, LastContactInfo>;
 };
@@ -97,14 +133,14 @@ function attOf(l: { trial_attended_at: string | null; trial_absent_at: string | 
   return l.trial_attended_at ? "asistio" : l.trial_absent_at ? "no_asistio" : "pendiente";
 }
 
-export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead = {} }: Props) {
+export function LeadsList({ role, leads, semaforoByLead = {}, lastContactByLead = {} }: Props) {
+  const cfg = ROLE_CONFIG[role];
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [attFilter, setAttFilter] = useState<AttFilter>("todos");
-  // Popup "Notas" — nota rápida sin salir de la lista. Se guarda vía el
-  // mismo endpoint de acciones (tipo nota) → acciones_closer → espejo en
-  // lead_contacts → cuenta como último contacto.
-  const [notasLead, setNotasLead] = useState<CloserLead | null>(null);
+  // Popup "Notas" — la nota queda en la ficha del lead y cuenta como
+  // último contacto (apaga rojos 💬 del semáforo si aplica).
+  const [notasLead, setNotasLead] = useState<LeadItem | null>(null);
   const [notaText, setNotaText] = useState("");
   const [notaSaving, setNotaSaving] = useState(false);
   const [notaError, setNotaError] = useState<string | null>(null);
@@ -117,10 +153,11 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
     setNotaSaving(true);
     setNotaError(null);
     try {
-      const res = await fetch(`/api/closer/leads/${notasLead.id}/action`, {
+      const { url, body } = cfg.saveNote(notasLead.id, notaText.trim());
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tipo: "nota", contenido: notaText.trim() }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         setNotaError("No se pudo guardar. Inténtalo de nuevo.");
@@ -140,10 +177,8 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
     return c;
   }, [leads]);
 
-  // Filtro por asistencia (Gelfis 2026-08-13) + buscador.
-  // Orden (Gelfis 2026-08-17): semáforo rojo → amarillo → verde; dentro
-  // de cada color, el último contacto MÁS VIEJO primero (sin contacto
-  // arriba de todo — es el más desatendido).
+  // Orden: semáforo rojo → amarillo → verde; dentro de cada color el
+  // último contacto MÁS VIEJO primero (sin contacto arriba de todo).
   const filtered = useMemo(() => {
     let result = attFilter === "todos" ? leads : leads.filter((l) => attOf(l) === attFilter);
     if (search.trim()) {
@@ -166,14 +201,14 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
   }, [leads, search, attFilter, semaforoByLead, lastContactByLead]);
 
   const CHIPS: Array<{ key: AttFilter; label: string; activeCls: string }> = [
-    { key: "todos",      label: `Todos (${leads.length})`,                  activeCls: "bg-brand-600 text-white border-brand-600" },
-    { key: "pendiente",  label: `🗓 Sesión pendiente (${counts.pendiente})`, activeCls: "bg-blue-600 text-white border-blue-600" },
-    { key: "asistio",    label: `✓ Asistió (${counts.asistio})`,            activeCls: "bg-emerald-600 text-white border-emerald-600" },
-    { key: "no_asistio", label: `✗ No asistió (${counts.no_asistio})`,      activeCls: "bg-red-600 text-white border-red-600" },
+    { key: "todos",      label: `Todos (${leads.length})`,                      activeCls: "bg-brand-600 text-white border-brand-600" },
+    { key: "pendiente",  label: `${cfg.pendienteChip} (${counts.pendiente})`,   activeCls: "bg-blue-600 text-white border-blue-600" },
+    { key: "asistio",    label: `✓ Asistió (${counts.asistio})`,                activeCls: "bg-emerald-600 text-white border-emerald-600" },
+    { key: "no_asistio", label: `✗ No asistió (${counts.no_asistio})`,          activeCls: "bg-red-600 text-white border-red-600" },
   ];
 
   // Tasa de cierre: convertidos ÷ asistieron (solo cuentan los que
-  // SÍ asistieron a su sesión — decisión Gelfis 2026-08-13).
+  // SÍ asistieron — decisión Gelfis 2026-08-13).
   const asistieron = useMemo(() => leads.filter((l) => !!l.trial_attended_at), [leads]);
   const convertidos = useMemo(
     () => asistieron.filter((l) => l.estado_cierre === "convertido" || l.status === "converted"),
@@ -199,7 +234,7 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
           </>
         ) : (
           <span className="text-sm text-slate-500 dark:text-slate-400">
-            Aún sin asistentes — se calcula sobre los leads que sí asistieron a su sesión
+            Aún sin asistentes — se calcula sobre los leads que sí asistieron
           </span>
         )}
       </div>
@@ -231,7 +266,7 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
 
       {filtered.length === 0 ? (
         <div className="rounded-3xl border border-dashed border-slate-200 dark:border-slate-700 p-8 text-center text-slate-500 dark:text-slate-400 text-sm">
-          {search ? "Sin resultados para esta búsqueda." : "Aún no tienes leads asignados."}
+          {search ? "Sin resultados para esta búsqueda." : cfg.emptyMsg}
         </div>
       ) : (
         <>
@@ -256,8 +291,7 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {filtered.map((l) => {
                   const attState = l.trial_attended_at ? "attended"
-                    : l.trial_absent_at ? "absent"
-                    : l.trial_scheduled_at ? "scheduled" : null;
+                    : l.trial_absent_at ? "absent" : null;
                   const waDigits = l.whatsapp_normalized?.replace(/\D/g, "") ?? "";
                   const prioFlags = {
                     reservaPrioritaria: l.reserva_prioritaria,
@@ -273,7 +307,7 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
                   return (
                     <tr
                       key={l.id}
-                      onClick={() => router.push(`/closer/leads/${l.id}`)}
+                      onClick={() => router.push(`${cfg.fichaBase}/${l.id}`)}
                       className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer transition-colors ${attState === "attended" ? "bg-emerald-50/50 dark:bg-emerald-500/5" : attState === "absent" ? "bg-red-50/30 dark:bg-red-500/5" : ""}`}
                     >
                       <td className={`py-2.5 px-3 border-l-4 ${sem ? SEM_BORDER[sem.color] : "border-l-transparent"}`}>
@@ -362,8 +396,7 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
           <div className="md:hidden space-y-2">
             {filtered.map((l) => {
               const attState = l.trial_attended_at ? "attended"
-                : l.trial_absent_at ? "absent"
-                : l.trial_scheduled_at ? "scheduled" : null;
+                : l.trial_absent_at ? "absent" : null;
               const waDigits = l.whatsapp_normalized?.replace(/\D/g, "") ?? "";
               const prioFlags = {
                 reservaPrioritaria: l.reserva_prioritaria,
@@ -379,7 +412,7 @@ export function CloserLeadsList({ leads, semaforoByLead = {}, lastContactByLead 
               return (
                 <div
                   key={l.id}
-                  onClick={() => router.push(`/closer/leads/${l.id}`)}
+                  onClick={() => router.push(`${cfg.fichaBase}/${l.id}`)}
                   className={`rounded-2xl border border-l-4 p-3 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${sem ? SEM_BORDER[sem.color] : "border-l-transparent"} ${attState === "attended" ? "border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5" : attState === "absent" ? "border-red-300 dark:border-red-500/30 bg-red-50/30 dark:bg-red-500/5" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`}
                 >
                   <div className="flex items-start justify-between gap-2">
