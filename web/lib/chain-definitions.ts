@@ -472,7 +472,7 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
     type: "sesion_attended",
     label: "Sesión de Plan: asistió",
     steps: [
-      { delayMs: 2 * H,  templateKind: "sesion_attended", templateSubN: 1, channels: ["whatsapp"], skipIfPaid: true },
+      { delayMs: 0,       templateKind: "sesion_attended", templateSubN: 1, channels: ["whatsapp"], skipIfPaid: true },
       { delayMs: 24 * H, templateKind: "sesion_attended", templateSubN: 2, channels: ["whatsapp"], skipIfPaid: true },
       { delayMs: 3 * D,  templateKind: "sesion_attended", templateSubN: 3, channels: ["whatsapp"], skipIfPaid: true },
       {
