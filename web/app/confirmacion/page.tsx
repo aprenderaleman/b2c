@@ -96,9 +96,11 @@ export default async function ConfirmacionPage({
          style={{ overscrollBehavior: "contain" }}>
       {/* Google Ads conversion tracker — se dispara al montar, con
           transaction_id=classId para dedup nativa. */}
-      {/* Pixels de conversión: solo trials. La Sesión de Plan tendrá su
-          propio evento cuando se enciendan campañas (fase 2). */}
-      {!isSesion && <ConfirmacionPixel classId={classId} leadEmail={leadEmail} leadPhone={leadPhone} />}
+      {/* Pixels de conversión: trials Y Sesiones de Plan (go de Gelfis
+          2026-08-17 para lanzar campañas del funnel /sesion-plan).
+          Mismo evento Schedule con dedup por classId; el Purchase del
+          depósito sigue siendo solo de trials. */}
+      <ConfirmacionPixel classId={classId} leadEmail={leadEmail} leadPhone={leadPhone} />
       {/* Reserva Prioritaria: si volvemos de Stripe con ?deposito=ok,
           dispara Purchase por los 3 canales (Google + fbq + CAPI).
           NO se solapa con ConfirmacionPixel — cada uno tiene su propio
