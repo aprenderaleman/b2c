@@ -84,6 +84,17 @@ export type ChainDef = {
   type: ChainType;
   label: string;
   steps: ChainStep[];
+  /**
+   * Si true, esta cadena IGNORA leads.ai_paused_until en advanceChain.
+   * Uso: cadenas de rescate transaccional (sesion_absent, chain4_absent,
+   * chain6_cancel) que reaccionan a un evento reciente (no-show, cancel)
+   * y DEBEN dispararse aunque el lead tenga pausa por otra sesión futura.
+   *
+   * Sin esto, se produce autocanibalismo: pauseAllOutbound de una sesión
+   * futura silencia el rescue de un no-show anterior del mismo lead
+   * (bug Ivette 2026-08-17: absent el 17 pero next_fire_at pospuesto al 19).
+   */
+  bypassPause?: boolean;
 };
 
 const H  = 3_600_000;
@@ -277,6 +288,7 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
   chain4_absent: {
     type: "chain4_absent",
     label: "No asistió",
+    bypassPause: true,  // rescue transaccional — ignora pause de sesiones futuras
     steps: [
       {
         delayMs: 20 * 60_000,
@@ -311,6 +323,7 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
   chain6_cancel: {
     type: "chain6_cancel",
     label: "Cancelar",
+    bypassPause: true,  // rescue transaccional — ignora pause
     steps: [
       { delayMs: 1 * H, templateKind: "chain6_cancel", templateSubN: 1, channels: ["whatsapp"] },
       {
@@ -489,6 +502,7 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
   sesion_absent: {
     type: "sesion_absent",
     label: "Sesión de Plan-Alemán: no asistió",
+    bypassPause: true,  // rescue transaccional — ignora pause de otras sesiones
     steps: [
       { delayMs: 20 * 60_000, templateKind: "sesion_absent", templateSubN: 1, channels: ["whatsapp"] },
       { delayMs: 24 * H,      templateKind: "sesion_absent", templateSubN: 2, channels: ["whatsapp"] },

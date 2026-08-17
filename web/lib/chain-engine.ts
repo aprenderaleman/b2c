@@ -375,7 +375,12 @@ export async function advanceChain(chain: ChainRow): Promise<{
   // (típicamente por haber agendado una sesión de plan-alemán), posponer la
   // chain hasta que expire — evita bombardear al lead con múltiples
   // cadenas mientras espera su sesión.
-  if (pausedUntil && new Date(pausedUntil).getTime() > Date.now()) {
+  // Excepción (Gelfis 2026-08-17, bug Ivette): cadenas de rescate
+  // transaccional (chain4_absent, chain6_cancel, sesion_absent) tienen
+  // def.bypassPause=true — ignoran esta pausa. Sin la excepción, el
+  // pauseAllOutbound de una sesión futura silencia el rescate de un
+  // no-show anterior del mismo lead (autocanibalismo).
+  if (!def.bypassPause && pausedUntil && new Date(pausedUntil).getTime() > Date.now()) {
     await sb.from("lead_chains").update({
       next_fire_at: pausedUntil,
       updated_at: new Date().toISOString(),
