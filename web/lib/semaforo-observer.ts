@@ -94,6 +94,48 @@ export async function observeTransitions(): Promise<{
     }
   }
 
+  // Cerrar episodios de leads que SALIERON del universo activo (se
+  // marcaron perdidos/convertidos): si su última transición fue rojo y
+  // nadie la cierra, ese episodio queda abierto para siempre e infla
+  // "tiempo promedio en rojo". Se registra una transición 'fuera'.
+  const { data: abiertos } = await sb
+    .from("semaforo_transitions")
+    .select("lead_id, color, detected_at")
+    .eq("color", "rojo")
+    .gte("detected_at", new Date(Date.now() - 90 * D).toISOString())
+    .order("detected_at", { ascending: false })
+    .limit(3000);
+
+  const ultimoRojo = new Map<string, string>();
+  for (const r of (abiertos ?? []) as Array<{ lead_id: string; detected_at: string }>) {
+    if (!ultimoRojo.has(r.lead_id)) ultimoRojo.set(r.lead_id, r.detected_at);
+  }
+  const fueraDelUniverso = [...ultimoRojo.keys()].filter(id => !semaforos.has(id));
+
+  for (let i = 0; i < fueraDelUniverso.length; i += 200) {
+    const slice = fueraDelUniverso.slice(i, i + 200);
+    // ¿Su transición más reciente sigue siendo la del rojo? (si ya hubo
+    // una posterior de otro color, el episodio está cerrado)
+    const { data: posteriores } = await sb
+      .from("semaforo_transitions")
+      .select("lead_id, color, detected_at")
+      .in("lead_id", slice)
+      .order("detected_at", { ascending: false })
+      .limit(2000);
+    const ultimaPorLead = new Map<string, string>();
+    for (const r of (posteriores ?? []) as Array<{ lead_id: string; color: string }>) {
+      if (!ultimaPorLead.has(r.lead_id)) ultimaPorLead.set(r.lead_id, r.color);
+    }
+    const cerrar = slice.filter(id => ultimaPorLead.get(id) === "rojo");
+    if (cerrar.length > 0) {
+      inserts.push(...cerrar.map(id => ({
+        lead_id: id, prev_color: "rojo", color: "fuera",
+        regla: "FUERA", causa: null,
+        badge: "⚫ Salió del universo activo (perdido/convertido)",
+      })));
+    }
+  }
+
   for (let i = 0; i < inserts.length; i += 500) {
     await sb.from("semaforo_transitions").insert(inserts.slice(i, i + 500));
   }
