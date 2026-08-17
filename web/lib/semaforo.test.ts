@@ -217,6 +217,25 @@ describe("R5 — post-clase sin propuesta", () => {
     }));
     expect(r.regla).not.toBe("R5");
   });
+
+  it("cadena activa apaga R5 — su paso 1 ya mandó el enlace (caso Alicia)", () => {
+    const r = evaluateSemaforo(input({
+      now, lead,
+      contacts: [saliente("2026-08-12T10:00:00+02:00")],
+      chain: { lead_id: "lead-1", chain_type: "sesion_attended", next_fire_at: "2026-08-18T09:36:00+02:00" },
+    }));
+    expect(r.regla).not.toBe("R5");
+    expect(r.color).toBe("verde");
+  });
+
+  it("sin propuesta, sin tarea Y sin cadena → sigue siendo R5", () => {
+    const r = evaluateSemaforo(input({
+      now, lead,
+      contacts: [saliente("2026-08-12T10:00:00+02:00")],
+      chain: null,
+    }));
+    expect(r.regla).toBe("R5");
+  });
 });
 
 describe("Prioridad dentro del rojo: 💰 → 💬 → 🆕 → 🎓 → 📅", () => {

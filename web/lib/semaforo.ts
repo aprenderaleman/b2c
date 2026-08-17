@@ -267,8 +267,12 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
     const propuestaDespues = salientes.some(c =>
       T(c.occurred_at) >= attMs &&
       (c.action_type === "enviar_propuesta" || c.action_type === "enviar_enlace"));
-    ev.push({ tipo: "post_evento", detalle: `asistió, ${fmtHabil(habil)} hábiles, propuesta después: ${propuestaDespues ? "sí" : "no"}, tarea futura: ${tareaFutura ? "sí" : "no"}`, at: lead.trial_attended_at });
-    if (habil > UMBRAL_POSTCLASE_MS && !propuestaDespues && !tareaFutura) {
+    // Una cadena activa YA es la jugada de cierre en marcha (su paso 1
+    // manda el enlace de inscripción). Contarla evita que TODO lead que
+    // asiste se ponga 🎓 rojo mientras Stiv trabaja — ruido que entrena
+    // a ignorar el badge (Gelfis 2026-08-17). Coherente con V1.
+    ev.push({ tipo: "post_evento", detalle: `asistió, ${fmtHabil(habil)} hábiles, propuesta después: ${propuestaDespues ? "sí" : "no"}, tarea futura: ${tareaFutura ? "sí" : "no"}, cadena activa: ${chain ? "sí" : "no"}`, at: lead.trial_attended_at });
+    if (habil > UMBRAL_POSTCLASE_MS && !propuestaDespues && !tareaFutura && !chain) {
       rojos.push({ causa: "postclase", regla: "R5", badge: `🎓 Post-clase ${fmtHabil(habil)}`, detalle: `Asistió hace ${fmtHabil(habil)} hábiles sin propuesta ni tarea futura`, triggerAt: lead.trial_attended_at });
     }
   }
