@@ -45,7 +45,7 @@ web/public/qr-local.png
 
 # Scratch local — scripts desechables de sesiones de trabajo, dumps de
 # datos con leads y documentos personales. No pertenecen al repo.
-scripts/_tmp_*
+_tmp_*
 *_audit.json
 Reporte_*.docx
 Reporte_*.pdf
