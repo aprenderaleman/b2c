@@ -59,6 +59,20 @@ export async function POST(
       : { trial_absent_at: now },
   ).eq("id", leadId);
 
+  // Registrar el resultado COMPLETA la tarea de la sesión (si no, la
+  // tarea "vence hoy" mantiene al lead en amarillo A1 aunque el closer
+  // ya haya actuado — caso Alicia 2026-08-17).
+  await sb
+    .from("tareas_closer")
+    .update({
+      fecha_completada: now,
+      resultado: "contactado",
+      notas: asistio ? "Sesión de Plan: asistió" : "Sesión de Plan: no asistió",
+    })
+    .eq("lead_id", leadId)
+    .eq("tipo", "sesion_plan")
+    .is("fecha_completada", null);
+
   const chainId = await startChain(leadId, asistio ? "sesion_attended" : "sesion_absent", {})
     .catch(() => null);
 
