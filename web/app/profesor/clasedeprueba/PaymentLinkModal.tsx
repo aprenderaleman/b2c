@@ -22,11 +22,13 @@ const GOALS: { id: GoalId; label: string; emoji: string }[] = [
 export function PaymentLinkModal({
   leadId,
   leadName,
+  endpointUrl,
   onClose,
 }: {
   leadId: string;
   leadName: string;
   defaultLevel?: string;
+  endpointUrl?: string;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -66,7 +68,7 @@ export function PaymentLinkModal({
           ? { category: "subscription", ritmoId, goalId }
           : { category: "one_time", goalId };
 
-        const res = await fetch(`/api/teacher/trial/${leadId}/send-offer`, {
+        const res = await fetch(endpointUrl ?? `/api/teacher/trial/${leadId}/send-offer`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),

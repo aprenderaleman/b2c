@@ -293,6 +293,7 @@ export function Layer2Actions({
         <PaymentLinkModal
           leadId={leadId}
           leadName={leadName}
+          endpointUrl={`/api/closer/leads/${leadId}/send-offer`}
           onClose={() => { setEnlaceOpen(false); router.refresh(); }}
         />
       )}

@@ -132,27 +132,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
 
   const sb = supabaseAdmin();
 
-  let teacherId: string;
-  if (user.role === "closer") {
-    const { data: classRow } = await sb
-      .from("classes")
-      .select("teacher_id")
-      .eq("lead_id", leadId)
-      .not("teacher_id", "is", null)
-      .order("scheduled_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!classRow) return NextResponse.json({ error: "no_class_for_lead" }, { status: 400 });
-    teacherId = (classRow as { teacher_id: string }).teacher_id;
-  } else {
-    const { data: teacherRow } = await sb
-      .from("teachers")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (!teacherRow) return NextResponse.json({ error: "teacher_not_found" }, { status: 404 });
-    teacherId = (teacherRow as { id: string }).id;
-  }
+  const { data: teacherRow } = await sb
+    .from("teachers")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!teacherRow) return NextResponse.json({ error: "teacher_not_found" }, { status: 404 });
+  const teacherId = (teacherRow as { id: string }).id;
 
   const { data: leadRow } = await sb
     .from("leads")
