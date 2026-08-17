@@ -2,8 +2,9 @@ import { redirect } from "next/navigation";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getCloserLeads } from "@/lib/closer-actions";
 import { supabaseAdmin } from "@/lib/supabase";
-import { CloserLeadsList, type LeadSemaforo } from "@/components/closer/CloserLeadsList";
+import { CloserLeadsList, type LeadSemaforo, type LastContactInfo } from "@/components/closer/CloserLeadsList";
 import { getSemaforoBatch } from "@/lib/semaforo";
+import { getLastContacts, fmtLastContact } from "@/lib/contacts";
 
 export const metadata = { title: "Mis leads · Closer" };
 
@@ -42,12 +43,20 @@ export default async function CloserLeadsPage() {
     }
   }
 
-  // Semáforo global por lead — el borde de color de cada fila/card.
-  const semaforos = await getSemaforoBatch(leads.map(l => l.id));
+  // Semáforo global por lead — color, orden de la lista y último contacto.
+  const [semaforos, lastContacts] = await Promise.all([
+    getSemaforoBatch(leads.map(l => l.id)),
+    getLastContacts(leads.map(l => l.id)),
+  ]);
   const semaforoByLead: Record<string, LeadSemaforo> = {};
   for (const [id, s] of semaforos) {
     if (s.color === "fuera") continue;
     semaforoByLead[id] = { color: s.color, badge: s.badge, detalle: s.detalle };
+  }
+  const lastContactByLead: Record<string, LastContactInfo> = {};
+  for (const l of leads) {
+    const c = lastContacts.get(l.id) ?? null;
+    lastContactByLead[l.id] = { label: fmtLastContact(c), at: c?.occurred_at ?? null };
   }
 
   return (
@@ -55,7 +64,12 @@ export default async function CloserLeadsPage() {
       <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">
         Mis leads
       </h1>
-      <CloserLeadsList leads={leads} teacherByLead={teacherByLead} semaforoByLead={semaforoByLead} />
+      <CloserLeadsList
+        leads={leads}
+        teacherByLead={teacherByLead}
+        semaforoByLead={semaforoByLead}
+        lastContactByLead={lastContactByLead}
+      />
     </main>
   );
 }

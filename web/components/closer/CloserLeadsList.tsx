@@ -66,11 +66,21 @@ const SEM_DOT: Record<LeadSemaforo["color"], string> = {
   verde: "bg-emerald-500",
 };
 
+export type LastContactInfo = {
+  /** "hace 3h (Lorenz, WhatsApp)" — formateado server-side */
+  label: string;
+  /** ISO del último saliente, null si nunca hubo contacto */
+  at: string | null;
+};
+
 type Props = {
   leads: CloserLead[];
   teacherByLead: Record<string, string>;
   semaforoByLead?: Record<string, LeadSemaforo>;
+  lastContactByLead?: Record<string, LastContactInfo>;
 };
+
+const COLOR_RANK: Record<LeadSemaforo["color"], number> = { rojo: 0, amarillo: 1, verde: 2 };
 
 type AttFilter = "todos" | "pendiente" | "asistio" | "no_asistio";
 
@@ -78,7 +88,7 @@ function attOf(l: { trial_attended_at: string | null; trial_absent_at: string | 
   return l.trial_attended_at ? "asistio" : l.trial_absent_at ? "no_asistio" : "pendiente";
 }
 
-export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {} }: Props) {
+export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {}, lastContactByLead = {} }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [attFilter, setAttFilter] = useState<AttFilter>("todos");
@@ -89,7 +99,10 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {} }: P
     return c;
   }, [leads]);
 
-  // Filtro por asistencia (Gelfis 2026-08-13) + buscador
+  // Filtro por asistencia (Gelfis 2026-08-13) + buscador.
+  // Orden (Gelfis 2026-08-17): semáforo rojo → amarillo → verde; dentro
+  // de cada color, el último contacto MÁS VIEJO primero (sin contacto
+  // arriba de todo — es el más desatendido).
   const filtered = useMemo(() => {
     let result = attFilter === "todos" ? leads : leads.filter((l) => attOf(l) === attFilter);
     if (search.trim()) {
@@ -100,8 +113,16 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {} }: P
         (l.whatsapp_normalized ?? "").includes(q)
       );
     }
-    return result;
-  }, [leads, search, attFilter]);
+    return [...result].sort((a, b) => {
+      const ra = semaforoByLead[a.id] ? COLOR_RANK[semaforoByLead[a.id].color] : 3;
+      const rb = semaforoByLead[b.id] ? COLOR_RANK[semaforoByLead[b.id].color] : 3;
+      if (ra !== rb) return ra - rb;
+      const ca = lastContactByLead[a.id]?.at ?? "";
+      const cb = lastContactByLead[b.id]?.at ?? "";
+      if (ca !== cb) return ca < cb ? -1 : 1;   // "" (nunca) primero
+      return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+    });
+  }, [leads, search, attFilter, semaforoByLead, lastContactByLead]);
 
   const CHIPS: Array<{ key: AttFilter; label: string; activeCls: string }> = [
     { key: "todos",      label: `Todos (${leads.length})`,                  activeCls: "bg-brand-600 text-white border-brand-600" },
@@ -183,6 +204,7 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {} }: P
               <thead className="text-[11px] uppercase text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60">
                 <tr>
                   <th className="text-left py-2 px-3">Lead</th>
+                  <th className="text-left py-2 px-3">Último contacto</th>
                   <th className="text-left py-2 px-3">Contacto</th>
                   <th className="text-left py-2 px-3">Meta</th>
                   <th className="text-left py-2 px-3">Nivel</th>
@@ -230,6 +252,11 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {} }: P
                             {sem.badge}
                           </div>
                         )}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className={`text-[12px] whitespace-nowrap ${lastContactByLead[l.id]?.at ? "text-slate-600 dark:text-slate-300" : "text-red-500 dark:text-red-400 font-semibold"}`}>
+                          {lastContactByLead[l.id]?.label ?? "—"}
+                        </span>
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="text-[12px] text-slate-600 dark:text-slate-300 truncate max-w-[180px]">
@@ -332,6 +359,9 @@ export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {} }: P
                       {sem?.color === "rojo" && (
                         <div className="text-[11px] font-bold text-red-600 dark:text-red-400 mt-0.5">{sem.badge}</div>
                       )}
+                      <div className={`text-[11px] mt-0.5 ${lastContactByLead[l.id]?.at ? "text-slate-500 dark:text-slate-400" : "text-red-500 dark:text-red-400 font-semibold"}`}>
+                        Último contacto: {lastContactByLead[l.id]?.label ?? "—"}
+                      </div>
                     </div>
                     {(levelRaw || l.german_level) && (
                       <span className="inline-flex items-center rounded-md bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/25 px-2 py-0.5 text-[12px] font-bold text-sky-700 dark:text-sky-300 shrink-0">

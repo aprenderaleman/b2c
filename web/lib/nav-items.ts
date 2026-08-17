@@ -96,8 +96,9 @@ function adminItems(): NavItem[] {
 
 function closerItems(): NavItem[] {
   return [
-    { label: "Hoy",                href: "/closer",                icon: "home",       priority: 1 },
-    { label: "Mis leads",          href: "/closer/leads",          icon: "users",      priority: 2 },
+    // "Hoy" (cola aparte) eliminada — Mis leads es la cola, ordenada
+    // por semáforo (Gelfis 2026-08-17).
+    { label: "Mis leads",          href: "/closer/leads",          icon: "users",      priority: 1 },
     { label: "Sesiones",           href: "/closer/sesiones",       icon: "userCheck",  priority: 2.5 },
     { label: "Mis numeros",        href: "/closer/numeros",        icon: "trendingUp", priority: 3 },
     { label: "Mi disponibilidad",  href: "/closer/disponibilidad", icon: "clock",      priority: 5 },
