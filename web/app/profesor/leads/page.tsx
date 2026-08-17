@@ -3,6 +3,7 @@ import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { TeacherLeadsList, type TeacherLead } from "@/components/teacher/TeacherLeadsList";
 import { getSemaforoBatch, feedbackPendienteProfe } from "@/lib/semaforo";
+import { getLastContacts, fmtLastContact } from "@/lib/contacts";
 
 /**
  * /profesor/leads — "Mis leads" del profesor (Gelfis 2026-08-13).
@@ -109,8 +110,17 @@ export default async function TeacherLeadsPage() {
   const leads = [...byLead.values()];
 
   // Semáforo global por lead + rojo propio del profe (🎓 feedback
-  // post-clase sin registrar en 2h hábiles — spec sección 4).
-  const semaforos = await getSemaforoBatch(leads.map(l => l.leadId));
+  // post-clase sin registrar en 2h hábiles — spec sección 4) +
+  // último contacto (misma lógica que /closer/leads).
+  const [semaforos, lastContacts] = await Promise.all([
+    getSemaforoBatch(leads.map(l => l.leadId)),
+    getLastContacts(leads.map(l => l.leadId)),
+  ]);
+  const lastContactByLead: Record<string, { label: string; at: string | null }> = {};
+  for (const l of leads) {
+    const c = lastContacts.get(l.leadId) ?? null;
+    lastContactByLead[l.leadId] = { label: fmtLastContact(c), at: c?.occurred_at ?? null };
+  }
   for (const l of leads) {
     const fb = feedbackPendienteProfe({
       scheduledAt: l.trialAt,
@@ -141,7 +151,7 @@ export default async function TeacherLeadsPage() {
         </p>
       </header>
 
-      <TeacherLeadsList leads={leads} />
+      <TeacherLeadsList leads={leads} lastContactByLead={lastContactByLead} />
     </main>
   );
 }

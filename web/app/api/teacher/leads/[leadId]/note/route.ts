@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
 import { supabaseAdmin } from "@/lib/supabase";
+import { registerContact, actorFromPanelUser } from "@/lib/contacts";
 
 /**
  * POST /api/teacher/leads/[leadId]/note — nota del profesor sobre un
@@ -48,5 +49,20 @@ export async function POST(
   if (error) {
     return NextResponse.json({ error: "insert_failed", message: error.message }, { status: 500 });
   }
+
+  // La nota también es un contacto (misma lógica que el closer, cuyo
+  // flujo de notas se espeja a lead_contacts): actualiza el "último
+  // contacto" y puede apagar rojos del semáforo. Notas <5 chars quedan
+  // solo como nota (registerContact las rechaza silenciosamente).
+  if (parsed.data.content.length >= 5) {
+    await registerContact({
+      leadId,
+      actor: await actorFromPanelUser(user),
+      actionType: "nota_libre",
+      channel: "otro",
+      note: parsed.data.content,
+    });
+  }
+
   return NextResponse.json({ ok: true });
 }

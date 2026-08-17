@@ -9,6 +9,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { StatusBadge } from "@/components/admin/StatusBadge";
 import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
@@ -49,15 +50,60 @@ const SEMAFORO_BORDER: Record<"rojo" | "amarillo" | "verde", string> = {
   verde: "border-l-emerald-500",
 };
 
+const COLOR_RANK: Record<"rojo" | "amarillo" | "verde", number> = { rojo: 0, amarillo: 1, verde: 2 };
+
+export type LastContactInfo = {
+  label: string;
+  at: string | null;
+};
+
 type AttFilter = "todos" | "pendiente" | "asistio" | "no_asistio";
 
 function attOf(l: { attended: boolean; absent: boolean }): Exclude<AttFilter, "todos"> {
   return l.attended ? "asistio" : l.absent ? "no_asistio" : "pendiente";
 }
 
-export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
+export function TeacherLeadsList({
+  leads,
+  lastContactByLead = {},
+}: {
+  leads: TeacherLead[];
+  lastContactByLead?: Record<string, LastContactInfo>;
+}) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [attFilter, setAttFilter] = useState<AttFilter>("todos");
+  // Popup Notas — misma lógica que /closer/leads: la nota queda en la
+  // ficha del lead (teacher_note) y cuenta como último contacto.
+  const [notasLead, setNotasLead] = useState<TeacherLead | null>(null);
+  const [notaText, setNotaText] = useState("");
+  const [notaSaving, setNotaSaving] = useState(false);
+  const [notaError, setNotaError] = useState<string | null>(null);
+
+  async function guardarNota() {
+    if (!notasLead || notaText.trim().length < 5) {
+      setNotaError("La nota necesita al menos 5 caracteres.");
+      return;
+    }
+    setNotaSaving(true);
+    setNotaError(null);
+    try {
+      const res = await fetch(`/api/teacher/leads/${notasLead.leadId}/note`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: notaText.trim() }),
+      });
+      if (!res.ok) {
+        setNotaError("No se pudo guardar. Inténtalo de nuevo.");
+        return;
+      }
+      setNotasLead(null);
+      setNotaText("");
+      router.refresh();
+    } finally {
+      setNotaSaving(false);
+    }
+  }
 
   const counts = useMemo(() => {
     const c = { pendiente: 0, asistio: 0, no_asistio: 0 };
@@ -65,6 +111,9 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
     return c;
   }, [leads]);
 
+  // Orden (misma lógica que /closer/leads): semáforo rojo → amarillo →
+  // verde; dentro de cada color el último contacto más viejo primero
+  // (sin contacto = el más desatendido, arriba).
   const filtered = useMemo(() => {
     let result = attFilter === "todos" ? leads : leads.filter((l) => attOf(l) === attFilter);
     if (search.trim()) {
@@ -75,8 +124,16 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
         (l.whatsapp ?? "").includes(q)
       );
     }
-    return result;
-  }, [leads, search, attFilter]);
+    return [...result].sort((a, b) => {
+      const ra = a.semaforo ? COLOR_RANK[a.semaforo.color] : 3;
+      const rb = b.semaforo ? COLOR_RANK[b.semaforo.color] : 3;
+      if (ra !== rb) return ra - rb;
+      const ca = lastContactByLead[a.leadId]?.at ?? "";
+      const cb = lastContactByLead[b.leadId]?.at ?? "";
+      if (ca !== cb) return ca < cb ? -1 : 1;   // "" (nunca) primero
+      return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
+    });
+  }, [leads, search, attFilter, lastContactByLead]);
 
   const CHIPS: Array<{ key: AttFilter; label: string; activeCls: string }> = [
     { key: "todos",      label: `Todos (${leads.length})`,              activeCls: "bg-brand-600 text-white border-brand-600" },
@@ -154,11 +211,12 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
               <thead className="text-[11px] uppercase text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/60">
                 <tr>
                   <th className="text-left py-2 px-3">Lead</th>
+                  <th className="text-left py-2 px-3">Último contacto</th>
                   <th className="text-left py-2 px-3">Contacto</th>
                   <th className="text-left py-2 px-3">Origen</th>
                   <th className="text-left py-2 px-3">Nivel</th>
                   <th className="text-left py-2 px-3">Clase de prueba</th>
-                  <th className="text-left py-2 px-3">Pipeline</th>
+                  <th className="text-left py-2 px-3">Notas</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -190,6 +248,11 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
                         </div>
                         <div className="text-[11px] text-slate-400 dark:text-slate-500">{fmtRelative(l.createdAt)}</div>
                         {q && <div className="text-[11px] text-slate-500 dark:text-slate-400 max-w-[220px] truncate">{q}</div>}
+                      </td>
+                      <td className="py-2 px-3">
+                        <span className={`text-[12px] whitespace-nowrap ${lastContactByLead[l.leadId]?.at ? "text-slate-600 dark:text-slate-300" : "text-red-500 dark:text-red-400 font-semibold"}`}>
+                          {lastContactByLead[l.leadId]?.label ?? "—"}
+                        </span>
                       </td>
                       <td className="py-2 px-3 text-[12px]">
                         {l.email && <div className="text-slate-600 dark:text-slate-300 truncate max-w-[180px]">{l.email}</div>}
@@ -228,7 +291,13 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
                         )}
                       </td>
                       <td className="py-2 px-3">
-                        <StatusBadge status={l.status} />
+                        <button
+                          type="button"
+                          onClick={() => setNotasLead(l)}
+                          className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          📝 Notas
+                        </button>
                       </td>
                     </tr>
                   );
@@ -286,21 +355,84 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
                       {l.semaforo.badge} — {l.semaforo.detalle}
                     </div>
                   )}
-                  {waDigits && (
-                    <a
-                      href={`https://wa.me/${waDigits}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 text-xs font-semibold"
+                  <div className={`mt-1 text-[11px] ${lastContactByLead[l.leadId]?.at ? "text-slate-500 dark:text-slate-400" : "text-red-500 dark:text-red-400 font-semibold"}`}>
+                    Último contacto: {lastContactByLead[l.leadId]?.label ?? "—"}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 flex-wrap">
+                    {waDigits && (
+                      <a
+                        href={`https://wa.me/${waDigits}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white px-3 py-1.5 text-xs font-semibold"
+                      >
+                        💬 Escribir por WhatsApp
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setNotasLead(l)}
+                      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                     >
-                      💬 Escribir por WhatsApp
-                    </a>
-                  )}
+                      📝 Notas
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
         </>
+      )}
+
+      {/* Popup Notas — la nota queda en la ficha del lead y cuenta como
+          último contacto (misma lógica que /closer/leads) */}
+      {notasLead && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !notaSaving && setNotasLead(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-50">
+              📝 Nota sobre {notasLead.name ?? "el lead"}
+            </h3>
+            <p className="mt-0.5 text-[11.5px] text-slate-500 dark:text-slate-400">
+              Queda guardada en su ficha y actualiza el último contacto.
+            </p>
+            <textarea
+              autoFocus
+              value={notaText}
+              onChange={(e) => setNotaText(e.target.value)}
+              rows={4}
+              placeholder="Qué hablaron, qué quedó pendiente… (mín. 5 caracteres)"
+              className="mt-3 w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) guardarNota();
+              }}
+            />
+            {notaError && <div className="mt-2 text-[12px] text-red-500">{notaError}</div>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={notaSaving}
+                onClick={() => { setNotasLead(null); setNotaText(""); setNotaError(null); }}
+                className="rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={notaSaving || notaText.trim().length < 5}
+                onClick={guardarNota}
+                className="rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-40 px-4 py-2 text-sm font-semibold text-white transition-colors"
+              >
+                {notaSaving ? "Guardando…" : "Guardar nota"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
