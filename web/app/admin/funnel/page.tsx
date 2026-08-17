@@ -47,6 +47,16 @@ import {
   DropoffPanel,
 } from "@/components/admin/FunnelWaterfall";
 import { RefreshButton } from "../ads/RefreshButton";
+import { getSemaforoBatch, type SemaforoResult } from "@/lib/semaforo";
+
+// Borde/punto del semáforo global en la lista de leads (los "fuera"
+// no llevan color).
+const SEM_BORDER: Record<string, string> = {
+  rojo: "border-l-red-500", amarillo: "border-l-amber-400", verde: "border-l-emerald-500",
+};
+const SEM_DOT: Record<string, string> = {
+  rojo: "bg-red-500", amarillo: "bg-amber-400", verde: "bg-emerald-500",
+};
 
 const PAGE_SIZE = 50;
 
@@ -279,6 +289,9 @@ export default async function FunnelControlPage({
   // tiene). Una sola query JOIN classes→teachers→users por todos los
   // lead_ids de la página actual — no hace N+1.
   // Result: Map<leadId, teacherName>.
+  // Semáforo global de los leads de la página (borde de color por fila).
+  const semaforoByLead: Map<string, SemaforoResult> = await getSemaforoBatch(leads.map(l => l.id));
+
   const teacherByLead = new Map<string, string>();
   // Ídem para Sesiones de Plan: Map<leadId, closerFirstName>.
   const closerByLead = new Map<string, string>();
@@ -808,9 +821,17 @@ export default async function FunnelControlPage({
                   depositIntentAt:    l.deposit_intent_at,
                 };
                 const qSummary = summarizeQualification(l.qualification_answers);
+                const sem = semaforoByLead.get(l.id);
+                const semVisible = sem && sem.color !== "fuera" ? sem : null;
                 return (
                   <tr key={l.id} className={`hover:bg-white/[0.03] ${priorityRowClass(prioFlags)}`}>
-                    <td className="py-2 px-3">
+                    <td className={`py-2 px-3 border-l-4 ${semVisible ? SEM_BORDER[semVisible.color] : "border-l-transparent"}`}>
+                      {semVisible && (
+                        <span
+                          className={`inline-block w-2 h-2 rounded-full mr-1.5 align-middle ${SEM_DOT[semVisible.color]}`}
+                          title={`${semVisible.badge} — ${semVisible.detalle}`}
+                        />
+                      )}
                       <a
                         href={`/admin/leads/${l.id}`}
                         target="_blank"
@@ -819,6 +840,11 @@ export default async function FunnelControlPage({
                       >
                         {l.name ?? "(sin nombre)"}
                       </a>
+                      {semVisible?.color === "rojo" && (
+                        <div className="text-[10px] font-bold text-red-300 mt-0.5" title={semVisible.detalle}>
+                          {semVisible.badge}
+                        </div>
+                      )}
                       <div className="mt-0.5"><PriorityBadges flags={prioFlags} /></div>
                       <div className="text-[10.5px] text-white/40">{fmtRelative(l.created_at)}</div>
                       {qSummary && (
@@ -929,10 +955,12 @@ export default async function FunnelControlPage({
               depositIntentAt:    l.deposit_intent_at,
             };
             const qSummaryM = summarizeQualification(l.qualification_answers);
+            const semM = semaforoByLead.get(l.id);
+            const semMVisible = semM && semM.color !== "fuera" ? semM : null;
             return (
               <div
                 key={l.id}
-                className={`rounded-xl border border-white/10 bg-white/[0.03] p-3 ${priorityRowClass(prioFlagsM)}`}
+                className={`rounded-xl border border-l-4 border-white/10 bg-white/[0.03] p-3 ${semMVisible ? SEM_BORDER[semMVisible.color] : "border-l-transparent"} ${priorityRowClass(prioFlagsM)}`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">

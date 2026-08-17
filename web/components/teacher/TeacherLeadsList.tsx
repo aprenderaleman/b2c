@@ -43,6 +43,12 @@ const SEMAFORO_DOT: Record<"rojo" | "amarillo" | "verde", string> = {
   verde: "bg-emerald-500",
 };
 
+const SEMAFORO_BORDER: Record<"rojo" | "amarillo" | "verde", string> = {
+  rojo: "border-l-red-500",
+  amarillo: "border-l-amber-400",
+  verde: "border-l-emerald-500",
+};
+
 type AttFilter = "todos" | "pendiente" | "asistio" | "no_asistio";
 
 function attOf(l: { attended: boolean; absent: boolean }): Exclude<AttFilter, "todos"> {
@@ -162,7 +168,7 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
                   const q = summarizeQualification(l.qualification);
                   return (
                     <tr key={l.leadId} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                      <td className="py-2 px-3">
+                      <td className={`py-2 px-3 border-l-4 ${l.semaforo ? SEMAFORO_BORDER[l.semaforo.color] : "border-l-transparent"}`}>
                         <div className="font-medium flex items-center gap-1.5 flex-wrap">
                           {l.semaforo && (
                             <span
@@ -237,7 +243,10 @@ export function TeacherLeadsList({ leads }: { leads: TeacherLead[] }) {
               const meta = SOURCE_META[l.landingIntent ?? "(sin landing)"] ?? SOURCE_META["(sin landing)"];
               const waDigits = l.whatsapp?.replace(/\D/g, "") ?? "";
               return (
-                <div key={l.leadId} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3">
+                <div
+                  key={l.leadId}
+                  className={`rounded-2xl border border-l-4 border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 ${l.semaforo ? SEMAFORO_BORDER[l.semaforo.color] : "border-l-transparent"}`}
+                >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="font-semibold flex items-center gap-1.5 flex-wrap">
                       {l.semaforo && (

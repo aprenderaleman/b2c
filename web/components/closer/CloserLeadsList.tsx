@@ -47,9 +47,29 @@ export type CloserLead = {
 };
 
 
+export type LeadSemaforo = {
+  color: "rojo" | "amarillo" | "verde";
+  badge: string;
+  detalle: string;
+};
+
+// Borde izquierdo con el color del semáforo — el "estado actual" del
+// lead visible de un vistazo en cada fila/card.
+const SEM_BORDER: Record<LeadSemaforo["color"], string> = {
+  rojo: "border-l-red-500",
+  amarillo: "border-l-amber-400",
+  verde: "border-l-emerald-500",
+};
+const SEM_DOT: Record<LeadSemaforo["color"], string> = {
+  rojo: "bg-red-500",
+  amarillo: "bg-amber-400",
+  verde: "bg-emerald-500",
+};
+
 type Props = {
   leads: CloserLead[];
   teacherByLead: Record<string, string>;
+  semaforoByLead?: Record<string, LeadSemaforo>;
 };
 
 type AttFilter = "todos" | "pendiente" | "asistio" | "no_asistio";
@@ -58,7 +78,7 @@ function attOf(l: { trial_attended_at: string | null; trial_absent_at: string | 
   return l.trial_attended_at ? "asistio" : l.trial_absent_at ? "no_asistio" : "pendiente";
 }
 
-export function CloserLeadsList({ leads, teacherByLead }: Props) {
+export function CloserLeadsList({ leads, teacherByLead, semaforoByLead = {} }: Props) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [attFilter, setAttFilter] = useState<AttFilter>("todos");
@@ -182,6 +202,7 @@ export function CloserLeadsList({ leads, teacherByLead }: Props) {
                     depositIntentAt: l.deposit_intent_at,
                   };
                   const teacher = teacherByLead[l.id];
+                  const sem = semaforoByLead[l.id];
                   const q = l.qualification_answers;
                   const goalRaw = q?.goal;
                   const levelRaw = q?.level;
@@ -191,14 +212,24 @@ export function CloserLeadsList({ leads, teacherByLead }: Props) {
                     <tr
                       key={l.id}
                       onClick={() => router.push(`/closer/leads/${l.id}`)}
-                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer transition-colors"
+                      className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer transition-colors ${attState === "attended" ? "bg-emerald-50/50 dark:bg-emerald-500/5" : attState === "absent" ? "bg-red-50/30 dark:bg-red-500/5" : ""}`}
                     >
-                      <td className="py-2.5 px-3">
-                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                          {l.name ?? "(sin nombre)"}
+                      <td className={`py-2.5 px-3 border-l-4 ${sem ? SEM_BORDER[sem.color] : "border-l-transparent"}`}>
+                        <span className="inline-flex items-center gap-1.5">
+                          {sem && (
+                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SEM_DOT[sem.color]}`} title={sem.detalle} />
+                          )}
+                          <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                            {l.name ?? "(sin nombre)"}
+                          </span>
                         </span>
                         <div className="mt-0.5"><PriorityBadges flags={prioFlags} /></div>
                         <div className="text-[10.5px] text-slate-400 dark:text-slate-500">{fmtRelative(l.created_at)}</div>
+                        {sem?.color === "rojo" && (
+                          <div className="text-[10.5px] font-bold text-red-600 dark:text-red-400 mt-0.5" title={sem.detalle}>
+                            {sem.badge}
+                          </div>
+                        )}
                       </td>
                       <td className="py-2.5 px-3">
                         <div className="text-[12px] text-slate-600 dark:text-slate-300 truncate max-w-[180px]">
@@ -274,6 +305,7 @@ export function CloserLeadsList({ leads, teacherByLead }: Props) {
                 depositIntentAt: l.deposit_intent_at,
               };
               const teacher = teacherByLead[l.id];
+              const sem = semaforoByLead[l.id];
               const q = l.qualification_answers;
               const goalRaw = q?.goal;
               const levelRaw = q?.level;
@@ -283,15 +315,23 @@ export function CloserLeadsList({ leads, teacherByLead }: Props) {
                 <div
                   key={l.id}
                   onClick={() => router.push(`/closer/leads/${l.id}`)}
-                  className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                  className={`rounded-2xl border border-l-4 p-3 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${sem ? SEM_BORDER[sem.color] : "border-l-transparent"} ${attState === "attended" ? "border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5" : attState === "absent" ? "border-red-300 dark:border-red-500/30 bg-red-50/30 dark:bg-red-500/5" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">
-                        {l.name ?? "(sin nombre)"}
+                      <span className="inline-flex items-center gap-1.5">
+                        {sem && (
+                          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${SEM_DOT[sem.color]}`} title={sem.detalle} />
+                        )}
+                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-50">
+                          {l.name ?? "(sin nombre)"}
+                        </span>
                       </span>
                       <div className="mt-0.5"><PriorityBadges flags={prioFlags} /></div>
                       <div className="text-[11px] text-slate-400 dark:text-slate-500">{fmtRelative(l.created_at)}</div>
+                      {sem?.color === "rojo" && (
+                        <div className="text-[11px] font-bold text-red-600 dark:text-red-400 mt-0.5">{sem.badge}</div>
+                      )}
                     </div>
                     {(levelRaw || l.german_level) && (
                       <span className="inline-flex items-center rounded-md bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/25 px-2 py-0.5 text-[12px] font-bold text-sky-700 dark:text-sky-300 shrink-0">
