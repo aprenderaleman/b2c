@@ -4,13 +4,29 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { buildPagoUrl } from "@/lib/enrollment-checkout";
 import { startChain } from "@/lib/chain-engine";
 import { logCloserAction } from "@/lib/closer-actions";
+import { sendWhatsappText } from "@/lib/whatsapp";
 import { RITMOS, ONE_TIME_PACKS, type RitmoId, type GoalId } from "@/lib/trial-packs";
-
-const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 const ONE_TIME_CLASSES: Record<GoalId, number> = {
   a1_a2: 32, b1: 48, b2: 48, c1: 64, fluidez_total: 96,
 };
+
+const ESTANDAR_CLASSES_PER_MONTH = 8;
+
+const MONTH_NAMES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+const GOAL_SHORT_LABELS: Record<GoalId, string> = {
+  a1_a2: "A1-A2", b1: "B1", b2: "B2", c1: "C1", fluidez_total: "Fluidez Total",
+};
+
+function computeFechaLlegada(months: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() + months);
+  return `${MONTH_NAMES[d.getMonth()]} de ${d.getFullYear()}`;
+}
 
 export async function POST(
   req: Request,
@@ -25,7 +41,7 @@ export async function POST(
   const sb = supabaseAdmin();
   const { data: lead } = await sb
     .from("leads")
-    .select("closer_id, email, name")
+    .select("closer_id, email, name, whatsapp_normalized")
     .eq("id", leadId)
     .single();
 
@@ -52,6 +68,10 @@ export async function POST(
   let monthlyPriceCents: number | null = null;
   let meta: string;
   let ritmo: string | null = null;
+  let metaLabel: string;
+  let ritmoLabel: string;
+  let fechaLlegada: string;
+  let isOneTime = false;
 
   if (category === "subscription") {
     if (!ritmoId || !goalId) return NextResponse.json({ error: "missing_ritmo_or_goal" }, { status: 400 });
@@ -68,22 +88,31 @@ export async function POST(
     monthlyPriceCents = r.pricePerMonth * 100;
     packLabel = `${r.emoji} ${r.name} · Meta ${g.label} · ${g.months} meses`;
     productName = `${r.name} — Meta ${g.label}`;
+    metaLabel = g.label;
+    ritmoLabel = r.name;
+    fechaLlegada = computeFechaLlegada(g.months);
   } else if (category === "one_time") {
     if (!goalId) return NextResponse.json({ error: "missing_goal" }, { status: 400 });
     const p = ONE_TIME_PACKS.find(x => x.id === goalId);
     if (!p) return NextResponse.json({ error: "invalid_pack" }, { status: 400 });
 
+    const classes = ONE_TIME_CLASSES[goalId] ?? 32;
+    const refMonths = Math.ceil(classes / ESTANDAR_CLASSES_PER_MONTH);
     meta = goalId;
     tipo_pago = "unico";
-    clases_totales = ONE_TIME_CLASSES[goalId] ?? 32;
+    clases_totales = classes;
     importe_cents = p.priceCents;
     packLabel = p.name;
     productName = p.name;
+    metaLabel = GOAL_SHORT_LABELS[goalId] || p.name;
+    ritmoLabel = "";
+    fechaLlegada = computeFechaLlegada(refMonths);
+    isOneTime = true;
   } else {
     return NextResponse.json({ error: "invalid_category" }, { status: 400 });
   }
 
-  const leadRow = lead as { email: string | null; name: string | null };
+  const leadRow = lead as { email: string | null; name: string | null; whatsapp_normalized: string | null };
 
   // Get teacher_id from trial class (for trazabilidad E2)
   const { data: trialClass } = await sb
@@ -146,6 +175,45 @@ export async function POST(
     contenido: `Enlace de inscripcion: ${packLabel}`,
     resultado: "mensaje_enviado",
   });
+
+  const firstName = (leadRow.name || "").split(/\s+/)[0] || "";
+  const waPhone = leadRow.whatsapp_normalized;
+
+  if (waPhone) {
+    const text = isOneTime
+      ? [
+          `¡Hola ${firstName}! 😊`,
+          ``,
+          `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} (pago único: todas tus clases desbloqueadas desde el día 1) — a tu ritmo: con 2 clases por semana, tu ${metaLabel} llega en ${fechaLlegada} 📅`,
+          `Y con tu inscripción queda activada tu Garantía de Nivel por escrito.`,
+          `👉 ${checkoutUrl}`,
+          ``,
+          `Son 5 minutos. Cualquier duda durante el proceso, aquí estoy 😊`,
+        ].join("\n")
+      : [
+          `¡Hola ${firstName}! 😊`,
+          ``,
+          `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} con ritmo ${ritmoLabel} — empezando esta semana, tu ${metaLabel} llega en ${fechaLlegada} 📅`,
+          `Y con tu inscripción queda activada tu Garantía de Nivel por escrito.`,
+          `👉 ${checkoutUrl}`,
+          ``,
+          `Son 5 minutos. Cualquier duda durante el proceso, aquí estoy 😊`,
+        ].join("\n");
+
+    const waRes = await sendWhatsappText(waPhone, text, {
+      kind: "closer_inscription_initial",
+    });
+
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type: waRes.ok ? "system_message_sent" : "send_failed",
+      author: "closer",
+      content: waRes.ok
+        ? `💬 Enlace de inscripción enviado por WhatsApp a ${waPhone}`
+        : `💬 Falló el envío del enlace: ${waRes.reason}`,
+      metadata: { kind: "closer_inscription_initial", channel: "whatsapp" },
+    });
+  }
 
   await startChain(leadId, "chain2_link_sent", {
     fullUrl: checkoutUrl,
