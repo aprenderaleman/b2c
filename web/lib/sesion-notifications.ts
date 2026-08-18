@@ -316,7 +316,7 @@ export async function sendSesionReminders(sb: SB, kind: SesionReminderKind): Pro
       if (when.hourNumber < 10) continue;
       msg =
         `¡Buenos días, ${leadFirst}! Hoy a las ${when.time} tienes tu Sesión de Plan-Alemán con ${closerShort} 🎥\n\n` +
-        `Un consejo: tenla donde puedas hablar tranquilo/a 5 minutos — es corta pero vale oro.\n\n` +
+        `Un consejo: tenla donde puedas hablar tranquilo/a 20 minutos — es corta pero vale oro.\n\n` +
         `Link: ${joinUrl}`;
     } else {
       msg =
