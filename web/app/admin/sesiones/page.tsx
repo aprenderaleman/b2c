@@ -12,7 +12,7 @@ type Row = {
   status: string;
   short_code: string | null;
   lead_id: string | null;
-  closer_user: { id: string; name: string | null } | Array<{ id: string; name: string | null }>;
+  closer_user: { id: string; full_name: string | null } | Array<{ id: string; full_name: string | null }>;
   lead: {
     id: string; name: string | null; email: string | null;
     whatsapp_normalized: string | null; status: string; language: string | null;
@@ -43,7 +43,7 @@ export default async function AdminSesionesPage() {
     .from("classes")
     .select(`
       id, scheduled_at, duration_minutes, status, short_code, lead_id,
-      closer_user:users!sesion_closer_id(id, name),
+      closer_user:users!sesion_closer_id(id, full_name),
       lead:leads!inner(
         id, name, email, whatsapp_normalized, status, language,
         german_level, goal, qualification_answers,
@@ -80,7 +80,7 @@ export default async function AdminSesionesPage() {
       depositIntentAt: lead.deposit_intent_at,
       trialAttendedAt: lead.trial_attended_at,
       trialAbsentAt: lead.trial_absent_at,
-      closerName: closer?.name?.split(/\s+/)[0] ?? "—",
+      closerName: closer?.full_name?.split(/\s+/)[0] ?? "—",
     };
   };
 
