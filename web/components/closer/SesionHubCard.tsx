@@ -41,7 +41,11 @@ const STATUS_PILL: Record<string, { label: string; cls: string }> = {
   cancelled: { label: "Cancelada", cls: "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30" },
 };
 
-export function SesionHubCard({ row }: { row: SesionRow }) {
+export function SesionHubCard({ row, closerName, fichaHref }: {
+  row: SesionRow;
+  closerName?: string;
+  fichaHref?: string;
+}) {
   const date = new Date(row.scheduledAt).toLocaleDateString("es-ES", {
     timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long",
   });
@@ -97,6 +101,7 @@ export function SesionHubCard({ row }: { row: SesionRow }) {
               <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 flex-wrap">
                 {row.leadGermanLevel && <span>Nivel <strong className="text-slate-700 dark:text-slate-200">{row.leadGermanLevel}</strong></span>}
                 {row.leadEmail && <><span>·</span><span className="font-mono">{row.leadEmail}</span></>}
+              {closerName && <><span>·</span><span>🎧 {closerName}</span></>}
               </div>
               {(() => {
                 const q = summarizeQualification(row.qualification);
@@ -135,7 +140,7 @@ export function SesionHubCard({ row }: { row: SesionRow }) {
             </a>
 
             <Link
-              href={`/closer/leads/${row.leadId}`}
+              href={fichaHref ?? `/closer/leads/${row.leadId}`}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-brand-200 dark:border-brand-500/30 bg-brand-50 dark:bg-brand-500/10 hover:bg-brand-100 dark:hover:bg-brand-500/20 text-brand-700 dark:text-brand-300 px-3.5 py-2 text-xs font-semibold transition-colors"
             >
               👤 Ficha

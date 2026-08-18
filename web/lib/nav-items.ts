@@ -71,6 +71,7 @@ function adminItems(): NavItem[] {
     { label: "Hoy",                href: "/admin",                icon: "home",          priority: 1 },
     { label: "Clases",             href: "/admin/clases",         icon: "calendarDays",  priority: 2 },
     { label: "Clases de prueba",   href: "/admin/clasedeprueba",  icon: "userCheck",     priority: 2.3 },
+    { label: "Sesiones Plan",      href: "/admin/sesiones",       icon: "userCheck",     priority: 2.35 },
     { label: "Mi disponibilidad",  href: "/admin/disponibilidad", icon: "clock",         priority: 2.4 },
     { label: "Grabaciones",      href: "/admin/grabaciones",    icon: "video",         priority: 2.5 },
     { label: "Estudiantes", href: "/admin/estudiantes", icon: "graduationCap", priority: 3 },
