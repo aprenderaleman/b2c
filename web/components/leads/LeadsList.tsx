@@ -322,7 +322,7 @@ export function LeadsList({ role, leads, semaforoByLead = {}, lastContactByLead 
                     <tr
                       key={l.id}
                       onClick={() => router.push(`${cfg.fichaBase}/${l.id}`)}
-                      className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer transition-colors ${attState === "attended" ? "bg-emerald-50/50 dark:bg-emerald-500/5" : attState === "absent" ? "bg-red-50/30 dark:bg-red-500/5" : ""}`}
+                      className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 cursor-pointer transition-colors ${attState === "absent" ? "bg-slate-100/70 dark:bg-slate-800/40" : ""}`}
                     >
                       <td className={`py-2.5 px-3 border-l-4 ${sem ? semBorder(sem) : "border-l-transparent"}`}>
                         <span className="inline-flex items-center gap-1.5">
@@ -432,7 +432,7 @@ export function LeadsList({ role, leads, semaforoByLead = {}, lastContactByLead 
                 <div
                   key={l.id}
                   onClick={() => router.push(`${cfg.fichaBase}/${l.id}`)}
-                  className={`rounded-2xl border border-l-4 p-3 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${sem ? semBorder(sem) : "border-l-transparent"} ${attState === "attended" ? "border-emerald-300 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5" : attState === "absent" ? "border-red-300 dark:border-red-500/30 bg-red-50/30 dark:bg-red-500/5" : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"}`}
+                  className={`rounded-2xl border border-l-4 border-slate-200 dark:border-slate-800 p-3 cursor-pointer hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${sem ? semBorder(sem) : "border-l-transparent"} ${attState === "absent" ? "bg-slate-100/70 dark:bg-slate-800/40" : "bg-white dark:bg-slate-900"}`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
