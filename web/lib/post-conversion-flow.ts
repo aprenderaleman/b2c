@@ -2,6 +2,7 @@ import { supabaseAdmin } from "./supabase";
 import { getTeacherById } from "./academy";
 import { createNotification } from "./notifications";
 import { sendWhatsappText } from "./whatsapp";
+import { createStudentNotesDoc, getTeacherEmail } from "./google-docs";
 
 export type ConversionScenario = "E1" | "E2" | "E3";
 
@@ -50,13 +51,14 @@ export async function runPostConversionFlow(opts: PostConversionOpts): Promise<v
     case "E1":
       if (opts.trialTeacherId) {
         await notifyTeacherOfConversion(opts.trialTeacherId, opts.leadName, opts.packLabel, "E1");
+        await setupStudentWithTeacher(sb, opts.studentId, opts.leadName, opts.trialTeacherId, "trial_teacher");
       }
       break;
 
     case "E2":
       if (opts.trialTeacherId) {
         await notifyTeacherOfConversion(opts.trialTeacherId, opts.leadName, opts.packLabel, "E2");
-        await assignTrialTeacherToStudent(sb, opts.studentId, opts.trialTeacherId);
+        await setupStudentWithTeacher(sb, opts.studentId, opts.leadName, opts.trialTeacherId, "trial_teacher");
       }
       break;
 
@@ -64,6 +66,57 @@ export async function runPostConversionFlow(opts: PostConversionOpts): Promise<v
       await assignBestTeacherToStudent(sb, opts.studentId, opts.leadName, opts.packLabel);
       break;
   }
+}
+
+async function setupStudentWithTeacher(
+  sb: ReturnType<typeof supabaseAdmin>,
+  studentId: string,
+  studentName: string,
+  teacherId: string,
+  source: "trial_teacher" | "auto_assigned",
+): Promise<void> {
+  const deadline = new Date(Date.now() + 24 * 3_600_000).toISOString();
+
+  const { data: student } = await sb
+    .from("students")
+    .select("current_level")
+    .eq("id", studentId)
+    .maybeSingle();
+  const level = (student as { current_level?: string } | null)?.current_level ?? null;
+
+  const teacherEmail = await getTeacherEmail(teacherId);
+  const teacher = await getTeacherById(teacherId);
+  const teacherName = teacher?.full_name ?? "Profesor";
+
+  const doc = await createStudentNotesDoc(studentName, level ?? "A1", teacherName, teacherEmail);
+  const documentUrl = doc?.url ?? null;
+
+  const { data: group } = await sb.from("student_groups").insert({
+    name: studentName,
+    teacher_id: teacherId,
+    class_type: "individual",
+    capacity: 1,
+    level,
+    document_url: documentUrl,
+    active: true,
+  }).select("id").single();
+
+  if (group) {
+    await sb.from("student_group_members").insert({
+      group_id: (group as { id: string }).id,
+      student_id: studentId,
+    });
+  }
+
+  const studentUpdate: Record<string, unknown> = {
+    teacher_assignment_source: source,
+    teacher_assigned_at: new Date().toISOString(),
+    teacher_contact_deadline: deadline,
+  };
+  if (documentUrl) {
+    studentUpdate.document_url = documentUrl;
+  }
+  await sb.from("students").update(studentUpdate).eq("id", studentId);
 }
 
 async function notifyTeacherOfConversion(
@@ -98,26 +151,6 @@ async function notifyTeacherOfConversion(
   }
 }
 
-async function assignTrialTeacherToStudent(
-  sb: ReturnType<typeof supabaseAdmin>,
-  studentId: string,
-  teacherId: string,
-): Promise<void> {
-  const deadline = new Date(Date.now() + 24 * 3_600_000).toISOString();
-
-  await sb.from("students").update({
-    teacher_assignment_source: "trial_teacher",
-    teacher_assigned_at: new Date().toISOString(),
-    teacher_contact_deadline: deadline,
-  }).eq("id", studentId);
-
-  await sb.from("student_groups").upsert({
-    student_id: studentId,
-    teacher_id: teacherId,
-    active: true,
-  }, { onConflict: "student_id,teacher_id" });
-}
-
 async function assignBestTeacherToStudent(
   sb: ReturnType<typeof supabaseAdmin>,
   studentId: string,
@@ -130,29 +163,17 @@ async function assignBestTeacherToStudent(
     return;
   }
 
-  const deadline = new Date(Date.now() + 24 * 3_600_000).toISOString();
-
   await sb.from("students").update({
     trial_teacher_id: bestTeacherId,
-    teacher_assignment_source: "auto_assigned",
-    teacher_assigned_at: new Date().toISOString(),
-    teacher_contact_deadline: deadline,
   }).eq("id", studentId);
 
-  await sb.from("student_groups").upsert({
-    student_id: studentId,
-    teacher_id: bestTeacherId,
-    active: true,
-  }, { onConflict: "student_id,teacher_id" });
-
+  await setupStudentWithTeacher(sb, studentId, leadName, bestTeacherId, "auto_assigned");
   await notifyTeacherOfConversion(bestTeacherId, leadName, packLabel, "E3");
 }
 
 async function findBestTeacherForStudent(
   sb: ReturnType<typeof supabaseAdmin>,
 ): Promise<string | null> {
-  // Active teachers who accept trials (proxy for accepting students),
-  // ordered by fewest active students (least loaded)
   const { data: teachers } = await sb
     .from("teachers")
     .select(`

@@ -101,6 +101,35 @@ export default async function TeacherLeadsPage() {
     trialInfo.set(lead.id, { scheduledAt: r.scheduled_at, durationMin: r.duration_minutes, status: r.status });
   }
 
+  // Filtro de propiedad actual (caso Sabine 2026-08-17: veía leads que
+  // reagendaron su trial con OTRO profe). Un lead que tuvo trial
+  // contigo pero cuya trial MÁS RECIENTE vigente es de otro profesor
+  // ya no es "tu lead" — se muestra solo en la lista del profe actual.
+  const candidateIds = [...byLead.keys()];
+  if (candidateIds.length > 0) {
+    const { data: latestAll } = await sb
+      .from("classes")
+      .select("lead_id, teacher_id, scheduled_at")
+      .in("lead_id", candidateIds)
+      .eq("is_trial", true)
+      .is("deleted_at", null)
+      .neq("status", "cancelled")
+      .order("scheduled_at", { ascending: false });
+    const latestTeacherByLead = new Map<string, string>();
+    for (const row of ((latestAll ?? []) as Array<{ lead_id: string | null; teacher_id: string | null }>)) {
+      if (row.lead_id && row.teacher_id && !latestTeacherByLead.has(row.lead_id)) {
+        latestTeacherByLead.set(row.lead_id, row.teacher_id);
+      }
+    }
+    for (const id of candidateIds) {
+      const owner = latestTeacherByLead.get(id);
+      if (owner && owner !== teacher.id) {
+        byLead.delete(id);
+        trialInfo.delete(id);
+      }
+    }
+  }
+
   const leads = [...byLead.values()];
 
   // Semáforo global + rojo propio del profe (🎓 feedback post-clase sin

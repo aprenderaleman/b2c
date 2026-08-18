@@ -47,7 +47,7 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
 
   const { data: lead } = await sb
     .from("leads")
-    .select("id, name, email, whatsapp_normalized, status, converted_to_user_id, meta, closer_id, fbclid")
+    .select("id, name, email, whatsapp_normalized, status, converted_to_user_id, meta, closer_id, fbclid, german_level")
     .eq("id", of.lead_id)
     .maybeSingle();
 
@@ -62,6 +62,7 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     converted_to_user_id: string | null; meta: Record<string, unknown> | null;
     closer_id: string | null;
     fbclid: string | null;
+    german_level: string | null;
   };
 
   if (ld.converted_to_user_id) {
@@ -128,13 +129,14 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     : of.clases_totales;
 
   const levelFromMeta = (ld.meta as Record<string, unknown> | null)?.nivel as string | undefined;
+  const resolvedLevel = ld.german_level ?? levelFromMeta ?? "A1";
 
   const convertInput: ConvertInput = {
     email: ld.email ?? `lead-${ld.id}@placeholder.local`,
     fullName: ld.name ?? "Estudiante",
     phone: ld.whatsapp_normalized,
     language: "es",
-    currentLevel: (levelFromMeta as ConvertInput["currentLevel"]) ?? "A1",
+    currentLevel: resolvedLevel as ConvertInput["currentLevel"],
     goal: of.meta,
     subscriptionType,
     classesRemaining,
@@ -214,6 +216,7 @@ type LeadRow = {
   converted_to_user_id: string | null; meta: Record<string, unknown> | null;
   closer_id: string | null;
   fbclid: string | null;
+  german_level: string | null;
 };
 
 /**

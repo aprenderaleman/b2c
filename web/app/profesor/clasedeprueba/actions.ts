@@ -52,28 +52,58 @@ export async function saveTeacherNotes(classId: string, notes: string) {
 
   const now = new Date().toISOString();
 
+  // OJO: trial_class_scripts NO tiene columna updated_at — incluirla
+  // hacía fallar el UPDATE en silencio y las notas "desaparecían"
+  // (caso Sabine 2026-08-17: solo sobrevivía el primer fragmento).
+  // Los errores se propagan para que el UI muestre el fallo en vez de
+  // fingir que guardó.
   if (existing) {
-    await sb
+    const { error } = await sb
       .from("trial_class_scripts")
-      .update({ teacher_notes: notes, updated_at: now })
+      .update({ teacher_notes: notes })
       .eq("id", existing.id);
+    if (error) throw new Error(`notes_update_failed: ${error.message}`);
   } else {
-    await sb.from("trial_class_scripts").insert({
+    const { error } = await sb.from("trial_class_scripts").insert({
       class_id:      classId,
       lead_id:       cls.lead_id,
       teacher_id:    user.id,
       current_step:  0,
       teacher_notes: notes,
     });
+    if (error) throw new Error(`notes_insert_failed: ${error.message}`);
   }
 
   if (cls.lead_id) {
-    await sb.from("lead_timeline").insert({
-      lead_id:   cls.lead_id,
-      type:      "teacher_note",
-      author:    teacherName,
-      content:   notes,
-      timestamp: now,
-    });
+    // Anti-spam del autosave (debounce cada 1.5s): si la última entrada
+    // del timeline es una teacher_note del mismo autor hace <1h, la
+    // ACTUALIZAMOS en vez de insertar otra — así el timeline guarda la
+    // versión final de la nota, no 10 fragmentos progresivos.
+    const { data: last } = await sb
+      .from("lead_timeline")
+      .select("id, type, author, timestamp")
+      .eq("lead_id", cls.lead_id)
+      .order("timestamp", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const l = last as { id: string; type: string; author: string; timestamp: string } | null;
+    const recentSameAuthor = l
+      && l.type === "teacher_note"
+      && l.author === teacherName
+      && (Date.now() - new Date(l.timestamp).getTime()) < 3600_000;
+
+    if (recentSameAuthor) {
+      await sb.from("lead_timeline")
+        .update({ content: notes, timestamp: now })
+        .eq("id", l.id);
+    } else {
+      await sb.from("lead_timeline").insert({
+        lead_id:   cls.lead_id,
+        type:      "teacher_note",
+        author:    teacherName,
+        content:   notes,
+        timestamp: now,
+      });
+    }
   }
 }
