@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 /**
  * Widget de referidos del portal del estudiante:
@@ -33,11 +34,33 @@ export function ReferralWidget() {
       .then((d: ReferralData | null) => {
         if (!alive || !d?.ok) return;
         setData(d);
-        if (d.victory) setVictoryOpen(true);
+        if (d.victory) {
+          setVictoryOpen(true);
+          // Marcar como visto AL MOSTRARSE (no solo al cerrar). Caso
+          // Ayman 2026-08-18: el popup quedó imposible de cerrar por un
+          // bug de posicionamiento y, como el dismiss nunca corría,
+          // reaparecía en cada página. Con esto el throttle 1/mes se
+          // aplica pase lo que pase con el UI.
+          fetch("/api/me/referral", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "dismiss_popup" }),
+          }).catch(() => {});
+        }
       })
       .catch(() => {});
     return () => { alive = false; };
   }, []);
+
+  // Cerrar con ESC cualquiera de los dos modales.
+  useEffect(() => {
+    if (!open && !victoryOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setOpen(false); setVictoryOpen(false); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, victoryOpen]);
 
   if (!data) return null;
 
@@ -62,14 +85,20 @@ export function ReferralWidget() {
     }).catch(() => {});
   };
 
-  const modal = (title: string, subtitle: React.ReactNode, onClose: () => void) => (
+  // PORTAL a document.body: el widget vive dentro del header del
+  // AppShell, que tiene backdrop-blur — ese filtro convierte al header
+  // en containing block de los descendientes position:fixed, así que
+  // el modal quedaba anclado al header (arriba, sin fondo y con la ✕
+  // fuera de pantalla — caso Ayman 2026-08-18). El portal lo saca al
+  // body y el fixed vuelve a ser relativo al viewport.
+  const modal = (title: string, subtitle: React.ReactNode, onClose: () => void) => createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-md rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-6 shadow-2xl">
         <button
           type="button"
           onClick={onClose}
-          className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          className="absolute top-3.5 right-3.5 w-9 h-9 rounded-full flex items-center justify-center text-slate-500 dark:text-slate-300 text-lg font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700"
           aria-label="Cerrar"
         >
           ✕
@@ -105,8 +134,17 @@ export function ReferralWidget() {
         <p className="mt-4 text-center text-xs text-slate-500 dark:text-slate-400">
           Amigos invitados: <strong>{data.invited_count}</strong> · Clases ganadas: <strong>{data.classes_earned}</strong>
         </p>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-3 w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+        >
+          Cerrar
+        </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 
   return (
