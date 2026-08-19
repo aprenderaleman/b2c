@@ -40,10 +40,37 @@ export async function POST(
   }
 
   const sb = supabaseAdmin();
+
+  // Autor = profesor real de la clase, no el user de sesión. Si Gelfis
+  // (admin) escribe en la ficha en nombre del profe, la nota debe salir
+  // atribuida al profe. Buscamos el trial activo del lead y sacamos su
+  // teacher.user_id → full_name. Si no hay clase, fallback al owns
+  // (que puede ser el propio user de sesión).
+  let authorName = owns.teacherName ?? "Profesor";
+  const { data: trialCls } = await sb
+    .from("classes")
+    .select("teacher_id")
+    .eq("lead_id", leadId)
+    .eq("is_trial", true)
+    .is("deleted_at", null)
+    .order("scheduled_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const tid = (trialCls as { teacher_id: string | null } | null)?.teacher_id;
+  if (tid) {
+    const { data: tRow } = await sb
+      .from("teachers")
+      .select("users:user_id (full_name)")
+      .eq("id", tid)
+      .maybeSingle();
+    const realName = (tRow as { users: { full_name: string | null } | null } | null)?.users?.full_name;
+    if (realName) authorName = realName;
+  }
+
   const { error } = await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type: "teacher_note",
-    author: owns.teacherName ?? "Profesor",
+    author: authorName,
     content: parsed.data.content,
   });
 

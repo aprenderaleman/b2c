@@ -37,12 +37,27 @@ export async function saveTeacherNotes(classId: string, notes: string) {
   const { data: cls } = await query.maybeSingle();
   if (!cls) throw new Error("not_owner");
 
-  const { data: userRow } = await sb
+  // La nota se atribuye SIEMPRE al profesor de la clase, no al user
+  // de sesión. Si Gelfis (admin) edita desde /admin/clasedeprueba en
+  // nombre del profe, la nota debe aparecer con el nombre del profe
+  // real que dio (o dará) la clase — es SU trabajo. Fallback al user
+  // de sesión sólo si la clase no tiene teacher asignado (edge case).
+  const { data: teacherUserRow } = cls.teacher_id
+    ? await sb
+        .from("teachers")
+        .select("users:user_id (full_name)")
+        .eq("id", cls.teacher_id)
+        .maybeSingle()
+    : { data: null };
+  const teacherFullName = (teacherUserRow as { users: { full_name: string | null } | null } | null)
+    ?.users?.full_name ?? null;
+
+  const { data: sessionUserRow } = await sb
     .from("users")
     .select("full_name")
     .eq("id", user.id)
     .maybeSingle();
-  const teacherName = userRow?.full_name ?? user.id;
+  const teacherName = teacherFullName ?? sessionUserRow?.full_name ?? user.id;
 
   const { data: existing } = await sb
     .from("trial_class_scripts")
