@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
+import { ViewAsStudentButton } from "@/components/teacher/ViewAsStudentButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mis estudiantes · Profesor" };
@@ -88,18 +89,18 @@ export default async function TeacherStudentsPage() {
         ) : (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {list.map(s => (
-              <li key={s.id}>
+              <li key={s.id} className="flex items-center gap-2 px-5 py-3 hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                 <Link
                   href={`/profesor/estudiantes/${s.id}`}
-                  className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-slate-50/60 dark:hover:bg-slate-800/40"
+                  className="flex flex-1 min-w-0 items-center justify-between gap-3"
                 >
-                  <div>
-                    <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                       {s.name ?? s.email}
                     </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono">{s.email}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate">{s.email}</div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 shrink-0">
                     {s.classesRemaining != null && (
                       <span className={`text-xs font-medium tabular-nums ${
                         s.classesRemaining <= 5
@@ -114,6 +115,7 @@ export default async function TeacherStudentsPage() {
                     <span className="text-xs text-slate-500 dark:text-slate-400">{s.level}</span>
                   </div>
                 </Link>
+                <ViewAsStudentButton studentId={s.id} />
               </li>
             ))}
           </ul>
