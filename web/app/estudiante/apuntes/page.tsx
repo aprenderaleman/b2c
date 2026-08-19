@@ -1,6 +1,6 @@
-import { redirect } from "next/navigation";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
+import { OpenInNewTab } from "./OpenInNewTab";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Apuntes de clase · Aprender-Aleman.de" };
@@ -13,7 +13,7 @@ export default async function ApuntesRedirect() {
   const student = await getStudentByUserId(session.user.id);
 
   if (student?.document_url) {
-    redirect(student.document_url);
+    return <OpenInNewTab url={student.document_url} />;
   }
 
   return (

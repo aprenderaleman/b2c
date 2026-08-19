@@ -425,11 +425,16 @@ export async function POST(req: Request) {
       // Bug Sabine 2026-08-10: antes NO se actualizaba teacher_id →
       // el lead elegía un slot de otro profe pero la clase quedaba
       // asignada al profe original (fuera de su disponibilidad).
+      // Bug Francisco 2026-08-19: título tampoco se actualizaba →
+      // profe veía "(Simon)" en su calendario pero teacher_id era Jonathan.
+      const newTeacherFirst = (match.teacherName.split(/\s+/)[0]) || match.teacherName;
+      const newTitle = `Clase de prueba — ${b.name.split(/\s+/)[0]} (${newTeacherFirst})`;
       const { error: rescheduleErr } = await sb
         .from("classes")
         .update({
           scheduled_at:    requestedSlotIso,
           teacher_id:      b.teacher_id,
+          title:           newTitle,
           notes_admin:     null,
           // Fix Gelfis 2026-07-24: sin resetear notified_at el cron
           // send-trial-notifications no re-envía la confirmación con
