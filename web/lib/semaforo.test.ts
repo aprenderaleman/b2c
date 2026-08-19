@@ -365,6 +365,133 @@ describe("Check 8 — validaciones de Registrar contacto", () => {
   });
 });
 
+describe("R5 — agendar_prueba cuenta como propuesta (fix Alicia)", () => {
+  const lead = { ...BASE_LEAD, trial_attended_at: "2026-08-13T09:00:00+02:00" };
+  const now = ms("2026-08-13T12:00:00+02:00");
+
+  it("agendar_prueba posterior a asistencia apaga R5", () => {
+    const r = evaluateSemaforo(input({
+      now, lead,
+      contacts: [saliente("2026-08-13T10:00:00+02:00", "agendar_prueba")],
+    }));
+    expect(r.regla).not.toBe("R5");
+  });
+
+  it("enviar_enlace posterior a asistencia apaga R5", () => {
+    const r = evaluateSemaforo(input({
+      now, lead,
+      contacts: [saliente("2026-08-13T10:00:00+02:00", "enviar_enlace")],
+    }));
+    expect(r.regla).not.toBe("R5");
+  });
+});
+
+describe("A2 — trial/sesión agendada para HOY", () => {
+  it("sesion_plan_at HOY sin resultado → amarillo A2", () => {
+    const lead = {
+      ...BASE_LEAD,
+      sesion_plan_at: "2026-08-13T15:00:00+02:00",
+    };
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T10:00:00+02:00"),
+      lead,
+      contacts: [saliente("2026-08-13T08:00:00+02:00")],
+    }));
+    expect(r.color).toBe("amarillo");
+    expect(r.regla).toBe("A2");
+  });
+
+  it("sesion_plan_at HOY con trial_attended_at → NO es A2 (ya pasó)", () => {
+    const lead = {
+      ...BASE_LEAD,
+      sesion_plan_at: "2026-08-13T09:00:00+02:00",
+      trial_attended_at: "2026-08-13T09:30:00+02:00",
+    };
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T10:00:00+02:00"),
+      lead,
+      contacts: [saliente("2026-08-13T09:35:00+02:00", "enviar_enlace")],
+    }));
+    expect(r.regla).not.toBe("A2");
+  });
+});
+
+describe("eventoFuturo → verde V1 (cita agendada a futuro)", () => {
+  it("trial_scheduled_at mañana sin resultado → verde V1 cita agendada", () => {
+    const lead = {
+      ...BASE_LEAD,
+      trial_scheduled_at: "2026-08-14T09:00:00+02:00",
+    };
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T12:00:00+02:00"),
+      lead,
+      contacts: [saliente("2026-08-13T10:00:00+02:00")],
+    }));
+    expect(r.color).toBe("verde");
+    expect(r.regla).toBe("V1");
+    expect(r.badge).toContain("Cita agendada");
+  });
+
+  it("sesion_plan_at mañana → verde V1 cita agendada", () => {
+    const lead = {
+      ...BASE_LEAD,
+      sesion_plan_at: "2026-08-15T10:00:00+02:00",
+    };
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T12:00:00+02:00"),
+      lead,
+      contacts: [saliente("2026-08-13T10:00:00+02:00")],
+    }));
+    expect(r.color).toBe("verde");
+    expect(r.badge).toContain("Cita agendada");
+  });
+});
+
+describe("FUERA — not_qualified", () => {
+  it("status not_qualified → fuera", () => {
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T12:00:00+02:00"),
+      lead: { ...BASE_LEAD, status: "not_qualified" },
+    }));
+    expect(r.color).toBe("fuera");
+    expect(r.regla).toBe("FUERA");
+  });
+
+  it("status lost → fuera", () => {
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T12:00:00+02:00"),
+      lead: { ...BASE_LEAD, status: "lost" },
+    }));
+    expect(r.color).toBe("fuera");
+  });
+});
+
+describe("R1 — saliente posterior apaga el rojo", () => {
+  it("saliente después del inbound → NO es R1", () => {
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T14:00:00+02:00"),
+      contacts: [
+        saliente("2026-08-13T08:00:00+02:00"),
+        entrante("2026-08-13T09:00:00+02:00"),
+        saliente("2026-08-13T10:00:00+02:00"),
+      ],
+    }));
+    expect(r.regla).not.toBe("R1");
+  });
+});
+
+describe("R3 — ventaPendiente como trigger", () => {
+  it("ventaPendiente >3h hábiles sin pago → rojo R3", () => {
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T14:00:00+02:00"),
+      contacts: [saliente("2026-08-13T08:00:00+02:00")],
+      ventaPendiente: { lead_id: "lead-1", created_at: "2026-08-13T09:00:00+02:00" },
+    }));
+    expect(r.regla).toBe("R3");
+    expect(r.causa).toBe("pago");
+  });
+});
+
 describe("Epoch C6 — la deuda histórica no genera rojos el día 1", () => {
   const epoch = ms("2026-08-17T00:00:00+02:00");
 
