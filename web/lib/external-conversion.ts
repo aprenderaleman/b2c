@@ -106,21 +106,10 @@ export async function handleExternalConversion(opts: ExternalConversionOpts): Pr
     return;
   }
 
-  const updateFields: Record<string, unknown> = {
-    clases_totales: opts.totalClasses,
-    clases_desbloqueadas: classesRemaining,
-    conversion_source: `external_${opts.source}`,
-    stripe_customer_id: opts.customerId || undefined,
-  };
-  if (opts.subscriptionId) {
-    updateFields.stripe_subscription_id = opts.subscriptionId;
-    updateFields.stripe_subscription_status = "active";
-  }
-
-  await sb.from("students").update(updateFields).eq("id", result.studentId);
-
-  // Create an oferta record for audit trail
-  await sb.from("ofertas_enviadas").insert({
+  // Oferta primero: el desbloqueo mensual de handleInvoicePaid lee
+  // clases_por_mes vía students.oferta_id → sin el vínculo, las
+  // renovaciones de suscriptores externos NO desbloquearían clases.
+  const { data: ofertaRow, error: ofertaErr } = await sb.from("ofertas_enviadas").insert({
     lead_id: ld.id,
     meta: goal ?? "desconocido",
     ritmo: opts.rhythmId,
@@ -131,7 +120,27 @@ export async function handleExternalConversion(opts: ExternalConversionOpts): Pr
     moneda: opts.currency,
     accepted_at: new Date().toISOString(),
     escenario: "E1",
-  });
+  }).select("id").single();
+  if (ofertaErr) console.error("[external-conversion] oferta insert failed:", ofertaErr.message);
+  const ofertaId = (ofertaRow as { id: string } | null)?.id ?? null;
+
+  const updateFields: Record<string, unknown> = {
+    clases_totales: opts.totalClasses,
+    clases_desbloqueadas: classesRemaining,
+    // OJO: students_conversion_source_check solo permite
+    // stripe_auto | manual | legacy. El origen externo queda en el
+    // timeline (metadata.source) — aquí el valor válido más cercano.
+    conversion_source: "stripe_auto",
+    stripe_customer_id: opts.customerId || undefined,
+    ...(ofertaId ? { oferta_id: ofertaId } : {}),
+  };
+  if (opts.subscriptionId) {
+    updateFields.stripe_subscription_id = opts.subscriptionId;
+    updateFields.stripe_subscription_status = "active";
+  }
+
+  const { error: updErr } = await sb.from("students").update(updateFields).eq("id", result.studentId);
+  if (updErr) console.error("[external-conversion] student update failed:", updErr.message);
 
   await sb.from("lead_timeline").insert({
     lead_id: ld.id,
