@@ -24,7 +24,6 @@ Public surface:
 
     mark_attended_converted(lead_id)
     mark_attended_lost(lead_id, reason)
-    mark_absent(lead_id)
 """
 from __future__ import annotations
 
@@ -108,21 +107,8 @@ def mark_attended_lost(lead_id: str, reason: str) -> None:
     _send_goodbye(lead)
 
 
-def mark_absent(lead_id: str) -> None:
-    """Marca el lead como trial_absent SIN activar cadena legacy.
-
-    Fix Gelfis 2026-08-01: la cadena tick_absent_followups (4 mensajes)
-    fue eliminada. Este handler ya no setea next_contact_date — el flow
-    real es el TS markTrialAbsent que manda 1 solo WA "¿sigues teniendo
-    interés? SÍ/NO" y espera respuesta. Esta función Python queda como
-    compat para callers antiguos y para el guardián — solo transiciona
-    el status, no envía mensaje.
-    """
-    lead = get_lead(lead_id)
-    if not lead:
-        return
-    update_status(lead_id, "trial_absent", author="gelfis")
-    log_timeline(
-        lead_id, type="status_change", author="gelfis",
-        content="Lead did not attend trial (Python mark_absent — no message sent, TS flow handles absent-interest).",
-    )
+# mark_absent(lead_id): ELIMINADA 2026-08-19. Era dead code — sólo la
+# importaba el smoke test, ningún cron/agent la disparaba. La única
+# fuente de verdad para "no asistió" es el TS `markTrialAbsent`
+# (web/lib/admin-actions.ts), invocado desde el hub del profe/closer.
+# Referencia: docs/no-auto-cancel-policy.md.

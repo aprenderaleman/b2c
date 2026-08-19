@@ -47,9 +47,7 @@ def main() -> int:
         from agents.agent_2_reviewer import review_single, review_batch, ReviewResult
         from agents.agent_3_sender import send_approved, SendResult
         from agents.agent_4_conversation import handle_incoming_message, BOOKING_WORDS, HUMAN_WORDS, NEGATIVE_WORDS, _has_phrase, _norm
-        from agents.agent_5_guardian import (
-            mark_attended_converted, mark_absent,
-        )
+        from agents.agent_5_guardian import mark_attended_converted
         from agents.notifications import (
             notify_needs_human, notify_trial_30min, notify_daily_summary,
             scan_escalations_and_notify,
