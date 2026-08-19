@@ -266,7 +266,7 @@ type ChainRow = {
 };
 
 export async function advanceChain(chain: ChainRow): Promise<{
-  action: "sent" | "skipped_paid" | "completed" | "error";
+  action: "sent" | "skipped_paid" | "completed" | "error" | "cancelled_invalid_wa";
   templateKind?: string;
 }> {
   const sb = supabaseAdmin();
@@ -495,6 +495,31 @@ export async function advanceChain(chain: ChainRow): Promise<{
         `enviado a lead ${chain.lead_id} en ${chain.chain_type} paso ${stepIndex + 1}. ` +
         `Body: ${JSON.stringify(text)}`,
       );
+    }
+
+    // Bug Leidy 2026-08-19: si Evolution responde `exists:false` el número
+    // no está en WhatsApp — no tiene sentido reintentar en los siguientes
+    // steps. Antes la chain seguía avanzando y quemaba 2-3 pasos con
+    // fallos idénticos. Cerramos la chain al primer fallo de este tipo.
+    if (!res.ok && /\"exists\"\s*:\s*false/.test(res.reason ?? "")) {
+      await sb.from("lead_chains").update({
+        completed_at: new Date().toISOString(),
+        cancel_reason: "invalid_whatsapp_number",
+        updated_at: new Date().toISOString(),
+      }).eq("id", chain.id);
+      await sb.from("lead_timeline").insert({
+        lead_id: chain.lead_id,
+        type: "status_change",
+        author: "system",
+        content: `Cadena cerrada: número WhatsApp inexistente (${phone})`,
+        metadata: {
+          kind: "chain_cancelled",
+          chain_id: chain.id,
+          chain_type: chain.chain_type,
+          reason: "invalid_whatsapp_number",
+        },
+      });
+      return { action: "cancelled_invalid_wa", templateKind };
     }
   }
 
