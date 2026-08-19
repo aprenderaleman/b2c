@@ -3,6 +3,7 @@ import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { ViewAsStudentButton } from "@/components/teacher/ViewAsStudentButton";
+import { getClassBalance } from "@/lib/class-balance";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mis estudiantes · Profesor" };
@@ -34,7 +35,7 @@ export default async function TeacherStudentsPage() {
   const { data: viaGroups } = await sb.from("student_group_members")
     .select(`
       student_id,
-      students!inner(current_level, classes_remaining, users!inner(full_name, email)),
+      students!inner(current_level, classes_remaining, oferta_id, users!inner(full_name, email)),
       group:student_groups!inner(teacher_id, active)
     `)
     .eq("group.teacher_id", me.id)
@@ -45,15 +46,22 @@ export default async function TeacherStudentsPage() {
     students: {
       current_level: string;
       classes_remaining: number | null;
+      oferta_id: string | null;
       users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
     } | Array<{
       current_level: string;
       classes_remaining: number | null;
+      oferta_id: string | null;
       users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
     }>;
   };
 
-  const seen = new Map<string, { id: string; name: string | null; email: string; level: string; classesRemaining: number | null }>();
+  type Item = {
+    id: string; name: string | null; email: string; level: string;
+    classesRemaining: number | null; hasOferta: boolean;
+    disponibles: number | null; desbloqueadas: number | null;
+  };
+  const seen = new Map<string, Item>();
   const ingest = (rows: R[]) => {
     for (const r of rows) {
       if (seen.has(r.student_id)) continue;
@@ -66,10 +74,32 @@ export default async function TeacherStudentsPage() {
         email: u?.email ?? "",
         level: s.current_level,
         classesRemaining: s.classes_remaining ?? null,
+        hasOferta: !!s.oferta_id,
+        disponibles: null,
+        desbloqueadas: null,
       });
     }
   };
   ingest((viaGroups ?? []) as R[]);
+
+  // Alumnos del Método (con oferta): la agenda descuenta del balance
+  // MENSUAL (desbloqueadas - consumidas - agendadas), no del total del
+  // pack. Caso Jonathan/Nancy 2026-08-20: la lista decía "45 clases"
+  // (total restante) pero al agendar solo había 5 disponibles del mes.
+  // Mostramos AMBOS números para que el profe sepa cuántas puede
+  // agendar YA y cuántas quedan del pack.
+  await Promise.all(
+    Array.from(seen.values())
+      .filter(s => s.hasOferta)
+      .map(async (s) => {
+        const b = await getClassBalance(s.id).catch(() => null);
+        if (b) {
+          s.disponibles = b.disponibles;
+          s.desbloqueadas = b.desbloqueadas;
+        }
+      }),
+  );
+
   const list = Array.from(seen.values()).sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email));
 
   return (
@@ -101,7 +131,24 @@ export default async function TeacherStudentsPage() {
                     <div className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate">{s.email}</div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
-                    {s.classesRemaining != null && (
+                    {s.hasOferta && s.disponibles != null ? (
+                      <span className="text-right">
+                        <span className={`block text-xs font-semibold tabular-nums ${
+                          s.disponibles <= 1
+                            ? "text-red-600 dark:text-red-400"
+                            : s.disponibles <= 3
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-emerald-600 dark:text-emerald-400"
+                        }`}>
+                          {s.disponibles} agendable{s.disponibles === 1 ? "" : "s"} ahora
+                        </span>
+                        {s.classesRemaining != null && (
+                          <span className="block text-[10px] text-slate-500 dark:text-slate-400 tabular-nums">
+                            {s.classesRemaining} restantes del pack
+                          </span>
+                        )}
+                      </span>
+                    ) : s.classesRemaining != null && (
                       <span className={`text-xs font-medium tabular-nums ${
                         s.classesRemaining <= 5
                           ? "text-red-600 dark:text-red-400"

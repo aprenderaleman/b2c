@@ -11,6 +11,7 @@ import { ScheduleButton } from "./ScheduleButton";
 import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
 import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
+import { getClassBalance } from "@/lib/class-balance";
 
 export const dynamic = "force-dynamic";
 
@@ -66,10 +67,18 @@ export default async function TeacherStudentDetail({
 
   // For admins we still scope notes to the teacher they filter by, or show
   // all by default. Simplest: show all notes on this student.
-  const [progress, notes] = await Promise.all([
+  const sbBal = supabaseAdmin();
+  const [progress, notes, ofertaRow] = await Promise.all([
     getStudentProgress(studentId),
     listNotesForStudent(studentId, teacherId ?? undefined),
+    sbBal.from("students").select("oferta_id").eq("id", studentId).maybeSingle(),
   ]);
+
+  // Balance de clases (caso Jonathan/Nancy 2026-08-20: el profe veía el
+  // total del pack pero no cuántas puede agendar del mes). Solo aplica
+  // a alumnos del Método (con oferta) — los legacy usan classes_remaining.
+  const hasOferta = !!(ofertaRow.data as { oferta_id: string | null } | null)?.oferta_id;
+  const balance = hasOferta ? await getClassBalance(studentId).catch(() => null) : null;
 
   return (
     <main className="space-y-5">
@@ -126,6 +135,39 @@ export default async function TeacherStudentDetail({
         <div className="flex">
           <GroupDocButton documentUrl={student.document_url} label="Apuntes de clase" />
         </div>
+      )}
+
+      {balance && (
+        <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+            Balance de clases
+          </h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            La suscripción desbloquea clases cada mes con el cobro. Solo se
+            pueden agendar las disponibles del mes — el resto del pack se
+            libera en los próximos cobros.
+          </p>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-3">
+              <div className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{balance.disponibles}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80 dark:text-emerald-300/80">Agendables ahora</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
+              <div className="text-2xl font-bold tabular-nums text-slate-700 dark:text-slate-200">{balance.agendadas}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Ya agendadas</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
+              <div className="text-2xl font-bold tabular-nums text-slate-700 dark:text-slate-200">{balance.consumidas}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tomadas</div>
+            </div>
+            <div className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
+              <div className="text-2xl font-bold tabular-nums text-slate-700 dark:text-slate-200">
+                {balance.total != null ? balance.total - balance.consumidas : "—"}
+              </div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Restantes del pack</div>
+            </div>
+          </div>
+        </section>
       )}
 
       <GarantiaNivelCard
