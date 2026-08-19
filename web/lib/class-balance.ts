@@ -75,13 +75,16 @@ export async function canBookClass(
 
   const { data: student } = await sb
     .from("students")
-    .select("oferta_id, stripe_subscription_status")
+    .select("oferta_id, clases_totales, stripe_subscription_status")
     .eq("id", studentId)
     .maybeSingle();
-  const s = student as { oferta_id: string | null; stripe_subscription_status: string | null } | null;
+  const s = student as { oferta_id: string | null; clases_totales: number | null; stripe_subscription_status: string | null } | null;
 
-  // Legacy students without oferta_id: no enforcement
-  if (!s?.oferta_id) return { allowed: true };
+  // Unificación 2026-08-21: el balance aplica a TODO estudiante con
+  // clases_totales definido (pago único = todo desbloqueado desde el
+  // día 1; suscripción = desbloqueo mensual). Solo quedan fuera los
+  // strays sin balance inicializado.
+  if (!s?.oferta_id && s?.clases_totales == null) return { allowed: true };
 
   const balance = await getClassBalance(studentId);
   if (balance.disponibles >= count) return { allowed: true };

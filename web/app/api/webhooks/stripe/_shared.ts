@@ -382,18 +382,21 @@ async function handleInvoicePaid(
   if (isSubscription) {
     const { data: studentData } = await sb
       .from("students")
-      .select("id, oferta_id, trial_teacher_id, commission_window_end, clases_por_mes:ofertas_enviadas(clases_por_mes), clases_desbloqueadas, clases_totales")
+      .select("id, oferta_id, trial_teacher_id, commission_window_end, classes_per_month, clases_por_mes:ofertas_enviadas(clases_por_mes), clases_desbloqueadas, clases_totales")
       .eq("id", student.id)
       .maybeSingle();
     const s = studentData as {
       id: string; oferta_id: string | null; trial_teacher_id: string | null;
       commission_window_end: string | null; clases_desbloqueadas: number;
-      clases_totales: number | null;
+      clases_totales: number | null; classes_per_month: number | null;
       clases_por_mes: { clases_por_mes: number | null } | null;
     } | null;
 
-    if (s?.oferta_id && s.clases_por_mes?.clases_por_mes) {
-      const perMonth = s.clases_por_mes.clases_por_mes;
+    // Cadencia: de la oferta si existe; si no, de students.classes_per_month
+    // (unificación 2026-08-21 — suscriptores legacy sin oferta también
+    // desbloquean mes a mes).
+    const perMonth = s?.clases_por_mes?.clases_por_mes ?? s?.classes_per_month ?? null;
+    if (s && perMonth) {
       const cap = s.clases_totales ?? Infinity;
       const newUnlocked = Math.min(s.clases_desbloqueadas + perMonth, cap);
       await sb.from("students")

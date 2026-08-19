@@ -35,7 +35,7 @@ export default async function TeacherStudentsPage() {
   const { data: viaGroups } = await sb.from("student_group_members")
     .select(`
       student_id,
-      students!inner(current_level, classes_remaining, oferta_id, users!inner(full_name, email)),
+      students!inner(current_level, classes_remaining, oferta_id, clases_totales, users!inner(full_name, email)),
       group:student_groups!inner(teacher_id, active)
     `)
     .eq("group.teacher_id", me.id)
@@ -47,11 +47,13 @@ export default async function TeacherStudentsPage() {
       current_level: string;
       classes_remaining: number | null;
       oferta_id: string | null;
+      clases_totales: number | null;
       users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
     } | Array<{
       current_level: string;
       classes_remaining: number | null;
       oferta_id: string | null;
+      clases_totales: number | null;
       users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
     }>;
   };
@@ -74,7 +76,7 @@ export default async function TeacherStudentsPage() {
         email: u?.email ?? "",
         level: s.current_level,
         classesRemaining: s.classes_remaining ?? null,
-        hasOferta: !!s.oferta_id,
+        hasOferta: !!s.oferta_id || s.clases_totales != null,
         disponibles: null,
         desbloqueadas: null,
       });

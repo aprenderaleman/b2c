@@ -71,14 +71,16 @@ export default async function TeacherStudentDetail({
   const [progress, notes, ofertaRow] = await Promise.all([
     getStudentProgress(studentId),
     listNotesForStudent(studentId, teacherId ?? undefined),
-    sbBal.from("students").select("oferta_id").eq("id", studentId).maybeSingle(),
+    sbBal.from("students").select("oferta_id, clases_totales").eq("id", studentId).maybeSingle(),
   ]);
 
-  // Balance de clases (caso Jonathan/Nancy 2026-08-20: el profe veía el
-  // total del pack pero no cuántas puede agendar del mes). Solo aplica
-  // a alumnos del Método (con oferta) — los legacy usan classes_remaining.
-  const hasOferta = !!(ofertaRow.data as { oferta_id: string | null } | null)?.oferta_id;
-  const balance = hasOferta ? await getClassBalance(studentId).catch(() => null) : null;
+  // Balance de clases (caso Jonathan/Nancy 2026-08-20). Tras la
+  // unificación 2026-08-21 aplica a todo estudiante con balance
+  // inicializado (clases_totales) — pago único con todo desbloqueado,
+  // suscripción con desbloqueo mensual.
+  const ofData = ofertaRow.data as { oferta_id: string | null; clases_totales: number | null } | null;
+  const hasBalance = !!ofData?.oferta_id || ofData?.clases_totales != null;
+  const balance = hasBalance ? await getClassBalance(studentId).catch(() => null) : null;
 
   return (
     <main className="space-y-5">
