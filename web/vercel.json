@@ -157,6 +157,10 @@
     {
       "path": "/api/cron/closer-health-check",
       "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/hours-reconciliation",
+      "schedule": "0 5 * * *"
     }
   ]
 }
