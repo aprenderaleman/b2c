@@ -85,8 +85,11 @@ async function findAnomalies(): Promise<Anomaly[]> {
   // C) Leads activos en limbo — closer asignado, sin próxima jugada
   //    Usamos una query compuesta: leads activos con closer, que NO
   //    tienen tarea futura NI cadena activa.
-  const { data: limboLeads } = await sb.rpc("closer_limbo_leads" as never)
-    .catch(() => ({ data: null })) as { data: Array<Record<string, unknown>> | null };
+  // PostgrestFilterBuilder no tiene .catch — si la RPC no existe,
+  // Supabase devuelve { data: null, error } sin lanzar. (El .catch
+  // anterior rompía el build de producción, 2026-08-19.)
+  const { data: limboLeads } = await sb.rpc("closer_limbo_leads" as never) as
+    { data: Array<Record<string, unknown>> | null };
 
   // Si la RPC no existe, fallback manual
   if (limboLeads === null) {
@@ -165,11 +168,13 @@ export async function GET(req: Request) {
         .map(a => `## ${a.code} — ${a.title} (${a.count})\n${JSON.stringify(a.rows, null, 2)}`)
         .join("\n\n---\n\n");
 
-      await sendRaw({
-        to: recipient,
-        subject: `[Closer Health] ${total} anomalía(s) detectada(s)`,
-        html: `<pre style="font-size:13px;white-space:pre-wrap">${body}</pre>`,
-      }).catch((err) => console.error("[closer-health-check] email error:", err));
+      // sendRaw es posicional: (to, subject, html, text)
+      await sendRaw(
+        recipient,
+        `[Closer Health] ${total} anomalía(s) detectada(s)`,
+        `<pre style="font-size:13px;white-space:pre-wrap">${body}</pre>`,
+        body,
+      ).catch((err) => console.error("[closer-health-check] email error:", err));
     }
   }
 
