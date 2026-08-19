@@ -70,13 +70,19 @@ async function handle(req: Request) {
   const sb = supabaseAdmin();
   const { data: cls } = await sb
     .from("classes")
-    .select("id, lead_id, is_trial")
+    .select("id, lead_id, is_trial, sesion_closer_id")
     .eq("id", classId)
     .maybeSingle();
-  if (!cls || !(cls as { is_trial: boolean }).is_trial) {
+  // Aceptamos tanto trials (is_trial=true) como Sesiones de Plan
+  // (sesion_closer_id NOT NULL) — mismo producto Reserva Prioritaria
+  // de 10€, mismo lock del slot, mismo descuento al pack.
+  const clsRow = cls as { is_trial: boolean; sesion_closer_id: string | null; lead_id: string } | null;
+  const isTrial  = clsRow?.is_trial === true;
+  const isSesion = Boolean(clsRow?.sesion_closer_id);
+  if (!clsRow || (!isTrial && !isSesion)) {
     return NextResponse.json({ error: "trial_not_found" }, { status: 404 });
   }
-  const leadId = (cls as { lead_id: string }).lead_id;
+  const leadId = clsRow.lead_id;
 
   const { data: leadRow } = await sb
     .from("leads")

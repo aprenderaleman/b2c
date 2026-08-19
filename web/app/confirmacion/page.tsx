@@ -109,13 +109,15 @@ export default async function ConfirmacionPage({
       {/* Reserva Prioritaria: si volvemos de Stripe con ?deposito=ok,
           dispara Purchase por los 3 canales (Google + fbq + CAPI).
           NO se solapa con ConfirmacionPixel — cada uno tiene su propio
-          eventID y sessionStorage guard. */}
-      {!isSesion && <ConfirmacionDepositPurchase
+          eventID y sessionStorage guard. Activo también para Sesiones
+          de Plan desde 2026-08-19 (Gelfis abrió el upsell de 10€ para
+          sesiones). */}
+      <ConfirmacionDepositPurchase
         classId={classId}
         leadEmail={leadEmail}
         leadPhone={leadPhone}
         active={depositoOk}
-      />}
+      />
       <IllustrationPanel step="success">
         <div className="flex flex-col min-h-[100dvh]">
           {/* Header sticky — sólo brand + back a inicio, sin progress bar. */}
@@ -148,7 +150,7 @@ export default async function ConfirmacionPage({
                 del H1. Cuando no ha pagado, no se muestra y la sección
                 normal "Mejora a Reserva Prioritaria" aparece bajo el
                 summary con el botón. ═══ */}
-            {!isSesion && (priorityActive || depositoOk) && (
+            {(priorityActive || depositoOk) && (
               <div className="rounded-2xl border-2 border-emerald-500 bg-gradient-to-br from-emerald-50 via-emerald-100 to-teal-50 p-4 md:p-5 shadow-lg shadow-emerald-500/15 mb-5">
                 <div className="flex items-center gap-3 md:gap-4">
                   <span className="text-4xl md:text-5xl leading-none shrink-0" aria-hidden>🌟</span>
@@ -165,7 +167,9 @@ export default async function ConfirmacionPage({
                   </div>
                 </div>
                 <p className="mt-2.5 text-[14px] md:text-[15px] text-emerald-900 leading-snug">
-                  Tu plaza está asegurada. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.
+                  {isSesion
+                    ? <>Tu sesión está asegurada. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.</>
+                    : <>Tu plaza está asegurada. Los <strong>10€</strong> se descuentan de tu pack si decides continuar.</>}
                 </p>
               </div>
             )}
@@ -204,17 +208,19 @@ export default async function ConfirmacionPage({
                 Solo se muestra cuando el lead NO ha pagado aún; el
                 estado "activada" se muestra como banner celebratorio
                 arriba del H1 (ver bloque anterior). ═══ */}
-            {!isSesion && !isMetaAdsPaidFunnel && !(priorityActive || depositoOk) && (
+            {!isMetaAdsPaidFunnel && !(priorityActive || depositoOk) && (
               <section className="mt-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 md:p-5">
                 <h2 className="text-[16px] md:text-[17px] font-bold text-slate-900 flex items-center gap-2 flex-wrap">
                   <span aria-hidden>🌟</span>
-                  <span>Mejora a Reserva Prioritaria</span>
+                  <span>{isSesion ? "Asegura tu Sesión con prioridad" : "Mejora a Reserva Prioritaria"}</span>
                   <span className="inline-flex items-center rounded-full bg-amber-400 text-amber-950 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider shadow-sm">
                     VIP
                   </span>
                 </h2>
                 <p className="mt-2 text-[14px] md:text-[15px] text-slate-700 leading-relaxed">
-                  Tu profesor preparará la clase <strong>adaptada a tu objetivo</strong> y tu plaza queda asegurada con prioridad. Además, tus <strong>10€ se descuentan de tu pack</strong> si decides continuar.
+                  {isSesion
+                    ? <>Tu asesor prepara tu plan personalizado antes de la videollamada, con foco en <strong>tus objetivos</strong>, y tu horario queda asegurado con prioridad. Además, tus <strong>10€ se descuentan de tu pack</strong> si decides continuar tras la sesión.</>
+                    : <>Tu profesor preparará la clase <strong>adaptada a tu objetivo</strong> y tu plaza queda asegurada con prioridad. Además, tus <strong>10€ se descuentan de tu pack</strong> si decides continuar.</>}
                 </p>
                 <div className="mt-4">
                   <PriorityUpgradeButton classId={classId} token={token} />
