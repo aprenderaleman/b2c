@@ -34,14 +34,21 @@ export async function POST(req: NextRequest) {
         out[account].push({
           customer_id: cust.id,
           name: cust.name,
-          subscriptions: subs.data.map(s => ({
-            id: s.id,
-            status: s.status,
-            amount: (s.items.data[0]?.price?.unit_amount ?? 0) / 100,
-            interval: s.items.data[0]?.price?.recurring?.interval ?? null,
-            current_period_end: new Date(s.current_period_end * 1000).toISOString().slice(0, 10),
-            metadata: s.metadata,
-          })),
+          subscriptions: subs.data.map(s => {
+            // current_period_end se movió de sitio en API nuevas de
+            // Stripe — leer defensivamente de ambas ubicaciones.
+            const cpe = (s as unknown as { current_period_end?: number }).current_period_end
+              ?? (s.items.data[0] as unknown as { current_period_end?: number } | undefined)?.current_period_end
+              ?? null;
+            return {
+              id: s.id,
+              status: s.status,
+              amount: (s.items.data[0]?.price?.unit_amount ?? 0) / 100,
+              interval: s.items.data[0]?.price?.recurring?.interval ?? null,
+              current_period_end: cpe ? new Date(cpe * 1000).toISOString().slice(0, 10) : null,
+              metadata: s.metadata,
+            };
+          }),
         });
       }
     } catch (e) {
