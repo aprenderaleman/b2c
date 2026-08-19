@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 
 const Body = z.object({
   name:         z.string().trim().min(2).max(200),
-  class_type:   z.enum(["group", "individual"]),
+  class_type:   z.enum(["group", "individual"]).default("individual"),
   level:        z.enum(["A0","A1","A2","B1","B2","C1","C2"]).nullable().optional(),
   teacher_id:   z.string().uuid().nullable().optional(),
   // URLs: aceptamos string libre + normalizamos abajo (auto-prepend

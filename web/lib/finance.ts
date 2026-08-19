@@ -344,6 +344,201 @@ export async function listStudentPayments(studentId: string): Promise<PaymentRow
 }
 
 // =============================================================================
+// Hours audit / reconciliation dashboard
+// =============================================================================
+
+export type TeacherHoursAudit = {
+  teacher_id: string;
+  teacher_name: string;
+  completed: number;
+  billed: number;
+  unbilled_non_trial: number;
+  trials: number;
+  total_bh: number;
+  upcoming: number;
+  rate_individual_cents: number;
+  rate_group_cents: number;
+};
+
+export type UnbilledClassRow = {
+  id: string;
+  teacher_id: string;
+  teacher_name: string;
+  title: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  actual_duration_minutes: number | null;
+  started_at: string | null;
+  ended_at: string | null;
+  rec_count: number;
+  evidence: "recording" | "timer" | "actual_duration" | "none";
+  computed_bh: number;
+};
+
+export async function getHoursAuditData(monthDate: Date): Promise<{
+  teachers: TeacherHoursAudit[];
+  unbilled: UnbilledClassRow[];
+  earnings: Array<TeacherMonthlyEarnings & { teacher_name: string | null }>;
+}> {
+  const sb = supabaseAdmin();
+  const monthStart = new Date(
+    Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), 1)
+  );
+  const monthEnd = new Date(
+    Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1)
+  );
+
+  let teachers: TeacherHoursAudit[] = [];
+  {
+    const { data: rawTeachers } = await sb
+      .from("teachers")
+      .select("id, rate_individual_cents, rate_group_cents, users!inner(full_name, role)")
+      .eq("active", true);
+
+    for (const row of (rawTeachers ?? []) as unknown as Array<{
+      id: string;
+      rate_individual_cents: number;
+      rate_group_cents: number;
+      users: { full_name: string; role: string } | Array<{ full_name: string; role: string }>;
+    }>) {
+      const t = {
+        ...row,
+        users: Array.isArray(row.users) ? row.users[0] : row.users,
+      };
+      if (!t.users || t.users.role !== "teacher") continue;
+
+      const { data: stats } = await sb
+        .from("classes")
+        .select("id, status, billed_hours, is_trial, scheduled_at")
+        .eq("teacher_id", t.id)
+        .gte("scheduled_at", monthStart.toISOString())
+        .lt("scheduled_at", monthEnd.toISOString());
+
+      const rows = (stats ?? []) as Array<{
+        id: string;
+        status: string;
+        billed_hours: number;
+        is_trial: boolean;
+        scheduled_at: string;
+      }>;
+
+      const completed = rows.filter((r) => r.status === "completed");
+      const billed = completed.filter((r) => r.billed_hours > 0);
+      const trials = completed.filter((r) => r.is_trial);
+      const unbilledNonTrial = completed.filter(
+        (r) => r.billed_hours === 0 && !r.is_trial
+      );
+      const upcoming = rows.filter(
+        (r) => r.status === "scheduled" && new Date(r.scheduled_at) >= new Date()
+      );
+
+      teachers.push({
+        teacher_id: t.id,
+        teacher_name: t.users.full_name,
+        completed: completed.length,
+        billed: billed.length,
+        unbilled_non_trial: unbilledNonTrial.length,
+        trials: trials.length,
+        total_bh: billed.reduce((s, r) => s + r.billed_hours, 0),
+        upcoming: upcoming.length,
+        rate_individual_cents: t.rate_individual_cents,
+        rate_group_cents: t.rate_group_cents,
+      });
+    }
+  }
+
+  // 2. Unbilled non-trial completed classes with evidence check
+  const { data: unbilledRaw } = await sb
+    .from("classes")
+    .select(`
+      id, teacher_id, title, scheduled_at, duration_minutes,
+      actual_duration_minutes, started_at, ended_at, is_trial,
+      teachers!inner(users!inner(full_name, role))
+    `)
+    .eq("status", "completed")
+    .eq("billed_hours", 0)
+    .eq("is_trial", false)
+    .gte("scheduled_at", monthStart.toISOString())
+    .lt("scheduled_at", monthEnd.toISOString());
+
+  const unbilled: UnbilledClassRow[] = [];
+  for (const rawCls of (unbilledRaw ?? []) as unknown as Array<{
+    id: string;
+    teacher_id: string;
+    title: string;
+    scheduled_at: string;
+    duration_minutes: number;
+    actual_duration_minutes: number | null;
+    started_at: string | null;
+    ended_at: string | null;
+    teachers: { users: Array<{ full_name: string; role: string }> } | Array<{ users: Array<{ full_name: string; role: string }> }>;
+  }>) {
+    const tFlat = Array.isArray(rawCls.teachers) ? rawCls.teachers[0] : rawCls.teachers;
+    const uFlat = Array.isArray(tFlat?.users) ? tFlat.users[0] : tFlat?.users;
+    if (!uFlat || uFlat.role !== "teacher") continue;
+    const cls = { ...rawCls, teachers: { users: uFlat } };
+
+    const { count: recCount } = await sb
+      .from("recordings")
+      .select("id", { count: "exact", head: true })
+      .eq("class_id", cls.id)
+      .eq("status", "ready");
+
+    let effectiveDur: number;
+    if (cls.actual_duration_minutes && cls.actual_duration_minutes > 0) {
+      effectiveDur = cls.actual_duration_minutes;
+    } else if (cls.started_at && cls.ended_at) {
+      effectiveDur = Math.round(
+        (new Date(cls.ended_at).getTime() -
+          new Date(cls.started_at).getTime()) /
+          60_000
+      );
+    } else {
+      effectiveDur = cls.duration_minutes;
+    }
+
+    let evidence: UnbilledClassRow["evidence"] = "none";
+    if ((recCount ?? 0) > 0) evidence = "recording";
+    else if (
+      cls.actual_duration_minutes !== null &&
+      cls.actual_duration_minutes >= 15
+    )
+      evidence = "actual_duration";
+    else if (
+      cls.started_at &&
+      cls.ended_at &&
+      new Date(cls.ended_at).getTime() - new Date(cls.started_at).getTime() >=
+        900_000
+    )
+      evidence = "timer";
+
+    unbilled.push({
+      id: cls.id,
+      teacher_id: cls.teacher_id,
+      teacher_name: cls.teachers.users.full_name,
+      title: cls.title,
+      scheduled_at: cls.scheduled_at,
+      duration_minutes: cls.duration_minutes,
+      actual_duration_minutes: cls.actual_duration_minutes,
+      started_at: cls.started_at,
+      ended_at: cls.ended_at,
+      rec_count: recCount ?? 0,
+      evidence,
+      computed_bh: computeBillingUnits(effectiveDur),
+    });
+  }
+
+  // 3. Earnings for the month
+  const earningsRaw = await getAllEarningsForMonth(monthDate);
+  const earnings = earningsRaw.map((e) => ({
+    ...e,
+    teacher_name: e.teacher_name,
+  }));
+
+  return { teachers, unbilled, earnings };
+}
+
+// =============================================================================
 // Display helpers
 // =============================================================================
 

@@ -77,6 +77,7 @@ function adminItems(): NavItem[] {
     { label: "Estudiantes", href: "/admin/estudiantes", icon: "graduationCap", priority: 3 },
     { label: "Empresa",    href: "/admin/empresa",     icon: "trendingUp",    priority: 3.5 },
     { label: "Finanzas",    href: "/admin/finanzas",    icon: "wallet",        priority: 4 },
+    { label: "Horas",       href: "/admin/horas",       icon: "clock",         priority: 4.5 },
     { label: "Grupos",      href: "/admin/grupos",      icon: "folder",        priority: 5 },
     // "Funnel" unifica los antiguos /admin/leads + /admin/ads en una
     // sola página (KPIs + lista de leads + atribución por landing). Las

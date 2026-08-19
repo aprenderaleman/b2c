@@ -152,6 +152,53 @@ export default async function EmpresaPage({
         </div>
       </Panel>
 
+      {/* ============ SECCION 1b: Metricas operativas ============ */}
+      <Panel title="Metricas operativas">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {/* Coste por clase impartida */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Coste por clase impartida
+            </p>
+            {m.cost_per_class ? (
+              <>
+                <p className="mt-1 text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">
+                  {moneyFromCents(m.cost_per_class.cost_cents)}{" "}
+                  <span className="text-sm font-normal text-slate-400">/ clase</span>
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  {moneyFromCents(m.cost_per_class.total_paid_cents)} pagado · {m.cost_per_class.classes_taught} clases impartidas
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-slate-400">Sin datos para este periodo</p>
+            )}
+          </div>
+
+          {/* Pasivo de servicio */}
+          <div className="rounded-2xl border border-amber-200 dark:border-amber-500/30 bg-amber-50/50 dark:bg-amber-500/5 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-400">
+              Pasivo de servicio
+            </p>
+            {m.service_liability ? (
+              <>
+                <p className="mt-1 text-2xl font-bold font-mono text-amber-700 dark:text-amber-300">
+                  {moneyFromCents(m.service_liability.total_cents)}
+                </p>
+                <p className="mt-0.5 text-[11px] text-amber-600/80 dark:text-amber-400/70">
+                  Coste futuro ya comprometido
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  {m.service_liability.total_classes} clases pendientes de impartir
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-slate-400">Sin datos</p>
+            )}
+          </div>
+        </div>
+      </Panel>
+
       {/* ============ SECCION 2: Grafico de evolucion ============ */}
       <Panel title="Evolucion del periodo">
         <div className="mt-4">

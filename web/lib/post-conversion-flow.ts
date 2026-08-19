@@ -82,7 +82,7 @@ async function setupStudentWithTeacher(
     .select("current_level")
     .eq("id", studentId)
     .maybeSingle();
-  const level = (student as { current_level?: string } | null)?.current_level ?? null;
+  const level = (student as { current_level?: string } | null)?.current_level ?? "A1";
 
   const teacherEmail = await getTeacherEmail(teacherId);
   const teacher = await getTeacherById(teacherId);

@@ -88,6 +88,19 @@ export type EmpresaMetrics = {
   prev_revenue_cents: number;
   prev_neto_cents: number;
   active_students: number;
+  cost_per_class: CostPerClass | null;
+  service_liability: ServiceLiability | null;
+};
+
+export type CostPerClass = {
+  cost_cents: number;
+  total_paid_cents: number;
+  classes_taught: number;
+};
+
+export type ServiceLiability = {
+  total_cents: number;
+  total_classes: number;
 };
 
 // =============================================================================
@@ -180,6 +193,8 @@ export async function getEmpresaMetrics(
     googleAdsSpend,
     googleAdsConversions,
     newClients,
+    costPerClass,
+    serviceLiability,
   ] = await Promise.all([
     getTotalRevenue(from, to),
     getTotalRevenue(prevFrom, prevTo),
@@ -197,6 +212,8 @@ export async function getEmpresaMetrics(
     getGoogleAdsSpend(sb, from, to),
     getGoogleAdsConversions(sb, from, to),
     getNewClientsMetrics(sb, from, to),
+    getCostPerClass(sb, from, to),
+    getServiceLiability(sb),
   ]);
 
   // Inject Google Ads conversions into funnel for real conversion rate
@@ -273,6 +290,8 @@ export async function getEmpresaMetrics(
     prev_revenue_cents: prevRevenue.revenue_cents,
     prev_neto_cents: prevNetoCents,
     active_students: newClients.total_unique_clients || activeStudents,
+    cost_per_class: costPerClass,
+    service_liability: serviceLiability,
   };
 }
 
@@ -438,6 +457,93 @@ async function countActiveStudents(sb: SB): Promise<number> {
     .select("id", { count: "exact", head: true })
     .or("subscription_status.eq.active,classes_remaining.gt.0");
   return count ?? 0;
+}
+
+async function getCostPerClass(sb: SB, from: Date, to: Date): Promise<CostPerClass | null> {
+  const fromDate = from.toISOString().slice(0, 10);
+  const toDate = to.toISOString().slice(0, 10);
+
+  const { data: earnings } = await sb
+    .from("teacher_earnings")
+    .select("amount_cents, classes_count")
+    .gte("month", fromDate)
+    .lte("month", toDate);
+
+  if (!earnings || earnings.length === 0) return null;
+
+  const totalPaid = earnings.reduce((s, r) => s + Number((r as any).amount_cents), 0);
+  const totalClasses = earnings.reduce((s, r) => s + Number((r as any).classes_count ?? 0), 0);
+
+  if (totalClasses === 0) return null;
+
+  return {
+    cost_cents: Math.round(totalPaid / totalClasses),
+    total_paid_cents: totalPaid,
+    classes_taught: totalClasses,
+  };
+}
+
+async function getServiceLiability(sb: SB): Promise<ServiceLiability | null> {
+  const { data: students } = await sb
+    .from("students")
+    .select("id, classes_remaining")
+    .or("subscription_status.eq.active,classes_remaining.gt.0");
+
+  if (!students || students.length === 0) return null;
+
+  const studentIds = students.map((s: any) => s.id);
+  const classesMap = new Map<string, number>();
+  for (const s of students as any[]) {
+    classesMap.set(s.id, Math.max(0, Number(s.classes_remaining ?? 0)));
+  }
+
+  const { data: recentClasses } = await sb
+    .from("class_participants")
+    .select("student_id, class:classes!inner(teacher_id, type)")
+    .in("student_id", studentIds);
+
+  const studentTeacher = new Map<string, { teacher_id: string; type: string }>();
+  for (const r of (recentClasses ?? []) as any[]) {
+    const c = Array.isArray(r.class) ? r.class[0] : r.class;
+    if (c?.teacher_id) {
+      studentTeacher.set(r.student_id, { teacher_id: c.teacher_id, type: c.type });
+    }
+  }
+
+  const teacherIds = [...new Set([...studentTeacher.values()].map(v => v.teacher_id))];
+  const { data: teachers } = await sb
+    .from("teachers")
+    .select("id, rate_group_cents, rate_individual_cents")
+    .in("id", teacherIds.length > 0 ? teacherIds : ["__none__"]);
+
+  const rateMap = new Map<string, { group: number; individual: number }>();
+  for (const t of (teachers ?? []) as any[]) {
+    rateMap.set(t.id, {
+      group: Number(t.rate_group_cents ?? 0),
+      individual: Number(t.rate_individual_cents ?? 0),
+    });
+  }
+
+  const DEFAULT_RATE_CENTS = 1500;
+  let totalCents = 0;
+  let totalClasses = 0;
+
+  for (const [studentId, remaining] of classesMap) {
+    if (remaining <= 0) continue;
+    totalClasses += remaining;
+    const info = studentTeacher.get(studentId);
+    if (info) {
+      const rates = rateMap.get(info.teacher_id);
+      const rate = rates
+        ? (info.type === "group" ? rates.group : rates.individual)
+        : DEFAULT_RATE_CENTS;
+      totalCents += remaining * (rate || DEFAULT_RATE_CENTS);
+    } else {
+      totalCents += remaining * DEFAULT_RATE_CENTS;
+    }
+  }
+
+  return { total_cents: totalCents, total_classes: totalClasses };
 }
 
 async function getAverageLTV(sb: SB): Promise<number> {
