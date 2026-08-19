@@ -592,19 +592,55 @@ function isWithinSendWindow(): boolean {
 }
 
 function getNext9amBerlin(): Date {
+  // El motor posterga fuera de ventana (09-21 Berlin) al próximo 09:00 Berlin.
+  // Bug histórico (Hernantorres 2026-08-19): la versión anterior SIEMPRE
+  // sumaba 1 día — si el motor corría a las 08:38 Berlin, en vez de
+  // posponer 22 min (hoy 09:00) posponía 24h22min (mañana 09:00). Además
+  // calculaba el offset TZ desde `toLocaleString("en-US")`, que Vercel
+  // interpretaba en UTC y devolvía offsets erróneos por DST (2h de deriva
+  // en verano CEST). Fix: calcular en Berlin con Intl.DateTimeFormat y
+  // construir el instante UTC de forma iterativa (converge en 1-2 pasos).
   const now = new Date();
-  const berlinStr = now.toLocaleString("en-US", { timeZone: "Europe/Berlin" });
-  const berlinNow = new Date(berlinStr);
-  const tomorrow9am = new Date(berlinNow);
-  tomorrow9am.setDate(tomorrow9am.getDate() + 1);
-  tomorrow9am.setHours(9, 0, 0, 0);
-  // Skip Sunday
-  if (tomorrow9am.getDay() === 0) {
-    tomorrow9am.setDate(tomorrow9am.getDate() + 1);
+  const berlinFmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  const parts = Object.fromEntries(
+    berlinFmt.formatToParts(now).map(p => [p.type, p.value]),
+  );
+  const berlinH = Number(parts.hour);
+
+  // Día objetivo en Berlin: hoy si aún no pasaron las 09:00, mañana si ya.
+  const [y, m, d] = [Number(parts.year), Number(parts.month), Number(parts.day)];
+  let target = new Date(Date.UTC(y, m - 1, d));
+  if (berlinH >= 9) target = new Date(target.getTime() + 86_400_000);
+
+  // Construir el instante UTC que corresponde a "target 09:00 Berlin".
+  // Iterativo: asumir UTC → medir hora Berlin → corregir. Converge en 1-2
+  // iteraciones incluso en cambios DST.
+  let guess = new Date(Date.UTC(
+    target.getUTCFullYear(), target.getUTCMonth(), target.getUTCDate(), 9, 0, 0,
+  ));
+  for (let i = 0; i < 3; i++) {
+    const gParts = Object.fromEntries(
+      berlinFmt.formatToParts(guess).map(p => [p.type, p.value]),
+    );
+    const gH = Number(gParts.hour), gMin = Number(gParts.minute);
+    const gDay = Number(gParts.day);
+    const dayDiff = target.getUTCDate() - gDay;
+    const diffMs = ((9 - gH + dayDiff * 24) * 60 - gMin) * 60_000;
+    if (diffMs === 0) break;
+    guess = new Date(guess.getTime() + diffMs);
   }
-  // Convert back to UTC-ish by calculating the offset
-  const offset = now.getTime() - berlinNow.getTime();
-  return new Date(tomorrow9am.getTime() + offset);
+
+  // Domingo Berlin → saltar a lunes 09:00.
+  const dayName = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Berlin", weekday: "short",
+  }).format(guess);
+  if (dayName === "Sun") guess = new Date(guess.getTime() + 86_400_000);
+
+  return guess;
 }
 
 // ── Closer task creation ──────────────────────────────────────────────
