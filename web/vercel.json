@@ -103,6 +103,10 @@
       "schedule": "0 6 * * *"
     },
     {
+      "path": "/api/cron/messaging-audit-daily",
+      "schedule": "15 7 * * *"
+    },
+    {
       "path": "/api/cron/summer-promo-dispatch",
       "schedule": "15 * * * *"
     },
