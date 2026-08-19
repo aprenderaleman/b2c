@@ -44,7 +44,7 @@ export default async function ConfirmacionPage({
       id, scheduled_at, duration_minutes, lead_id, is_trial, short_code, sesion_closer_id,
       teacher:teachers(users(full_name, email)),
       closer:users!classes_sesion_closer_id_fkey(full_name, email),
-      lead:leads!inner(name, email, whatsapp_normalized, reserva_prioritaria)
+      lead:leads!inner(name, email, whatsapp_normalized, reserva_prioritaria, landing_intent)
     `)
     .eq("id", classId)
     .maybeSingle();
@@ -63,8 +63,8 @@ export default async function ConfirmacionPage({
                             Array<{ full_name: string | null; email: string }> }> | null;
     closer: { full_name: string | null; email: string } |
             Array<{ full_name: string | null; email: string }> | null;
-    lead: { name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null } |
-          Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null }>;
+    lead: { name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null; landing_intent: string | null } |
+          Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null; landing_intent: string | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null =>
     !x ? null : Array.isArray(x) ? x[0] ?? null : x;
@@ -81,6 +81,11 @@ export default async function ConfirmacionPage({
   const leadPhone   = leadFlat?.whatsapp_normalized ?? undefined;
   const firstName   = leadName.trim().split(/\s+/)[0] || "";
   const priorityActive = leadFlat?.reserva_prioritaria === true;
+  // El funnel /meta-ads-paid ya cobra un depósito de 10€ antes de llegar
+  // aquí (es su premisa de valor). Ofrecerles "Mejora a Reserva Prioritaria"
+  // ahora sería doble cobro y confunde. Excluimos ese único landing_intent;
+  // el resto de funnels (home, SEO, meta-ads gratis, redes) sí ven el CTA.
+  const isMetaAdsPaidFunnel = leadFlat?.landing_intent === "meta-ads-paid";
 
   const startDate = new Date(r.scheduled_at).toLocaleString("es-ES", {
     timeZone: "Europe/Berlin",
@@ -199,7 +204,7 @@ export default async function ConfirmacionPage({
                 Solo se muestra cuando el lead NO ha pagado aún; el
                 estado "activada" se muestra como banner celebratorio
                 arriba del H1 (ver bloque anterior). ═══ */}
-            {!isSesion && !(priorityActive || depositoOk) && (
+            {!isSesion && !isMetaAdsPaidFunnel && !(priorityActive || depositoOk) && (
               <section className="mt-6 rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 p-4 md:p-5">
                 <h2 className="text-[16px] md:text-[17px] font-bold text-slate-900 flex items-center gap-2 flex-wrap">
                   <span aria-hidden>🌟</span>
