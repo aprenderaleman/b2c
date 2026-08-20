@@ -1,15 +1,9 @@
 import { redirect } from "next/navigation";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
-import { SesionHubCard, type SesionRow } from "@/components/closer/SesionHubCard";
+import { SesionHubShell } from "@/components/closer/SesionHubShell";
+import type { SesionRow } from "@/components/closer/SesionHubCard";
 
-/**
- * /closer/sesiones — hub de Sesiones de Plan del closer (Gelfis
- * 2026-08-13). Gemelo de /profesor/clasedeprueba: próximas sesiones +
- * historial, con las mismas acciones y cadenas que el profe (asistió,
- * no asistió, objeción, enlace de inscripción, confirmar pago,
- * reagendar, página web).
- */
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sesiones · Closer" };
 
@@ -92,13 +86,13 @@ export default async function CloserSesionesPage() {
 
   const all = ((data ?? []) as unknown as Row[]).map(toRow).filter((x): x is SesionRow => x !== null);
 
-  // Próximas: agendadas/en vivo desde hace 1h (margen para las que
-  // acaban de pasar y aún no se registraron). Historial: el resto.
-  const cutoff = Date.now() - 3600_000;
-  const proximas = all
-    .filter((s) => (s.status === "scheduled" || s.status === "live") && new Date(s.scheduledAt).getTime() >= cutoff)
+  const now = Date.now();
+  const upcoming = all
+    .filter((s) => new Date(s.scheduledAt).getTime() >= now && s.status !== "cancelled")
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
-  const historial = all.filter((s) => !proximas.includes(s));
+  const past = all
+    .filter((s) => !upcoming.includes(s))
+    .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt));
 
   return (
     <main className="space-y-6">
@@ -106,34 +100,11 @@ export default async function CloserSesionesPage() {
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Sesiones de Plan</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
           Tus videollamadas agendadas y el historial. Marca el resultado al
-          terminar cada sesión — activa las cadenas de seguimiento automáticas.
+          terminar cada sesi&oacute;n — activa las cadenas de seguimiento autom&aacute;ticas.
         </p>
       </header>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Próximas ({proximas.length})
-        </h2>
-        {proximas.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
-            Sin sesiones agendadas. Revisa tus franjas en{" "}
-            <a href="/closer/disponibilidad" className="text-brand-600 dark:text-brand-400 hover:underline">Mi disponibilidad</a>.
-          </div>
-        ) : (
-          proximas.map((s) => <SesionHubCard key={s.classId} row={s} />)
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Historial ({historial.length})
-        </h2>
-        {historial.length === 0 ? (
-          <p className="text-sm text-slate-400 dark:text-slate-500 px-1">Aún no hay sesiones pasadas.</p>
-        ) : (
-          historial.map((s) => <SesionHubCard key={s.classId} row={s} />)
-        )}
-      </section>
+      <SesionHubShell upcoming={upcoming} past={past} />
     </main>
   );
 }

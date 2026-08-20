@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
-import { SesionHubCard, type SesionRow } from "@/components/closer/SesionHubCard";
+import { SesionHubShell } from "@/components/closer/SesionHubShell";
+import type { SesionRow } from "@/components/closer/SesionHubCard";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Sesiones de Plan-Alemán · Admin" };
@@ -86,11 +87,13 @@ export default async function AdminSesionesPage() {
 
   const all = ((data ?? []) as unknown as Row[]).map(toRow).filter((x): x is SesionRow & { closerName: string } => x !== null);
 
-  const cutoff = Date.now() - 3600_000;
-  const proximas = all
-    .filter((s) => (s.status === "scheduled" || s.status === "live") && new Date(s.scheduledAt).getTime() >= cutoff)
+  const now = Date.now();
+  const upcoming = all
+    .filter((s) => new Date(s.scheduledAt).getTime() >= now && s.status !== "cancelled")
     .sort((a, b) => a.scheduledAt.localeCompare(b.scheduledAt));
-  const historial = all.filter((s) => !proximas.includes(s));
+  const past = all
+    .filter((s) => !upcoming.includes(s))
+    .sort((a, b) => b.scheduledAt.localeCompare(a.scheduledAt));
 
   return (
     <main className="space-y-6">
@@ -102,33 +105,7 @@ export default async function AdminSesionesPage() {
         </p>
       </header>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Pr&oacute;ximas ({proximas.length})
-        </h2>
-        {proximas.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-8 text-center text-sm text-slate-500 dark:text-slate-400">
-            Sin sesiones agendadas.
-          </div>
-        ) : (
-          proximas.map((s) => (
-            <SesionHubCard key={s.classId} row={s} closerName={s.closerName} fichaHref={`/admin/leads/${s.leadId}`} />
-          ))
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-          Historial ({historial.length})
-        </h2>
-        {historial.length === 0 ? (
-          <p className="text-sm text-slate-400 dark:text-slate-500 px-1">A&uacute;n no hay sesiones pasadas.</p>
-        ) : (
-          historial.map((s) => (
-            <SesionHubCard key={s.classId} row={s} closerName={s.closerName} fichaHref={`/admin/leads/${s.leadId}`} />
-          ))
-        )}
-      </section>
+      <SesionHubShell upcoming={upcoming} past={past} isAdmin />
     </main>
   );
 }
