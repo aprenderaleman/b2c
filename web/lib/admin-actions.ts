@@ -731,6 +731,19 @@ export async function sendSesionRescheduleLinkMessage(
       const { deleteSesionEventForCloser } = await import("./closer-calendar-sync");
       deleteSesionEventForCloser(sesion.sesion_closer_id, sesion.closer_gcal_event_id).catch(() => {});
     }
+
+    // Aviso al closer asignado del cancel (Gelfis 2026-08-19). No
+    // tenemos user_id del actor aquí — solo el nombre; el helper no
+    // puede filtrar por identidad. Aceptable: si el closer se cancela
+    // a sí mismo, recibe un email confirmando lo que acaba de hacer.
+    const { notifyCloserSesionChanged } = await import("./assignee-notifications");
+    void notifyCloserSesionChanged({
+      sesionId:     sesion.id,
+      kind:         "cancelled",
+      previousDate: sesion.scheduled_at,
+      actorUserId:  null,
+      actorLabel:   `${actorName} (via link reagenda)`,
+    });
   }
 
   await sb.from("leads").update({

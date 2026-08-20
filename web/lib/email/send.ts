@@ -86,6 +86,14 @@ import {
   type TrialAssignedTeacherVars,
 } from "./templates/trial-assigned-teacher";
 import {
+  renderTrialTeacherUpdated,
+  type TrialTeacherUpdatedVars,
+} from "./templates/trial-teacher-updated";
+import {
+  renderSesionCloserUpdated,
+  type SesionCloserUpdatedVars,
+} from "./templates/sesion-closer-updated";
+import {
   renderCloserDailyDigest,
   type CloserDailyDigestVars,
 } from "./templates/closer-daily-digest";
@@ -563,6 +571,34 @@ export async function sendTrialRescheduledEmail(
   const { assertLeadJoinUrl } = await import("@/lib/trial-token");
   assertLeadJoinUrl(vars.joinUrl, "sendTrialRescheduledEmail");
   const { subject, html, text } = renderTrialRescheduled(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Aviso al profe cuando su clase de prueba fue reagendada o cancelada
+ * por un tercero (admin, lead vía funnel). Gelfis 2026-08-19: los profes
+ * necesitan enterarse aunque no hayan iniciado la acción — de otra
+ * forma se enteran al abrir el panel o cuando el lead no aparece.
+ * El caller debe suprimir el envío si el actor ES el mismo teacher.
+ */
+export async function sendTrialTeacherUpdatedEmail(
+  to: string,
+  vars: TrialTeacherUpdatedVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTrialTeacherUpdated(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Aviso al closer cuando su Sesión de Plan-Alemán fue reagendada o
+ * cancelada por un tercero (lead vía funnel, otro closer). Idem al
+ * anterior: suprimir si el actor ES el mismo closer.
+ */
+export async function sendSesionCloserUpdatedEmail(
+  to: string,
+  vars: SesionCloserUpdatedVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderSesionCloserUpdated(vars);
   return sendRaw(to, subject, html, text);
 }
 

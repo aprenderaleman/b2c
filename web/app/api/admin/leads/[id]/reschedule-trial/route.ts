@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { patchTrialEvent } from "@/lib/google-calendar";
 import { sendTrialRescheduledEmail } from "@/lib/email/send";
+import { notifyTeacherClassChanged } from "@/lib/assignee-notifications";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { formatBerlinFull } from "@/lib/time";
 import { buildLeadJoinUrl } from "@/lib/trial-token";
@@ -288,6 +289,20 @@ export async function POST(
   };
   const emailOk = lr.email             ? settledOk(results[0]) : null;
   const waOk    = lr.whatsapp_normalized ? settledOk(results[lr.email ? 1 : 0]) : null;
+
+  // Notificar al teacher que su clase cambió. Si hubo swap de profe,
+  // solo notificamos al NUEVO — el viejo se entera por el evento GCal
+  // borrado y por el cambio en su panel (edge case poco frecuente).
+  const actorUserId = (session?.user as { id?: string } | undefined)?.id ?? null;
+  const actorEmail  = session?.user?.email ?? null;
+  void notifyTeacherClassChanged({
+    classId:      c.id,
+    kind:         "rescheduled",
+    previousDate: c.scheduled_at,
+    newDate:      newStart,
+    actorUserId,
+    actorLabel:   cronAuthd ? "cron/curl" : (actorEmail ? `${actorEmail} (admin)` : "admin"),
+  });
 
   // 7) Timeline
   const actor = cronAuthd ? "cron/curl" : (session?.user?.email ?? "admin");

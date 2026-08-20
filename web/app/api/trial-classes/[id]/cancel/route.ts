@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { sendTrialCancelledEmail } from "@/lib/email/send";
 import { startChain } from "@/lib/chain-engine";
+import { notifyTeacherClassChanged } from "@/lib/assignee-notifications";
 
 /**
  * POST /api/trial-classes/{id}/cancel
@@ -98,6 +99,17 @@ export async function POST(
   if (updErr) {
     return NextResponse.json({ error: "cancel_failed", message: updErr.message }, { status: 500 });
   }
+
+  // Aviso al teacher — solo si el actor NO es él mismo (helper filtra).
+  // Rol del actor va al label para transparencia.
+  const actorLabel = role === "teacher" ? "el profe" : role === "admin" ? `${session.user?.email ?? "admin"} (admin)` : `${session.user?.email ?? "superadmin"} (superadmin)`;
+  void notifyTeacherClassChanged({
+    classId:      c.id,
+    kind:         "cancelled",
+    previousDate: c.scheduled_at,
+    actorUserId:  userId,
+    actorLabel,
+  });
 
   // Notificación al lead (Gelfis 2026-07-03): WA + email con CTA a
   // reagendar. Se envía para cualquier rol que cancele (teacher /

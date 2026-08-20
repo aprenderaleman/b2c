@@ -148,6 +148,19 @@ export async function POST(req: NextRequest) {
     .update({ notes_admin: null })
     .eq("id", body.class_id);
 
+  // Aviso al profe del nuevo teacher_id (si hubo swap, del nuevo).
+  // Este endpoint es interno (script/agent); no hay actorUserId real,
+  // así que el email siempre se envía al assignee.
+  const { notifyTeacherClassChanged } = await import("@/lib/assignee-notifications");
+  void notifyTeacherClassChanged({
+    classId:      body.class_id,
+    kind:         "rescheduled",
+    previousDate: cls.scheduled_at,
+    newDate:      newStart,
+    actorUserId:  null,
+    actorLabel:   "sistema (lead reagendó)",
+  });
+
   return NextResponse.json({
     ok: true,
     class_id: body.class_id,

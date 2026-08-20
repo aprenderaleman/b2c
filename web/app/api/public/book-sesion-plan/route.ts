@@ -9,6 +9,7 @@ import { pauseAllOutbound } from "@/lib/chain-engine";
 import { sanitizeE164 } from "@/lib/phone";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { notifyCloserOnBooking } from "@/lib/sesion-notifications";
+import { notifyCloserSesionChanged } from "@/lib/assignee-notifications";
 import {
   createSesionEventForCloser,
   patchSesionEventForCloser,
@@ -491,6 +492,18 @@ export async function POST(req: Request) {
       if (!rescheduled) {
         await notifyCloserOnBooking(sb, classId).catch(err => {
           console.error("[book-sesion-plan] notifyCloserOnBooking error:", err);
+        });
+      } else {
+        // Aviso al closer del cambio de fecha (Gelfis 2026-08-19). Actor
+        // es el propio lead vía funnel público, así que actorUserId=null
+        // y el helper siempre envía.
+        void notifyCloserSesionChanged({
+          sesionId:     classId,
+          kind:         "rescheduled",
+          previousDate: activeSesion?.scheduled_at as string | undefined,
+          newDate:      b.slot_iso,
+          actorUserId:  null,
+          actorLabel:   `${b.name} (lead)`,
         });
       }
     } catch (err) {
