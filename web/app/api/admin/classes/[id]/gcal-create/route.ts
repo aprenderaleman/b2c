@@ -24,10 +24,16 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  if (!session?.user || (role !== "admin" && role !== "superadmin")) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  // Aceptamos sesión admin (uso normal desde UI) o Bearer CRON_SECRET
+  // (uso desde script para backfills / reasignaciones puntuales).
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const cronOk = Boolean(process.env.CRON_SECRET) && bearer === process.env.CRON_SECRET;
+  if (!cronOk) {
+    const session = await auth();
+    const role = (session?.user as { role?: string } | undefined)?.role;
+    if (!session?.user || (role !== "admin" && role !== "superadmin")) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
   }
 
   const { id } = await params;
