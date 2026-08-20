@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { RecordingRow, type RecordingRowItem } from "./RecordingRow";
 
-type Tab = "contenido" | "regulares" | "prueba";
+type Tab = "contenido" | "regulares" | "prueba" | "sesiones";
 
 type Props = {
   contentItems: RecordingRowItem[];
   regularItems: RecordingRowItem[];
   trialItems: RecordingRowItem[];
+  sesionItems: RecordingRowItem[];
   isSuper: boolean;
 };
 
@@ -16,22 +17,25 @@ const tabs: { key: Tab; label: string; icon: string }[] = [
   { key: "contenido", label: "Videos de contenido", icon: "🎬" },
   { key: "regulares", label: "Clases regulares",    icon: "📹" },
   { key: "prueba",    label: "Clases de prueba",     icon: "🎯" },
+  { key: "sesiones",  label: "Sesiones de plan",     icon: "🤝" },
 ];
 
-export function RecordingTabs({ contentItems, regularItems, trialItems, isSuper }: Props) {
+export function RecordingTabs({ contentItems, regularItems, trialItems, sesionItems, isSuper }: Props) {
   const [active, setActive] = useState<Tab>("contenido");
 
   const counts: Record<Tab, number> = {
     contenido: contentItems.length,
     regulares: regularItems.length,
     prueba:    trialItems.length,
+    sesiones:  sesionItems.length,
   };
 
-  const visibleTabs = isSuper ? tabs : tabs.filter(t => t.key !== "prueba");
+  const visibleTabs = isSuper ? tabs : tabs.filter(t => t.key !== "prueba" && t.key !== "sesiones");
 
   const items =
     active === "contenido" ? contentItems :
     active === "regulares" ? regularItems :
+    active === "sesiones"  ? sesionItems  :
                              trialItems;
 
   const sectionStyles: Record<Tab, { border: string; bg: string; divider: string; headerBorder: string }> = {
@@ -53,6 +57,12 @@ export function RecordingTabs({ contentItems, regularItems, trialItems, isSuper 
       divider: "divide-slate-100 dark:divide-slate-800",
       headerBorder: "border-slate-100 dark:border-slate-800",
     },
+    sesiones: {
+      border: "border-sky-300 dark:border-sky-500/40",
+      bg: "bg-sky-50/40 dark:bg-sky-500/5",
+      divider: "divide-sky-200/60 dark:divide-sky-500/20",
+      headerBorder: "border-sky-200 dark:border-sky-500/30",
+    },
   };
 
   const style = sectionStyles[active];
@@ -61,6 +71,7 @@ export function RecordingTabs({ contentItems, regularItems, trialItems, isSuper 
     contenido: "Aún no hay videos de contenido. Los profesores pueden crear sesiones desde /profesor/videos.",
     regulares: "Aún no hay grabaciones de clases regulares.",
     prueba:    "No hay grabaciones de clases de prueba.",
+    sesiones:  "No hay grabaciones de sesiones de plan.",
   };
 
   return (
@@ -81,7 +92,9 @@ export function RecordingTabs({ contentItems, regularItems, trialItems, isSuper 
                     ? "bg-purple-600 text-white shadow-md shadow-purple-500/20"
                     : tab.key === "prueba"
                       ? "bg-amber-500 text-white shadow-md shadow-amber-500/20"
-                      : "bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-md"
+                      : tab.key === "sesiones"
+                        ? "bg-sky-600 text-white shadow-md shadow-sky-500/20"
+                        : "bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-md"
                   : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500"
                 }
               `}

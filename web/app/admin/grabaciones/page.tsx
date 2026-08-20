@@ -18,10 +18,11 @@ export default async function AdminRecordingsPage() {
     .select(`
       id, status, duration_seconds, file_size_bytes, created_at, processed_at,
       class:classes!inner(
-        id, title, scheduled_at, is_trial, is_content_recording,
-        teacher:teachers!inner(
-          users!inner(full_name, email)
+        id, title, scheduled_at, is_trial, is_content_recording, sesion_closer_id,
+        teacher:teachers(
+          users(full_name, email)
         ),
+        sesion_closer:users!classes_sesion_closer_id_fkey(full_name, email),
         class_participants(
           students(users(full_name, email))
         )
@@ -37,9 +38,11 @@ export default async function AdminRecordingsPage() {
     scheduled_at: string | null;
     is_trial:     boolean;
     is_content_recording?: boolean;
+    sesion_closer_id: string | null;
     teacher: {
       users: UserLite | UserLite[];
-    } | Array<{ users: UserLite | UserLite[] }>;
+    } | Array<{ users: UserLite | UserLite[] }> | null;
+    sesion_closer: UserLite | UserLite[] | null;
     class_participants: Array<{
       students: { users: UserLite | UserLite[] } |
                 Array<{ users: UserLite | UserLite[] }> | null;
@@ -61,6 +64,7 @@ export default async function AdminRecordingsPage() {
     const c  = flat(r.class);
     const t  = c ? flat(c.teacher) : null;
     const tu = t ? flat(t.users) : null;
+    const closer = c ? flat(c.sesion_closer) : null;
     const students = c?.class_participants?.map(p => {
       const s = flat(p.students);
       return s ? flat(s.users) : null;
@@ -75,9 +79,10 @@ export default async function AdminRecordingsPage() {
       class_id:     c?.id ?? null,
       class_title:  c?.title ?? "(sin título)",
       class_date:   c?.scheduled_at ?? r.created_at,
-      teacher_name: tu?.full_name || tu?.email || "—",
+      teacher_name: tu?.full_name || tu?.email || closer?.full_name || closer?.email || "—",
       is_trial:     Boolean(c?.is_trial),
       is_content:   Boolean(c?.is_content_recording),
+      is_sesion:    Boolean(c?.sesion_closer_id),
       students,
     };
   });
@@ -97,10 +102,14 @@ export default async function AdminRecordingsPage() {
 
   const contentItems = allItems.filter(i => i.is_content).map(toRowItem);
   const classItems   = allItems.filter(i => !i.is_content);
-  const trialItems   = (isSuper ? classItems.filter(i => i.is_trial) : []).map(toRowItem);
-  const regularItems = classItems.filter(i => !i.is_trial).map(toRowItem);
+  // Sesiones de plan (videollamada con closer): clase sin profesor con
+  // sesion_closer_id — antes el join !inner a teachers las excluía de
+  // la página entera. Solo superadmin, como las trials.
+  const sesionItems  = (isSuper ? classItems.filter(i => i.is_sesion) : []).map(toRowItem);
+  const trialItems   = (isSuper ? classItems.filter(i => i.is_trial && !i.is_sesion) : []).map(toRowItem);
+  const regularItems = classItems.filter(i => !i.is_trial && !i.is_sesion).map(toRowItem);
 
-  const visibleItems = isSuper ? allItems : allItems.filter(i => !i.is_trial);
+  const visibleItems = isSuper ? allItems : allItems.filter(i => !i.is_trial && !i.is_sesion);
   const ready      = visibleItems.filter(i => i.status === "ready").length;
   const processing = visibleItems.filter(i => i.status === "processing").length;
   const failed     = visibleItems.filter(i => i.status === "failed").length;
@@ -131,6 +140,7 @@ export default async function AdminRecordingsPage() {
         contentItems={contentItems}
         regularItems={regularItems}
         trialItems={trialItems}
+        sesionItems={sesionItems}
         isSuper={isSuper}
       />
     </main>
