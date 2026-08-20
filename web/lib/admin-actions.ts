@@ -674,6 +674,95 @@ export async function sendRescheduleLinkMessage(
 }
 
 /**
+ * Reagendar una Sesión de Plan-Alemán (videollamada con closer).
+ *
+ * Gemelo de sendRescheduleLinkMessage pero para sesiones del closer:
+ *   1. Cancela la sesión actual (classes con sesion_closer_id).
+ *   2. Elimina evento de Google Calendar del closer.
+ *   3. Envía WA con link a /sesion-plan/funnel para re-agendar.
+ *   4. Cancela cadenas activas.
+ *
+ * El funnel hace upsert por email/WhatsApp — el lead no se duplica.
+ */
+export async function sendSesionRescheduleLinkMessage(
+  leadId: string,
+  opts?: { actorName?: string },
+): Promise<{ ok: boolean; reason?: string }> {
+  const actorName = opts?.actorName ?? "closer";
+  const sb = supabaseAdmin();
+
+  const { data: leadInfo } = await sb
+    .from("leads")
+    .select("name, whatsapp_normalized")
+    .eq("id", leadId)
+    .maybeSingle();
+  const linfo = leadInfo as { name: string | null; whatsapp_normalized: string | null } | null;
+  if (!linfo?.whatsapp_normalized) return { ok: false, reason: "no_whatsapp" };
+
+  const nowIso = new Date().toISOString();
+  const { data: currentSesion } = await sb
+    .from("classes")
+    .select("id, scheduled_at, sesion_closer_id, closer_gcal_event_id")
+    .eq("lead_id", leadId)
+    .not("sesion_closer_id", "is", null)
+    .eq("status", "scheduled")
+    .gte("scheduled_at", nowIso)
+    .order("scheduled_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const sesion = currentSesion as {
+    id: string; scheduled_at: string;
+    sesion_closer_id: string | null; closer_gcal_event_id: string | null;
+  } | null;
+
+  if (sesion) {
+    await sb.from("classes")
+      .update({ status: "cancelled", updated_at: nowIso })
+      .eq("id", sesion.id);
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    "status_change",
+      author:  actorName,
+      content: `🚫 Sesión de plan cancelada por reagendamiento (${actorName}) (${new Date(sesion.scheduled_at).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })} Berlín)`,
+      metadata: { class_id: sesion.id, kind: "sesion_cancelled_for_reschedule", actor: actorName },
+    });
+
+    if (sesion.closer_gcal_event_id && sesion.sesion_closer_id) {
+      const { deleteSesionEventForCloser } = await import("./closer-calendar-sync");
+      deleteSesionEventForCloser(sesion.sesion_closer_id, sesion.closer_gcal_event_id).catch(() => {});
+    }
+  }
+
+  await sb.from("leads").update({
+    sesion_plan_at: null,
+  }).eq("id", leadId);
+
+  const firstName = (linfo.name || "").split(/\s+/)[0] || linfo.name || "";
+  const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+  const sesionUrl = `${baseUrl}/sesion-plan/funnel`;
+
+  const waText = sesion
+    ? `¡Hola ${firstName}! 👋\n\nHe cancelado tu sesión de plan actual. Puedes elegir un nuevo horario con este enlace:\n\n👉 ${sesionUrl}\n\nEs una videollamada de 25 minutos donde veremos tu plan personalizado de alemán. Avísame cuando hayas elegido tu nuevo horario. 😊\n\n— Aprender-Aleman.de`
+    : `¡Hola ${firstName}! 👋\n\nTe comparto el enlace para agendar tu sesión de plan de alemán — eliges tu horario en un momento:\n\n👉 ${sesionUrl}\n\nEs una videollamada de 25 minutos donde veremos tu plan personalizado. 😊\n\n— Aprender-Aleman.de`;
+
+  const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "sesion_reschedule_link" });
+  await sb.from("lead_timeline").insert({
+    lead_id: leadId,
+    type:    waRes.ok ? "system_message_sent" : "send_failed",
+    author:  actorName,
+    content: waRes.ok
+      ? `💬 Reagendamiento de sesión enviado a ${linfo.whatsapp_normalized}`
+      : `💬 Falló envío del link reagendar sesión: ${waRes.reason ?? "unknown"}`,
+    metadata: { kind: "sesion_reschedule_link", channel: "whatsapp" },
+  });
+
+  await cancelActiveChain(leadId, "sesion_reschedule")
+    .catch(err => console.warn("[sendSesionRescheduleLinkMessage] cancelActiveChain error:", err));
+
+  return waRes.ok ? { ok: true } : { ok: false, reason: waRes.reason ?? "send_failed" };
+}
+
+/**
  * Flujo 3b: lead asistió pero tiene una objeción (precio, pensarlo,
  * pareja/familia, tiempo). Arranca la cadena chain3_obj_* correspondiente.
  */

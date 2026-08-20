@@ -109,6 +109,8 @@ const ALLOWED_WA_KINDS = new Set([
   "sesion_reminder_15m",
   // ACK al lead cuando responde CONFIRMO a la sesión de plan (Gelfis 2026-08-14)
   "sesion_confirm_ack",
+  // Reagendar sesión de plan (link a /sesion-plan/funnel)
+  "sesion_reschedule_link",
   // Notificaciones al closer (funnel /sesion-plan)
   "sesion_closer_booked",   // al agendarse: nombre + meta + hora
   "sesion_closer_pre_15m",  // T-15m: espejo del recordatorio al lead

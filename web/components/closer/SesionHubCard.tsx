@@ -9,6 +9,8 @@
  * — decisión Gelfis 2026-08-13: sin botón "Acciones" duplicado aquí.
  */
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { PriorityBadges, summarizeQualification } from "@/components/admin/PriorityBadge";
 
@@ -46,6 +48,36 @@ export function SesionHubCard({ row, closerName, fichaHref }: {
   closerName?: string;
   fichaHref?: string;
 }) {
+  const router = useRouter();
+  const [rescheduling, setRescheduling] = useState(false);
+
+  const handleReagendar = async () => {
+    if (!confirm(
+      "REAGENDAR sesión de plan.\n\n" +
+      "Esto va a:\n" +
+      "  • Cancelar la sesión actual del lead (si existe).\n" +
+      "  • Enviar por WhatsApp el link a /sesion-plan/funnel.\n\n" +
+      "Cuando el lead elija nuevo horario, se agendará automáticamente.\n\n" +
+      "¿Continuar?"
+    )) return;
+    setRescheduling(true);
+    try {
+      const res = await fetch(`/api/closer/leads/${row.leadId}/send-sesion-reschedule-link`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.reason ?? `HTTP ${res.status}`);
+      alert("Mensaje de reagendar sesión enviado.");
+      router.refresh();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al enviar reagendamiento");
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
   const date = new Date(row.scheduledAt).toLocaleDateString("es-ES", {
     timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long",
   });
@@ -145,6 +177,16 @@ export function SesionHubCard({ row, closerName, fichaHref }: {
             >
               👤 Ficha
             </Link>
+
+            {row.status === "scheduled" && (
+              <button
+                onClick={handleReagendar}
+                disabled={rescheduling}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 px-3.5 py-2 text-xs font-semibold transition-colors disabled:opacity-50"
+              >
+                {rescheduling ? "Enviando..." : "📅 Reagendar"}
+              </button>
+            )}
           </div>
         </div>
       </div>
