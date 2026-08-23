@@ -484,6 +484,14 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
   sesion_attended: {
     type: "sesion_attended",
     label: "Sesión de Plan-Alemán: asistió",
+    // Bug Yamileth 2026-08-23: la Sesión de Plan-Alemán agenda con
+    // pauseAllOutbound(sesion+24h) para silenciar otras cadenas
+    // mientras el lead espera. Cuando el closer marca "asistió" y
+    // arranca sesion_attended, ese mismo pause bloquea el step 0
+    // (delayMs=0, envío inmediato) y lo posterga 23h — el lead no
+    // recibe el mensaje justo cuando más engagement hay. bypassPause
+    // libera esta cadena transaccional (idem sesion_absent).
+    bypassPause: true,
     steps: [
       { delayMs: 0,       templateKind: "sesion_attended", templateSubN: 1, channels: ["whatsapp"], skipIfPaid: true },
       { delayMs: 24 * H, templateKind: "sesion_attended", templateSubN: 2, channels: ["whatsapp"], skipIfPaid: true },
