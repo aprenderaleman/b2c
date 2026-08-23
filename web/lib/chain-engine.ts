@@ -402,8 +402,12 @@ export async function advanceChain(chain: ChainRow): Promise<{
       }
     }
 
-    // Send window check: 09:00-21:00 Berlin
-    if (!isWithinSendWindow()) {
+    // Send window check: 09:00-21:00 Berlin, no domingos.
+    // Cadenas transaccionales (bypassPause) también saltan este gate —
+    // el followup post-sesión pierde impacto si se retrasa 24h. Bug
+    // Yamileth 2026-08-23: sesión asistida un domingo → mensaje se
+    // postergaba a lunes 09:00 en vez de salir en caliente.
+    if (!def.bypassPause && !isWithinSendWindow()) {
       const next9am = getNext9amBerlin();
       await sb.from("lead_chains").update({
         next_fire_at: next9am.toISOString(),
