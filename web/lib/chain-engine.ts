@@ -31,7 +31,22 @@ export async function startChain(
   leadId: string,
   chainType: ChainType,
   metadata: Record<string, unknown> = {},
-  opts?: { objectionChip?: ObjectionChip; skipFirstStep?: boolean },
+  opts?: {
+    objectionChip?: ObjectionChip;
+    skipFirstStep?: boolean;
+    /**
+     * Marca la chain para que su PRIMER envío ignore el send-window
+     * gate (09-21 Berlin, sin domingos). El flag se auto-limpia después
+     * del primer envío exitoso — steps subsiguientes respetan el gate.
+     *
+     * Uso: endpoints donde un humano (profe, closer, admin) dispara la
+     * chain al marcar una acción. Regla del negocio (Gelfis 2026-08-23):
+     * "Stiv no envía mensajes automáticos los domingos, PERO si alguien
+     * marca una acción, la chain debe salir en el momento aunque sea
+     * fin de semana o fuera de horario."
+     */
+    bypassGateOnStart?: boolean;
+  },
 ): Promise<string | null> {
   const sb = supabaseAdmin();
   const def = CHAIN_DEFINITIONS[chainType];
@@ -43,6 +58,11 @@ export async function startChain(
   const firstStep = def.steps[0];
   const nextFireAt = new Date(Date.now() + firstStep.delayMs).toISOString();
 
+  // Inyectar flag en metadata si es acción humana (consumido en advanceChain).
+  const chainMetadata: Record<string, unknown> = opts?.bypassGateOnStart
+    ? { ...metadata, bypass_gate_on_start: true }
+    : metadata;
+
   const { data, error } = await sb
     .from("lead_chains")
     .insert({
@@ -51,7 +71,7 @@ export async function startChain(
       objection_chip: opts?.objectionChip ?? null,
       current_step: 0,
       next_fire_at: opts?.skipFirstStep ? null : nextFireAt,
-      metadata,
+      metadata: chainMetadata,
     })
     .select("id")
     .single();
@@ -80,7 +100,7 @@ export async function startChain(
       next_fire_at: nextFireAt,
       paused_until: null,
       last_auto_sent_at: null,
-      metadata,
+      metadata: chainMetadata,
     };
     await advanceChain(chainRow).catch((err) =>
       console.error(`[chain-engine] instant advance error for chain ${data.id}:`, err),
@@ -403,11 +423,17 @@ export async function advanceChain(chain: ChainRow): Promise<{
     }
 
     // Send window check: 09:00-21:00 Berlin, no domingos.
-    // Cadenas transaccionales (bypassPause) también saltan este gate —
-    // el followup post-sesión pierde impacto si se retrasa 24h. Bug
-    // Yamileth 2026-08-23: sesión asistida un domingo → mensaje se
-    // postergaba a lunes 09:00 en vez de salir en caliente.
-    if (!def.bypassPause && !isWithinSendWindow()) {
+    // Excepciones (Gelfis 2026-08-23):
+    //   1. Cadenas transaccionales (def.bypassPause) — bug Yamileth:
+    //      sesión asistida un domingo → mensaje se postergaba a lunes.
+    //   2. Chain con metadata.bypass_gate_on_start=true — arranque
+    //      humano (profe/closer/admin marca acción). Regla: "Stiv no
+    //      envía automáticos los domingos, PERO si alguien marca una
+    //      acción, la chain sale en el momento". El flag se consume
+    //      abajo tras enviar (steps subsiguientes respetan el gate).
+    const bypassGateOnce = (chain.metadata as { bypass_gate_on_start?: boolean } | null)
+      ?.bypass_gate_on_start === true;
+    if (!def.bypassPause && !bypassGateOnce && !isWithinSendWindow()) {
       const next9am = getNext9amBerlin();
       await sb.from("lead_chains").update({
         next_fire_at: next9am.toISOString(),
@@ -463,10 +489,17 @@ export async function advanceChain(chain: ChainRow): Promise<{
 
     const res = await sendWhatsappText(phone, text, { kind: templateKind });
 
-    // R4: update last_auto_sent_at after successful send
+    // R4: update last_auto_sent_at after successful send. También
+    // consumimos bypass_gate_on_start (si estaba en metadata) — el flag
+    // solo aplica al primer envío; steps subsiguientes respetan el gate.
     if (res.ok) {
+      const currentMeta = (chain.metadata ?? {}) as Record<string, unknown>;
+      const cleanedMeta: Record<string, unknown> = { ...currentMeta };
+      const hadBypass = cleanedMeta.bypass_gate_on_start === true;
+      if (hadBypass) delete cleanedMeta.bypass_gate_on_start;
       await sb.from("lead_chains").update({
         last_auto_sent_at: new Date().toISOString(),
+        ...(hadBypass ? { metadata: cleanedMeta } : {}),
       }).eq("id", chain.id);
     }
 

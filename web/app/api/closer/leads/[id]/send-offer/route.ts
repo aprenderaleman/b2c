@@ -218,7 +218,7 @@ export async function POST(
   await startChain(leadId, "chain2_link_sent", {
     fullUrl: checkoutUrl,
     packLabel,
-  });
+  }, { bypassGateOnStart: true });
 
   return NextResponse.json({ ok: true, ofertaId, checkoutUrl });
 }

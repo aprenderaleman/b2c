@@ -58,7 +58,7 @@ export async function processLayer2Action(args: Layer2ActionArgs): Promise<Layer
 }
 
 async function handleAgendar(args: Layer2ActionArgs): Promise<Layer2Result> {
-  const chainId = await startChain(args.leadId, "chain8a_agendar", {});
+  const chainId = await startChain(args.leadId, "chain8a_agendar", {}, { bypassGateOnStart: true });
   await logCloserAction({
     closerId: args.closerId,
     leadId: args.leadId,
@@ -70,7 +70,7 @@ async function handleAgendar(args: Layer2ActionArgs): Promise<Layer2Result> {
 }
 
 async function handleNoContesto(args: Layer2ActionArgs): Promise<Layer2Result> {
-  const chainId = await startChain(args.leadId, "chain8b_no_contesto", {});
+  const chainId = await startChain(args.leadId, "chain8b_no_contesto", {}, { bypassGateOnStart: true });
   await logCloserAction({
     closerId: args.closerId,
     leadId: args.leadId,
@@ -82,7 +82,7 @@ async function handleNoContesto(args: Layer2ActionArgs): Promise<Layer2Result> {
 }
 
 async function handleEnviarInfo(args: Layer2ActionArgs): Promise<Layer2Result> {
-  const chainId = await startChain(args.leadId, "chain8c_info", {});
+  const chainId = await startChain(args.leadId, "chain8c_info", {}, { bypassGateOnStart: true });
   await logCloserAction({
     closerId: args.closerId,
     leadId: args.leadId,
@@ -103,7 +103,7 @@ async function handleEnviarPropuesta(args: Layer2ActionArgs): Promise<Layer2Resu
     ritmo: `${ritmo.emoji} ${ritmo.name}`,
     precio_ritmo: `${ritmo.pricePerMonth} €/mes`,
     packId: ritmo.id,
-  });
+  }, { bypassGateOnStart: true });
 
   await logCloserAction({
     closerId: args.closerId,
@@ -161,7 +161,7 @@ async function handleSeguimientoFecha(args: Layer2ActionArgs): Promise<Layer2Res
 async function handlePasarReactivacion(args: Layer2ActionArgs): Promise<Layer2Result> {
   const sb = supabaseAdmin();
 
-  const chainId = await startChain(args.leadId, "chain8g_reactivacion", {});
+  const chainId = await startChain(args.leadId, "chain8g_reactivacion", {}, { bypassGateOnStart: true });
 
   await sb.from("leads").update({
     estado_cierre: "en_reactivacion",

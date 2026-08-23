@@ -311,7 +311,7 @@ export async function markTrialAttendedAwaitingConversion(
       fullUrl: opts.fullUrl,
       packLabel: opts.packLabel,
     } : {}),
-  }).catch(err => console.warn("[markTrialAttended] startChain error:", err));
+  }, { bypassGateOnStart: true }).catch(err => console.warn("[markTrialAttended] startChain error:", err));
 }
 
 /**
@@ -488,7 +488,7 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
     chainMetadata.packId = priorMeta.last_offered_pack;
   }
 
-  await startChain(leadId, "chain1_attended", chainMetadata)
+  await startChain(leadId, "chain1_attended", chainMetadata, { bypassGateOnStart: true })
     .catch(err => console.warn("[markTrialAttendedNoLink] startChain error:", err));
 }
 
@@ -538,7 +538,7 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     .eq("id", leadId)
     .maybeSingle();
   const hasReserva = (reservaRow as { reserva_prioritaria?: boolean } | null)?.reserva_prioritaria === true;
-  await startChain(leadId, "chain4_absent", { reserva_prioritaria: hasReserva })
+  await startChain(leadId, "chain4_absent", { reserva_prioritaria: hasReserva }, { bypassGateOnStart: true })
     .catch(err => console.warn("[markTrialAbsent] startChain error:", err));
 }
 
@@ -818,6 +818,6 @@ export async function markTrialAttendedWithObjection(
   });
 
   const chainType = OBJECTION_CHIP_TO_CHAIN[chip];
-  await startChain(leadId, chainType, { objection_chip: chip }, { objectionChip: chip })
+  await startChain(leadId, chainType, { objection_chip: chip }, { objectionChip: chip, bypassGateOnStart: true })
     .catch(err => console.warn("[markTrialAttendedWithObjection] startChain error:", err));
 }
