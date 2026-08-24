@@ -324,6 +324,88 @@ export async function createTeacherTrialEvent(
   }
 }
 
+/**
+ * Evento genérico de clase en el calendar personal del profe (no solo
+ * trials). El id devuelto se guarda en classes.teacher_gcal_event_id
+ * (migración 120) para poder reagendar/cancelar el espejo después.
+ */
+export async function createTeacherClassEvent(
+  teacherId: string,
+  a: {
+    summary:         string;      // "Ahlam — Clase individual"
+    startIso:        string;
+    durationMinutes: number;
+    description?:    string;
+  },
+): Promise<{ eventId: string } | null> {
+  const cal = await getTeacherCalendarClient(teacherId);
+  if (!cal) return null;
+
+  const start = new Date(a.startIso);
+  const end   = new Date(start.getTime() + a.durationMinutes * 60_000);
+  try {
+    const res = await cal.events.insert({
+      calendarId: "primary",
+      requestBody: {
+        summary:     a.summary,
+        description: a.description ?? "",
+        start: { dateTime: start.toISOString(), timeZone: "Europe/Berlin" },
+        end:   { dateTime: end.toISOString(),   timeZone: "Europe/Berlin" },
+        reminders: { useDefault: true },
+      },
+    });
+    if (!res.data.id) return null;
+    return { eventId: res.data.id };
+  } catch (e) {
+    console.error(`[gcal-oauth] createTeacherClassEvent failed for teacher ${teacherId}:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+/** Mueve un evento existente del calendar del profe a nueva hora/duración. */
+export async function patchTeacherCalendarEvent(
+  teacherId:       string,
+  eventId:         string,
+  newStartIso:     string,
+  durationMinutes: number,
+): Promise<boolean> {
+  const cal = await getTeacherCalendarClient(teacherId);
+  if (!cal) return false;
+
+  const start = new Date(newStartIso);
+  const end   = new Date(start.getTime() + durationMinutes * 60_000);
+  try {
+    await cal.events.patch({
+      calendarId: "primary",
+      eventId,
+      requestBody: {
+        start: { dateTime: start.toISOString(), timeZone: "Europe/Berlin" },
+        end:   { dateTime: end.toISOString(),   timeZone: "Europe/Berlin" },
+      },
+    });
+    return true;
+  } catch (e) {
+    console.error(`[gcal-oauth] patchTeacherCalendarEvent ${eventId} failed:`, e instanceof Error ? e.message : e);
+    return false;
+  }
+}
+
+/** Borra un evento del calendar del profe (best-effort). */
+export async function deleteTeacherCalendarEvent(
+  teacherId: string,
+  eventId:   string,
+): Promise<boolean> {
+  const cal = await getTeacherCalendarClient(teacherId);
+  if (!cal) return false;
+  try {
+    await cal.events.delete({ calendarId: "primary", eventId });
+    return true;
+  } catch (e) {
+    console.error(`[gcal-oauth] deleteTeacherCalendarEvent ${eventId} failed:`, e instanceof Error ? e.message : e);
+    return false;
+  }
+}
+
 // ── FreeBusy with cache ─────────────────────────────────────────
 
 type BusyCacheEntry = { intervals: BusyInterval[]; expiresAtMs: number };

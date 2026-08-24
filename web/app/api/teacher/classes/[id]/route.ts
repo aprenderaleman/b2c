@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
 import { sendClassLifecycleEmail, lifecycleEmailsEnabled } from "@/lib/email/send";
+import { syncTeacherCalendarAfterReschedule, removeTeacherCalendarEvents } from "@/lib/teacher-calendar-sync";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -148,6 +149,10 @@ export async function PATCH(
     const newAt = changes.scheduledAt ? new Date(changes.scheduledAt) : new Date(cls.scheduled_at);
     const title = changes.title ?? cls.title;
     await notifyStudents(cls.id, "rescheduled", title, newAt, cls.duration_minutes, targetIds.length);
+    // Espejo en Google Calendar (profe + central si es trial) — tras
+    // responder, best-effort.
+    after(() => syncTeacherCalendarAfterReschedule(targetIds).catch(e =>
+      console.error("[teacher/classes] gcal sync failed:", e)));
   }
 
   return NextResponse.json({ ok: true, scope: changes.scope, updated: targetIds.length });
@@ -184,6 +189,9 @@ export async function DELETE(
   }
 
   await notifyStudents(cls.id, "cancelled", cls.title, new Date(cls.scheduled_at), cls.duration_minutes, targetIds.length);
+
+  after(() => removeTeacherCalendarEvents(targetIds).catch(e =>
+    console.error("[teacher/classes] gcal cleanup failed:", e)));
 
   return NextResponse.json({ ok: true, scope, cancelled: targetIds.length });
 }

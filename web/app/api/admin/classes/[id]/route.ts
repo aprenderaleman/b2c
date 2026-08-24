@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { cancelClass } from "@/lib/classes";
 import { supabaseAdmin } from "@/lib/supabase";
+import { syncTeacherCalendarAfterReschedule, removeTeacherCalendarEvents } from "@/lib/teacher-calendar-sync";
 
 /**
  * PATCH  /api/admin/classes/[id]   → edit a class or a whole series.
@@ -215,6 +216,14 @@ export async function PATCH(
     }
   }
 
+  // Espejo GCal del profe: horario movido (o profe reasignado) →
+  // sincronizar eventos tras responder, best-effort.
+  if (updatedIds.length > 0 && (b.scheduled_at || b.duration_minutes || b.teacher_id)) {
+    const ids = [...updatedIds];
+    after(() => syncTeacherCalendarAfterReschedule(ids).catch(e =>
+      console.error("[admin/classes] gcal sync failed:", e)));
+  }
+
   return NextResponse.json({ ok: true, scope: b.scope, updated_ids: updatedIds });
 }
 
@@ -234,6 +243,9 @@ export async function DELETE(
 
   try {
     const r = await cancelClass(id, { whole });
+    const ids = [...r.cancelledIds];
+    after(() => removeTeacherCalendarEvents(ids).catch(e =>
+      console.error("[admin/classes] gcal cleanup failed:", e)));
     return NextResponse.json({ ok: true, cancelledIds: r.cancelledIds });
   } catch (e) {
     return NextResponse.json(

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
@@ -8,6 +8,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { wireChatsForClass } from "@/lib/chat";
 import { createNotification } from "@/lib/notifications";
 import { sendClassLifecycleEmail, lifecycleEmailsEnabled } from "@/lib/email/send";
+import { mirrorClassesToTeacherCalendar } from "@/lib/teacher-calendar-sync";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -148,6 +149,12 @@ export async function POST(req: Request) {
 
   // Notify students only (teacher is the caller; they know).
   notifyStudentsOnCreation(result.ids[0], body.studentIds, body.title).catch(() => {});
+
+  // Espejo en el Google Calendar personal del profe (si lo tiene
+  // vinculado) — tras responder, best-effort.
+  const createdIds = result.ids;
+  after(() => mirrorClassesToTeacherCalendar(createdIds).catch(e =>
+    console.error("[teacher/classes] gcal mirror failed:", e)));
 
   return NextResponse.json({
     ok:        true,

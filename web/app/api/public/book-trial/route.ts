@@ -508,6 +508,10 @@ export async function POST(req: Request) {
           germanLevel:     b.german_level ?? null,
           goal:            b.goal ?? "travel",
           joinUrl:         buildLeadJoinUrl({ classId: ex.id, leadId, shortCode: ex.short_code, baseUrl: PLATFORM_URL }),
+        }).then(async ev => {
+          // Guardar el event id para poder reagendar/cancelar el espejo
+          // (migración 120).
+          if (ev) await sb.from("classes").update({ teacher_gcal_event_id: ev.eventId }).eq("id", ex.id);
         }).catch(e => console.error("[book-trial] reschedule teacher gcal event failed:", e));
       }
 
@@ -755,6 +759,10 @@ export async function POST(req: Request) {
       germanLevel:     b.german_level ?? null,
       goal:            goal,
       joinUrl:         shortLinkUrl,
+    }).then(async ev => {
+      // Guardar el event id para poder reagendar/cancelar el espejo
+      // (migración 120).
+      if (ev) await sb.from("classes").update({ teacher_gcal_event_id: ev.eventId }).eq("id", classId);
     }).catch(e => console.error("[book-trial] teacher gcal event failed:", e));
 
     // ── Email notification to admin for EVERY new trial ──

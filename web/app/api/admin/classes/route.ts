@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { createClass } from "@/lib/classes";
@@ -6,6 +6,7 @@ import { sendClassLifecycleEmail, lifecycleEmailsEnabled } from "@/lib/email/sen
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
 import { wireChatsForClass } from "@/lib/chat";
+import { mirrorClassesToTeacherCalendar } from "@/lib/teacher-calendar-sync";
 
 /**
  * POST /api/admin/classes
@@ -101,6 +102,11 @@ export async function POST(req: Request) {
     body.studentIds,
     body.teacherId,
   ).catch(e => console.error("notify failed:", e));
+
+  // Espejo en el GCal personal del profe asignado (best-effort).
+  const createdIds = result.ids;
+  after(() => mirrorClassesToTeacherCalendar(createdIds).catch(e =>
+    console.error("[admin/classes] gcal mirror failed:", e)));
 
   return NextResponse.json({
     ok:        true,
