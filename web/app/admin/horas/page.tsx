@@ -4,6 +4,7 @@ import {
   moneyFromCents,
   formatMonthEs,
 } from "@/lib/finance";
+import { supabaseAdmin } from "@/lib/supabase";
 import { HorasMonthPicker } from "./MonthPicker";
 import { BillButton, BillAllButton } from "./BillButton";
 import Link from "next/link";
@@ -24,6 +25,56 @@ export default async function HorasPage({
   const monthStr = focus.toISOString().slice(0, 7);
 
   const { teachers, unbilled, earnings } = await getHoursAuditData(focus);
+
+  // ── Comisiones del mes (profes + closers) ─────────────────────────
+  // La columna `mes` guarda el primer día del mes en hora local Berlín
+  // (p.ej. 2026-07-31T22:00Z = 1-ago local). Traemos una ventana amplia
+  // y bucketeamos en JS sumando 2 días antes de comparar YYYY-MM.
+  const sb = supabaseAdmin();
+  const winStart = new Date(Date.UTC(focus.getUTCFullYear(), focus.getUTCMonth(), 1) - 3 * 86_400_000).toISOString();
+  const winEnd   = new Date(Date.UTC(focus.getUTCFullYear(), focus.getUTCMonth() + 1, 1) + 3 * 86_400_000).toISOString();
+  const { data: comisionesRaw } = await sb
+    .from("comisiones")
+    .select("usuario_id, rol, tipo, monto_cents, mes, pagado, users!comisiones_usuario_id_fkey(full_name, email)")
+    .gte("mes", winStart)
+    .lt("mes", winEnd);
+
+  type ComRow = {
+    usuario_id: string; rol: string; tipo: string; monto_cents: number;
+    mes: string; pagado: boolean;
+    users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> | null;
+  };
+  const inMonth = ((comisionesRaw ?? []) as ComRow[]).filter(r => {
+    const bucket = new Date(new Date(r.mes).getTime() + 2 * 86_400_000).toISOString().slice(0, 7);
+    return bucket === monthStr;
+  });
+
+  type ComAgg = {
+    nombre: string; rol: string;
+    conversiones: number; bonos: number; otros: number;
+    total: number; pendiente: number;
+  };
+  const comisionesPorPersona = new Map<string, ComAgg>();
+  for (const r of inMonth) {
+    const u = Array.isArray(r.users) ? r.users[0] : r.users;
+    const key = r.usuario_id;
+    const agg = comisionesPorPersona.get(key) ?? {
+      nombre: u?.full_name || u?.email || key.slice(0, 8),
+      rol: r.rol,
+      conversiones: 0, bonos: 0, otros: 0, total: 0, pendiente: 0,
+    };
+    const cents = r.monto_cents ?? 0;
+    if (r.tipo === "conversion") agg.conversiones += cents;
+    else if (r.tipo === "bono_cierre") agg.bonos += cents;
+    else agg.otros += cents;
+    agg.total += cents;
+    if (!r.pagado) agg.pendiente += cents;
+    comisionesPorPersona.set(key, agg);
+  }
+  const comisiones = [...comisionesPorPersona.values()]
+    .sort((a, b) => b.total - a.total);
+  const totalComisionesCents = comisiones.reduce((s, c) => s + c.total, 0);
+  const comisionesPendientesCents = comisiones.reduce((s, c) => s + c.pendiente, 0);
 
   const totalBilled = teachers.reduce((s, t) => s + t.total_bh, 0);
   const totalUnbilled = unbilled.length;
@@ -62,16 +113,20 @@ export default async function HorasPage({
       </header>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <StatCard label="Horas facturadas" value={String(totalBilled)} />
         <StatCard
           label="Coste profes"
           value={moneyFromCents(totalEarningsCents)}
         />
         <StatCard
+          label="Comisiones"
+          value={moneyFromCents(totalComisionesCents)}
+        />
+        <StatCard
           label="Pendiente pago"
-          value={moneyFromCents(pendingCents)}
-          accent={pendingCents > 0 ? "amber" : undefined}
+          value={moneyFromCents(pendingCents + comisionesPendientesCents)}
+          accent={pendingCents + comisionesPendientesCents > 0 ? "amber" : undefined}
         />
         <StatCard
           label="Sin facturar"
@@ -169,6 +224,73 @@ export default async function HorasPage({
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Comisiones del mes (profes + closers) */}
+      <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+            Comisiones del mes · profes y closers
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Conversiones, bonos de cierre y otros incentivos — aparte del coste por horas.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 text-left text-xs text-slate-600 dark:text-slate-300">
+              <tr>
+                <Th>Persona</Th>
+                <Th>Rol</Th>
+                <Th>Conversiones</Th>
+                <Th>Bonos cierre</Th>
+                <Th>Otros</Th>
+                <Th>Total</Th>
+                <Th>Estado</Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+              {comisiones.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                    Sin comisiones este mes.
+                  </td>
+                </tr>
+              )}
+              {comisiones.map((c) => (
+                <tr key={c.nombre + c.rol} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                  <Td className="font-medium">{c.nombre}</Td>
+                  <Td>
+                    <span className={`text-xs font-semibold rounded-full px-2 py-0.5 ${
+                      c.rol === "closer"
+                        ? "bg-sky-100 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300"
+                        : "bg-violet-100 dark:bg-violet-500/15 text-violet-700 dark:text-violet-300"
+                    }`}>
+                      {c.rol === "closer" ? "Closer" : "Profesor"}
+                    </span>
+                  </Td>
+                  <Td className="font-mono">{c.conversiones > 0 ? moneyFromCents(c.conversiones) : "—"}</Td>
+                  <Td className="font-mono">{c.bonos > 0 ? moneyFromCents(c.bonos) : "—"}</Td>
+                  <Td className="font-mono">{c.otros > 0 ? moneyFromCents(c.otros) : "—"}</Td>
+                  <Td className="font-mono font-semibold">{moneyFromCents(c.total)}</Td>
+                  <Td>
+                    {c.pendiente === 0 ? (
+                      <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300 text-xs">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                        Pagado
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-amber-700 dark:text-amber-300 text-xs">
+                        <span className="h-2 w-2 rounded-full bg-amber-500" />
+                        {moneyFromCents(c.pendiente)} pendiente
+                      </span>
+                    )}
+                  </Td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
