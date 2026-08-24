@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getTeacherAvailability } from "@/lib/availability";
+import { resolveEffectiveUser } from "@/lib/impersonation";
 
 /**
  * GET /api/teacher/calendar?start=ISO&end=ISO
@@ -43,6 +44,20 @@ export async function GET(req: Request) {
     teacherId = me.id;
   } else if (role === "admin" || role === "superadmin") {
     teacherId = url.searchParams.get("teacherId");
+    if (!teacherId) {
+      // "Ver como profesor": el admin navega /profesor/calendario con la
+      // cookie de impersonación activa — resolvemos el profe desde ahí
+      // (mismo mecanismo que /api/teacher/picker).
+      const eff = await resolveEffectiveUser({
+        fallbackUserId: (session.user as { id: string }).id,
+        fallbackRole:   role,
+        expectRole:     "teacher",
+      });
+      if (eff.impersonated) {
+        const t = await getTeacherByUserId(eff.userId);
+        teacherId = t?.id ?? null;
+      }
+    }
     if (!teacherId) return NextResponse.json({ error: "teacherId_required" }, { status: 400 });
   } else {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
