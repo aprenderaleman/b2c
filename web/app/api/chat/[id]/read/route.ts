@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { resolveChatCaller } from "@/lib/chat-auth";
 import { isChatParticipant, markChatRead } from "@/lib/chat";
 
 /**
@@ -10,9 +10,9 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const userId = (session.user as { id: string }).id;
+  const caller = await resolveChatCaller();
+  if (!caller) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const userId = caller.userId;
 
   const { id } = await params;
   if (!(await isChatParticipant(id, userId))) {

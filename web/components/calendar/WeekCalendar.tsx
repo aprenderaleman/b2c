@@ -392,7 +392,10 @@ function EventModal({
             <div className="flex flex-wrap gap-2">
               <a href={`/aula/${ev.id}`} className="btn-secondary text-xs">Entrar al aula</a>
               {role === "teacher" && !ev.is_trial && (
-                <a href={`/profesor/clases/${ev.id}`} className="btn-secondary text-xs">Ver detalle</a>
+                <>
+                  <a href={`/profesor/clases/${ev.id}`} className="btn-secondary text-xs">Ver detalle</a>
+                  <a href="/profesor/mensajes" className="btn-secondary text-xs">💬 Mensajes</a>
+                </>
               )}
               {canEdit && (
                 <>

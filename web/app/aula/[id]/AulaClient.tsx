@@ -283,7 +283,10 @@ export function AulaClient(p: Props) {
           chatOpen={chatOpen}
           onToggleChat={() => setChatOpen(o => !o)}
         />
-        <div className="flex-1 min-h-0 flex bg-slate-900">
+        {/* relative: el chat flota como overlay sobre el video en vez de
+            robarle ancho (queja Gelfis 2026-08 — el <aside> en flex
+            encogía la zona de video). */}
+        <div className="flex-1 min-h-0 flex bg-slate-900 relative">
           <div className="flex-1 min-w-0 h-full">
             <VideoArea classId={p.classId} isHost={p.isHost} />
           </div>
@@ -846,7 +849,9 @@ function ChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
 
   return (
     <aside
-      className={`w-80 shrink-0 border-l border-slate-800 bg-slate-950 flex flex-col ${open ? "" : "hidden"}`}
+      className={`absolute right-0 top-0 bottom-0 z-20 w-80 max-w-[85vw]
+                  border-l border-slate-800 bg-slate-950/90 backdrop-blur-sm
+                  shadow-2xl flex flex-col ${open ? "" : "hidden"}`}
       aria-hidden={!open}
     >
       <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800 shrink-0">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
+import { resolveChatCaller } from "@/lib/chat-auth";
 import { isChatParticipant, listChatMessages, sendMessage } from "@/lib/chat";
 
 /**
@@ -23,9 +23,9 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const userId = (session.user as { id: string }).id;
+  const caller = await resolveChatCaller();
+  if (!caller) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const userId = caller.userId;
 
   const { id } = await params;
   if (!(await isChatParticipant(id, userId))) {
@@ -40,9 +40,9 @@ export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const userId = (session.user as { id: string }).id;
+  const caller = await resolveChatCaller();
+  if (!caller) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const userId = caller.userId;
 
   const { id } = await params;
   if (!(await isChatParticipant(id, userId))) {

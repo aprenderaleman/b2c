@@ -27,6 +27,12 @@ type Message = {
 type Props = {
   currentUserId:   string;
   currentUserName: string;
+  /**
+   * true cuando se renderiza dentro de un panel de rol (/profesor/mensajes,
+   * /estudiante/mensajes): altura contenida + borde redondeado en vez de
+   * ocupar el viewport completo.
+   */
+  embedded?: boolean;
 };
 
 /**
@@ -36,7 +42,7 @@ type Props = {
  * once we expose the anon key to the browser — for now polling is simpler
  * and avoids a bigger security review).
  */
-export function ChatShell({ currentUserId, currentUserName: _currentUserName }: Props) {
+export function ChatShell({ currentUserId, currentUserName: _currentUserName, embedded = false }: Props) {
   const [chats,    setChats]    = useState<ChatListItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading,  setLoading]  = useState(true);
@@ -58,7 +64,10 @@ export function ChatShell({ currentUserId, currentUserName: _currentUserName }: 
   const active = chats.find(c => c.id === activeId) ?? null;
 
   return (
-    <main className="h-[calc(100vh-3.5rem)] grid grid-cols-1 md:grid-cols-[320px_1fr] bg-slate-50 dark:bg-slate-950">
+    <main className={`grid grid-cols-1 md:grid-cols-[320px_1fr] bg-slate-50 dark:bg-slate-950
+      ${embedded
+        ? "h-[calc(100vh-10rem)] min-h-[420px] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+        : "h-[calc(100vh-3.5rem)]"}`}>
       {/* Conversations list */}
       <aside className="border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-y-auto">
         <header className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 z-10">
