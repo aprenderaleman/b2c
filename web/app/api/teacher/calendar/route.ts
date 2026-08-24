@@ -62,7 +62,7 @@ export async function GET(req: Request) {
       parent_class_id, recurrence_pattern, lead_id,
       class_participants(
         student_id,
-        students!inner(id, user_id, users!inner(full_name, email), leads(whatsapp_normalized))
+        students!inner(id, user_id, users!inner(full_name, email), leads!students_lead_id_fkey(whatsapp_normalized))
       )
     `)
     .eq("teacher_id", teacherId)
