@@ -9,26 +9,31 @@ import { sendClassLifecycleEmail, lifecycleEmailsEnabled } from "@/lib/email/sen
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 /**
- * PATCH /api/teacher/classes/{id}  — reschedule / edit a single class instance
- * DELETE /api/teacher/classes/{id} — cancel (soft: status='cancelled')
+ * PATCH /api/teacher/classes/{id}  — reschedule / edit una clase o su serie
+ * DELETE /api/teacher/classes/{id}?scope=series — cancelar (soft)
  *
  * Ownership: caller must be the class's assigned teacher. Admins also
- * allowed. Only works on classes with status='scheduled' — once the
- * class is live/completed the teacher should use the end-class flow.
- * Notifies participating students via WhatsApp + in-app on both paths.
+ * allowed. PATCH only works on classes with status='scheduled'.
+ * Notifies participating students via email + in-app on both paths.
  *
- * This endpoint edits ONE instance. Recurring series edits stay in
- * admin's hands for now (too many footguns: "bump all future Mondays?").
+ * scope="series" (decisión Gelfis 2026-08-24: los profes tienen control
+ * total de sueltas Y series): aplica a ESTA clase y todas las
+ * posteriores aún agendadas de la misma cadena de recurrencia. Para
+ * scheduled_at se aplica el DELTA (nuevo − viejo) a cada instancia,
+ * preservando el espaciado semanal — misma lógica que el admin. La
+ * notificación al estudiante es UNA sola (resumen con nº de clases),
+ * no un email por instancia.
  */
 
 export const runtime = "nodejs";
 
 const PatchBody = z.object({
+  scope:           z.enum(["this", "series"]).default("this"),
   scheduledAt:     z.string().datetime().optional(),
   durationMinutes: z.coerce.number().int().min(15).max(240).optional(),
   title:           z.string().trim().min(2).max(200).optional(),
   topic:           z.string().trim().max(500).nullable().optional(),
-}).refine(b => Object.keys(b).length > 0, { message: "no_changes" });
+}).refine(b => Object.keys(b).filter(k => k !== "scope").length > 0, { message: "no_changes" });
 
 async function authorizeEditor(classId: string) {
   const session = await auth();
@@ -41,7 +46,7 @@ async function authorizeEditor(classId: string) {
   const sb = supabaseAdmin();
   const { data: cls } = await sb
     .from("classes")
-    .select("id, teacher_id, status, scheduled_at, duration_minutes, title, type")
+    .select("id, teacher_id, status, scheduled_at, duration_minutes, title, type, parent_class_id")
     .eq("id", classId)
     .maybeSingle();
   if (!cls) return { ok: false, status: 404, body: { error: "not_found" } };
@@ -55,6 +60,26 @@ async function authorizeEditor(classId: string) {
   return { ok: true as const, session, cls };
 }
 
+type ClsRow = {
+  id: string; teacher_id: string | null; status: string; scheduled_at: string;
+  duration_minutes: number; title: string; type: string; parent_class_id: string | null;
+};
+
+/** IDs de la serie desde el anchor hacia delante (solo agendadas). */
+async function seriesTargetIds(anchor: ClsRow): Promise<string[]> {
+  const sb = supabaseAdmin();
+  const parentId = anchor.parent_class_id ?? anchor.id;
+  const { data: siblings } = await sb
+    .from("classes")
+    .select("id")
+    .or(`id.eq.${parentId},parent_class_id.eq.${parentId}`)
+    .gte("scheduled_at", anchor.scheduled_at)
+    .eq("status", "scheduled");
+  const ids = ((siblings ?? []) as Array<{ id: string }>).map(r => r.id);
+  if (!ids.includes(anchor.id)) ids.push(anchor.id);
+  return ids;
+}
+
 export async function PATCH(
   req:    Request,
   { params }: { params: Promise<{ id: string }> },
@@ -62,7 +87,7 @@ export async function PATCH(
   const { id } = await params;
   const a = await authorizeEditor(id);
   if (!a.ok) return NextResponse.json(a.body, { status: a.status });
-  const cls = a.cls as { id: string; teacher_id: string | null; status: string; scheduled_at: string; duration_minutes: number; title: string; type: string };
+  const cls = a.cls as ClsRow;
   if (cls.status !== "scheduled") {
     return NextResponse.json(
       { error: "bad_status", message: "Solo puedes reprogramar clases en estado 'agendada'." },
@@ -84,35 +109,58 @@ export async function PATCH(
   const changes = parsed.data;
 
   const sb = supabaseAdmin();
+  const targetIds = changes.scope === "series" ? await seriesTargetIds(cls) : [cls.id];
+
+  // Campos planos → a todos los targets
   const patch: Record<string, unknown> = {};
-  if (changes.scheduledAt)     patch.scheduled_at     = changes.scheduledAt;
   if (changes.durationMinutes) patch.duration_minutes = changes.durationMinutes;
   if (changes.title)           patch.title            = changes.title;
   if (changes.topic !== undefined) patch.topic        = changes.topic;
-
-  const { error } = await sb.from("classes").update(patch).eq("id", cls.id);
-  if (error) {
-    return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
+  if (Object.keys(patch).length > 0) {
+    const { error } = await sb.from("classes").update(patch).in("id", targetIds);
+    if (error) {
+      return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
+    }
   }
 
-  // Notify students when timing changed.
+  // scheduled_at: directo para "this", delta para "series"
+  if (changes.scheduledAt) {
+    const deltaMs = new Date(changes.scheduledAt).getTime() - new Date(cls.scheduled_at).getTime();
+    if (changes.scope === "this" || deltaMs === 0) {
+      const { error } = await sb.from("classes")
+        .update({ scheduled_at: changes.scheduledAt })
+        .eq("id", cls.id);
+      if (error) return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
+    } else {
+      const { data: currents } = await sb
+        .from("classes").select("id, scheduled_at").in("id", targetIds);
+      for (const c of (currents ?? []) as Array<{ id: string; scheduled_at: string }>) {
+        const shifted = new Date(new Date(c.scheduled_at).getTime() + deltaMs).toISOString();
+        const { error } = await sb.from("classes")
+          .update({ scheduled_at: shifted }).eq("id", c.id);
+        if (error) return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
+      }
+    }
+  }
+
+  // Notify students when timing changed — UNA notificación (resumen).
   if (changes.scheduledAt || changes.durationMinutes) {
     const newAt = changes.scheduledAt ? new Date(changes.scheduledAt) : new Date(cls.scheduled_at);
     const title = changes.title ?? cls.title;
-    await notifyStudents(cls.id, "rescheduled", title, newAt);
+    await notifyStudents(cls.id, "rescheduled", title, newAt, cls.duration_minutes, targetIds.length);
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, scope: changes.scope, updated: targetIds.length });
 }
 
 export async function DELETE(
-  _req:   Request,
+  req:   Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   const a = await authorizeEditor(id);
   if (!a.ok) return NextResponse.json(a.body, { status: a.status });
-  const cls = a.cls as { id: string; status: string; scheduled_at: string; title: string };
+  const cls = a.cls as ClsRow;
 
   if (cls.status === "completed" || cls.status === "cancelled") {
     return NextResponse.json(
@@ -121,18 +169,23 @@ export async function DELETE(
     );
   }
 
+  const url = new URL(req.url);
+  const scope = url.searchParams.get("scope") === "series" ? "series" : "this";
+
   const sb = supabaseAdmin();
+  const targetIds = scope === "series" ? await seriesTargetIds(cls) : [cls.id];
+
   const { error } = await sb
     .from("classes")
     .update({ status: "cancelled" })
-    .eq("id", cls.id);
+    .in("id", targetIds);
   if (error) {
     return NextResponse.json({ error: "cancel_failed", message: error.message }, { status: 500 });
   }
 
-  await notifyStudents(cls.id, "cancelled", cls.title, new Date(cls.scheduled_at));
+  await notifyStudents(cls.id, "cancelled", cls.title, new Date(cls.scheduled_at), cls.duration_minutes, targetIds.length);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, scope, cancelled: targetIds.length });
 }
 
 async function notifyStudents(
@@ -141,6 +194,7 @@ async function notifyStudents(
   title:          string,
   when:           Date,
   durationMinutes = 60,
+  seriesCount     = 1,
 ): Promise<void> {
   try {
     const sb = supabaseAdmin();
@@ -162,6 +216,8 @@ async function notifyStudents(
       }>;
     };
 
+    const seriesSuffixEs = seriesCount > 1 ? ` (serie completa: ${seriesCount} clases)` : "";
+
     for (const p of (participants ?? []) as Part[]) {
       const s = Array.isArray(p.students) ? p.students[0] : p.students;
       if (!s) continue;
@@ -180,10 +236,10 @@ async function notifyStudents(
           audience:      "student",
           kind,
           recipientName: first,
-          classTitle:    title,
+          classTitle:    title + seriesSuffixEs,
           startDate:     fmt + (lang === "de" ? " (Berlin)" : " (Berlín)"),
           durationMin:   durationMinutes,
-          count:         1,
+          count:         seriesCount,
           classUrl:      `${PLATFORM_URL}/estudiante/clases/${classId}`,
           language:      lang,
         }).catch(e => console.error(`[teacher/classes/${classId}] student email failed:`, e));
@@ -191,7 +247,9 @@ async function notifyStudents(
       await createNotification({
         user_id:  s.user_id,
         type:     kind === "rescheduled" ? "class_updated" : "class_cancelled",
-        title:    kind === "rescheduled" ? "Clase reprogramada" : "Clase cancelada",
+        title:    kind === "rescheduled"
+          ? (seriesCount > 1 ? `Serie reprogramada (${seriesCount} clases)` : "Clase reprogramada")
+          : (seriesCount > 1 ? `Serie cancelada (${seriesCount} clases)` : "Clase cancelada"),
         body:     `${title} — ${fmt}`,
         link:     `/estudiante/clases/${classId}`,
         class_id: classId,

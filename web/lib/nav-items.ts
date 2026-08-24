@@ -43,6 +43,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student" | "closer">
   admin:      adminItems(),
   teacher: [
     { label: "Hoy",              href: "/profesor",                 icon: "home",           priority: 1 },
+    { label: "Calendario",       href: "/profesor/calendario",      icon: "calendarDays",   priority: 1.5 },
     { label: "Mis clases",       href: "/profesor/clases",          icon: "calendarDays",   priority: 2 },
     { label: "Clases de prueba", href: "/profesor/clasedeprueba",   icon: "userCheck",      priority: 2.5 },
     { label: "Mis leads",        href: "/profesor/leads",           icon: "users",          priority: 2.7 },
@@ -102,6 +103,7 @@ function closerItems(): NavItem[] {
     // por semáforo (Gelfis 2026-08-17).
     { label: "Mis leads",          href: "/closer/leads",          icon: "users",      priority: 1 },
     { label: "Sesiones",           href: "/closer/sesiones",       icon: "userCheck",  priority: 2.5 },
+    { label: "Calendario",         href: "/closer/calendario",     icon: "calendarDays", priority: 2.7 },
     { label: "Mis numeros",        href: "/closer/numeros",        icon: "trendingUp", priority: 3 },
     { label: "Mi disponibilidad",  href: "/closer/disponibilidad", icon: "clock",      priority: 5 },
     { label: "Perfil",             href: "/closer/perfil",         icon: "userCircle", priority: 4 },
