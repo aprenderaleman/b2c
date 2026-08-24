@@ -51,6 +51,17 @@ export default async function AulaPage({
   const cls = await getClassById(id);
   if (!cls) notFound();
 
+  // If this class is not live but another class between the same
+  // teacher and student IS live right now, redirect to the live one.
+  // This prevents the common scenario where teacher clicks "Iniciar
+  // clase ahora" (creating/promoting a class) while the student
+  // navigates to a different scheduled class — both end up in
+  // different LiveKit rooms waiting for each other.
+  if (cls.status !== "live" && session?.user) {
+    const liveRedirect = await findLiveClassRedirect(id, cls.teacher_id, session.user as { id: string; role?: string });
+    if (liveRedirect) redirect(`/aula/${liveRedirect}`);
+  }
+
   // Trial classes drop the auto-generated "Clase de prueba — Test
   // (Gelfis)" title in favour of a clean public-facing label and
   // pivot the fallback CTA to SCHULE (the lead has nowhere else
@@ -156,6 +167,64 @@ export default async function AulaPage({
       brandBackground={brandBackground}
     />
   );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Live-class redirect: if the user navigates to a non-live class but
+// there's another class with status='live' involving the same teacher
+// and the same user, redirect them to the live one. Prevents the
+// "both in different rooms" bug.
+// ───────────────────────────────────────────────────────────────────
+
+async function findLiveClassRedirect(
+  currentClassId: string,
+  teacherId:      string,
+  user:           { id: string; role?: string },
+): Promise<string | null> {
+  const sb = supabaseAdmin();
+  const role = user.role ?? "student";
+
+  if (role === "teacher" || role === "admin" || role === "superadmin") {
+    // Teacher/admin: find any live class by this teacher that isn't the
+    // current one. If exactly one, redirect there.
+    const { data } = await sb
+      .from("classes")
+      .select("id")
+      .eq("teacher_id", teacherId)
+      .eq("status", "live")
+      .neq("id", currentClassId)
+      .limit(2);
+    const rows = (data ?? []) as { id: string }[];
+    return rows.length === 1 ? rows[0].id : null;
+  }
+
+  if (role === "student") {
+    // Student: find a live class where they're a participant AND the
+    // teacher is the same as the class they tried to enter.
+    const { data: stu } = await sb
+      .from("students")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!stu) return null;
+
+    const { data } = await sb
+      .from("class_participants")
+      .select("class:classes!inner(id, teacher_id, status)")
+      .eq("student_id", (stu as { id: string }).id)
+      .eq("class.teacher_id", teacherId)
+      .eq("class.status", "live")
+      .limit(5);
+
+    type Row = { class: { id: string } | Array<{ id: string }> };
+    const rows = (data ?? []) as Row[];
+    for (const r of rows) {
+      const c = Array.isArray(r.class) ? r.class[0] : r.class;
+      if (c && c.id !== currentClassId) return c.id;
+    }
+  }
+
+  return null;
 }
 
 // ───────────────────────────────────────────────────────────────────

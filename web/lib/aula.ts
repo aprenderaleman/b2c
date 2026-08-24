@@ -89,11 +89,14 @@ export async function authorizeAulaAccess(
     return { ok: false, reason: "cancelled" };
   }
 
+  const classStatus = (cls as { status: string }).status;
   const scheduled = new Date((cls as { scheduled_at: string }).scheduled_at);
   const duration  = (cls as { duration_minutes: number }).duration_minutes;
   const opensAt   = new Date(scheduled.getTime() - 15 * 60_000);
   const closesAt  = new Date(scheduled.getTime() + (duration + 5) * 60_000);
-  const canEnterNow = now >= opensAt && now <= closesAt;
+  // Live classes are always joinable — the teacher explicitly started
+  // them, so the time window must not block anyone from entering.
+  const canEnterNow = classStatus === "live" || (now >= opensAt && now <= closesAt);
 
   const roomName = (cls as { livekit_room_id: string }).livekit_room_id;
   const teacher = (cls as { teacher: unknown }).teacher;

@@ -111,44 +111,79 @@ export async function POST(req: Request) {
   const studentUserId = (st as { user_id: string }).user_id;
   const studentName   = uu.full_name ?? uu.email;
 
-  // NOTE: Parallel live classes are explicitly allowed (per Gelfis) —
-  // a teacher may legitimately have multiple live rooms at once, e.g.
-  // one with a colleague covering attendance. No guard here.
-
-  // Create the class. scheduled_at=NOW(), started_at=NOW(), status=live.
-  // duration_minutes is a placeholder — the real number lands in
-  // actual_duration_minutes when the teacher ends the class.
+  // Before creating a new class, check if there's already a scheduled
+  // class for this teacher+student pair today. If so, promote it to
+  // 'live' instead of creating a duplicate — prevents teacher and
+  // student from ending up in different LiveKit rooms.
   const now = new Date();
-  const { data: cls, error: insErr } = await sb
-    .from("classes")
-    .insert({
-      type:             "individual",
-      teacher_id:       me.id,
-      scheduled_at:     now.toISOString(),
-      started_at:       now.toISOString(),
-      duration_minutes: 60,
-      title:            `Clase con ${studentName}`,
-      topic:            null,
-      status:           "live",
-      notes_admin:      "on_demand",
-    })
-    .select("id, livekit_room_id")
-    .single();
-  if (insErr || !cls) {
-    return NextResponse.json(
-      { error: "create_failed", message: insErr?.message ?? "unknown" },
-      { status: 500 },
-    );
-  }
-  const classId = (cls as { id: string }).id;
+  const todayStart = new Date(now);
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const todayEnd = new Date(todayStart);
+  todayEnd.setUTCDate(todayEnd.getUTCDate() + 1);
 
-  // Attach the student.
-  await sb.from("class_participants").insert({
-    class_id:           classId,
-    student_id:         studentId,
-    attended:           null,
-    counts_as_session:  true,
-  });
+  const { data: existing } = await sb
+    .from("classes")
+    .select("id, livekit_room_id, class_participants!inner(student_id)")
+    .eq("teacher_id", me.id)
+    .eq("class_participants.student_id", studentId)
+    .in("status", ["scheduled"])
+    .gte("scheduled_at", todayStart.toISOString())
+    .lt("scheduled_at", todayEnd.toISOString())
+    .order("scheduled_at", { ascending: true })
+    .limit(1);
+
+  type ExistingRow = { id: string; livekit_room_id: string };
+  const reuse = (existing ?? [])[0] as ExistingRow | undefined;
+
+  let classId: string;
+
+  if (reuse) {
+    // Promote the existing scheduled class to live.
+    const { error: updErr } = await sb
+      .from("classes")
+      .update({ status: "live", started_at: now.toISOString() })
+      .eq("id", reuse.id);
+    if (updErr) {
+      return NextResponse.json(
+        { error: "update_failed", message: updErr.message },
+        { status: 500 },
+      );
+    }
+    classId = reuse.id;
+  } else {
+    // No existing class today — create a new on-demand class.
+    const { data: cls, error: insErr } = await sb
+      .from("classes")
+      .insert({
+        type:             "individual",
+        teacher_id:       me.id,
+        scheduled_at:     now.toISOString(),
+        started_at:       now.toISOString(),
+        duration_minutes: 60,
+        title:            `Clase con ${studentName}`,
+        topic:            null,
+        status:           "live",
+        notes_admin:      "on_demand",
+      })
+      .select("id, livekit_room_id")
+      .single();
+    if (insErr || !cls) {
+      return NextResponse.json(
+        { error: "create_failed", message: insErr?.message ?? "unknown" },
+        { status: 500 },
+      );
+    }
+    classId = (cls as { id: string }).id;
+
+    // Attach the student (only for new classes — existing ones already
+    // have the participant row from when they were scheduled).
+    await sb.from("class_participants").insert({
+      class_id:           classId,
+      student_id:         studentId,
+      attended:           null,
+      counts_as_session:  true,
+    });
+  }
 
   // In-app notification — Gelfis explicitly did NOT want WhatsApp here.
   await createNotification({
