@@ -44,27 +44,45 @@ export async function notifyTeacherClassChanged(input: {
   kind:           "rescheduled" | "cancelled";
   previousDate:   FormatBerlinInput;
   newDate?:       FormatBerlinInput;   // solo rescheduled
-  actorUserId?:   string | null;       // quien hizo el cambio
+  actorUserId?:   string | null;       // quien hizo el cambio (users.id)
   actorLabel:     string;              // "Gelfis (admin)", "María (lead)", "cron"
 }): Promise<void> {
   try {
     const sb = supabaseAdmin();
+    // classes.teacher_id → teachers.id; teachers.user_id → users.id (donde
+    // están full_name + email). Bug detectado 2026-08-24: la primera
+    // versión hacía JOIN directo a users:teacher_id — como el id no
+    // existía en users, el helper hacía early-return y ningún profe
+    // recibió email.
     const { data: cls } = await sb
       .from("classes")
-      .select("teacher_id, lead_id, users:teacher_id(full_name, email), leads:lead_id(name)")
+      .select(`
+        teacher_id,
+        lead_id,
+        teachers:teacher_id (
+          user_id,
+          users:user_id ( full_name, email )
+        ),
+        leads:lead_id ( name )
+      `)
       .eq("id", input.classId)
       .maybeSingle();
     const row = cls as unknown as {
       teacher_id: string | null;
-      users: { full_name: string | null; email: string | null } | null;
+      teachers: {
+        user_id: string | null;
+        users: { full_name: string | null; email: string | null } | null;
+      } | null;
       leads: { name: string | null } | null;
     } | null;
     if (!row?.teacher_id) return;
-    if (row.teacher_id === input.actorUserId) return;
-    const email = row.users?.email;
+    const teacherUserId = row.teachers?.user_id ?? null;
+    // Comparar user_id del profe con actorUserId (ambos son users.id).
+    if (teacherUserId && teacherUserId === input.actorUserId) return;
+    const email = row.teachers?.users?.email;
     if (!email) return;
 
-    const firstName = (row.users?.full_name ?? "").split(/\s+/)[0] || "profe";
+    const firstName = (row.teachers?.users?.full_name ?? "").split(/\s+/)[0] || "profe";
     const leadName  = row.leads?.name ?? "el estudiante";
 
     await sendTrialTeacherUpdatedEmail(email, {
