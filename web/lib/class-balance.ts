@@ -6,6 +6,7 @@ export type ClassBalance = {
   consumidas: number;
   agendadas: number;
   disponibles: number;
+  classesPerMonth: number | null;
 };
 
 export async function getClassBalance(studentId: string): Promise<ClassBalance> {
@@ -13,11 +14,16 @@ export async function getClassBalance(studentId: string): Promise<ClassBalance> 
 
   const { data: student } = await sb
     .from("students")
-    .select("clases_totales, clases_desbloqueadas")
+    .select("clases_totales, clases_desbloqueadas, classes_per_month, classes_remaining")
     .eq("id", studentId)
     .maybeSingle();
-  const s = student as { clases_totales: number | null; clases_desbloqueadas: number } | null;
-  if (!s) return { total: null, desbloqueadas: 0, consumidas: 0, agendadas: 0, disponibles: 0 };
+  const s = student as {
+    clases_totales: number | null;
+    clases_desbloqueadas: number;
+    classes_per_month: number | null;
+    classes_remaining: number | null;
+  } | null;
+  if (!s) return { total: null, desbloqueadas: 0, consumidas: 0, agendadas: 0, disponibles: 0, classesPerMonth: null };
 
   const { data: consumedRow } = await sb
     .from("classes")
@@ -47,7 +53,18 @@ export async function getClassBalance(studentId: string): Promise<ClassBalance> 
     ).data?.map((r: { id: string }) => r.id) ?? []);
 
   const desbloqueadas = s.clases_desbloqueadas ?? 0;
-  const disponibles = desbloqueadas - consumidas - (agendadas ?? 0);
+  const cpm = s.classes_per_month;
+
+  let disponibles = desbloqueadas - consumidas - (agendadas ?? 0);
+
+  // Monthly cap: subscription students can't book more than their plan per cycle
+  if (cpm != null && cpm > 0) {
+    disponibles = Math.min(disponibles, cpm);
+  }
+  // Pack cap: never exceed remaining classes in the total pack
+  if (s.classes_remaining != null) {
+    disponibles = Math.min(disponibles, s.classes_remaining);
+  }
 
   return {
     total: s.clases_totales,
@@ -55,6 +72,7 @@ export async function getClassBalance(studentId: string): Promise<ClassBalance> 
     consumidas,
     agendadas: agendadas ?? 0,
     disponibles: Math.max(disponibles, 0),
+    classesPerMonth: cpm,
   };
 }
 
@@ -75,15 +93,17 @@ export async function canBookClass(
 
   const { data: student } = await sb
     .from("students")
-    .select("oferta_id, clases_totales, stripe_subscription_status")
+    .select("oferta_id, clases_totales, stripe_subscription_status, classes_per_month, classes_remaining")
     .eq("id", studentId)
     .maybeSingle();
-  const s = student as { oferta_id: string | null; clases_totales: number | null; stripe_subscription_status: string | null } | null;
+  const s = student as {
+    oferta_id: string | null;
+    clases_totales: number | null;
+    stripe_subscription_status: string | null;
+    classes_per_month: number | null;
+    classes_remaining: number | null;
+  } | null;
 
-  // Unificación 2026-08-21: el balance aplica a TODO estudiante con
-  // clases_totales definido (pago único = todo desbloqueado desde el
-  // día 1; suscripción = desbloqueo mensual). Solo quedan fuera los
-  // strays sin balance inicializado.
   if (!s?.oferta_id && s?.clases_totales == null) return { allowed: true };
 
   const balance = await getClassBalance(studentId);
@@ -94,8 +114,12 @@ export async function canBookClass(
     return { allowed: true, graceApplied: true };
   }
 
+  const monthlyNote = s.classes_per_month
+    ? ` Tu plan incluye ${s.classes_per_month} clases al mes.`
+    : "";
+
   return {
     allowed: false,
-    reason: `No tienes clases disponibles (${balance.disponibles} disponibles, necesitas ${count}). Contacta a tu academia para más información.`,
+    reason: `No tienes clases disponibles (${balance.disponibles} disponibles, necesitas ${count}).${monthlyNote} Contacta a tu academia para más información.`,
   };
 }

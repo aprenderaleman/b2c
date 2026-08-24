@@ -145,9 +145,9 @@ export default async function TeacherStudentDetail({
             Balance de clases
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            La suscripción desbloquea clases cada mes con el cobro. Solo se
-            pueden agendar las disponibles del mes — el resto del pack se
-            libera en los próximos cobros.
+            {balance.classesPerMonth
+              ? `Plan: ${balance.classesPerMonth} clases/mes. Solo se pueden agendar hasta ${balance.classesPerMonth} por ciclo.`
+              : "La suscripción desbloquea clases cada mes con el cobro."}
           </p>
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
             <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-3">
