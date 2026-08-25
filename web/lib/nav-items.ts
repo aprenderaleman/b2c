@@ -54,6 +54,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student" | "closer">
     { label: "Materiales",       href: "/profesor/materiales",      icon: "folder",         priority: 6 },
     { label: "Recursos",         href: "/profesor/recursos",        icon: "bookOpen",       priority: 6.2 },
     { label: "Grabaciones",      href: "/profesor/grabaciones",     icon: "video",          priority: 6.5 },
+    { label: "Cursos",           href: "/profesor/cursos",          icon: "bookOpen",       priority: 6.7 },
   ],
   student: [
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
@@ -64,6 +65,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student" | "closer">
     { label: "Biblioteca",   href: "/estudiante/biblioteca",    icon: "folder",         priority: 3.3 },
     { label: "Grabaciones",  href: "/estudiante/grabaciones",   icon: "video",          priority: 3.5 },
     { label: "Tareas",       href: "/estudiante/tareas",        icon: "fileText",       priority: 4 },
+    { label: "Cursos",       href: "/estudiante/cursos",        icon: "bookOpen",       priority: 3.1 },
     { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
   ],
   closer: closerItems(),
