@@ -133,15 +133,40 @@ export async function POST(req: Request) {
     .limit(1);
 
   type ExistingRow = { id: string; livekit_room_id: string };
-  const reuse = (existing ?? [])[0] as ExistingRow | undefined;
+  let reuse = (existing ?? [])[0] as ExistingRow | undefined;
+
+  // Falso arranque (caso Sabine/Jeaneth 2026-08-25): el profe entró,
+  // no vio video, pulsó "Terminar" a los segundos y luego "Iniciar
+  // clase ahora" — la clase original ya estaba completed y se creaba
+  // una SEGUNDA fila/sala (doble descuento de saldo + sala distinta a
+  // la que el alumno conoce). Si hay una clase con este alumno
+  // completada hace <15 min sin asistencia marcada, la REABRIMOS.
+  if (!reuse) {
+    const recentCutoff = new Date(now.getTime() - 15 * 60_000).toISOString();
+    const { data: recent } = await sb
+      .from("classes")
+      .select("id, livekit_room_id, class_participants!inner(student_id, attended)")
+      .eq("teacher_id", me.id)
+      .eq("class_participants.student_id", studentId)
+      .eq("type", "individual")
+      .eq("status", "completed")
+      .gte("ended_at", recentCutoff)
+      .order("ended_at", { ascending: false })
+      .limit(1);
+    type RecentRow = ExistingRow & { class_participants: Array<{ attended: boolean | null }> };
+    const r = (recent ?? [])[0] as RecentRow | undefined;
+    if (r && r.class_participants.every(p => p.attended === null)) {
+      reuse = { id: r.id, livekit_room_id: r.livekit_room_id };
+    }
+  }
 
   let classId: string;
 
   if (reuse) {
-    // Promote the existing scheduled class to live.
+    // Promote (or re-open) the existing class to live.
     const { error: updErr } = await sb
       .from("classes")
-      .update({ status: "live", started_at: now.toISOString() })
+      .update({ status: "live", started_at: now.toISOString(), ended_at: null })
       .eq("id", reuse.id);
     if (updErr) {
       return NextResponse.json(

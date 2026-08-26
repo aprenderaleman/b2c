@@ -116,13 +116,24 @@ export function AulaClient(p: Props) {
   // luego mid-call desde la barra inferior.
   const [bgChoice, setBgChoice] = useState<BgMode>("off");
   const [mediaWarning, setMediaWarning] = useState<string | null>(null);
-  // "handoff": tras submit del PreJoin, esperamos ~400 ms antes de
-  // montar LiveKitRoom. iOS Safari sólo permite UN getUserMedia por
-  // origen a la vez, y si Room intenta pedir cámara/mic mientras
-  // PreJoin aún los tiene, LiveKit aborta con "Client initiated
-  // disconnect". El pequeño gap deja que el cleanup de PreJoin
-  // libere las tracks antes de que Room las pida (Leana 2026-07-28).
+  // "handoff": tras submit del PreJoin, esperamos antes de montar
+  // LiveKitRoom. iOS Safari sólo permite UN getUserMedia por origen a
+  // la vez, y si Room intenta pedir cámara/mic mientras PreJoin aún
+  // los tiene, LiveKit aborta con "Client initiated disconnect". El
+  // gap deja que el cleanup de PreJoin libere las tracks (Leana
+  // 2026-07-28). En móvil el gap es mayor: 400 ms no bastaban en
+  // Android de gama media (Francisco/Marcela 2026-08-26).
   const [roomReady, setRoomReady] = useState(false);
+  // Reintento automático del connect: cuando el handshake aborta con
+  // "client initiated disconnect" ANTES de llegar a conectar, no
+  // mostramos el error — desmontamos LiveKitRoom, esperamos un gap
+  // mayor y remontamos, hasta 2 veces. Solo tras agotar reintentos el
+  // usuario ve la pantalla de error (Francisco/Marcela 2026-08-26:
+  // perdimos una clase de prueba por este error en primer intento).
+  const [connectAttempt, setConnectAttempt] = useState(0);
+  const connectedRef = useRef(false);
+  const isMobileUa = typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const handoffMs = (isMobileUa ? 1000 : 400) + connectAttempt * 800;
 
   useEffect(() => {
     let cancelled = false;
@@ -145,13 +156,21 @@ export function AulaClient(p: Props) {
     return () => { cancelled = true; };
   }, [p.classId]);
 
-  // Retry: limpia estados y deja que useEffect vuelva a pedir token.
+  // Retry manual (botón "Reintentar"): conserva la selección del
+  // PreJoin — repetir todo el lobby re-creaba la misma carrera de
+  // getUserMedia que causó el fallo. Solo re-monta LiveKitRoom tras
+  // un handoff largo. El token sigue siendo válido (TTL 2h).
   const retry = () => {
     setError(null);
-    setToken(null);
-    setServerUrl(null);
-    setUserChoices(null);
     setRoomReady(false);
+    setConnectAttempt(a => a + 1);
+    if (!token || !serverUrl) {
+      // El fallo fue ANTES de tener token (auth/red) — reset completo
+      // para que el useEffect vuelva a pedirlo.
+      setToken(null);
+      setServerUrl(null);
+      setUserChoices(null);
+    }
   };
 
   if (webViewBlocker) return <WebViewBlockerScreen classTitle={p.classTitle} onIgnore={() => setWebViewBlocker(false)} />;
@@ -188,7 +207,7 @@ export function AulaClient(p: Props) {
     return (
       <>
         <HandoffScreen classTitle={p.classTitle} />
-        <HandoffTimer onReady={() => setRoomReady(true)} />
+        <HandoffTimer onReady={() => setRoomReady(true)} delayMs={handoffMs} />
       </>
     );
   }
@@ -206,12 +225,14 @@ export function AulaClient(p: Props) {
   return (
     <main className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
       <LiveKitRoom
+        key={connectAttempt}
         token={token}
         serverUrl={serverUrl}
         connect={true}
         video={videoCapture}
         audio={audioCapture}
         data-lk-theme="default"
+        onConnected={() => { connectedRef.current = true; }}
         onError={(e) => {
           // Log completo para diagnóstico (aparece en Vercel client
           // logs vía Sentry si está montado, o al menos en la consola
@@ -219,9 +240,19 @@ export function AulaClient(p: Props) {
           console.error("[aula/livekit] onError:", {
             name:    (e as Error).name,
             message: (e as Error).message,
-            stack:   (e as Error).stack?.split("\n").slice(0, 4).join(" | "),
+            attempt: connectAttempt,
           });
-          setError((e as Error).message);
+          const msg = (e as Error).message;
+          // Aborto en pleno handshake (carrera getUserMedia) ANTES de
+          // llegar a conectar → reintento automático silencioso con
+          // handoff más largo, hasta 2 veces. El usuario solo ve
+          // "Conectando…" un poco más.
+          if (/client initiated disconnect/i.test(msg) && !connectedRef.current && connectAttempt < 2) {
+            setRoomReady(false);
+            setConnectAttempt(a => a + 1);
+            return;
+          }
+          setError(msg);
         }}
         onMediaDeviceFailure={(failure) => {
           // Runtime permission denial or missing device mid-connect — keep
@@ -234,6 +265,11 @@ export function AulaClient(p: Props) {
           );
         }}
         onDisconnected={() => {
+          // Un connect fallido también dispara onDisconnected. Si nunca
+          // llegamos a estar conectados, NO redirigir — dejar que el
+          // auto-retry / pantalla de error manejen la situación (hoy
+          // esto echaba al lead a la web pública en pleno reintento).
+          if (!connectedRef.current) return;
           // Decide where to send the user when LiveKit disconnects:
           //   host    → /profesor (handled by HostTeardown via custom event)
           //   student → su dashboard /estudiante (decisión Gelfis 2026-05-14:
@@ -497,9 +533,23 @@ function TopBar({
 
   const router = useRouter();
   const [ending, setEnding] = useState(false);
+  // Cuándo entró el profe a la sala — para detectar el "falso arranque"
+  // (caso Sabine/Jeaneth 2026-08-25: entró, no vio video aún, terminó la
+  // clase a los 20 segundos con la alumna dentro).
+  const joinedAtRef = useRef(Date.now());
 
   const endClass = async () => {
-    if (!confirm("¿Terminar clase para TODOS? Se desconectarán profesor y estudiantes.")) return;
+    const inRoomSec = (Date.now() - joinedAtRef.current) / 1000;
+    const othersPresent = participants.length > 1;
+    if (inRoomSec < 180 && othersPresent) {
+      if (!confirm(
+        "⚠️ Acabas de entrar y hay participantes en la sala.\n\n" +
+        "Si no ves el video de alguien, espera unos segundos — la cámara " +
+        "puede tardar en arrancar (sobre todo con el fondo virtual). " +
+        "Terminar la clase expulsará a todos y cerrará la sala.\n\n" +
+        "¿Seguro que quieres TERMINAR la clase para todos?"
+      )) return;
+    } else if (!confirm("¿Terminar clase para TODOS? Se desconectarán profesor y estudiantes.")) return;
     setEnding(true);
     try {
       const res = await fetch(`/api/aula/${classId}/moderate`, {
@@ -1212,10 +1262,10 @@ function HandoffScreen({ classTitle }: { classTitle: string }) {
 
 /** Timer no-visual — separado para poder ponerlo dentro/fuera del árbol
  *  sin re-crearlo. */
-function HandoffTimer({ onReady }: { onReady: () => void }) {
+function HandoffTimer({ onReady, delayMs = 400 }: { onReady: () => void; delayMs?: number }) {
   useEffect(() => {
-    const t = setTimeout(onReady, 400);
+    const t = setTimeout(onReady, delayMs);
     return () => clearTimeout(t);
-  }, [onReady]);
+  }, [onReady, delayMs]);
   return null;
 }
