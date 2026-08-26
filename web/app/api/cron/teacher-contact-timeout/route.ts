@@ -27,16 +27,22 @@ export async function GET(req: Request) {
   let reassigned = 0;
 
   // Find students with teacher_contact_deadline that has passed
-  // and teacher_contacted_at is still null
+  // and teacher_contacted_at is still null.
+  // JOIN fix (Gelfis 2026-08-26): la relación anterior era users!inner
+  // sin especificar FK — Supabase la resolvía como students.id, que
+  // NO existe en users (students.user_id sí). Por eso studentName
+  // caía siempre al fallback 'Nuevo alumno'.
   const { data: pendingStudents } = await sb
     .from("students")
     .select(`
       id,
+      user_id,
       trial_teacher_id,
       teacher_contact_deadline,
       teacher_assigned_at,
       teacher_assignment_source,
-      users!inner(full_name)
+      teacher_reminded_at,
+      users:user_id(full_name)
     `)
     .is("teacher_contacted_at", null)
     .not("teacher_contact_deadline", "is", null)
@@ -49,11 +55,13 @@ export async function GET(req: Request) {
   for (const student of pendingStudents) {
     const s = student as {
       id: string;
+      user_id: string | null;
       trial_teacher_id: string | null;
       teacher_contact_deadline: string;
       teacher_assigned_at: string | null;
       teacher_assignment_source: string | null;
-      users: { full_name: string | null }[];
+      teacher_reminded_at: string | null;
+      users: { full_name: string | null } | { full_name: string | null }[] | null;
     };
 
     if (!s.trial_teacher_id) continue;
@@ -62,19 +70,23 @@ export async function GET(req: Request) {
       ? new Date(s.teacher_assigned_at).getTime()
       : new Date(s.teacher_contact_deadline).getTime() - 24 * 3_600_000;
     const elapsed = now.getTime() - assignedAt;
-    const usersArr = Array.isArray(s.users) ? s.users : [s.users];
-    const studentName = usersArr[0]?.full_name ?? "Nuevo alumno";
+    const usersRel = s.users;
+    const userRow = Array.isArray(usersRel) ? usersRel[0] : usersRel;
+    const studentName = userRow?.full_name ?? "Nuevo alumno";
 
     if (elapsed >= 48 * 3_600_000) {
       // 48h passed — REASSIGN to next best teacher
       const newTeacherId = await findReplacementTeacher(sb, s.trial_teacher_id);
 
       if (newTeacherId) {
+        // Reset teacher_reminded_at: el nuevo profe entra en su propia
+        // ventana de 24h, debe poder recibir su propio recordatorio.
         await sb.from("students").update({
           trial_teacher_id: newTeacherId,
           teacher_assignment_source: "reassigned",
           teacher_assigned_at: now.toISOString(),
           teacher_contact_deadline: new Date(now.getTime() + 24 * 3_600_000).toISOString(),
+          teacher_reminded_at: null,
         }).eq("id", s.id);
 
         // Notify new teacher
@@ -114,7 +126,12 @@ export async function GET(req: Request) {
         reassigned++;
       }
     } else if (elapsed >= 24 * 3_600_000) {
-      // 24h passed — send REMINDER to current teacher
+      // 24h passed — send REMINDER to current teacher, MAX 1 vez.
+      // Bug histórico (Jonathan/Sonia 2026-08-26): sin dedupe el cron
+      // horario enviaba hasta ~24 recordatorios idénticos en la
+      // ventana 24-48h. teacher_reminded_at marca si ya se envió.
+      if (s.teacher_reminded_at) continue;
+
       const teacher = await getTeacherById(s.trial_teacher_id);
       if (teacher) {
         await createNotification({
@@ -132,6 +149,10 @@ export async function GET(req: Request) {
             { kind: "teacher_contact_reminder" },
           ).catch(() => {});
         }
+
+        await sb.from("students").update({
+          teacher_reminded_at: now.toISOString(),
+        }).eq("id", s.id);
 
         reminded++;
       }
