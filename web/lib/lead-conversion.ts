@@ -310,11 +310,17 @@ export async function convertLeadToStudent(
           });
         }
       }
-      // Arranca el motor desde el step 2 (Hans T+1d en adelante).
-      await startChain(lead.id, "welcome_week", {}, { skipFirstStep: false });
-      // skipFirstStep:false → el motor evalúa el step 0 pero como delayMs=0,
-      // next_fire_at = ahora → se dispararía inmediato. Para evitar
-      // duplicar con el envío síncrono de arriba, avanzamos manual a step 1.
+      // Arranca el motor con skipFirstStep=true (el step 0 ya se envió
+      // síncrono arriba). El UPDATE posterior avanza a step 1 con
+      // next_fire=+24h para que el motor tome el testigo mañana.
+      //
+      // Bug Saidys 2026-08-27: antes usábamos skipFirstStep=false,
+      // asumiendo que el UPDATE a current_step=1 evitaría el duplicado.
+      // No funcionaba porque startChain con delayMs=0 llama a
+      // advanceChain INLINE dentro de sí mismo (ver chain-engine
+      // línea 72-88) — el step 0 se envía ANTES de que llegue el
+      // UPDATE. Resultado: doble welcome_week idéntico en 15 segundos.
+      await startChain(lead.id, "welcome_week", {}, { skipFirstStep: true });
       await sb.from("lead_chains")
         .update({
           current_step: 1,
