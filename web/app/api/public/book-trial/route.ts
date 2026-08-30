@@ -574,6 +574,40 @@ export async function POST(req: Request) {
   }
   const classId = (cls as { id: string }).id;
 
+  // Bug Johann 2026-08-30: cerrar cadenas de rescate activas de trials
+  // previos — el lead acaba de agendar una nueva clase, ya no tiene
+  // sentido seguirle diciendo "¿te agendo la clase?" (chain4_absent)
+  // ni "¿reagendamos la que cancelaste?" (chain6_cancel). Solo estas
+  // dos cadenas se cierran: las conversacionales (chain1_attended,
+  // chain2_link_sent, welcome_week) siguen su ciclo si están activas.
+  const { data: rescueChains } = await sb
+    .from("lead_chains")
+    .update({
+      completed_at: new Date().toISOString(),
+      cancel_reason: "trial_rebooked",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("lead_id", leadId)
+    .in("chain_type", ["chain4_absent", "chain6_cancel"])
+    .is("completed_at", null)
+    .select("id, chain_type, current_step");
+  if (rescueChains && rescueChains.length > 0) {
+    for (const c of rescueChains) {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "status_change",
+        author:  "system",
+        content: `Cadena cerrada: trial_rebooked (nueva clase agendada)`,
+        metadata: {
+          kind:       "chain_cancelled",
+          chain_id:   c.id,
+          chain_type: c.chain_type,
+          reason:     "trial_rebooked",
+        },
+      });
+    }
+  }
+
   // ── 5. Magic-link URLs.
   // Long URL (still issued for the email + the /confirmacion deep-link
   // — backwards compatible with leads who already received it).
