@@ -10,6 +10,7 @@ import { sanitizeE164 } from "@/lib/phone";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { notifyCloserOnBooking } from "@/lib/sesion-notifications";
 import { notifyCloserSesionChanged } from "@/lib/assignee-notifications";
+import { closeRescueChainsForRebook } from "@/lib/rescue-chains";
 import {
   createSesionEventForCloser,
   patchSesionEventForCloser,
@@ -292,6 +293,11 @@ export async function POST(req: Request) {
       .eq("lead_id", leadId)
       .eq("tipo", "sesion_plan")
       .is("fecha_completada", null);
+    // Cerrar sesion_absent activa — el lead ya reagendó, no necesita
+    // mensajes de rescate. Antes solo se pausaba con pauseAllOutbound
+    // → tras 24h el sesion_absent reanudaba y bombardeaba de nuevo
+    // (bug Johann 2026-08-30 aplicado a sesiones).
+    await closeRescueChainsForRebook(sb, leadId, "sesion", "sesion_rebooked");
   } else {
     // Insert nuevo — intenta el closer preferido; si su horario exacto
     // choca (unique index 105), cae al closer del slot.

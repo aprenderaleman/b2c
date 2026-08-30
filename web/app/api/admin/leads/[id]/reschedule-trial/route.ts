@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { patchTrialEvent } from "@/lib/google-calendar";
 import { sendTrialRescheduledEmail } from "@/lib/email/send";
 import { notifyTeacherClassChanged } from "@/lib/assignee-notifications";
+import { closeRescueChainsForRebook } from "@/lib/rescue-chains";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { formatBerlinFull } from "@/lib/time";
 import { buildLeadJoinUrl } from "@/lib/trial-token";
@@ -289,6 +290,10 @@ export async function POST(
   };
   const emailOk = lr.email             ? settledOk(results[0]) : null;
   const waOk    = lr.whatsapp_normalized ? settledOk(results[lr.email ? 1 : 0]) : null;
+
+  // Cerrar chains de rescate — el lead ya tiene nueva fecha, no
+  // necesita mensajes "¿te agendo la clase?".
+  await closeRescueChainsForRebook(sb, leadId, "trial");
 
   // Notificar al teacher que su clase cambió. Si hubo swap de profe,
   // solo notificamos al NUEVO — el viejo se entera por el evento GCal

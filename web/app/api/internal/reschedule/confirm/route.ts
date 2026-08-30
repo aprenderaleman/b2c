@@ -148,6 +148,13 @@ export async function POST(req: NextRequest) {
     .update({ notes_admin: null })
     .eq("id", body.class_id);
 
+  // Cerrar chains de rescate del lead — reagendó, no necesita mensajes
+  // de "¿te agendo la clase?".
+  if (cls.lead_id) {
+    const { closeRescueChainsForRebook } = await import("@/lib/rescue-chains");
+    await closeRescueChainsForRebook(sb, cls.lead_id, "trial");
+  }
+
   // Aviso al profe del nuevo teacher_id (si hubo swap, del nuevo).
   // Este endpoint es interno (script/agent); no hay actorUserId real,
   // así que el email siempre se envía al assignee.

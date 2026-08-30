@@ -18,6 +18,7 @@ import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
 import { createTeacherTrialEvent } from "@/lib/google-calendar-oauth";
 import { sendRaw } from "@/lib/email/send";
 import { attributeReferral } from "@/lib/referrals";
+import { closeRescueChainsForRebook } from "@/lib/rescue-chains";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
 function generateShortCode(): string {
@@ -488,6 +489,10 @@ export async function POST(req: Request) {
         content: `Trial reagendado vía self-service: ${existingSlotIso} → ${requestedSlotIso}.${teacherChanged ? ` Profesor reasignado a ${match.teacherName}.` : ""} Google Calendar patched.`,
       });
 
+      // Bug Johann 2026-08-30 (rama reagenda): cerrar chains de rescate
+      // — el lead reagendó, ya no necesita mensajes de "¿reagendamos?".
+      await closeRescueChainsForRebook(sb, leadId, "trial");
+
       if (teacherChanged) {
         await notifyTeacherOfTrial({
           teacherId:   b.teacher_id,
@@ -577,36 +582,8 @@ export async function POST(req: Request) {
   // Bug Johann 2026-08-30: cerrar cadenas de rescate activas de trials
   // previos — el lead acaba de agendar una nueva clase, ya no tiene
   // sentido seguirle diciendo "¿te agendo la clase?" (chain4_absent)
-  // ni "¿reagendamos la que cancelaste?" (chain6_cancel). Solo estas
-  // dos cadenas se cierran: las conversacionales (chain1_attended,
-  // chain2_link_sent, welcome_week) siguen su ciclo si están activas.
-  const { data: rescueChains } = await sb
-    .from("lead_chains")
-    .update({
-      completed_at: new Date().toISOString(),
-      cancel_reason: "trial_rebooked",
-      updated_at: new Date().toISOString(),
-    })
-    .eq("lead_id", leadId)
-    .in("chain_type", ["chain4_absent", "chain6_cancel"])
-    .is("completed_at", null)
-    .select("id, chain_type, current_step");
-  if (rescueChains && rescueChains.length > 0) {
-    for (const c of rescueChains) {
-      await sb.from("lead_timeline").insert({
-        lead_id: leadId,
-        type:    "status_change",
-        author:  "system",
-        content: `Cadena cerrada: trial_rebooked (nueva clase agendada)`,
-        metadata: {
-          kind:       "chain_cancelled",
-          chain_id:   c.id,
-          chain_type: c.chain_type,
-          reason:     "trial_rebooked",
-        },
-      });
-    }
-  }
+  // ni "¿reagendamos la que cancelaste?" (chain6_cancel).
+  await closeRescueChainsForRebook(sb, leadId, "trial");
 
   // ── 5. Magic-link URLs.
   // Long URL (still issued for the email + the /confirmacion deep-link
