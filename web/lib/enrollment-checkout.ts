@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import { supabaseAdmin } from "./supabase";
 import { stripeUS, findOrCreateCustomer } from "./stripe";
 import { RITMOS, ONE_TIME_PACKS, type RitmoId, type GoalId } from "./trial-packs";
-import { TERMS_VERSION, TERMS_URL, TERMS_CHECKOUT_TEXT } from "./terms";
+import { TERMS_VERSION, TERMS_URL, PRIVACY_VERSION, TERMS_CHECKOUT_TEXT } from "./terms";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -163,6 +163,8 @@ export async function createEnrollmentCheckoutSession(
       email:             leadRow.email,
       terms_version:     TERMS_VERSION,
       terms_url:         TERMS_URL,
+      privacy_version:   PRIVACY_VERSION,
+      source:            "b2c-checkout",
       ip:                visitor?.ip ?? null,
       user_agent:        visitor?.userAgent ?? null,
       stripe_session_id: session.id,

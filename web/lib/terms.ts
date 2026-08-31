@@ -10,8 +10,10 @@
  * constantes — el resto del pipeline (checkout, webhook) las arrastra.
  */
 
-export const TERMS_VERSION = "condiciones-es-v2.0";
-export const TERMS_URL     = "https://aprender-aleman.de/condiciones";
+export const TERMS_VERSION   = "condiciones-es-v2.0";
+export const TERMS_URL       = "https://aprender-aleman.de/condiciones";
+export const PRIVACY_VERSION = "privacidad-es-v2.0";
+export const PRIVACY_URL     = "https://aprender-aleman.de/privacidad";
 
 /**
  * Texto mostrado junto al checkbox de TyC en Stripe Checkout
@@ -22,10 +24,12 @@ export const TERMS_URL     = "https://aprender-aleman.de/condiciones";
  * acto, registrado por Stripe y volcado a terms_acceptances vía
  * webhook. Límite de Stripe: 1200 caracteres.
  */
+// Wording acordado con la sesión legal 2026-08-31 (declaración
+// compuesta TyC + privacidad + §10.2 en un solo checkbox obligatorio).
 export const TERMS_CHECKOUT_TEXT =
-  `Acepto los [Términos y condiciones](${TERMS_URL}) (${TERMS_VERSION}) de Linguify Global LLC y ` +
-  `solicito expresamente que la prestación del servicio comience de inmediato ` +
-  `(acceso a la plataforma y reserva de clases) antes de que finalice el plazo legal ` +
-  `de desistimiento de 14 días. Sé que, si desisto dentro de ese plazo, abonaré la ` +
-  `parte proporcional del servicio ya prestado, y que mi derecho de desistimiento se ` +
-  `extingue cuando el servicio se haya ejecutado completamente.`;
+  `He leído y acepto los [Términos y condiciones](${TERMS_URL}) y la ` +
+  `[Política de privacidad](${PRIVACY_URL}). Solicito expresamente que el servicio ` +
+  `comience de inmediato y confirmo que, si desisto en el plazo de 14 días (§10.2), ` +
+  `deberé pagar la parte proporcional ya prestada hasta la comunicación del ` +
+  `desistimiento, y que el derecho de desistimiento se extingue cuando el servicio ` +
+  `se haya ejecutado completamente.`;
