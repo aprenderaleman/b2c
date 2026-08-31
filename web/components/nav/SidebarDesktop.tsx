@@ -76,6 +76,8 @@ export function SidebarDesktop({
 function defaultHome(role: Role): string {
   if (role === "teacher") return "/profesor";
   if (role === "student") return "/estudiante";
+  if (role === "closer")  return "/closer";
+  if (role === "setter")  return "/setter";
   return "/admin";
 }
 
@@ -94,10 +96,14 @@ function RolePill({ role, impersonated }: { role: Role; impersonated: boolean })
     role === "superadmin" ? "Superadmin" :
     role === "admin"      ? "Admin"      :
     role === "teacher"    ? "Profesor"   :
+    role === "closer"     ? "Closer"     :
+    role === "setter"     ? "Setter"     :
                             "Estudiante";
   const emoji =
     role === "teacher" ? "👨‍🏫" :
     role === "student" ? "🎓"   :
+    role === "closer"  ? "📈"   :
+    role === "setter"  ? "📞"   :
                          "🛡️";
   return (
     <div className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium

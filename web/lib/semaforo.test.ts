@@ -492,6 +492,58 @@ describe("R3 — ventaPendiente como trigger", () => {
   });
 });
 
+describe("Setter — sus salientes solo apagan R4 (lead nuevo)", () => {
+  const setterSaliente = (at: string, action = "confirmar_cita") => ({
+    lead_id: "lead-1", direction: "saliente" as const, action_type: action,
+    occurred_at: new Date(at).toISOString(), actor_type: "setter", actor_name: "María",
+  });
+
+  it("un contacto del setter apaga R4 (llamar primero es su función)", () => {
+    const lead = { ...BASE_LEAD, created_at: "2026-08-13T08:00:00+02:00" };
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T09:00:00+02:00"), lead,
+      contacts: [setterSaliente("2026-08-13T08:10:00+02:00")],
+    }));
+    expect(r.regla).not.toBe("R4");
+  });
+
+  it("un contacto del setter NO apaga R1 (respuesta sigue siendo del closer)", () => {
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T14:00:00+02:00"),
+      contacts: [
+        saliente("2026-08-13T08:00:00+02:00"),
+        entrante("2026-08-13T09:00:00+02:00"),
+        setterSaliente("2026-08-13T10:00:00+02:00"),
+      ],
+    }));
+    expect(r.regla).toBe("R1");
+    expect(r.causa).toBe("respuesta");
+  });
+
+  it("un contacto del setter NO apaga R3 (el pago es del closer)", () => {
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T14:00:00+02:00"),
+      contacts: [
+        saliente("2026-08-13T10:00:00+02:00", "enviar_enlace"),
+        setterSaliente("2026-08-13T12:00:00+02:00"),
+      ],
+    }));
+    expect(r.regla).toBe("R3");
+  });
+
+  it("un agendar_prueba del setter NO apaga R5 (post-clase es del closer)", () => {
+    const lead = { ...BASE_LEAD, trial_attended_at: "2026-08-13T09:00:00+02:00" };
+    const r = evaluateSemaforo(input({
+      now: ms("2026-08-13T12:00:00+02:00"), lead,
+      contacts: [
+        saliente("2026-08-12T10:00:00+02:00"),
+        setterSaliente("2026-08-13T10:00:00+02:00", "agendar_prueba"),
+      ],
+    }));
+    expect(r.regla).toBe("R5");
+  });
+});
+
 describe("Epoch C6 — la deuda histórica no genera rojos el día 1", () => {
   const epoch = ms("2026-08-17T00:00:00+02:00");
 

@@ -7,7 +7,7 @@ export type CreateUserInput = {
   fullName:  string;
   phone:     string | null;
   language:  "es" | "de";
-  role:      "admin" | "teacher" | "closer";
+  role:      "admin" | "teacher" | "closer" | "setter";
   // Si true, el usuario se crea con active=false (necesita aprobación
   // manual del admin antes de poder loguearse). Usado por el flujo
   // de auto-registro de profesores. Por defecto false → activo de

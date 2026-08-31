@@ -15,7 +15,7 @@ import { redirect } from "next/navigation";
 import { auth } from "./auth";
 import { getImpersonation } from "./impersonation";
 
-export type Role = "superadmin" | "admin" | "teacher" | "student" | "closer";
+export type Role = "superadmin" | "admin" | "teacher" | "student" | "closer" | "setter";
 
 export type AuthedSession = {
   user: {
@@ -37,6 +37,7 @@ export function defaultPathForRole(role: Role): string {
     case "teacher": return "/profesor";
     case "student": return "/estudiante";
     case "closer":  return "/closer";
+    case "setter":  return "/setter";
   }
 }
 
@@ -91,7 +92,7 @@ function currentPath(): string {
  */
 export async function requireRoleWithImpersonation(
   allowed:    Role[],
-  expectRole: "teacher" | "student" | "closer",
+  expectRole: "teacher" | "student" | "closer" | "setter",
 ): Promise<AuthedSession & {
   impersonation: null | { admin_id: string; admin_name: string; original_user_id: string };
 }> {

@@ -12,6 +12,7 @@ import { FollowupMessages } from "./FollowupMessages";
 import { TeacherLeadActions } from "./TeacherLeadActions";
 import { getLastContacts, fmtLastContact } from "@/lib/contacts";
 import { RegistrarContactoButton } from "@/components/contacts/RegistrarContactoButton";
+import { LeadContactsHistory } from "@/components/contacts/LeadContactsHistory";
 
 // Meta del lead en lenguaje natural para los mensajes del profe
 const META_LABEL: Record<string, string> = {
@@ -234,6 +235,8 @@ export default async function TeacherLeadDetailPage({
         </h2>
         <AddNoteInput leadId={lead.id} />
       </section>
+
+      <LeadContactsHistory leadId={lead.id} />
     </main>
   );
 }

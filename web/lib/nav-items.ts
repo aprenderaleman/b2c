@@ -38,7 +38,7 @@ export type NavIconKey =
   | "heart"
   | "refreshCw";
 
-export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student" | "closer"> | "admin" | "teacher" | "student" | "closer", NavItem[]> = {
+export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
   superadmin: adminItems(),
   admin:      adminItems(),
   teacher: [
@@ -69,6 +69,7 @@ export const NAV_BY_ROLE: Record<Exclude<Role, "teacher" | "student" | "closer">
     { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
   ],
   closer: closerItems(),
+  setter: setterItems(),
 };
 
 function adminItems(): NavItem[] {
@@ -95,6 +96,7 @@ function adminItems(): NavItem[] {
     { label: "Referidos",   href: "/admin/referidos",   icon: "heart",         priority: 8.7 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
     { label: "Closers",     href: "/admin/closers",     icon: "userCheck",     priority: 9.5 },
+    { label: "Setters",     href: "/admin/setters",     icon: "userCheck",     priority: 9.52 },
     { label: "Reactivacion",href: "/admin/reactivacion", icon: "refreshCw",   priority: 9.55 },
     { label: "Aprobaciones",href: "/admin/aprobaciones", icon: "wallet",       priority: 9.6 },
     { label: "Config CRM",  href: "/admin/config/cadencia", icon: "barChart3", priority: 9.7 },
@@ -111,6 +113,15 @@ function closerItems(): NavItem[] {
     { label: "Mis numeros",        href: "/closer/numeros",        icon: "trendingUp", priority: 3 },
     { label: "Mi disponibilidad",  href: "/closer/disponibilidad", icon: "clock",      priority: 5 },
     { label: "Perfil",             href: "/closer/perfil",         icon: "userCircle", priority: 4 },
+  ];
+}
+
+function setterItems(): NavItem[] {
+  return [
+    // La cola ES su home: citas por confirmar, hoy/mañana, no-shows y
+    // backlog, con su marcador (métricas) arriba.
+    { label: "Mi cola",  href: "/setter",        icon: "users",      priority: 1 },
+    { label: "Perfil",   href: "/setter/perfil", icon: "userCircle", priority: 2 },
   ];
 }
 

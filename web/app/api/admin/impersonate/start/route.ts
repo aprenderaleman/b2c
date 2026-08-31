@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
   }
 
   const targetRole = (target as { role: string }).role;
-  if (targetRole !== "student" && targetRole !== "teacher" && targetRole !== "closer") {
-    return NextResponse.json({ error: "can only impersonate students, teachers or closers" }, { status: 400 });
+  if (targetRole !== "student" && targetRole !== "teacher" && targetRole !== "closer" && targetRole !== "setter") {
+    return NextResponse.json({ error: "can only impersonate students, teachers, closers or setters" }, { status: 400 });
   }
 
   // Audit log entry.
@@ -63,11 +63,11 @@ export async function POST(req: NextRequest) {
     admin_id:     adminId,
     admin_name:   adminName,
     target_id:    targetId,
-    target_role:  targetRole as "student" | "teacher" | "closer",
+    target_role:  targetRole as "student" | "teacher" | "closer" | "setter",
     target_name:  (target as { full_name: string | null }).full_name ?? (target as { email: string }).email,
     target_email: (target as { email: string }).email,
   });
 
-  const homeUrl = targetRole === "teacher" ? "/profesor" : targetRole === "closer" ? "/closer" : "/estudiante";
+  const homeUrl = targetRole === "teacher" ? "/profesor" : targetRole === "closer" ? "/closer" : targetRole === "setter" ? "/setter" : "/estudiante";
   return NextResponse.json({ ok: true, redirect: homeUrl, role: targetRole });
 }

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { CloserLeadDetail } from "@/components/closer/CloserLeadDetail";
 import { getLastContacts, fmtLastContact } from "@/lib/contacts";
 import { RegistrarContactoButton } from "@/components/contacts/RegistrarContactoButton";
+import { LeadContactsHistory } from "@/components/contacts/LeadContactsHistory";
 
 export const metadata = { title: "Lead · Closer" };
 
@@ -139,6 +140,7 @@ export default async function CloserLeadPage({
         activeTrial={activeTrial}
         teacherName={teacherName}
       />
+      <LeadContactsHistory leadId={lead.id} />
     </main>
   );
 }

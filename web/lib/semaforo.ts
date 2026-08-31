@@ -200,6 +200,11 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
   const T = (iso: string) => new Date(iso).getTime();
   const contacts = [...input.contacts].sort((a, b) => T(a.occurred_at) - T(b.occurred_at));
   const salientes = contacts.filter(c => c.direction === "saliente");
+  // Los contactos del setter SOLO apagan R4 (lead nuevo sin contacto).
+  // Atender respuestas (R1), el enlace de pago (R3) y la jugada
+  // post-clase (R5) siguen siendo deuda del closer: un saliente del
+  // setter no las salda (Gelfis 2026-08-31).
+  const salientesSinSetter = salientes.filter(c => c.actor_type !== "setter");
   const lastSaliente = salientes[salientes.length - 1] ?? null;
 
   const inbounds = contacts.filter(c => c.direction === "entrante" && c.action_type === "mensaje_lead");
@@ -231,7 +236,7 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
   if (enlaceAt && !pagado && T(enlaceAt) >= epochMs) {
     const enlaceMs = new Date(enlaceAt).getTime();
     const habil = businessMsBetween(enlaceMs, now);
-    const salientePosterior = salientes.some(c => T(c.occurred_at) > enlaceMs);
+    const salientePosterior = salientesSinSetter.some(c => T(c.occurred_at) > enlaceMs);
     ev.push({ tipo: "enlace_pago", detalle: `enviado, ${fmtHabil(habil)} hábiles, saliente posterior: ${salientePosterior ? "sí" : "no"}`, at: enlaceAt });
     if (habil > UMBRAL_ENLACE_MS && !salientePosterior) {
       rojos.push({ causa: "pago", regla: "R3", badge: `💰 Link ${fmtHabil(habil)}`, detalle: `Enlace de pago sin pagar desde hace ${fmtHabil(habil)} hábiles`, triggerAt: enlaceAt });
@@ -241,7 +246,7 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
   // R1 💬 inbound sin saliente posterior >2h hábiles
   if (lastInbound && T(lastInbound.occurred_at) >= epochMs) {
     const inMs = new Date(lastInbound.occurred_at).getTime();
-    const atendido = salientes.some(c => T(c.occurred_at) > inMs);
+    const atendido = salientesSinSetter.some(c => T(c.occurred_at) > inMs);
     const habil = businessMsBetween(inMs, now);
     ev.push({ tipo: "inbound", detalle: `mensaje del lead, ${fmtHabil(habil)} hábiles, atendido: ${atendido ? "sí" : "no"}`, at: lastInbound.occurred_at });
     if (!atendido && habil > UMBRAL_RESPUESTA_MS) {
@@ -264,7 +269,7 @@ export function evaluateSemaforo(input: SemaforoInput): SemaforoResult {
   if (lead.trial_attended_at && !pagado && T(lead.trial_attended_at) >= epochMs) {
     const attMs = new Date(lead.trial_attended_at).getTime();
     const habil = businessMsBetween(attMs, now);
-    const propuestaDespues = salientes.some(c =>
+    const propuestaDespues = salientesSinSetter.some(c =>
       T(c.occurred_at) >= attMs &&
       (c.action_type === "enviar_propuesta" || c.action_type === "enviar_enlace" || c.action_type === "agendar_prueba"));
     // Una cadena activa YA es la jugada de cierre en marcha (su paso 1

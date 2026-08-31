@@ -12,6 +12,7 @@ import { RescheduleTrialButton } from "./RescheduleTrialButton";
 import { AssignCloserButton } from "./AssignCloserButton";
 import { getLastContacts, fmtLastContact } from "@/lib/contacts";
 import { RegistrarContactoButton } from "@/components/contacts/RegistrarContactoButton";
+import { LeadContactsHistory } from "@/components/contacts/LeadContactsHistory";
 
 export const dynamic = "force-dynamic";
 
@@ -396,6 +397,8 @@ export default async function LeadDetail({
           </Panel>
         </div>
       </div>
+
+      <LeadContactsHistory leadId={lead.id} />
     </main>
   );
 }

@@ -1,14 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase";
-import { patchTrialEvent } from "@/lib/google-calendar";
-import { sendTrialRescheduledEmail } from "@/lib/email/send";
-import { notifyTeacherClassChanged } from "@/lib/assignee-notifications";
-import { closeRescueChainsForRebook } from "@/lib/rescue-chains";
-import { sendWhatsappText } from "@/lib/whatsapp";
-import { formatBerlinFull } from "@/lib/time";
-import { buildLeadJoinUrl } from "@/lib/trial-token";
+import { rescheduleTrialForLead } from "@/lib/reschedule-trial";
 
 /**
  * POST /api/admin/leads/[id]/reschedule-trial
@@ -22,25 +15,10 @@ import { buildLeadJoinUrl } from "@/lib/trial-token";
  *     duration_minutes?: 30
  *   }
  *
- * Comportamiento:
- *   1. Auth admin/superadmin (session-based, no API key).
- *   2. Verifica que la clase existe, sigue scheduled, es trial y
- *      pertenece al lead de la URL.
- *   3. Race-guard: si entre el check del frontend y este confirm
- *      otra clase del mismo profe entró al hueco nuevo, devuelve 409.
- *   4. UPDATE classes.scheduled_at + reset notes_admin (para que los
- *      crons de recordatorios vuelvan a disparar).
- *   5. Patch del evento en Google Calendar si existe. Si falla,
- *      ROLLBACK del UPDATE — DB y Calendar nunca quedan
- *      desincronizados.
- *   6. Disparo en paralelo de WhatsApp + email al lead avisando del
- *      cambio + pidiendo confirmación. Failures no bloquean (ya está
- *      reagendado en BD; admin reintenta manualmente).
- *   7. Inserta entry en lead_timeline con kind=trial_rescheduled.
- *
- * Nota: NO aceptamos cambio de profesor — la UI no lo expone. Si en
- * el futuro hace falta, agregar `new_teacher_id` al body y propagar
- * al UPDATE + race-guard.
+ * La lógica (verificaciones, race-guard, patch GCal con rollback,
+ * notificaciones, cierre de cadenas, timeline) vive en
+ * lib/reschedule-trial.ts — compartida con el rol setter. Este route
+ * solo hace la auth admin/cron y adapta la respuesta HTTP.
  */
 
 export const runtime  = "nodejs";
@@ -68,8 +46,6 @@ function isCronAuthd(req: Request): boolean {
   if (b && b.toLowerCase().startsWith("bearer ") && b.slice(7).trim() === e) return true;
   return req.headers.get("x-cron-secret") === e;
 }
-
-const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 export async function POST(
   req: Request,
@@ -101,243 +77,26 @@ export async function POST(
     );
   }
   const b = parsed.data;
-  const newStart = new Date(b.new_start_iso);
-  if (newStart.getTime() < Date.now()) {
-    return NextResponse.json(
-      { ok: false, error: "in_the_past", message: "La nueva fecha debe ser en el futuro." },
-      { status: 400 },
-    );
-  }
 
-  const sb = supabaseAdmin();
-
-  // 1) Verify class belongs to this lead, is trial, scheduled.
-  const { data: cls, error: clsErr } = await sb
-    .from("classes")
-    .select("id, status, is_trial, scheduled_at, teacher_id, lead_id, duration_minutes, google_calendar_event_id, short_code")
-    .eq("id", b.class_id)
-    .is("deleted_at", null) // soft-delete guard 2026-07-10
-    .maybeSingle();
-  if (clsErr || !cls) {
-    return NextResponse.json({ ok: false, error: "class_not_found" }, { status: 404 });
-  }
-  type ClassRow = {
-    id: string; status: string; is_trial: boolean; scheduled_at: string;
-    teacher_id: string; lead_id: string | null; duration_minutes: number;
-    google_calendar_event_id: string | null; short_code: string | null;
-  };
-  const c = cls as ClassRow;
-  if (c.lead_id !== leadId) {
-    return NextResponse.json(
-      { ok: false, error: "class_not_for_this_lead" },
-      { status: 409 },
-    );
-  }
-  if (!c.is_trial || c.status !== "scheduled") {
-    return NextResponse.json(
-      { ok: false, error: "not_reschedulable", reason: `status=${c.status} is_trial=${c.is_trial}` },
-      { status: 409 },
-    );
-  }
-
-  const duration = b.duration_minutes ?? c.duration_minutes ?? 40;
-  const slotEnd  = new Date(newStart.getTime() + duration * 60_000);
-  const slotPrev = new Date(newStart.getTime() - duration * 60_000);
-  // Si se pide cambio de profe, el race-guard aplica al NUEVO profe.
-  const targetTeacherId = b.new_teacher_id ?? c.teacher_id;
-  const teacherChanged  = !!b.new_teacher_id && b.new_teacher_id !== c.teacher_id;
-
-  // 2) Race-guard: ¿alguien tomó el slot nuevo entre el check y este confirm?
-  //    Excluimos la propia clase (estamos moviéndola).
-  const { data: collisions } = await sb
-    .from("classes")
-    .select("id")
-    .is("deleted_at", null) // soft-delete guard 2026-07-10
-    .eq("teacher_id", targetTeacherId)
-    .in("status", ["scheduled", "live"])
-    .neq("id", c.id)
-    .lt("scheduled_at", slotEnd.toISOString())
-    .gte("scheduled_at", slotPrev.toISOString());
-  if (collisions && collisions.length > 0) {
-    return NextResponse.json(
-      {
-        ok:    false,
-        error: "slot_taken",
-        message: "El profesor ya tiene una clase agendada en ese horario. Elige otro.",
-      },
-      { status: 409 },
-    );
-  }
-
-  // 3) UPDATE classes (opcional: reasigna teacher si new_teacher_id)
-  const { error: updErr } = await sb
-    .from("classes")
-    .update({
-      scheduled_at: newStart.toISOString(),
-      // Reset markers de recordatorios — los crons (24h/morning/30m)
-      // consultan notes_admin para idempotencia, así que basta con
-      // limpiarlo para que re-disparen en el nuevo horario.
-      notes_admin:  null,
-      ...(teacherChanged ? { teacher_id: targetTeacherId } : {}),
-    })
-    .eq("id", c.id);
-  if (updErr) {
-    return NextResponse.json(
-      { ok: false, error: "db_update_failed", reason: updErr.message },
-      { status: 500 },
-    );
-  }
-
-  // 4) Patch evento en Google Calendar (si existe)
-  let gcalPatched = false;
-  if (c.google_calendar_event_id) {
-    try {
-      gcalPatched = await patchTrialEvent(
-        c.google_calendar_event_id,
-        newStart.toISOString(),
-        duration,
-      );
-    } catch (e) {
-      console.error("[reschedule-trial] gcal patch threw:", e);
-    }
-    if (!gcalPatched) {
-      // Rollback para no dejar BD y Calendar desincronizados.
-      const { error: rbErr } = await sb
-        .from("classes")
-        .update({ scheduled_at: c.scheduled_at })
-        .eq("id", c.id);
-      if (rbErr) {
-        console.error("[reschedule-trial] CRITICAL: gcal patch failed AND rollback failed:", rbErr);
-        return NextResponse.json(
-          { ok: false, error: "gcal_failed_and_rollback_failed", reason: rbErr.message },
-          { status: 500 },
-        );
-      }
-      return NextResponse.json(
-        {
-          ok: false, error: "gcal_failed",
-          message: "El patch del evento en Google Calendar falló. La clase NO fue movida.",
-        },
-        { status: 500 },
-      );
-    }
-  }
-
-  // 5) Lead info para mensajes
-  const { data: lead } = await sb
-    .from("leads")
-    .select("id, name, email, whatsapp_normalized, language")
-    .eq("id", leadId)
-    .maybeSingle();
-  type LeadRow = {
-    id: string; name: string | null; email: string | null;
-    whatsapp_normalized: string | null; language: "es" | "de" | null;
-  };
-  const lr        = (lead ?? {}) as LeadRow;
-  const lang      = (lr.language === "de" ? "de" : "es") as "es" | "de";
-  const leadFirst = (lr.name ?? "").trim().split(/\s+/)[0] || "";
-  const startDate = formatBerlinFull(newStart, lang);
-  const joinUrl   = buildLeadJoinUrl({
-    classId:   c.id,
-    leadId:    leadId,
-    shortCode: c.short_code,
-    baseUrl:   PLATFORM_URL,
-  });
-
-  // 6) Notificar — email + WA en paralelo, fire-and-forget.
-  const waText = lang === "de"
-    ? [
-        `${leadFirst}, deine kostenlose Probestunde DEUTSCH wurde verschoben.`,
-        ``,
-        `📅 Neuer Termin: ${startDate}`,
-        `🔗 ZUM UNTERRICHTSRAUM: ${joinUrl}`,
-        ``,
-        `Bitte bestätige mit "Ja", dass du dabei bist 🙌`,
-        ``,
-        `— Aprender-Aleman.de`,
-      ].join("\n")
-    : [
-        `${leadFirst}, hemos reagendado tu clase de prueba GRATUITA de ALEMÁN.`,
-        ``,
-        `📅 Nueva fecha: ${startDate}`,
-        `🔗 ENLACE A LA CLASE: ${joinUrl}`,
-        ``,
-        `¿Me confirmas con un "Sí" que asistirás? 🙌`,
-        ``,
-        `— Aprender-Aleman.de`,
-      ].join("\n");
-
-  const tasks: Promise<unknown>[] = [];
-  if (lr.email) {
-    tasks.push(
-      sendTrialRescheduledEmail(lr.email, {
-        leadName:     leadFirst || "tú",
-        newStartDate: startDate,
-        durationMin:  duration,
-        joinUrl,
-        language:     lang,
-      }),
-    );
-  }
-  if (lr.whatsapp_normalized) {
-    tasks.push(sendWhatsappText(lr.whatsapp_normalized, waText));
-  }
-  const results = await Promise.allSettled(tasks);
-  const settledOk = (r: PromiseSettledResult<unknown> | undefined): boolean | null => {
-    if (!r) return null;
-    if (r.status !== "fulfilled") return false;
-    return (r.value as { ok?: boolean }).ok === true;
-  };
-  const emailOk = lr.email             ? settledOk(results[0]) : null;
-  const waOk    = lr.whatsapp_normalized ? settledOk(results[lr.email ? 1 : 0]) : null;
-
-  // Cerrar chains de rescate — el lead ya tiene nueva fecha, no
-  // necesita mensajes "¿te agendo la clase?".
-  await closeRescueChainsForRebook(sb, leadId, "trial");
-
-  // Notificar al teacher que su clase cambió. Si hubo swap de profe,
-  // solo notificamos al NUEVO — el viejo se entera por el evento GCal
-  // borrado y por el cambio en su panel (edge case poco frecuente).
   const actorUserId = (session?.user as { id?: string } | undefined)?.id ?? null;
   const actorEmail  = session?.user?.email ?? null;
-  void notifyTeacherClassChanged({
-    classId:      c.id,
-    kind:         "rescheduled",
-    previousDate: c.scheduled_at,
-    newDate:      newStart,
-    actorUserId,
-    actorLabel:   cronAuthd ? "cron/curl" : (actorEmail ? `${actorEmail} (admin)` : "admin"),
-  });
 
-  // 7) Timeline
-  const actor = cronAuthd ? "cron/curl" : (session?.user?.email ?? "admin");
-  await sb.from("lead_timeline").insert({
-    lead_id: leadId,
-    type:    "agent_note",
-    author:  cronAuthd ? "system" : "admin",
-    content: `📅 Clase de prueba reagendada a ${startDate}${teacherChanged ? ` (profe cambiado)` : ""} por ${actor}.`,
-    metadata: {
-      kind:              "trial_rescheduled",
-      class_id:          c.id,
-      old_start_iso:     c.scheduled_at,
-      new_start_iso:     newStart.toISOString(),
-      old_teacher_id:    c.teacher_id,
-      new_teacher_id:    targetTeacherId,
-      teacher_changed:   teacherChanged,
-      gcal_patched:      gcalPatched,
-      email_sent:        emailOk,
-      wa_sent:           waOk,
+  const result = await rescheduleTrialForLead({
+    leadId,
+    classId:         b.class_id,
+    newStartIso:     b.new_start_iso,
+    durationMinutes: b.duration_minutes,
+    newTeacherId:    b.new_teacher_id,
+    actor: {
+      userId:         actorUserId,
+      label:          cronAuthd ? "cron/curl" : (actorEmail ? `${actorEmail} (admin)` : "admin"),
+      timelineAuthor: cronAuthd ? "system" : "admin",
     },
   });
 
-  return NextResponse.json({
-    ok:           true,
-    class_id:     c.id,
-    new_start_iso: newStart.toISOString(),
-    new_start_label: startDate,
-    gcal_patched: gcalPatched,
-    email_sent:   emailOk,
-    wa_sent:      waOk,
-    join_url:     joinUrl,
-  });
+  if (!result.ok) {
+    const { status, ...rest } = result;
+    return NextResponse.json({ ...rest }, { status });
+  }
+  return NextResponse.json(result);
 }

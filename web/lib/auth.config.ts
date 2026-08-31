@@ -4,7 +4,7 @@
 
 import type { NextAuthConfig } from "next-auth";
 
-type Role = "superadmin" | "admin" | "teacher" | "student" | "closer";
+type Role = "superadmin" | "admin" | "teacher" | "student" | "closer" | "setter";
 
 /**
  * Which routes are gated, and which roles are allowed on each.
@@ -15,6 +15,7 @@ const PROTECTED: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/profesor",   roles: ["superadmin", "admin", "teacher"] },
   { prefix: "/estudiante", roles: ["superadmin", "admin", "student"] },
   { prefix: "/closer",     roles: ["superadmin", "admin", "closer"] },
+  { prefix: "/setter",     roles: ["superadmin", "admin", "setter"] },
   { prefix: "/aula",       roles: ["superadmin", "admin", "teacher", "student", "closer"] },
   { prefix: "/grabacion",  roles: ["superadmin", "admin", "teacher", "student"] },
   { prefix: "/comunidad",  roles: ["superadmin", "admin", "teacher", "student"] },
@@ -45,6 +46,7 @@ function defaultPathForRole(role: Role): string {
     case "teacher": return "/profesor";
     case "student": return "/estudiante";
     case "closer":  return "/closer";
+    case "setter":  return "/setter";
   }
 }
 

@@ -95,5 +95,7 @@ export function AppShell({
 function defaultHome(role: Role): string {
   if (role === "teacher") return "/profesor";
   if (role === "student") return "/estudiante";
+  if (role === "closer")  return "/closer";
+  if (role === "setter")  return "/setter";
   return "/admin";
 }

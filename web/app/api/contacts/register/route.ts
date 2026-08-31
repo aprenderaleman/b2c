@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { resolveCloserActor } from "@/lib/closer-auth";
+import { resolveSetterActor } from "@/lib/setter-auth";
 import {
   registerContact,
   CONTACT_ACTION_TYPES,
   CONTACT_CHANNELS,
+  SETTER_ACTION_TYPES,
   type ContactActionType,
   type ContactChannel,
   type ContactActor,
@@ -57,12 +59,34 @@ export async function POST(req: Request) {
 
   if (role === "admin" || role === "superadmin") {
     // Admin puede registrar sobre cualquier lead — pero si está en modo
-    // "ver como closer", registra como ese closer (mismo criterio que el
-    // resto del módulo closer).
-    const imp = await resolveCloserActor();
-    actor = imp && imp.id !== userId
-      ? { type: "closer", id: imp.id, name: imp.name }
+    // "ver como closer" / "ver como setter", registra como ese usuario
+    // (mismo criterio que el resto de cada módulo).
+    const impCloser = await resolveCloserActor();
+    const impSetter = await resolveSetterActor();
+    actor = impCloser && impCloser.id !== userId
+      ? { type: "closer", id: impCloser.id, name: impCloser.name }
+      : impSetter && impSetter.id !== userId
+      ? { type: "setter", id: impSetter.id, name: impSetter.name }
       : { type: "admin", id: userId, name: userName };
+  } else if (role === "setter") {
+    const setter = await resolveSetterActor();
+    if (!setter) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    // El setter solo registra sus 3 jugadas (+ no contestó y nota).
+    if (!(SETTER_ACTION_TYPES as readonly string[]).includes(actionType)) {
+      return NextResponse.json({ error: "invalid_action_type" }, { status: 400 });
+    }
+    // Ownership: cualquier lead con cita (trial o sesión) — su universo
+    // entero son las citas agendadas; no hay asignación por setter.
+    const { data: cita } = await sb
+      .from("classes")
+      .select("id")
+      .eq("lead_id", leadId)
+      .is("deleted_at", null)
+      .limit(1);
+    if (!cita || cita.length === 0) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    actor = { type: "setter", id: setter.id, name: setter.name };
   } else if (role === "closer") {
     const closer = await resolveCloserActor();
     if (!closer) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -102,8 +126,12 @@ export async function POST(req: Request) {
 
   // Anti-limbo: registrar un contacto también es "guardar una acción" —
   // si el lead queda sin próxima jugada, el sistema crea la auto-tarea.
-  const { ensureFuturePlay } = await import("@/lib/semaforo");
-  await ensureFuturePlay(leadId).catch(() => {});
+  // EXCEPTO para el setter: sus contactos no crean tareas en la cola del
+  // closer (su cola se deriva de citas, no de tareas).
+  if (actor.type !== "setter") {
+    const { ensureFuturePlay } = await import("@/lib/semaforo");
+    await ensureFuturePlay(leadId).catch(() => {});
+  }
 
   return NextResponse.json({ ok: true, id: res.id });
 }
