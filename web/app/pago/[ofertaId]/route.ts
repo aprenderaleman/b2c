@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ ofertaId: string }> },
 ) {
   const { ofertaId } = await params;
@@ -28,7 +28,11 @@ export async function GET(
     return NextResponse.redirect(`${SITE_URL}/`, 302);
   }
 
-  const result = await createEnrollmentCheckoutSession(ofertaId);
+  // IP + UA del visitante → registro legal de aceptación de TyC.
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || null;
+  const userAgent = req.headers.get("user-agent");
+
+  const result = await createEnrollmentCheckoutSession(ofertaId, { ip, userAgent });
 
   if (result.ok) {
     return NextResponse.redirect(result.url, 302);

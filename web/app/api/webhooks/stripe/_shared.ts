@@ -96,6 +96,25 @@ async function handleCheckoutCompleted(
       console.warn("[stripe-webhook] enrollment sin oferta_id/lead_id", session.id);
       return;
     }
+
+    // Registro legal (FASE 2, §10.2): volcar el consentimiento del
+    // checkbox de TyC de Stripe a terms_acceptances. El custom_text
+    // mostrado incluía la solicitud de inicio inmediato, así que
+    // consent aceptado = TyC + §10.2 probados con timestamp e IP.
+    try {
+      const tos = session.consent?.terms_of_service ?? null;
+      // Si Stripe no devolvió consent (p.ej. la session se creó con el
+      // fallback sin checkbox), solo sellamos accepted_at — sin
+      // sobreescribir el marcador 'not_shown'.
+      const patch: Record<string, unknown> = { accepted_at: new Date().toISOString() };
+      if (tos) {
+        patch.tos_consent             = tos;
+        patch.immediate_start_consent = tos === "accepted";
+      }
+      await sb.from("terms_acceptances").update(patch).eq("stripe_session_id", session.id);
+    } catch (e) {
+      console.error("[stripe-webhook] terms_acceptances update failed:", e);
+    }
     const stripeCustomerId = typeof session.customer === "string"
       ? session.customer
       : (session.customer as { id: string } | null)?.id ?? "";

@@ -2,6 +2,7 @@ import type Stripe from "stripe";
 import { supabaseAdmin } from "./supabase";
 import { stripeUS, findOrCreateCustomer } from "./stripe";
 import { RITMOS, ONE_TIME_PACKS, type RitmoId, type GoalId } from "./trial-packs";
+import { TERMS_VERSION, TERMS_URL, TERMS_CHECKOUT_TEXT } from "./terms";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -16,7 +17,12 @@ const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-alem
  * session se crea al VISITAR el link, el link corto nunca caduca —
  * cada visita genera una session fresca.
  */
-export async function createEnrollmentCheckoutSession(ofertaId: string): Promise<
+export async function createEnrollmentCheckoutSession(
+  ofertaId: string,
+  /** IP y user-agent del visitante del link — para el registro legal
+   *  de aceptación de TyC (terms_acceptances, migración 124). */
+  visitor?: { ip?: string | null; userAgent?: string | null },
+): Promise<
   | { ok: true; url: string }
   | { ok: false; reason: "not_found" | "already_accepted" | "stripe_error" }
 > {
@@ -123,8 +129,51 @@ export async function createEnrollmentCheckoutSession(ofertaId: string): Promise
       };
     }
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    // Consentimiento legal (FASE 2, TyC condiciones-es-v2.0): checkbox
+    // de TyC en Stripe Checkout con el texto §10.2 de inicio inmediato.
+    // Requiere que la cuenta Stripe tenga la URL de TyC configurada en
+    // Settings → Public details; si no la tiene, el create falla — por
+    // eso el fallback de abajo reintenta SIN consent para que un tema
+    // de configuración jamás bloquee un pago.
+    const consentParams: Pick<Stripe.Checkout.SessionCreateParams, "consent_collection" | "custom_text"> = {
+      consent_collection: { terms_of_service: "required" },
+      custom_text: { terms_of_service_acceptance: { message: TERMS_CHECKOUT_TEXT } },
+    };
+
+    let session: Stripe.Checkout.Session;
+    let consentShown = true;
+    try {
+      session = await stripe.checkout.sessions.create({ ...sessionParams, ...consentParams });
+    } catch (consentErr) {
+      console.error(
+        "[enrollment-checkout] CRITICAL: session con consent_collection falló — reintentando SIN checkbox de TyC. " +
+        "Revisar la URL de Términos en Stripe Settings → Public details.",
+        consentErr instanceof Error ? consentErr.message : consentErr,
+      );
+      consentShown = false;
+      session = await stripe.checkout.sessions.create(sessionParams);
+    }
     if (!session.url) return { ok: false, reason: "stripe_error" };
+
+    // Registro legal: una fila por session creada. El webhook
+    // checkout.session.completed la completa con el consent real.
+    await sb.from("terms_acceptances").insert({
+      lead_id:           of.lead_id,
+      oferta_id:         of.id,
+      email:             leadRow.email,
+      terms_version:     TERMS_VERSION,
+      terms_url:         TERMS_URL,
+      ip:                visitor?.ip ?? null,
+      user_agent:        visitor?.userAgent ?? null,
+      stripe_session_id: session.id,
+      // Si el fallback quitó el checkbox, dejamos constancia de que el
+      // §10.2 NO se mostró en esta session.
+      immediate_start_consent: false,
+      tos_consent:       consentShown ? null : "not_shown",
+    }).then(({ error }) => {
+      if (error) console.error("[enrollment-checkout] terms_acceptances insert failed:", error.message);
+    });
+
     return { ok: true, url: session.url };
   } catch (err) {
     console.error("[enrollment-checkout] Stripe error:", err);
