@@ -50,7 +50,21 @@ export async function startChain(
 ): Promise<string | null> {
   const sb = supabaseAdmin();
   const def = CHAIN_DEFINITIONS[chainType];
-  if (!def || def.steps.length === 0) return null;
+  if (!def || def.steps.length === 0) {
+    // Definición mal formada o chainType desconocido → dejar rastro
+    // en timeline para no volar ciego (bug Renny 2026-08-31: no vimos
+    // por qué la chain no aparecía sin logs de Vercel).
+    try {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "send_failed",
+        author:  "system",
+        content: `startChain fallo: definicion invalida para chain_type='${chainType}'`,
+        metadata: { kind: "chain_start_failed", chain_type: chainType, reason: "invalid_definition" },
+      });
+    } catch { /* best-effort */ }
+    return null;
+  }
 
   // Close any active chain for this lead
   await cancelActiveChain(leadId, "new_chain");
@@ -78,6 +92,23 @@ export async function startChain(
 
   if (error) {
     console.error(`[chain-engine] startChain error for lead ${leadId}:`, error.message);
+    // Rastro visible en timeline — con console.warn quedaba invisible
+    // (bug Renny 2026-08-31). Ahora sí aparece en el detalle del lead
+    // y el cron messaging-audit-daily puede alertarlo.
+    try {
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    "send_failed",
+        author:  "system",
+        content: `startChain fallo (${chainType}): ${error.message}`,
+        metadata: {
+          kind:       "chain_start_failed",
+          chain_type: chainType,
+          reason:     "insert_error",
+          error:      error.message,
+        },
+      });
+    } catch { /* best-effort */ }
     return null;
   }
 

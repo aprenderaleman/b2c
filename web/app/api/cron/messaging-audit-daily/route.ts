@@ -190,6 +190,23 @@ async function runAudit(): Promise<Check[]> {
       detail: `${slowRescue.length} sesion_absent >30min sin primer envío. Ej: ${sample}` });
   }
 
+  // ── 7. Fallos de startChain (bug Renny 2026-08-31) ────────────
+  // Timeline entries con kind=chain_start_failed indican que un
+  // handler llamó startChain y la BD rechazó el insert. Antes solo
+  // salía en console.warn de Vercel → invisible. Ahora lo captamos aquí.
+  const { data: chainFailures } = await sb.from("lead_timeline")
+    .select("content, metadata, timestamp, lead_id")
+    .eq("metadata->>kind", "chain_start_failed")
+    .gte("timestamp", dayAgo)
+    .limit(20);
+  if (chainFailures && chainFailures.length > 0) {
+    const sample = chainFailures.slice(0, 3)
+      .map(r => `${(r.metadata as { chain_type?: string })?.chain_type ?? "?"} lead=${(r.lead_id as string).slice(0, 8)}`)
+      .join(" · ");
+    checks.push({ name: "chain_start_failed", status: "critical",
+      detail: `${chainFailures.length} startChain fallidos en 24h. Ej: ${sample}` });
+  }
+
   return checks;
 }
 
