@@ -61,6 +61,14 @@ export async function createSchuleSsoLink(args: {
   email:    Email;
   fullName: string | null;
   phone:    string | null;
+  /**
+   * Rol con el que Schule debe crear/actualizar al usuario. Sin él,
+   * Schule crea 'schule_student' (comportamiento histórico — los
+   * alumnos siguen sin mandarlo). "teacher"/"admin" hacen que profes
+   * y admins entren con SSO como ellos mismos en vez de caer en el
+   * formulario de login (caso Jonathan 2026-08-28).
+   */
+  role?:    "teacher" | "admin";
 }): Promise<SchuleLinkResult> {
   const secret = process.env.B2C_SYNC_SECRET;
   if (!secret) {
@@ -77,6 +85,7 @@ export async function createSchuleSsoLink(args: {
   const tryRequest = async (includePhone: boolean) => {
     const body: Record<string, unknown> = { email: args.email, secret };
     if (args.fullName) body.full_name = args.fullName;
+    if (args.role)     body.role      = args.role;
     if (includePhone && args.phone) body.phone = args.phone;
     return fetch(`${SCHULE_BASE}/api/b2c/sso-link`, {
       method:  "POST",

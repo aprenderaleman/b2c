@@ -43,7 +43,7 @@ a{display:inline-block;margin-top:1.5rem;color:#ea580c;text-decoration:none;font
   });
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   // Cortocircuito si SCHULE está en mantenimiento. Si alguien tiene
   // este enlace en una pestaña abierta o lo abre desde un email,
   // ve un mensaje legible en lugar de redirigirse a una app rota.
@@ -98,15 +98,39 @@ export async function GET() {
     }
   }
 
+  // Profes y admins entran con su rol real — sin él, Schule los crea
+  // como schule_student y los tiraba al formulario de login (caso
+  // Jonathan 2026-08-28). Los alumnos siguen sin mandar role.
+  const ssoRole =
+    role === "teacher"                       ? "teacher" as const :
+    role === "admin" || role === "superadmin" ? "admin"  as const :
+    undefined;
+
   const link = await createSchuleSsoLink({
     email:    (u as { email: string }).email,
     fullName: (u as { full_name: string | null }).full_name,
     phone:    (u as { phone: string | null }).phone,
+    role:     ssoRole,
   });
 
   if (!link.ok) {
     return htmlError(link.status, link.error);
   }
 
-  return NextResponse.redirect(link.redirectUrl, 302);
+  // ?next=<url de schule> — destino final tras el auto-login (p. ej. la
+  // página de un curso desde /profesor/cursos). Solo aceptamos URLs del
+  // propio dominio de Schule; si Schule ignora el parámetro, el usuario
+  // aterriza en el dashboard, que sigue siendo correcto.
+  let redirectUrl = link.redirectUrl;
+  const next = new URL(req.url).searchParams.get("next");
+  if (next) {
+    try {
+      const nu = new URL(next);
+      if (nu.origin === "https://schule.aprender-aleman.de") {
+        redirectUrl += `${redirectUrl.includes("?") ? "&" : "?"}next=${encodeURIComponent(nu.pathname + nu.search)}`;
+      }
+    } catch { /* next inválido → dashboard */ }
+  }
+
+  return NextResponse.redirect(redirectUrl, 302);
 }

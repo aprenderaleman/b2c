@@ -52,7 +52,12 @@ export function CursosGrid() {
       {CURSOS.map((c) => (
         <a
           key={c.nivel}
-          href={c.url}
+          // SSO transparente: el link pasa por schule-open, que hace el
+          // sso-link server-side (con role para profes/admins) y
+          // redirige a Schule ya logueado — sin formulario de login
+          // (caso Jonathan 2026-08-28). `next` intenta aterrizar en el
+          // curso concreto; si Schule lo ignora, cae al dashboard.
+          href={`/api/entitlements/schule-open?next=${encodeURIComponent(c.url)}`}
           target="_blank"
           rel="noopener noreferrer"
           className="group relative flex flex-col overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 transition-shadow hover:shadow-lg hover:shadow-slate-200/50 dark:hover:shadow-slate-900/50"
