@@ -144,6 +144,54 @@ export async function getTeacherRecordings(teacherId: string): Promise<
   return out;
 }
 
+export async function getCloserRecordings(closerUserId: string): Promise<
+  Array<RecordingRow & { class_title: string; scheduled_at: string; lead_name: string | null }>
+> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("classes")
+    .select(`
+      id, title, scheduled_at,
+      lead:leads(name),
+      recordings(
+        id, file_url, status, duration_seconds, downloadable, created_at, processed_at, error
+      )
+    `)
+    .eq("sesion_closer_id", closerUserId)
+    .is("deleted_at", null);
+  if (error) return [];
+
+  type Raw = {
+    id: string; title: string; scheduled_at: string;
+    lead: { name: string | null } | Array<{ name: string | null }> | null;
+    recordings: Record<string, unknown>[] | undefined;
+  };
+  const out: Array<RecordingRow & { class_title: string; scheduled_at: string; lead_name: string | null }> = [];
+  for (const c of (data ?? []) as Raw[]) {
+    const recs = c.recordings ?? [];
+    const leadFlat = Array.isArray(c.lead) ? c.lead[0] : c.lead;
+    for (const rec of recs) {
+      out.push({
+        id:               rec.id as string,
+        class_id:         c.id,
+        file_url:         (rec.file_url as string | null) ?? null,
+        file_size_bytes:  null,
+        duration_seconds: (rec.duration_seconds as number | null) ?? null,
+        status:           (rec.status as RecordingStatus) ?? "processing",
+        error:            (rec.error as string | null) ?? null,
+        downloadable:     Boolean(rec.downloadable),
+        created_at:       rec.created_at as string,
+        processed_at:     (rec.processed_at as string | null) ?? null,
+        class_title:      c.title,
+        scheduled_at:     c.scheduled_at,
+        lead_name:        leadFlat?.name ?? null,
+      });
+    }
+  }
+  out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return out;
+}
+
 export function formatDurationHms(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);

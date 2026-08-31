@@ -226,6 +226,16 @@ export async function canViewRecording(
     return { ok: true, classId: (rec as { class_id: string }).class_id };
   }
 
+  if (role === "closer") {
+    const { data: closerCls } = await sb
+      .from("classes")
+      .select("id")
+      .eq("id", (rec as { class_id: string }).class_id)
+      .eq("sesion_closer_id", userId)
+      .maybeSingle();
+    if (closerCls) return { ok: true, classId: (rec as { class_id: string }).class_id };
+  }
+
   if (role === "student") {
     type Part = { students: { user_id: string } | Array<{ user_id: string }> | null };
     const parts = ((cls as { class_participants: Part[] }).class_participants ?? []);

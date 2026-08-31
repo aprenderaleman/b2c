@@ -14,7 +14,7 @@ export default async function RecordingPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const session = await requireRole(["superadmin", "admin", "teacher", "student"]);
+  const session = await requireRole(["superadmin", "admin", "teacher", "student", "closer"]);
   const { id } = await params;
 
   const rec = await getRecordingById(id);
@@ -35,6 +35,7 @@ export default async function RecordingPage({
   const backHref =
     session.user.role === "student" ? `/estudiante/clases/${cls.id}` :
     session.user.role === "teacher" ? `/profesor/clases/${cls.id}`   :
+    session.user.role === "closer"  ? `/closer/grabaciones`          :
                                       `/admin/clases/${cls.id}`;
 
   return (
