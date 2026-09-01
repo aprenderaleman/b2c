@@ -71,18 +71,6 @@ export async function registerCommission(opts: RegisterOpts): Promise<number> {
     return 0;
   }
 
-  const comisionId = (comision as { id: string }).id;
-
-  await sb.from("class_hours_log").insert({
-    teacher_id: opts.teacherId,
-    duration_minutes: 0,
-    rate_at_time: commissionCents,
-    amount_cents: commissionCents,
-    currency: opts.currency,
-    kind: "commission",
-    comision_id: comisionId,
-  });
-
   const { error: rpcErr } = await sb.rpc("recompute_teacher_month", {
     p_teacher_id: opts.teacherId,
     p_any_date_in_month: new Date().toISOString(),
@@ -150,18 +138,6 @@ export async function registerBonoCierre(opts: {
     console.error("[commission-engine] bono_cierre insert failed:", insertErr);
     return 0;
   }
-
-  const comisionId = (comision as { id: string }).id;
-
-  await sb.from("class_hours_log").insert({
-    teacher_id: opts.teacherId,
-    duration_minutes: 0,
-    rate_at_time: bonoCents,
-    amount_cents: bonoCents,
-    currency: "EUR",
-    kind: "commission",
-    comision_id: comisionId,
-  });
 
   const { error: rpcErr } = await sb.rpc("recompute_teacher_month", {
     p_teacher_id: opts.teacherId,

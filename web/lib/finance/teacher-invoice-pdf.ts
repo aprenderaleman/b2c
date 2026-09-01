@@ -98,44 +98,37 @@ export async function buildTeacherInvoicePdf(args: {
     .gte("created_at", monthStart)
     .lt("created_at", monthEnd);
 
-  // Comisiones: class_hours_log kind='commission' (class_id puede ser NULL)
-  const { data: commissionLog } = await sb
-    .from("class_hours_log")
-    .select("id, created_at, amount_cents, comision_id")
-    .eq("teacher_id", args.teacherId)
-    .eq("kind", "commission")
-    .gte("created_at", monthStart)
-    .lt("created_at", monthEnd);
+  // Comisiones: leer directamente de la tabla comisiones (single source of truth, migración 122)
+  const { data: teacherUser } = await sb
+    .from("teachers")
+    .select("user_id")
+    .eq("id", args.teacherId)
+    .maybeSingle();
+  const teacherUserId = (teacherUser as { user_id: string } | null)?.user_id;
 
-  type CommRow = { id: string; created_at: string; amount_cents: number; comision_id: string | null };
-  const commRows = (commissionLog ?? []) as CommRow[];
-
-  // Enriquecer con datos de la tabla comisiones
   type CommDetail = { amount_cents: number; tipo: string; base_amount_cents: number; comision_pct: number; escenario: string };
   const commDetails: CommDetail[] = [];
-  const comisionIds = commRows.map(r => r.comision_id).filter(Boolean) as string[];
-  let comisionesMap = new Map<string, { tipo: string; base_amount_cents: number; comision_pct: number; escenario: string }>();
-  if (comisionIds.length > 0) {
+  let totalCommissionCents = 0;
+
+  if (teacherUserId) {
+    const mesStr = `${args.month}-01`;
     const { data: comisionesData } = await sb
       .from("comisiones")
-      .select("id, tipo, base_amount_cents, comision_pct, escenario")
-      .in("id", comisionIds);
-    for (const c of (comisionesData ?? []) as { id: string; tipo: string; base_amount_cents: number; comision_pct: number; escenario: string }[]) {
-      comisionesMap.set(c.id, c);
+      .select("id, tipo, monto_cents, base_amount_cents, comision_pct, escenario")
+      .eq("usuario_id", teacherUserId)
+      .eq("mes", mesStr);
+
+    for (const c of (comisionesData ?? []) as { id: string; tipo: string; monto_cents: number; base_amount_cents: number; comision_pct: number; escenario: string }[]) {
+      if (c.monto_cents <= 0) continue;
+      commDetails.push({
+        amount_cents: c.monto_cents,
+        tipo: c.tipo,
+        base_amount_cents: c.base_amount_cents ?? 0,
+        comision_pct: Number(c.comision_pct ?? 0),
+        escenario: c.escenario ?? "",
+      });
+      totalCommissionCents += c.monto_cents;
     }
-  }
-  let totalCommissionCents = 0;
-  for (const r of commRows) {
-    if (r.amount_cents <= 0) continue;
-    const meta = r.comision_id ? comisionesMap.get(r.comision_id) : null;
-    commDetails.push({
-      amount_cents: r.amount_cents,
-      tipo: meta?.tipo ?? "comision_base",
-      base_amount_cents: meta?.base_amount_cents ?? 0,
-      comision_pct: Number(meta?.comision_pct ?? 0),
-      escenario: meta?.escenario ?? "",
-    });
-    totalCommissionCents += r.amount_cents;
   }
 
   type ParticipantRow = {

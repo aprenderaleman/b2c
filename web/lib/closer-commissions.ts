@@ -207,27 +207,15 @@ export async function calculateCommissions(
     await sb.from("comisiones").insert(rows);
   }
 
-  // Teacher payroll: class_hours_log + recompute
+  // Teacher payroll: recompute (commissions read from comisiones table)
   if (teacherTableId) {
-    const teacherComision = comisiones.find((c) => c.rol === "teacher");
-    if (teacherComision) {
-      await sb.from("class_hours_log").insert({
-        teacher_id: teacherTableId,
-        duration_minutes: 0,
-        rate_at_time: teacherComision.monto_cents,
-        amount_cents: teacherComision.monto_cents,
-        currency: "EUR",
-        kind: "commission",
-      });
-
-      await sb.rpc("recompute_teacher_month", {
-        p_teacher_id: teacherTableId,
-        p_any_date_in_month: new Date().toISOString(),
-      }).then(
-        () => {},
-        (err) => console.error("[closer-commissions] recompute failed:", err),
-      );
-    }
+    await sb.rpc("recompute_teacher_month", {
+      p_teacher_id: teacherTableId,
+      p_any_date_in_month: new Date().toISOString(),
+    }).then(
+      () => {},
+      (err) => console.error("[closer-commissions] recompute failed:", err),
+    );
   }
 
   return comisiones;
