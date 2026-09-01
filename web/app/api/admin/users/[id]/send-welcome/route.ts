@@ -24,16 +24,23 @@ const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.d
  * "no recibí el correo" o "el link expiró".
  */
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-  const role = (session.user as { role?: string }).role;
-  if (role !== "admin" && role !== "superadmin") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  // Dos vías de auth, mismo patrón que sesiones-gcal-backfill: sesión
+  // admin (botón en /admin/usuarios) o Bearer CRON_SECRET (operativa —
+  // p. ej. reenvíos tras el incidente SMTP 553 del 2026-08-27).
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const cronOk = Boolean(process.env.CRON_SECRET) && bearer === process.env.CRON_SECRET;
+  if (!cronOk) {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const role = (session.user as { role?: string }).role;
+    if (role !== "admin" && role !== "superadmin") {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
   }
 
   const { id } = await params;
