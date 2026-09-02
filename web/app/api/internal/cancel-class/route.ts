@@ -88,16 +88,15 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 2. GCal cleanup (best-effort, async)
-  const gcalId = (cls as { google_calendar_event_id: string | null }).google_calendar_event_id;
+  // 2. GCal cleanup (best-effort) — helper unificado: central + profe
+  //    + closer, y limpia las columnas (Gelfis 2026-09-02).
   let gcalDeleted = false;
-  if (gcalId) {
-    try {
-      const { deleteTrialEvent } = await import("@/lib/google-calendar");
-      gcalDeleted = await deleteTrialEvent(gcalId);
-    } catch (e) {
-      console.warn("[cancel-class] gcal cleanup failed:", e);
-    }
+  try {
+    const { removeTeacherCalendarEvents } = await import("@/lib/teacher-calendar-sync");
+    await removeTeacherCalendarEvents([body.class_id]);
+    gcalDeleted = true;
+  } catch (e) {
+    console.warn("[cancel-class] gcal cleanup failed:", e);
   }
 
   // 3. Emails

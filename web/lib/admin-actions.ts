@@ -8,7 +8,6 @@ import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "
 import { getLeadTrialTeacher } from "./trial-compensation";
 import { startChain, cancelActiveChain } from "./chain-engine";
 import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
-import { deleteTrialEvent } from "./google-calendar";
 
 /**
  * Tag interno: cuando se setea, Stiv debe escalar a `needs_human` la
@@ -595,9 +594,12 @@ export async function sendRescheduleLinkMessage(
       metadata: { class_id: trial.id, kind: "trial_cancelled_for_reschedule", actor: actorName },
     });
 
-    // Eliminar evento de Google Calendar
-    if (trial.google_calendar_event_id) {
-      deleteTrialEvent(trial.google_calendar_event_id).catch(() => {});
+    // Eliminar espejos de Google Calendar (central + profe). El helper
+    // borra ambos y limpia las columnas — cubre teacher_gcal_event_id
+    // que el deleteTrialEvent inline no tocaba (Gelfis 2026-09-02).
+    {
+      const { removeTeacherCalendarEvents } = await import("./teacher-calendar-sync");
+      removeTeacherCalendarEvents([trial.id]).catch(() => {});
     }
 
     // Notificar al profesor in-app si el que reagenda NO es el propio profesor

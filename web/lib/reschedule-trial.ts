@@ -162,6 +162,14 @@ export async function rescheduleTrialForLead(args: RescheduleTrialArgs): Promise
     }
   }
 
+  // 4b) Espejo en el GCal personal del profe (teacher_gcal_event_id) —
+  //     best-effort, no bloquea el reagendado (el evento central ya
+  //     quedó movido arriba con rollback garantizado).
+  try {
+    const { syncTeacherCalendarAfterReschedule } = await import("./teacher-calendar-sync");
+    syncTeacherCalendarAfterReschedule([c.id]).catch(() => {});
+  } catch { /* best-effort */ }
+
   // 5) Lead info para mensajes
   const { data: lead } = await sb
     .from("leads")

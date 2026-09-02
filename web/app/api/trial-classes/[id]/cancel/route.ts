@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendWhatsappText } from "@/lib/whatsapp";
 import { sendTrialCancelledEmail } from "@/lib/email/send";
 import { startChain } from "@/lib/chain-engine";
 import { notifyTeacherClassChanged } from "@/lib/assignee-notifications";
+import { removeTeacherCalendarEvents } from "@/lib/teacher-calendar-sync";
 
 /**
  * POST /api/trial-classes/{id}/cancel
@@ -99,6 +100,11 @@ export async function POST(
   if (updErr) {
     return NextResponse.json({ error: "cancel_failed", message: updErr.message }, { status: 500 });
   }
+
+  // Liberar el hueco en Google Calendar (central + profe) — tras
+  // responder, best-effort.
+  after(() => removeTeacherCalendarEvents([classId]).catch(e =>
+    console.error("[trial-cancel] gcal cleanup failed:", e)));
 
   // Aviso al teacher — solo si el actor NO es él mismo (helper filtra).
   // Rol del actor va al label para transparencia.

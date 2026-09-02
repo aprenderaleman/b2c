@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendWhatsappText } from "@/lib/whatsapp";
+import { removeTeacherCalendarEvents } from "@/lib/teacher-calendar-sync";
 
 /**
  * POST /api/admin/students/[id]/deactivate
@@ -143,11 +144,15 @@ export async function POST(
     }
   }
 
-  // 3. Cancelar 1:1 (status='cancelled').
+  // 3. Cancelar 1:1 (status='cancelled') + liberar sus huecos en los
+  //    Google Calendars espejados (best-effort, tras responder).
   if (individualClassIds.length > 0) {
     await sb.from("classes")
       .update({ status: "cancelled" })
       .in("id", individualClassIds);
+    const ids = [...individualClassIds];
+    after(() => removeTeacherCalendarEvents(ids).catch(e =>
+      console.error("[deactivate] gcal cleanup failed:", e)));
   }
   // 4. Sacar de grupales (preservando la clase para el resto).
   if (groupParticipantRemovals.length > 0) {

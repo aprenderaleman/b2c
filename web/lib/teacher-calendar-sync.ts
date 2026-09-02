@@ -29,6 +29,8 @@ type ClassRow = {
   teacher_id:                string | null;
   teacher_gcal_event_id:     string | null;
   google_calendar_event_id:  string | null;
+  sesion_closer_id:          string | null;
+  closer_gcal_event_id:      string | null;
 };
 
 async function loadClasses(classIds: string[]): Promise<ClassRow[]> {
@@ -36,7 +38,7 @@ async function loadClasses(classIds: string[]): Promise<ClassRow[]> {
   const sb = supabaseAdmin();
   const { data } = await sb
     .from("classes")
-    .select("id, title, type, status, scheduled_at, duration_minutes, is_trial, teacher_id, teacher_gcal_event_id, google_calendar_event_id")
+    .select("id, title, type, status, scheduled_at, duration_minutes, is_trial, teacher_id, teacher_gcal_event_id, google_calendar_event_id, sesion_closer_id, closer_gcal_event_id")
     .in("id", classIds);
   return (data ?? []) as ClassRow[];
 }
@@ -104,7 +106,14 @@ export async function syncTeacherCalendarAfterReschedule(classIds: string[]): Pr
 
 /**
  * Tras una cancelación (suelta o serie): borra los eventos espejados
- * del GCal del profe y del calendar central, y limpia las columnas.
+ * en LOS TRES calendarios posibles — el personal del profe
+ * (teacher_gcal_event_id), el central de Gelfis
+ * (google_calendar_event_id, trials) y el personal del closer
+ * (closer_gcal_event_id, sesiones de plan) — y limpia las columnas.
+ * Idempotente y best-effort: llamar dos veces o sobre clases sin
+ * espejo no hace nada. Es el ÚNICO helper que los flujos de
+ * cancelación deben invocar (Gelfis 2026-09-02: liberar el hueco en
+ * los calendars al cancelar).
  */
 export async function removeTeacherCalendarEvents(classIds: string[]): Promise<void> {
   const sb = supabaseAdmin();
@@ -121,6 +130,15 @@ export async function removeTeacherCalendarEvents(classIds: string[]): Promise<v
         await sb.from("classes").update({ google_calendar_event_id: null }).eq("id", c.id);
       } catch (e) {
         console.warn(`[teacher-gcal-sync] central delete failed for ${c.id}:`, e);
+      }
+    }
+    if (c.sesion_closer_id && c.closer_gcal_event_id) {
+      try {
+        const { deleteSesionEventForCloser } = await import("./closer-calendar-sync");
+        await deleteSesionEventForCloser(c.sesion_closer_id, c.closer_gcal_event_id);
+        await sb.from("classes").update({ closer_gcal_event_id: null }).eq("id", c.id);
+      } catch (e) {
+        console.warn(`[teacher-gcal-sync] closer delete failed for ${c.id}:`, e);
       }
     }
   }
