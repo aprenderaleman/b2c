@@ -37,6 +37,7 @@ export async function GET(req: Request) {
     .select(`
       id,
       user_id,
+      lead_id,
       trial_teacher_id,
       teacher_contact_deadline,
       teacher_assigned_at,
@@ -56,6 +57,7 @@ export async function GET(req: Request) {
     const s = student as {
       id: string;
       user_id: string | null;
+      lead_id: string | null;
       trial_teacher_id: string | null;
       teacher_contact_deadline: string;
       teacher_assigned_at: string | null;
@@ -73,6 +75,25 @@ export async function GET(req: Request) {
     const usersRel = s.users;
     const userRow = Array.isArray(usersRel) ? usersRel[0] : usersRel;
     const studentName = userRow?.full_name ?? "Nuevo alumno";
+
+    // Bug Saidys 2026-09-02: si el student YA tiene alguna clase
+    // agendada o completada (trial o regular), significa que un profe
+    // sí coordinó — aunque teacher_contacted_at siga null. Marcamos
+    // como contactado para romper el loop de reasignaciones.
+    // Antes: el cron reasignaba a Saidys cada 48h a Jonathan pese a
+    // que Simon ya le había dado 1 trial completa y otra scheduled.
+    if (s.lead_id) {
+      const { count: existingClasses } = await sb.from("classes")
+        .select("id", { count: "exact", head: true })
+        .eq("lead_id", s.lead_id)
+        .in("status", ["scheduled", "completed"]);
+      if ((existingClasses ?? 0) > 0) {
+        await sb.from("students").update({
+          teacher_contacted_at: now.toISOString(),
+        }).eq("id", s.id);
+        continue;
+      }
+    }
 
     if (elapsed >= 48 * 3_600_000) {
       // 48h passed — REASSIGN to next best teacher
