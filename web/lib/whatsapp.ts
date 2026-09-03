@@ -141,6 +141,8 @@ const ALLOWED_WA_KINDS = new Set([
   "trial_absent_interest_yes",
   "trial_absent_interest_close",
   "admin_manual",  // bypass para Gelfis desde endpoints admin
+  // Notificación al profesor cuando su lead convierte (post-conversion-flow)
+  "teacher_conversion_notify",
 ]);
 
 /**
