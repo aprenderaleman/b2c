@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import { sendWhatsappText } from "@/lib/whatsapp";
 
 /**
@@ -8,21 +9,24 @@ import { sendWhatsappText } from "@/lib/whatsapp";
  * SIN insertar timeline, SIN dedup. Pensado para validar copy antes de
  * lanzar campañas (Gelfis 2026-06-19).
  *
- * Auth: CRON_SECRET. Respeta el blocklist de lib/whatsapp.ts.
+ * Auth: CRON_SECRET o sesión admin/superadmin.
+ * Respeta el blocklist de lib/whatsapp.ts.
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function authorised(req: Request): boolean {
+async function authorised(req: Request): Promise<boolean> {
   const expected = process.env.CRON_SECRET;
-  if (!expected) return false;
   const bearer = req.headers.get("authorization");
-  if (bearer && bearer.toLowerCase().startsWith("bearer ") && bearer.slice(7).trim() === expected) return true;
-  return req.headers.get("x-cron-secret") === expected;
+  if (expected && bearer && bearer.toLowerCase().startsWith("bearer ") && bearer.slice(7).trim() === expected) return true;
+  if (expected && req.headers.get("x-cron-secret") === expected) return true;
+  const session = await auth();
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  return role === "admin" || role === "superadmin";
 }
 
 export async function POST(req: Request) {
-  if (!authorised(req)) {
+  if (!(await authorised(req))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const body = await req.json().catch(() => ({})) as { phone?: string; text?: string };
