@@ -291,7 +291,7 @@ export function AulaClient(p: Props) {
             return;
           }
           if (p.audience === "lead") {
-            window.location.href = "https://aprender-aleman.de";
+            window.location.href = "https://aprender-aleman.de/inscripciones";
             return;
           }
           // Default = student → dashboard del alumno.
