@@ -234,12 +234,6 @@ export function AulaClient(p: Props) {
         connect={true}
         video={videoCapture}
         audio={audioCapture}
-        screen={{
-          audio: false,
-          selfBrowserSurface: "exclude",
-          surfaceSwitching: "include",
-          systemAudio: "exclude",
-        }}
         data-lk-theme="default"
         onConnected={() => { connectedRef.current = true; }}
         onError={(e) => {
@@ -346,11 +340,12 @@ export function AulaClient(p: Props) {
               controls={{
                 microphone:  !(p.isSesionPlan && p.audience === "lead"),
                 camera:      !(p.isSesionPlan && p.audience === "lead"),
-                screenShare: p.audience !== "lead",
+                screenShare: false,
                 chat:        false,
                 leave:       true,
               }}
             />
+            {p.audience !== "lead" && <SafeScreenShareButton />}
             <VirtualBackgroundButton
               canCamera={userChoices.videoEnabled}
               brandEnabled={p.brandBackground}
@@ -500,6 +495,58 @@ function HostBtn({
         disabled:opacity-50`}
     >
       {children}
+    </button>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Custom screen share button — pasa audio:false y systemAudio:exclude
+// para que compartir pantalla NO silencie el micrófono del presenter.
+// ControlBar no acepta opciones de captura, así que lo hacemos manual.
+// ───────────────────────────────────────────────────────────────────
+function SafeScreenShareButton() {
+  const { localParticipant } = useLocalParticipant();
+  const [sharing, setSharing] = useState(false);
+
+  useEffect(() => {
+    setSharing(localParticipant.isScreenShareEnabled);
+    const onChange = () => setSharing(localParticipant.isScreenShareEnabled);
+    localParticipant.on(ParticipantEvent.TrackPublished, onChange);
+    localParticipant.on(ParticipantEvent.TrackUnpublished, onChange);
+    localParticipant.on(ParticipantEvent.LocalTrackPublished, onChange);
+    return () => {
+      localParticipant.off(ParticipantEvent.TrackPublished, onChange);
+      localParticipant.off(ParticipantEvent.TrackUnpublished, onChange);
+      localParticipant.off(ParticipantEvent.LocalTrackPublished, onChange);
+    };
+  }, [localParticipant]);
+
+  const toggle = async () => {
+    try {
+      await localParticipant.setScreenShareEnabled(!sharing, {
+        audio: false,
+        selfBrowserSurface: "exclude",
+        surfaceSwitching: "include",
+        systemAudio: "exclude",
+      });
+    } catch {
+      // User cancelled the screen share picker — no action needed.
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      className={`lk-button lk-screen-share-button ${sharing ? "lk-screen-share-active" : ""}`}
+      aria-pressed={sharing}
+      title={sharing ? "Dejar de compartir" : "Compartir pantalla"}
+    >
+      <svg viewBox="0 0 24 24" className="lk-button-icon" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="20" height="20" aria-hidden>
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
+      </svg>
     </button>
   );
 }
