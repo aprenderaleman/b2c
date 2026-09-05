@@ -40,6 +40,9 @@ type Props = {
   /** Habilita la opción "Fondo Aprender-Aleman.de" en el selector de
    *  fondo virtual. Rollout: admin/superadmin primero, luego profes. */
   brandBackground?: boolean;
+  /** Sesión de Plan-Alemán (closer). Cuando true y audience=lead,
+   *  oculta controles de mic/cámara al lead — experimental. */
+  isSesionPlan?: boolean;
 };
 
 /**
@@ -231,6 +234,12 @@ export function AulaClient(p: Props) {
         connect={true}
         video={videoCapture}
         audio={audioCapture}
+        screen={{
+          audio: false,
+          selfBrowserSurface: "exclude",
+          surfaceSwitching: "include",
+          systemAudio: "exclude",
+        }}
         data-lk-theme="default"
         onConnected={() => { connectedRef.current = true; }}
         onError={(e) => {
@@ -335,13 +344,10 @@ export function AulaClient(p: Props) {
           <div className="flex items-center justify-center gap-3 flex-wrap">
             <ControlBar
               controls={{
-                // Mostrar siempre los toggles. Si el usuario entró con
-                // cam/mic apagados desde PreJoin puede prenderlos aquí
-                // mid-call; LiveKit lidia con el getUserMedia tardío.
-                microphone:  true,
-                camera:      true,
-                screenShare: true,                 // enabled for everyone — students can share too
-                chat:        false,                // we render our own ChatPanel
+                microphone:  !(p.isSesionPlan && p.audience === "lead"),
+                camera:      !(p.isSesionPlan && p.audience === "lead"),
+                screenShare: p.audience !== "lead",
+                chat:        false,
                 leave:       true,
               }}
             />

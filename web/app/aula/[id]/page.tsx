@@ -66,8 +66,9 @@ export default async function AulaPage({
   // (Gelfis)" title in favour of a clean public-facing label and
   // pivot the fallback CTA to SCHULE (the lead has nowhere else
   // useful to go from here).
-  const isTrial   = cls.is_trial;
-  const aulaTitle = isTrial ? "Clase de prueba de alemán" : cls.title;
+  const isTrial      = cls.is_trial;
+  const isSesionPlan = !!(cls as { sesion_closer_id?: string | null }).sesion_closer_id;
+  const aulaTitle    = isTrial ? "Clase de prueba de alemán" : cls.title;
 
   let access;
   let displayName: string;
@@ -165,6 +166,7 @@ export default async function AulaPage({
       displayName={displayName}
       backHref={backHref}
       brandBackground={brandBackground}
+      isSesionPlan={isSesionPlan}
     />
   );
 }

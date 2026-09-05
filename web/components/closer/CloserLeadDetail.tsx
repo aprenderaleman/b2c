@@ -132,6 +132,10 @@ export function CloserLeadDetail({
   const [showSaleModal, setShowSaleModal] = useState(false);
   const [registrarTaskId, setRegistrarTaskId] = useState<string | null | "sin_tarea">(null);
   const [marcandoSesion, setMarcandoSesion] = useState(false);
+  const [instantMeeting, setInstantMeeting] = useState<{
+    loading: boolean;
+    result: { closerUrl: string; leadUrlFull: string } | null;
+  }>({ loading: false, result: null });
 
   // Resultado de la Sesión de Plan-Alemán → dispara sesion_attended/sesion_absent
   const marcarSesion = async (resultado: "asistio" | "no_asistio") => {
@@ -155,6 +159,24 @@ export function CloserLeadDetail({
       alert(err instanceof Error ? err.message : "Error");
     } finally {
       setMarcandoSesion(false);
+    }
+  };
+
+  const crearReunionInstantanea = async () => {
+    if (!confirm("Crear una reunión instantánea con este lead.\n\nSe generará un enlace que puedes enviarle por WhatsApp.\n\n¿Continuar?")) return;
+    setInstantMeeting({ loading: true, result: null });
+    try {
+      const res = await fetch(`/api/closer/leads/${lead.id}/instant-meeting`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setInstantMeeting({ loading: false, result: { closerUrl: json.closerUrl, leadUrlFull: json.leadUrlFull } });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error al crear reunión");
+      setInstantMeeting({ loading: false, result: null });
     }
   };
 
@@ -268,9 +290,65 @@ export function CloserLeadDetail({
                 Venta pendiente
               </span>
             )}
+            {lead.estado_cierre !== "convertido" && lead.estado_cierre !== "perdido" && (
+              <button
+                onClick={crearReunionInstantanea}
+                disabled={instantMeeting.loading}
+                className="text-xs font-medium rounded-full border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 px-3 py-1 hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+              >
+                {instantMeeting.loading ? "Creando..." : "🎥 Reunión instantánea"}
+              </button>
+            )}
           </div>
         </div>
       </header>
+
+      {instantMeeting.result && (
+        <div className="rounded-2xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-2 min-w-0 flex-1">
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">
+                🎥 Reunión instantánea creada
+              </p>
+              <div className="space-y-1.5">
+                <div>
+                  <span className="text-xs text-blue-700 dark:text-blue-300 font-medium">Enlace para el lead:</span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <code className="text-xs bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-500/30 rounded px-2 py-1 font-mono break-all flex-1">
+                      {instantMeeting.result.leadUrlFull}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(instantMeeting.result!.leadUrlFull);
+                      }}
+                      className="shrink-0 text-xs font-medium rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 transition-colors"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+                <a
+                  href={instantMeeting.result.closerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:underline"
+                >
+                  Entrar a la videollamada &rarr;
+                </a>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setInstantMeeting({ loading: false, result: null })}
+              className="text-blue-400 hover:text-blue-600 text-lg leading-none shrink-0"
+              aria-label="Cerrar"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2-column layout */}
       <div className="grid gap-5 lg:grid-cols-3">

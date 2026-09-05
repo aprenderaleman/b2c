@@ -51,7 +51,10 @@ export async function authorizeTrialAulaAccess(
   // (authorizeAulaAccess) mantienen los +5 originales.
   const scheduled = new Date(c.scheduled_at);
   const opensAt   = new Date(scheduled.getTime() - 15 * 60_000);
-  const closesAt  = new Date(scheduled.getTime() + (c.duration_minutes + 20) * 60_000);
+  // Sesiones de Plan-Alemán: ventana de 6h tras el fin (los leads
+  // dicen que pueden entrar "unas horas después" — Gelfis 2026-09-05).
+  const graceMin  = c.sesion_closer_id ? 6 * 60 : 20;
+  const closesAt  = new Date(scheduled.getTime() + (c.duration_minutes + graceMin) * 60_000);
   return {
     ok:           true,
     role:         "participant",     // lead is never host
@@ -93,7 +96,9 @@ export async function authorizeAulaAccess(
   const scheduled = new Date((cls as { scheduled_at: string }).scheduled_at);
   const duration  = (cls as { duration_minutes: number }).duration_minutes;
   const opensAt   = new Date(scheduled.getTime() - 15 * 60_000);
-  const closesAt  = new Date(scheduled.getTime() + (duration + 5) * 60_000);
+  const sesionCloserId = (cls as { sesion_closer_id: string | null }).sesion_closer_id;
+  const graceMin  = sesionCloserId ? 6 * 60 : 5;
+  const closesAt  = new Date(scheduled.getTime() + (duration + graceMin) * 60_000);
   // Live classes are always joinable — the teacher explicitly started
   // them, so the time window must not block anyone from entering.
   const canEnterNow = classStatus === "live" || (now >= opensAt && now <= closesAt);
@@ -133,7 +138,6 @@ export async function authorizeAulaAccess(
   // Closers: host de SU Sesión de Plan-Alemán (misma regla que el profe con
   // su clase — solo el closer asignado, 2026-08-13).
   if (role === "closer") {
-    const sesionCloserId = (cls as { sesion_closer_id: string | null }).sesion_closer_id;
     if (sesionCloserId && sesionCloserId === userId) {
       return { ok: true, role: "host", roomName, canEnterNow, opensAt, closesAt };
     }

@@ -396,7 +396,7 @@ export async function getClassById(id: string): Promise<ClassWithPeople | null> 
     .select(`
       id, type, teacher_id, scheduled_at, duration_minutes,
       recurrence_pattern, recurrence_end_date, parent_class_id,
-      title, topic, status, livekit_room_id, is_trial, group_id,
+      title, topic, status, livekit_room_id, is_trial, group_id, sesion_closer_id,
       group:student_groups(name),
       started_at, ended_at, actual_duration_minutes, notes_admin, teacher_notes, notes_shared_with_student, created_at,
       teacher:teachers(
