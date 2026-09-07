@@ -14,6 +14,7 @@ import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
 import { detectBrowserTimezone, detectCountryFromBrowser, effectiveLeadTimezone } from "@/lib/timezone-country";
 import { captureAttributionFromUrl, readAttribution, clearAttribution } from "@/lib/ads-attribution";
 import { trackFunnel } from "@/lib/track-funnel";
+import { resolveProfe, landingIntentForProfe } from "@/lib/profes";
 
 /**
  * Step 1 — slot picker. Mobile pattern: horizontal day strip + vertical
@@ -155,9 +156,19 @@ function StepCuandoInner() {
   const landingFromUrl = searchParams?.get("landing") ?? null;
   const motivoFromUrl  = searchParams?.get("motivo")  ?? null;
   const levelFromUrl   = searchParams?.get("level")   ?? null;
+  const profeFromUrl   = searchParams?.get("profe")   ?? null;
+  // ?profe=sabine|jonathan (landing /clase-profe, campaña Meta Reels
+  // 2026-08-20): fuerza que el picker liste SOLO huecos de esa profe
+  // y que el book-trial se ancle a su teacher_id. Cualquier otro valor
+  // se ignora y cae al pool normal.
+  const profe = resolveProfe(profeFromUrl);
   // Si el lead viene del flujo /home con socialmedia, ya nos dieron
   // motivo + nivel. Si no, asumimos atajo desde landing.
-  const effectiveLanding = landingFromUrl ?? "agendar-directo";
+  // Con ?profe= válido, forzamos landing_intent=clase-profe-{slug} para
+  // que reporting en /admin filtre por variante de la campaña.
+  const effectiveLanding = profe
+    ? landingIntentForProfe(profe)
+    : (landingFromUrl ?? "agendar-directo");
 
   // Captura gclid/utm de URL al montar. Si el lead vino directo aquí
   // con ?gclid=... (Google Ads), lo persistimos para spread en book-trial.
@@ -229,12 +240,15 @@ function StepCuandoInner() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/public/trial-slots", { cache: "no-store" })
+    const url = profe
+      ? `/api/public/trial-slots?teacher_id=${encodeURIComponent(profe.teacherId)}`
+      : "/api/public/trial-slots";
+    fetch(url, { cache: "no-store" })
       .then(r => r.json())
       .then(d => { if (!cancelled) setSlots(d.slots ?? []); })
       .catch(() => { if (!cancelled) setLoadErr("No pudimos cargar los horarios. Recarga la página."); });
     return () => { cancelled = true; };
-  }, []);
+  }, [profe]);
 
   const slotsByDay = useMemo(() => {
     const map = new Map<string, SlotItem[]>();
@@ -418,10 +432,15 @@ function StepCuandoInner() {
         if (res.status === 409 && json.error === "slot_taken") {
           setSubmitErr("Ese horario se acaba de ocupar. Elige otro.");
           setSelectedSlot(null);
-          fetch("/api/public/trial-slots", { cache: "no-store" })
-            .then(r => r.json())
-            .then(d => setSlots(d.slots ?? []))
-            .catch(() => { /* ignore */ });
+          {
+            const url = profe
+              ? `/api/public/trial-slots?teacher_id=${encodeURIComponent(profe.teacherId)}`
+              : "/api/public/trial-slots";
+            fetch(url, { cache: "no-store" })
+              .then(r => r.json())
+              .then(d => setSlots(d.slots ?? []))
+              .catch(() => { /* ignore */ });
+          }
         } else {
           setSubmitErr(json.message ?? "No pudimos confirmar tu clase. Inténtalo de nuevo.");
         }

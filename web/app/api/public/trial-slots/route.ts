@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { listTrialSlots } from "@/lib/trial-slots";
 
 /**
@@ -14,9 +14,13 @@ import { listTrialSlots } from "@/lib/trial-slots";
 export const runtime  = "nodejs";
 export const dynamic  = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const slots = await listTrialSlots();
+    // Opcional: ?teacher_id=<uuid> restringe el picker a UN solo profe.
+    // Usado por la landing /clase-profe (Meta Reels 2026-08-20) cuando
+    // el lead entra con ?profe=sabine|jonathan.
+    const onlyTeacherId = req.nextUrl.searchParams.get("teacher_id") ?? undefined;
+    const slots = await listTrialSlots({ onlyTeacherId });
     return NextResponse.json({ ok: true, slots }, {
       headers: { "Cache-Control": "private, no-cache, no-store, must-revalidate" },
     });

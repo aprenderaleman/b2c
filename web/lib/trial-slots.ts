@@ -78,13 +78,18 @@ type TeacherRow = {
  * Returns up to MAX_RESULTS upcoming free slots. Auto-extends from 14
  * to 30 days if the shorter window came up empty.
  */
-export async function listTrialSlots(): Promise<TrialSlot[]> {
-  const first = await computeSlots(DEFAULT_HORIZON_DAYS);
+export async function listTrialSlots(
+  opts: { onlyTeacherId?: string } = {},
+): Promise<TrialSlot[]> {
+  const first = await computeSlots(DEFAULT_HORIZON_DAYS, opts);
   if (first.length > 0) return first;
-  return computeSlots(EXTENDED_HORIZON_DAYS);
+  return computeSlots(EXTENDED_HORIZON_DAYS, opts);
 }
 
-async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
+async function computeSlots(
+  horizonDays: number,
+  opts: { onlyTeacherId?: string } = {},
+): Promise<TrialSlot[]> {
   const sb = supabaseAdmin();
   const now = new Date();
   const earliestStart = new Date(now.getTime() + MIN_LEAD_TIME_HOURS * 3600_000);
@@ -108,7 +113,7 @@ async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
     users: { full_name: string | null; email: string } |
            Array<{ full_name: string | null; email: string }>;
   };
-  const teacherList = ((rawTeachers ?? []) as TeacherRaw[]).map(r => {
+  const teacherListAll = ((rawTeachers ?? []) as TeacherRaw[]).map(r => {
     const u = Array.isArray(r.users) ? r.users[0] : r.users;
     return {
       id:        r.id,
@@ -117,6 +122,12 @@ async function computeSlots(horizonDays: number): Promise<TrialSlot[]> {
       email:     u?.email ?? "",
     };
   });
+  // Filtro opcional a UN solo teacher (usado por landing /clase-profe
+  // con ?profe=sabine|jonathan). Si el teacher no es eligible se devuelve
+  // vacío — la landing muestra "sin huecos" y el lead reintenta / cambia.
+  const teacherList = opts.onlyTeacherId
+    ? teacherListAll.filter(t => t.id === opts.onlyTeacherId)
+    : teacherListAll;
   if (teacherList.length === 0) return [];
 
   const teacherIds = teacherList.map(t => t.id);
