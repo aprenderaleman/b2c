@@ -686,15 +686,36 @@ export async function POST(req: Request) {
     // in their personal OAuth-connected calendar.
     let isAdminTeacher = false;
     {
-      const { data: tRow } = await sb
-        .from("teachers")
-        .select("users(role)")
-        .eq("id", b.teacher_id)
-        .maybeSingle();
+      // Caso Wendy/Carolina (detectado 2026-09-08): si esta consulta
+      // falla o devuelve vacío de forma transitoria, antes se asumía
+      // silenciosamente "no es Gelfis" y el trial quedaba SIN evento
+      // en el calendar central, sin rastro. Ahora: 1 retry y, si aun
+      // así no hay respuesta, nota visible en el timeline.
       type TRow = { users: { role: string } | Array<{ role: string }> | null };
-      const u = (tRow as TRow | null)?.users;
+      let tRow: TRow | null = null;
+      let tErr: string | null = null;
+      for (let i = 0; i < 2 && !tRow; i++) {
+        const res = await sb
+          .from("teachers")
+          .select("users(role)")
+          .eq("id", b.teacher_id)
+          .maybeSingle();
+        tRow = (res.data as TRow | null) ?? null;
+        tErr = res.error?.message ?? (tRow ? null : "empty_row");
+      }
+      const u = tRow?.users;
       const role = (Array.isArray(u) ? u[0]?.role : u?.role) ?? "";
       isAdminTeacher = role === "superadmin";
+      if (!tRow) {
+        console.error(`[book-trial] teacher role lookup failed for ${b.teacher_id}: ${tErr}`);
+        await sb.from("lead_timeline").insert({
+          lead_id: leadId,
+          type:    "send_failed",
+          author:  "system",
+          content: `📅 No se pudo verificar el profe para el espejo de Google Calendar (${tErr}) — si la clase es de Gelfis, crear el evento manualmente`,
+          metadata: { kind: "google_calendar_role_lookup_failed", class_id: classId, teacher_id: b.teacher_id },
+        }).then(() => {}, () => {});
+      }
     }
 
     await sb.from("lead_timeline").insert({
