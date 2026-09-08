@@ -70,9 +70,6 @@ export default async function AulaPage({
   const isSesionPlan = !!cls.sesion_closer_id;
   const aulaTitle    = isTrial ? "Clase de prueba de alemán" : cls.title;
 
-  console.log("[aula/page] classId=%s sesion_closer_id=%s isSesionPlan=%s isLead=%s",
-    id, cls.sesion_closer_id, isSesionPlan, !session?.user);
-
   let access;
   let displayName: string;
   let backHref:    string;
