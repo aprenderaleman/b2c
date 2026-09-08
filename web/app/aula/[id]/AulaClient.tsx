@@ -185,6 +185,10 @@ export function AulaClient(p: Props) {
   // en móvil la solicitud falla con frecuencia y bloquea la entrada.
   const leadListenOnly = !!(p.isSesionPlan && p.audience === "lead");
 
+  // DEBUG temporal — quitar tras confirmar que leads entran sin PreJoin
+  console.log("[AulaClient] isSesionPlan=%s audience=%s leadListenOnly=%s",
+    p.isSesionPlan, p.audience, leadListenOnly);
+
   // Pre-join: el usuario verifica cámara/mic + escoge dispositivos
   // antes de conectar. Estilo Google Meet "Ready to join".
   if (!userChoices && !leadListenOnly) {
