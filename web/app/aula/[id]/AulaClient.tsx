@@ -180,9 +180,14 @@ export function AulaClient(p: Props) {
   if (error) return <ErrorScreen reason={error} backHref={p.backHref} onRetry={retry} />;
   if (!token || !serverUrl) return <LoadingScreen classTitle={p.classTitle} />;
 
+  // Leads en sesiones de closer entran sin cámara/mic (solo escuchan).
+  // Saltamos PreJoin para no pedir permisos de media innecesarios —
+  // en móvil la solicitud falla con frecuencia y bloquea la entrada.
+  const leadListenOnly = !!(p.isSesionPlan && p.audience === "lead");
+
   // Pre-join: el usuario verifica cámara/mic + escoge dispositivos
   // antes de conectar. Estilo Google Meet "Ready to join".
-  if (!userChoices) {
+  if (!userChoices && !leadListenOnly) {
     return (
       <AulaPreJoin
         classTitle={p.classTitle}
@@ -206,7 +211,9 @@ export function AulaClient(p: Props) {
   // Handoff: PreJoin ya desmontó (esta rama ni siquiera pasó a
   // renderizarlo), pero necesitamos ~400 ms para que iOS libere
   // el getUserMedia antes de que LiveKitRoom lo pida.
-  if (!roomReady) {
+  // Listen-only leads no pasan por PreJoin → no hay getUserMedia que
+  // soltar, así que el handoff no aplica.
+  if (!roomReady && !leadListenOnly) {
     return (
       <>
         <HandoffScreen classTitle={p.classTitle} />
@@ -218,12 +225,14 @@ export function AulaClient(p: Props) {
   // Mapeamos las elecciones del usuario en PreJoin → opciones de
   // captura de LiveKit. Si el usuario seleccionó un device específico,
   // pasamos `{ deviceId: ... }`; si no, pasamos `true`/`false`.
-  const audioCapture = userChoices.audioEnabled
-    ? (userChoices.audioDeviceId ? { deviceId: userChoices.audioDeviceId } : true)
-    : false;
-  const videoCapture = userChoices.videoEnabled
-    ? (userChoices.videoDeviceId ? { deviceId: userChoices.videoDeviceId } : true)
-    : false;
+  const audioCapture = leadListenOnly ? false
+    : userChoices!.audioEnabled
+      ? (userChoices!.audioDeviceId ? { deviceId: userChoices!.audioDeviceId } : true)
+      : false;
+  const videoCapture = leadListenOnly ? false
+    : userChoices!.videoEnabled
+      ? (userChoices!.videoDeviceId ? { deviceId: userChoices!.videoDeviceId } : true)
+      : false;
 
   return (
     <main className="h-screen w-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
@@ -346,11 +355,13 @@ export function AulaClient(p: Props) {
               }}
             />
             {p.audience !== "lead" && <SafeScreenShareButton />}
-            <VirtualBackgroundButton
-              canCamera={userChoices.videoEnabled}
-              brandEnabled={p.brandBackground}
-              initialMode={bgChoice}
-            />
+            {!leadListenOnly && (
+              <VirtualBackgroundButton
+                canCamera={userChoices?.videoEnabled ?? false}
+                brandEnabled={p.brandBackground}
+                initialMode={bgChoice}
+              />
+            )}
           </div>
         </div>
         <RoomAudioRenderer />
