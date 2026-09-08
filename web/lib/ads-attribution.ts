@@ -30,12 +30,13 @@ export type AttributionKey =
   | "utm_campaign"
   | "utm_term"
   | "utm_content"
-  | "ref";        // código de referido de estudiante (sistema "Regala una clase")
+  | "ref"         // código de referido de estudiante (sistema "Regala una clase")
+  | "profe";      // slug del profesor en la campaña /clase-profe (sabine|jonathan)
 
 const ALL_KEYS: AttributionKey[] = [
   "gclid", "gbraid", "wbraid",
   "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-  "ref",
+  "ref", "profe",
 ];
 
 /**

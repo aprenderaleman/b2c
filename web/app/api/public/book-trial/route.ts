@@ -108,6 +108,10 @@ const Body = z.object({
   // gana 3", 2026-08-14). First-touch: attributeReferral() nunca
   // sobrescribe un referred_by previo; código inválido se ignora.
   ref:           z.string().trim().max(20).nullable().optional(),
+  // Landing /clase-profe (Meta Reels 2026-08-20): slug del profesor
+  // que originó al lead. Normalizado a sabine|jonathan|generico.
+  // Cualquier otro valor se coerce a 'generico' antes de persistir.
+  profe:         z.string().trim().max(20).nullable().optional(),
 });
 
 export async function POST(req: Request) {
@@ -224,6 +228,17 @@ export async function POST(req: Request) {
   // column doesn't exist on our funnel UI; admin can refine later.
   const goal    = b.goal ?? "travel";
   const urgency = "asap";
+  // Normaliza el slug de la campaña /clase-profe. Ver migración 127.
+  // Cualquier valor fuera de sabine|jonathan cae a 'generico' — nunca
+  // NULL cuando el lead vino de esa landing (necesitamos que el reporting
+  // separe "genérico intencional" del NULL "no vino de esa campaña").
+  const profeRaw = (b.profe ?? "").trim().toLowerCase();
+  const profeSlug: "sabine" | "jonathan" | "generico" | null =
+    profeRaw === "sabine"   ? "sabine" :
+    profeRaw === "jonathan" ? "jonathan" :
+    // Solo forzamos "generico" si el body trae la key (aunque venga vacía o
+    // basura); si NO se manda, dejamos NULL — el lead no vino de esa campaña.
+    (b.profe !== undefined && b.profe !== null) ? "generico" : null;
 
   let leadId: string;
   let isNewLead = false;
@@ -289,6 +304,10 @@ export async function POST(req: Request) {
       landing_intent:       updateLanding,
       motivo_inicial:       updateMotivoIni,
       ...adAttribution,
+      // Solo persistimos profe si el body la trae (evita pisar el slug
+      // válido de una campaña previa con NULL cuando el lead vuelve
+      // desde otro flow).
+      ...(profeSlug !== null ? { profe: profeSlug } : {}),
       gdpr_accepted:        true,
       gdpr_accepted_at:     new Date().toISOString(),
       source:               "funnel_trial_self_book",
@@ -318,6 +337,7 @@ export async function POST(req: Request) {
       utm_campaign:         b.utm_campaign ?? null,
       utm_term:             b.utm_term     ?? null,
       utm_content:          b.utm_content  ?? null,
+      profe:                profeSlug,
       gdpr_accepted:        true,
       gdpr_accepted_at:     new Date().toISOString(),
       source:               "funnel_trial_self_book",

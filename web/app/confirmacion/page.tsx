@@ -44,7 +44,7 @@ export default async function ConfirmacionPage({
       id, scheduled_at, duration_minutes, lead_id, is_trial, short_code, sesion_closer_id,
       teacher:teachers(users(full_name, email)),
       closer:users!classes_sesion_closer_id_fkey(full_name, email),
-      lead:leads!inner(name, email, whatsapp_normalized, reserva_prioritaria, landing_intent)
+      lead:leads!inner(name, email, whatsapp_normalized, reserva_prioritaria, landing_intent, country)
     `)
     .eq("id", classId)
     .maybeSingle();
@@ -63,8 +63,8 @@ export default async function ConfirmacionPage({
                             Array<{ full_name: string | null; email: string }> }> | null;
     closer: { full_name: string | null; email: string } |
             Array<{ full_name: string | null; email: string }> | null;
-    lead: { name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null; landing_intent: string | null } |
-          Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null; landing_intent: string | null }>;
+    lead: { name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null; landing_intent: string | null; country: string | null } |
+          Array<{ name: string | null; email: string | null; whatsapp_normalized: string | null; reserva_prioritaria: boolean | null; landing_intent: string | null; country: string | null }>;
   };
   const flat = <T,>(x: T | T[] | null | undefined): T | null =>
     !x ? null : Array.isArray(x) ? x[0] ?? null : x;
@@ -81,6 +81,14 @@ export default async function ConfirmacionPage({
   const leadPhone   = leadFlat?.whatsapp_normalized ?? undefined;
   const firstName   = leadName.trim().split(/\s+/)[0] || "";
   const priorityActive = leadFlat?.reserva_prioritaria === true;
+  // Advanced matching para Meta Pixel + CAPI. Nombre se divide en
+  // firstName/lastName por convención Meta; country se manda ISO-2 lower
+  // hasheado por el endpoint /api/meta-capi.
+  const nameParts = (leadFlat?.name ?? "").trim().split(/\s+/).filter(Boolean);
+  const leadFirstName = nameParts[0] ?? undefined;
+  const leadLastName  = nameParts.slice(1).join(" ") || undefined;
+  const leadCountry   = (leadFlat?.country ?? "").toLowerCase() || undefined;
+  const metaPixelId   = process.env.NEXT_PUBLIC_META_PIXEL_ID;
   // El funnel /meta-ads-paid ya cobra un depósito de 10€ antes de llegar
   // aquí (es su premisa de valor). Ofrecerles "Mejora a Reserva Prioritaria"
   // ahora sería doble cobro y confunde. Excluimos ese único landing_intent;
@@ -105,7 +113,16 @@ export default async function ConfirmacionPage({
           2026-08-17 para lanzar campañas del funnel /sesion-plan).
           Mismo evento Schedule con dedup por classId; el Purchase del
           depósito sigue siendo solo de trials. */}
-      <ConfirmacionPixel classId={classId} leadEmail={leadEmail} leadPhone={leadPhone} />
+      <ConfirmacionPixel
+        classId={classId}
+        leadId={r.lead_id}
+        leadEmail={leadEmail}
+        leadPhone={leadPhone}
+        leadFirstName={leadFirstName}
+        leadLastName={leadLastName}
+        leadCountry={leadCountry}
+        metaPixelId={metaPixelId}
+      />
       {/* Reserva Prioritaria: si volvemos de Stripe con ?deposito=ok,
           dispara Purchase por los 3 canales (Google + fbq + CAPI).
           NO se solapa con ConfirmacionPixel — cada uno tiene su propio

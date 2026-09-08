@@ -160,8 +160,13 @@ function StepCuandoInner() {
   // ?profe=sabine|jonathan (landing /clase-profe, campaña Meta Reels
   // 2026-08-20): fuerza que el picker liste SOLO huecos de esa profe
   // y que el book-trial se ancle a su teacher_id. Cualquier otro valor
-  // se ignora y cae al pool normal.
-  const profe = resolveProfe(profeFromUrl);
+  // se ignora y cae al pool normal. Fallback a sessionStorage
+  // (captureAttributionFromUrl guarda profe al montar) para no perder
+  // el slug si el usuario navega y pierde el query param.
+  const profeFromStorage = typeof window !== "undefined"
+    ? (sessionStorage.getItem("b2c.attr.profe") ?? null)
+    : null;
+  const profe = resolveProfe(profeFromUrl ?? profeFromStorage);
   // Si el lead viene del flujo /home con socialmedia, ya nos dieron
   // motivo + nivel. Si no, asumimos atajo desde landing.
   // Con ?profe= válido, forzamos landing_intent=clase-profe-{slug} para
@@ -424,6 +429,16 @@ function StepCuandoInner() {
           // ('agendar-directo') y book-trial marcará motivo='direct'.
           landing_intent: effectiveLanding,
           ...(motivoFromUrl ? { motivo_inicial: motivoFromUrl } : {}),
+          // Campaña /clase-profe: pasa el slug al backend. Si el lead
+          // vino de esa landing (URL o sessionStorage), forzamos el
+          // valor exacto (sabine|jonathan) o "generico" — nunca dejamos
+          // ambigüedad. Los leads de otros funnels omiten esta key y
+          // book-trial deja leads.profe = NULL.
+          ...(profe
+            ? { profe: profe.slug }
+            : (searchParams?.get("landing") === "clase-profe"
+                ? { profe: "generico" }
+                : {})),
           ...readAttribution(),
         }),
       });

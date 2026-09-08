@@ -51,6 +51,14 @@ export async function POST(req: Request) {
     // usamos; si no, los leemos del Cookie header.
     fbc?: string;
     fbp?: string;
+    // Advanced matching adicional (Gelfis 2026-08-20): mejora la match
+    // rate contra la audiencia de Meta y desbloquea EMQ (Event Match
+    // Quality). Todos opcionales, todos hasheados server-side.
+    firstName?: string;
+    lastName?:  string;
+    city?:      string;
+    country?:   string;   // ISO-2 lowercase; ej "de", "es", "ar"
+    externalId?: string;  // lead_id — permite cross-device match sin PII
   };
   try {
     body = await req.json();
@@ -89,6 +97,20 @@ export async function POST(req: Request) {
     const digits = body.phone.replace(/\D/g, "");
     if (digits.length >= 8) userData.ph = sha256(digits);
   }
+  // Advanced matching adicional. Todo se normaliza + hashea (Meta pide
+  // lowercase + trim antes del SHA-256, sin espacios ni acentos donde
+  // aplique). Country e ISO-2 se manda hasheado también.
+  if (body.firstName) userData.fn = sha256(body.firstName);
+  if (body.lastName)  userData.ln = sha256(body.lastName);
+  if (body.city) {
+    const cityNorm = body.city.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+    if (cityNorm) userData.ct = sha256(cityNorm);
+  }
+  if (body.country) {
+    const c = body.country.trim().toLowerCase();
+    if (c.length === 2) userData.country = sha256(c);
+  }
+  if (body.externalId) userData.external_id = sha256(body.externalId);
   if (fbc) userData.fbc = fbc;
   if (fbp) userData.fbp = fbp;
 
