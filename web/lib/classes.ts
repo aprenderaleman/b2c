@@ -23,6 +23,7 @@ export type ClassRow = {
   status:                  ClassStatus;
   livekit_room_id:         string;
   is_trial:                boolean;
+  sesion_closer_id:        string | null;
   group_id:                string | null;
   group_name:              string | null;
   started_at:              string | null;
@@ -537,6 +538,7 @@ function normaliseClassRow(r: RawClass): ClassWithPeople {
     status:                   r.status as ClassStatus,
     livekit_room_id:          r.livekit_room_id as string,
     is_trial:                 (r.is_trial as boolean | null) ?? false,
+    sesion_closer_id:         (r.sesion_closer_id as string | null) ?? null,
     group_id:                 (r.group_id as string | null) ?? null,
     group_name:               flattenGroupName(r.group),
     started_at:               (r.started_at as string | null) ?? null,

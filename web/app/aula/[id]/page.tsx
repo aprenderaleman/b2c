@@ -67,7 +67,7 @@ export default async function AulaPage({
   // pivot the fallback CTA to SCHULE (the lead has nowhere else
   // useful to go from here).
   const isTrial      = cls.is_trial;
-  const isSesionPlan = !!(cls as { sesion_closer_id?: string | null }).sesion_closer_id;
+  const isSesionPlan = !!cls.sesion_closer_id;
   const aulaTitle    = isTrial ? "Clase de prueba de alemán" : cls.title;
 
   let access;
