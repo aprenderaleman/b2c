@@ -19,6 +19,8 @@ import {
   useTracks,
   useParticipants,
   useLocalParticipant,
+  useDisconnectButton,
+  useStartAudio,
   type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
 import type { LocalUserChoices } from "@livekit/components-core";
@@ -345,26 +347,31 @@ export function AulaClient(p: Props) {
         </div>
         <div className="border-t border-slate-800 bg-slate-900/80 backdrop-blur p-2">
           <div className="flex items-center justify-center gap-3 flex-wrap">
-            <ControlBar
-              controls={{
-                microphone:  !(p.isSesionPlan && p.audience === "lead"),
-                camera:      !(p.isSesionPlan && p.audience === "lead"),
-                screenShare: false,
-                chat:        false,
-                leave:       true,
-              }}
-            />
-            {p.audience !== "lead" && <SafeScreenShareButton />}
-            {!leadListenOnly && (
-              <VirtualBackgroundButton
-                canCamera={userChoices?.videoEnabled ?? false}
-                brandEnabled={p.brandBackground}
-                initialMode={bgChoice}
-              />
+            {leadListenOnly ? (
+              <LeadLeaveButton />
+            ) : (
+              <>
+                <ControlBar
+                  controls={{
+                    microphone:  true,
+                    camera:      true,
+                    screenShare: false,
+                    chat:        false,
+                    leave:       true,
+                  }}
+                />
+                {p.audience !== "lead" && <SafeScreenShareButton />}
+                <VirtualBackgroundButton
+                  canCamera={userChoices?.videoEnabled ?? false}
+                  brandEnabled={p.brandBackground}
+                  initialMode={bgChoice}
+                />
+              </>
             )}
           </div>
         </div>
         <RoomAudioRenderer />
+        {leadListenOnly && <LeadAutoAudio />}
         {p.isHost && <HostTeardown classId={p.classId} backHref={p.backHref} />}
         {p.isHost && <RecordingAutoStart classId={p.classId} />}
       </LiveKitRoom>
@@ -558,6 +565,47 @@ function SafeScreenShareButton() {
         <line x1="8" y1="21" x2="16" y2="21" />
         <line x1="12" y1="17" x2="12" y2="21" />
       </svg>
+    </button>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Lead-only controls: botón "Salir" y auto-start de audio
+// ───────────────────────────────────────────────────────────────────
+function LeadLeaveButton() {
+  const { buttonProps } = useDisconnectButton({});
+  return (
+    <button
+      {...buttonProps}
+      className="rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium px-5 py-2.5 flex items-center gap-2 transition-colors"
+    >
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <polyline points="16 17 21 12 16 7" />
+        <line x1="21" y1="12" x2="9" y2="12" />
+      </svg>
+      Salir
+    </button>
+  );
+}
+
+function LeadAutoAudio() {
+  const { mergedProps, canPlayAudio } = useStartAudio({ props: {} });
+  useEffect(() => {
+    if (!canPlayAudio) mergedProps.onClick?.();
+  }, [canPlayAudio]);
+  if (canPlayAudio) return null;
+  return (
+    <button
+      {...mergedProps}
+      className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center cursor-pointer"
+      style={{ display: "flex" }}
+    >
+      <div className="bg-slate-800 rounded-2xl p-8 text-center shadow-2xl max-w-xs">
+        <div className="text-4xl mb-3" aria-hidden>🔊</div>
+        <p className="text-white font-semibold">Toca para activar el audio</p>
+        <p className="text-slate-400 text-sm mt-1">Tu navegador necesita un toque para reproducir sonido.</p>
+      </div>
     </button>
   );
 }
