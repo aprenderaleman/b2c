@@ -564,11 +564,19 @@ export async function sendRescheduleLinkMessage(
   const sb = supabaseAdmin();
   const { data: leadInfo } = await sb
     .from("leads")
-    .select("name, whatsapp_normalized")
+    .select("name, whatsapp_normalized, email, language")
     .eq("id", leadId)
     .maybeSingle();
-  const linfo = leadInfo as { name: string | null; whatsapp_normalized: string | null } | null;
-  if (!linfo?.whatsapp_normalized) return { ok: false, reason: "no_whatsapp" };
+  const linfo = leadInfo as {
+    name: string | null; whatsapp_normalized: string | null;
+    email: string | null; language: "es" | "de" | null;
+  } | null;
+  // Caso 2026-09-09 (número sin WhatsApp, Evolution exists:false): el
+  // link debe poder viajar por email como fallback — solo abortamos si
+  // el lead no tiene NINGÚN canal.
+  if (!linfo?.whatsapp_normalized && !linfo?.email) {
+    return { ok: false, reason: "El lead no tiene WhatsApp ni email registrados." };
+  }
 
   const nowIso = new Date().toISOString();
   const { data: currentTrial } = await sb
@@ -658,21 +666,64 @@ export async function sendRescheduleLinkMessage(
     ? `¡Hola ${firstName}! 👋\n\nHe cancelado tu clase de prueba actual. Puedes elegir un nuevo horario con este enlace, tardarás solo 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu nuevo horario. 😊\n\n— Stiv · Aprender-Aleman.de`
     : `¡Hola ${firstName}! 👋\n\nTe comparto el enlace para agendar tu clase de prueba de alemán — eliges tu horario en 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu horario. 😊\n\n— Stiv · Aprender-Aleman.de`;
 
-  const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "trial_reschedule_link" });
-  await sb.from("lead_timeline").insert({
-    lead_id: leadId,
-    type:    waRes.ok ? "system_message_sent" : "send_failed",
-    author:  "gelfis",
-    content: waRes.ok
-      ? `💬 Reagendamiento enviado a ${linfo.whatsapp_normalized} — lead pasa a 'rescheduling'`
-      : `💬 Falló envío del link reagendar: ${waRes.reason ?? "unknown"}`,
-    metadata: { kind: "trial_reschedule_link", channel: "whatsapp" },
-  });
+  let waOk = false;
+  let waReason: string | null = null;
+  if (linfo.whatsapp_normalized) {
+    const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "trial_reschedule_link" });
+    waOk = waRes.ok;
+    waReason = waRes.ok ? null : (waRes.reason ?? "unknown");
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    waRes.ok ? "system_message_sent" : "send_failed",
+      author:  "gelfis",
+      content: waRes.ok
+        ? `💬 Reagendamiento enviado a ${linfo.whatsapp_normalized} — lead pasa a 'rescheduling'`
+        : `💬 Falló envío del link reagendar: ${waReason}`,
+      metadata: { kind: "trial_reschedule_link", channel: "whatsapp" },
+    });
+  }
+
+  // Fallback a email si el WA falló o no hay número (caso 2026-09-09:
+  // número sin cuenta de WhatsApp — la clase ya está cancelada y el
+  // lead en 'rescheduling', así que el link TIENE que llegarle).
+  let emailOk = false;
+  if (!waOk && linfo.email) {
+    try {
+      const { sendTrialCancelledEmail } = await import("./email/send");
+      const res = await sendTrialCancelledEmail(linfo.email, {
+        leadName: firstName,
+        language: linfo.language === "de" ? "de" : "es",
+        rescheduleUrl,
+      });
+      emailOk = res.ok;
+      await sb.from("lead_timeline").insert({
+        lead_id: leadId,
+        type:    res.ok ? "system_message_sent" : "send_failed",
+        author:  "gelfis",
+        content: res.ok
+          ? `📧 Link de reagendar enviado por email a ${linfo.email} (fallback — WA: ${waReason ?? "sin número"})`
+          : `📧 Falló también el email del link reagendar: ${"error" in res ? res.error : "unknown"}`,
+        metadata: { kind: "trial_reschedule_link", channel: "email" },
+      });
+    } catch (e) {
+      console.error("[sendRescheduleLinkMessage] email fallback failed:", e);
+    }
+  }
+
   // Cancelar cualquier cadena activa (el lead está reagendando, no necesita más follow-ups)
   await cancelActiveChain(leadId, "reschedule")
     .catch(err => console.warn("[sendRescheduleLinkMessage] cancelActiveChain error:", err));
 
-  return waRes.ok ? { ok: true } : { ok: false, reason: waRes.reason ?? "send_failed" };
+  if (waOk || emailOk) return { ok: true };
+  const noWa = !linfo.whatsapp_normalized;
+  const waMsg = /exists.*false|http_400/i.test(waReason ?? "")
+    ? "el número no tiene cuenta de WhatsApp"
+    : `WhatsApp falló (${waReason ?? "sin número"})`;
+  return {
+    ok: false,
+    reason: `No se pudo enviar el link: ${noWa ? "sin número de WhatsApp" : waMsg}` +
+            (linfo.email ? " y el email también falló." : " y el lead no tiene email."),
+  };
 }
 
 /**
