@@ -26,6 +26,7 @@ import {
 import type { LocalUserChoices } from "@livekit/components-core";
 import { RoomEvent, Track, ParticipantEvent, type Participant } from "livekit-client";
 import { VirtualBackgroundButton, BRAND_IMAGES, BG_LABELS, type BgMode } from "./VirtualBackgroundButton";
+import { WhiteboardPanel, WhiteboardToggleButton } from "./WhiteboardPanel";
 
 type Props = {
   classId:          string;
@@ -97,6 +98,7 @@ export function AulaClient(p: Props) {
   const [error, setError]         = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [chatOpen,  setChatOpen]  = useState(false);
+  const [wbOpen,    setWbOpen]    = useState(false);
   const [webViewBlocker, setWebViewBlocker] = useState(false);
 
   // Detección WebView tras hidratación (SSR-safe). Se muestra un
@@ -340,6 +342,10 @@ export function AulaClient(p: Props) {
           <div className="flex-1 min-w-0 h-full">
             <VideoArea classId={p.classId} isHost={p.isHost} />
           </div>
+          {/* Pizarra: overlay z-10 sobre el video (debajo del chat z-20).
+              Montada siempre para escuchar el data channel; Excalidraw
+              solo se carga al abrirse. */}
+          <WhiteboardPanel open={wbOpen} onOpenChange={setWbOpen} isHost={p.isHost} />
           {panelOpen && (
             <ParticipantsPanel onClose={() => setPanelOpen(false)} />
           )}
@@ -361,6 +367,7 @@ export function AulaClient(p: Props) {
                   }}
                 />
                 {p.audience !== "lead" && <SafeScreenShareButton />}
+                <WhiteboardToggleButton active={wbOpen} onToggle={() => setWbOpen(o => !o)} />
                 <VirtualBackgroundButton
                   canCamera={userChoices?.videoEnabled ?? false}
                   brandEnabled={p.brandBackground}
