@@ -525,30 +525,52 @@ function HostBtn({
 function SafeScreenShareButton() {
   const { localParticipant } = useLocalParticipant();
   const [sharing, setSharing] = useState(false);
+  // Evita llamadas concurrentes a setScreenShareEnabled (doble clic
+  // mientras el picker está abierto lanza "already published").
+  const busyRef = useRef(false);
 
   useEffect(() => {
     setSharing(localParticipant.isScreenShareEnabled);
     const onChange = () => setSharing(localParticipant.isScreenShareEnabled);
-    localParticipant.on(ParticipantEvent.TrackPublished, onChange);
-    localParticipant.on(ParticipantEvent.TrackUnpublished, onChange);
+    // Bug 2026-09-10 (profe no podía volver a compartir): para el
+    // participante LOCAL los eventos correctos son LocalTrackPublished
+    // y LocalTrackUnpublished — TrackPublished/TrackUnpublished solo
+    // disparan para remotos. Sin LocalTrackUnpublished, al dejar de
+    // compartir (p.ej. con la barra nativa del navegador) `sharing`
+    // quedaba en true y el siguiente clic intentaba APAGAR en vez de
+    // abrir el picker → atascado para siempre.
     localParticipant.on(ParticipantEvent.LocalTrackPublished, onChange);
+    localParticipant.on(ParticipantEvent.LocalTrackUnpublished, onChange);
     return () => {
-      localParticipant.off(ParticipantEvent.TrackPublished, onChange);
-      localParticipant.off(ParticipantEvent.TrackUnpublished, onChange);
       localParticipant.off(ParticipantEvent.LocalTrackPublished, onChange);
+      localParticipant.off(ParticipantEvent.LocalTrackUnpublished, onChange);
     };
   }, [localParticipant]);
 
   const toggle = async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     try {
-      await localParticipant.setScreenShareEnabled(!sharing, {
+      // SIEMPRE contra el estado real de LiveKit — el estado React
+      // puede estar desfasado y es exactamente lo que causaba el bug.
+      const enable = !localParticipant.isScreenShareEnabled;
+      await localParticipant.setScreenShareEnabled(enable, {
         audio: false,
         selfBrowserSurface: "exclude",
         surfaceSwitching: "include",
         systemAudio: "exclude",
       });
-    } catch {
-      // User cancelled the screen share picker — no action needed.
+    } catch (e) {
+      // NotAllowedError = el usuario cerró el picker — silencio.
+      // Cualquier otro error se loguea para diagnóstico.
+      const name = (e as Error)?.name ?? "";
+      if (name !== "NotAllowedError") {
+        console.error("[aula/screenshare] toggle failed:", (e as Error)?.message ?? e);
+      }
+    } finally {
+      busyRef.current = false;
+      // Re-sincronizar pase lo que pase.
+      setSharing(localParticipant.isScreenShareEnabled);
     }
   };
 
