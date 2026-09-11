@@ -29,8 +29,14 @@ import type { DataPublishOptions } from "livekit-client";
  * profe) y evita meter un CRDT.
  */
 
+// v0.18: los estilos ya no se auto-inyectan — el CSS se importa junto
+// al chunk dinámico (solo carga al abrir la pizarra).
 const Excalidraw = dynamic(
-  async () => (await import("@excalidraw/excalidraw")).Excalidraw,
+  async () => {
+    // @ts-expect-error — css side-effect import sin tipos
+    await import("@excalidraw/excalidraw/index.css");
+    return (await import("@excalidraw/excalidraw")).Excalidraw;
+  },
   { ssr: false, loading: () => (
     <div className="h-full w-full flex items-center justify-center text-slate-400 text-sm">
       Cargando pizarra…
