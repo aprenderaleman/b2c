@@ -26,6 +26,35 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 const DEFAULT_BUCKET = "aprender-aleman-recordings";
 const DEFAULT_EXPIRES_SECONDS = 6 * 3600;   // 6h — plenty to watch a class
 
+// ── Salud del dominio CDN (caso 2026-09-14) ────────────────────────
+// El registro DNS de R2_PUBLIC_DOMAIN desapareció de Cloudflare y TODAS
+// las grabaciones dejaron de reproducirse (las URLs se reescribían a un
+// host muerto). Antes de reescribir, comprobamos que el dominio responda
+// (cualquier status HTTP vale — solo importa que DNS+TLS funcionen) y
+// cacheamos el resultado 5 min. Si está caído: log CRITICAL y se sirve
+// la URL firmada del origin R2 — más lenta, pero reproduce.
+const DOMAIN_HEALTH_TTL_MS = 5 * 60_000;
+let _domainHealth: { host: string; ok: boolean; ts: number } | null = null;
+
+async function cdnDomainHealthy(host: string): Promise<boolean> {
+  const now = Date.now();
+  if (_domainHealth && _domainHealth.host === host && now - _domainHealth.ts < DOMAIN_HEALTH_TTL_MS) {
+    return _domainHealth.ok;
+  }
+  let ok = false;
+  try {
+    await fetch(`https://${host}/`, { method: "HEAD", signal: AbortSignal.timeout(3000) });
+    ok = true;
+  } catch {
+    console.error(
+      `[r2] CRITICAL: el dominio CDN ${host} no responde (¿registro DNS borrado en Cloudflare?). ` +
+      `Sirviendo URLs firmadas del origin R2 como fallback. Restaurar en Cloudflare → R2 → bucket → Custom Domains.`,
+    );
+  }
+  _domainHealth = { host, ok, ts: now };
+  return ok;
+}
+
 let _client: S3Client | null = null;
 function client(): S3Client | null {
   if (_client) return _client;
@@ -83,7 +112,7 @@ export async function signRecordingUrl(
     // authentication AS LONG AS the custom domain is bound to the same
     // bucket in the Cloudflare dashboard.
     const publicDomain = process.env.R2_PUBLIC_DOMAIN;
-    if (publicDomain) {
+    if (publicDomain && await cdnDomainHealthy(publicDomain)) {
       try {
         const u = new URL(signed);
         u.host = publicDomain;
