@@ -15,6 +15,7 @@ export const NotesField = forwardRef<NotesFieldHandle, {
 }>(function NotesField({ classId, initialNotes }, ref) {
   const [value, setValue] = useState(initialNotes ?? "");
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef(initialNotes ?? "");
@@ -28,11 +29,18 @@ export const NotesField = forwardRef<NotesFieldHandle, {
     setStatus("saving");
     startTransition(async () => {
       try {
-        await saveTeacherNotes(classId, text.trim());
-        lastSavedRef.current = text.trim();
-        setStatus("saved");
-      } catch {
+        const res = await saveTeacherNotes(classId, text.trim());
+        if (res.ok) {
+          lastSavedRef.current = text.trim();
+          setStatus("saved");
+          setErrorMsg(null);
+        } else {
+          setStatus("error");
+          setErrorMsg(res.error);
+        }
+      } catch (e) {
         setStatus("error");
+        setErrorMsg(e instanceof Error ? e.message : null);
       }
     });
   }, [classId, startTransition]);
@@ -42,9 +50,12 @@ export const NotesField = forwardRef<NotesFieldHandle, {
     const text = valueRef.current.trim();
     if (!text || text === lastSavedRef.current.trim()) return;
     try {
-      await saveTeacherNotes(classId, text);
-      lastSavedRef.current = text;
-      setStatus("saved");
+      const res = await saveTeacherNotes(classId, text);
+      if (res.ok) {
+        lastSavedRef.current = text;
+        setStatus("saved");
+        setErrorMsg(null);
+      }
     } catch { /* action buttons proceed regardless */ }
   }, [classId]);
 
@@ -88,7 +99,9 @@ export const NotesField = forwardRef<NotesFieldHandle, {
           <span className="text-[11px] text-emerald-600 dark:text-emerald-400">Guardado automaticamente</span>
         )}
         {status === "error" && (
-          <span className="text-[11px] text-red-600 dark:text-red-400">Error al guardar — reintentando...</span>
+          <span className="text-[11px] text-red-600 dark:text-red-400">
+            Error al guardar{errorMsg ? `: ${errorMsg}` : " — reintentando..."}
+          </span>
         )}
         {dirty && status === "idle" && !pending && (
           <span className="text-[11px] text-amber-500 dark:text-amber-400">Sin guardar</span>

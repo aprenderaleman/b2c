@@ -4,14 +4,32 @@ import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 
-export async function saveTeacherNotes(classId: string, notes: string) {
+/**
+ * Resultado estructurado (2026-09-14): antes la action LANZABA errores
+ * y Next los censura en producción ("An error occurred…"), así que el
+ * profe solo veía "Error al guardar — reintentando..." sin causa y
+ * nosotros no teníamos ni un log útil. Ahora devuelve { ok, error } y
+ * el UI muestra el motivo real.
+ */
+export type SaveNotesResult = { ok: true } | { ok: false; error: string };
+
+export async function saveTeacherNotes(classId: string, notes: string): Promise<SaveNotesResult> {
+  try {
+    return await saveTeacherNotesInner(classId, notes);
+  } catch (e) {
+    console.error("[saveTeacherNotes] unexpected:", e);
+    return { ok: false, error: e instanceof Error ? e.message : "error_inesperado" };
+  }
+}
+
+async function saveTeacherNotesInner(classId: string, notes: string): Promise<SaveNotesResult> {
   const session = await auth();
-  if (!session?.user) throw new Error("unauthorized");
+  if (!session?.user) return { ok: false, error: "Sesión expirada — recarga la página e inicia sesión." };
 
   const user = session.user as { id: string; role?: string };
   const role = user.role;
   if (!role || !["teacher", "admin", "superadmin"].includes(role)) {
-    throw new Error("forbidden");
+    return { ok: false, error: "Tu rol no puede guardar notas de prueba." };
   }
 
   const sb = supabaseAdmin();
@@ -30,12 +48,18 @@ export async function saveTeacherNotes(classId: string, notes: string) {
 
   if (!isAdmin) {
     const teacher = await getTeacherByUserId(user.id);
-    if (!teacher) throw new Error("no_teacher_profile");
+    if (!teacher) return { ok: false, error: "Tu cuenta no tiene perfil de profesor." };
     query = query.eq("teacher_id", teacher.id);
   }
 
-  const { data: cls } = await query.maybeSingle();
-  if (!cls) throw new Error("not_owner");
+  const { data: cls, error: clsErr } = await query.maybeSingle();
+  if (clsErr) return { ok: false, error: `No se pudo leer la clase: ${clsErr.message}` };
+  if (!cls) {
+    return {
+      ok: false,
+      error: "Esta clase de prueba ya no está asignada a ti (¿reasignada o cancelada?). Recarga la página.",
+    };
+  }
 
   // La nota se atribuye SIEMPRE al profesor de la clase, no al user
   // de sesión. Si Gelfis (admin) edita desde /admin/clasedeprueba en
@@ -77,8 +101,11 @@ export async function saveTeacherNotes(classId: string, notes: string) {
       .from("trial_class_scripts")
       .update({ teacher_notes: notes })
       .eq("id", existing.id);
-    if (error) throw new Error(`notes_update_failed: ${error.message}`);
+    if (error) return { ok: false, error: `No se pudo actualizar: ${error.message}` };
   } else {
+    if (!cls.lead_id) {
+      return { ok: false, error: "Esta clase de prueba no tiene lead asociado — avisa al admin." };
+    }
     const { error } = await sb.from("trial_class_scripts").insert({
       class_id:      classId,
       lead_id:       cls.lead_id,
@@ -86,7 +113,7 @@ export async function saveTeacherNotes(classId: string, notes: string) {
       current_step:  0,
       teacher_notes: notes,
     });
-    if (error) throw new Error(`notes_insert_failed: ${error.message}`);
+    if (error) return { ok: false, error: `No se pudo guardar: ${error.message}` };
   }
 
   if (cls.lead_id) {
@@ -121,4 +148,6 @@ export async function saveTeacherNotes(classId: string, notes: string) {
       });
     }
   }
+
+  return { ok: true };
 }
