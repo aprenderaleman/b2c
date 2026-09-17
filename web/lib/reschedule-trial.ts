@@ -173,11 +173,12 @@ export async function rescheduleTrialForLead(args: RescheduleTrialArgs): Promise
   // 5) Lead info para mensajes
   const { data: lead } = await sb
     .from("leads")
-    .select("id, name, email, whatsapp_normalized, language")
+    .select("id, name, email, whatsapp_normalized, language, german_level, goal")
     .eq("id", leadId)
     .maybeSingle();
   type LeadRow = {
     id: string; name: string | null; email: string | null;
+    german_level: string | null; goal: string | null;
     whatsapp_normalized: string | null; language: "es" | "de" | null;
   };
   const lr        = (lead ?? {}) as LeadRow;
@@ -190,6 +191,51 @@ export async function rescheduleTrialForLead(args: RescheduleTrialArgs): Promise
     shortCode: c.short_code,
     baseUrl:   PLATFORM_URL,
   });
+
+  // 5b) Evento CENTRAL (calendar de Gelfis) coherente tras reasignación
+  //     (casos Isa/Marcia 2026-09-17: el reagendado self-service
+  //     reasignó el trial a Gelfis pero solo PARCHEABA eventos
+  //     existentes — nunca creaba uno, así que la clase no aparecía en
+  //     su calendario). Dos direcciones, best-effort:
+  //       · Ahora es de Gelfis y no hay evento → crearlo.
+  //       · Dejó de ser de Gelfis y hay evento → borrarlo.
+  try {
+    const { data: tRow } = await sb
+      .from("teachers")
+      .select("users(role, full_name)")
+      .eq("id", targetTeacherId)
+      .maybeSingle();
+    type TU = { role: string; full_name: string | null };
+    const tuRaw = (tRow as { users: TU | TU[] | null } | null)?.users;
+    const tu = Array.isArray(tuRaw) ? tuRaw[0] : tuRaw;
+    const isAdminTeacher = tu?.role === "superadmin";
+
+    if (isAdminTeacher && !c.google_calendar_event_id) {
+      const { createTrialEvent } = await import("./google-calendar");
+      const ev = await createTrialEvent({
+        leadName:        lr.name ?? "Lead",
+        teacherName:     tu?.full_name ?? "Gelfis",
+        startIso:        newStart.toISOString(),
+        durationMinutes: duration,
+        leadEmail:       lr.email ?? null,
+        leadWhatsapp:    lr.whatsapp_normalized ?? null,
+        germanLevel:     lr.german_level ?? null,
+        goal:            lr.goal ?? null,
+        joinUrl,
+      });
+      if (ev) {
+        await sb.from("classes").update({ google_calendar_event_id: ev.eventId }).eq("id", c.id);
+      } else {
+        console.error(`[reschedule-trial] no se pudo crear evento central para clase ${c.id} (reasignada a Gelfis)`);
+      }
+    } else if (!isAdminTeacher && teacherChanged && c.google_calendar_event_id) {
+      const { deleteTrialEvent } = await import("./google-calendar");
+      await deleteTrialEvent(c.google_calendar_event_id).catch(() => {});
+      await sb.from("classes").update({ google_calendar_event_id: null }).eq("id", c.id);
+    }
+  } catch (e) {
+    console.error("[reschedule-trial] central gcal sync (reasignación) falló:", e);
+  }
 
   // 6) Notificar — email + WA en paralelo, fire-and-forget.
   const waText = lang === "de"
