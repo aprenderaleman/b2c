@@ -32,13 +32,16 @@ const BERLIN_TZ = "Europe/Berlin";
 const DEFAULT_HORIZON_DAYS = 15;
 const EXTENDED_HORIZON_DAYS = 30;
 const TRIAL_MINUTES = 40;
-// Trial slots se ofrecen cada 40 min (09:00, 09:40, 10:20…) — cambio
-// Gelfis 2026-06-24. Las clases de prueba duran 40 min, así que slots
-// cada 40 min permiten back-to-back si el profe tiene la ventana
-// disponible. El collision check más abajo evita solapamientos con
-// clases ya reservadas. Antes 60 min (hora cerrada) limitaba a la
-// mitad de la capacidad real del profesor.
-const SLOT_GRANULARITY_MIN = 40;
+// Pausa mínima entre clases (petición de los profes, Gelfis
+// 2026-09-17): 10 min de respiro. Se aplica de dos formas:
+//   a) La rejilla de slots pasa de 40 a 50 min (09:00, 09:50, 10:40…)
+//      — dos trials nuevos nunca quedan back-to-back.
+//   b) El collision check infla cada bloque ocupado ±10 min, así
+//      tampoco se ofrecen huecos pegados a clases ya reservadas fuera
+//      de rejilla (reagendadas, clases regulares a horas sueltas).
+// Historial: 60 min hasta 2026-06-24, luego 40 min back-to-back.
+const BREAK_MINUTES = 10;
+const SLOT_GRANULARITY_MIN = TRIAL_MINUTES + BREAK_MINUTES;
 const MIN_LEAD_TIME_HOURS = 4;              // can't book within 4h of now
 // Generous cap so all 15 days fit even with Gelfis's wide
 // 12-hour weekday windows. Worst-case math is 15 days × ~45
@@ -260,9 +263,11 @@ async function computeSlots(
           if (t < earliestStart.getTime()) continue;
           const slotEnd = t + TRIAL_MINUTES * 60_000;
 
-          // Reject if it overlaps any of this teacher's existing classes.
+          // Reject if it overlaps any of this teacher's existing classes,
+          // con colchón BREAK_MINUTES a ambos lados (pausa entre clases).
           const busy = busyByTeacher.get(teacher.id) ?? [];
-          const collision = busy.some(b => t < b.endMs && slotEnd > b.startMs);
+          const bufMs = BREAK_MINUTES * 60_000;
+          const collision = busy.some(b => t < b.endMs + bufMs && slotEnd > b.startMs - bufMs);
           if (collision) continue;
 
           candidates.push({ startMs: t, teacher });
