@@ -50,17 +50,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "insert_failed", message: insErr?.message }, { status: 500 });
   }
 
-  // Top up the student's classes_remaining balance.
+  // Amplía el contrato; el trigger de la DB recalcula classes_remaining.
   if (parsed.data.classesAdded > 0) {
     const { data: student } = await sb
       .from("students")
-      .select("classes_remaining")
+      .select("clases_totales, classes_purchased")
       .eq("id", parsed.data.studentId)
       .maybeSingle();
-    const current = Number((student as { classes_remaining?: number } | null)?.classes_remaining ?? 0);
+    const s = student as { clases_totales?: number | null; classes_purchased?: number | null } | null;
+    const current = Number(s?.clases_totales ?? s?.classes_purchased ?? 0);
     await sb
       .from("students")
-      .update({ classes_remaining: current + parsed.data.classesAdded })
+      .update({ clases_totales: current + parsed.data.classesAdded })
       .eq("id", parsed.data.studentId);
   }
 

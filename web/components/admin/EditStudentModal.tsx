@@ -24,7 +24,7 @@ type Student = {
   hans_access:           boolean;
 };
 
-const LEVELS = ["A0","A1","A2","B1","B2","C1","C2"] as const;
+const LEVELS = ["A1","A2","B1","B2","C1"] as const;
 const SUB_TYPES = ["single_classes","package","monthly_subscription","combined"] as const;
 const SUB_STATUS = ["active","paused","cancelled","expired"] as const;
 

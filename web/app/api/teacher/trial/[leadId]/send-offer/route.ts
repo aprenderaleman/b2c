@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { buildPagoUrl } from "@/lib/enrollment-checkout";
 import { registerContact, actorFromPanelUser } from "@/lib/contacts";
 import {
-  RITMOS, ONE_TIME_PACKS, KIDS_PACK,
+  RITMOS, ONE_TIME_PACKS, KIDS_PACK, GOAL_CLASSES,
   type RitmoId, type GoalId, type PlanCategory, type PaymentType,
 } from "@/lib/trial-packs";
 
@@ -22,14 +22,12 @@ function computeFechaLlegada(months: number): string {
   return `${MONTH_NAMES[d.getMonth()]} de ${d.getFullYear()}`;
 }
 
-const ONE_TIME_CLASSES: Record<GoalId, number> = {
-  a1_a2: 32, b1: 48, b2: 48, c1: 64, fluidez_total: 96,
-};
+const ONE_TIME_CLASSES = GOAL_CLASSES;
 
 const ESTANDAR_CLASSES_PER_MONTH = 8;
 
 const GOAL_SHORT_LABELS: Record<GoalId, string> = {
-  a1_a2: "A1-A2",
+  a1_a2: "A2",
   b1: "B1",
   b2: "B2",
   c1: "C1",
@@ -82,7 +80,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     meta = goalId;
     ritmo = ritmoId;
     tipo_pago = "suscripcion";
-    clases_totales = g.months * r.classesPerMonth;
+    clases_totales = g.classes;
     clases_por_mes = r.classesPerMonth;
     importe_cents = g.totalCents;
     monthlyPriceCents = r.pricePerMonth * 100;

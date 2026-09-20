@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { getStudents, moneyFromCents, subscriptionStatusEs, subscriptionTypeEs } from "@/lib/academy";
+import { getStudents, getStudentsOverview, goalLevelEs, ritmoLabelEs, subscriptionStatusEs } from "@/lib/academy";
+import RefreshButton from "./RefreshButton";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Estudiantes · Admin" };
@@ -27,6 +28,7 @@ export default async function StudentsListPage({
   };
 
   const { rows, total } = await getStudents(filter);
+  const overview = await getStudentsOverview(rows.map(r => r.id));
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -38,12 +40,15 @@ export default async function StudentsListPage({
             {total.toLocaleString("es-ES")} resultado{total === 1 ? "" : "s"}
           </p>
         </div>
-        <a
-          href="/admin/estudiantes/nuevo"
-          className="text-sm font-semibold px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white"
-        >
-          + Nuevo estudiante
-        </a>
+        <div className="flex items-center gap-3">
+          <RefreshButton />
+          <a
+            href="/admin/estudiantes/nuevo"
+            className="text-sm font-semibold px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white"
+          >
+            + Nuevo estudiante
+          </a>
+        </div>
       </header>
 
       <form method="get" className="rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 grid gap-3 sm:grid-cols-4">
@@ -61,7 +66,7 @@ export default async function StudentsListPage({
           <option value="expired">Expirada</option>
         </select>
         <select name="type" defaultValue={filter.subscription_type ?? ""} className="input-text">
-          <option value="">Cualquier plan</option>
+          <option value="">Cualquier tipo de pago</option>
           <option value="single_classes">Clases sueltas</option>
           <option value="package">Paquete</option>
           <option value="monthly_subscription">Suscripción mensual</option>
@@ -69,7 +74,7 @@ export default async function StudentsListPage({
         </select>
         <select name="level" defaultValue={filter.level ?? ""} className="input-text">
           <option value="">Cualquier nivel</option>
-          {["A0","A1","A2","B1","B2","C1","C2"].map(l => (
+          {["A1","A2","B1","B2","C1"].map(l => (
             <option key={l} value={l}>{l}</option>
           ))}
         </select>
@@ -86,23 +91,24 @@ export default async function StudentsListPage({
         <button type="submit" className="btn-primary">Filtrar</button>
       </form>
 
-      <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 dark:bg-slate-800/60 text-left text-slate-600 dark:text-slate-300">
             <tr>
               <Th>Nombre</Th>
-              <Th>Correo</Th>
-              <Th>Nivel</Th>
-              <Th>Plan</Th>
+              <Th>Profe</Th>
+              <Th>Nivel → Meta</Th>
+              <Th>Ritmo</Th>
               <Th>Estado</Th>
-              <Th>Clases restantes</Th>
-              <Th>Convertido</Th>
+              <Th>Progreso</Th>
+              <Th>Restantes</Th>
+              <Th>Desde</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400">
                   Aún no hay estudiantes.
                   <br />
                   <span className="text-xs">
@@ -115,29 +121,52 @@ export default async function StudentsListPage({
                 </td>
               </tr>
             )}
-            {rows.map(s => (
-              <tr key={s.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                <Td>
-                  <Link href={`/admin/estudiantes/${s.id}`} className="font-medium text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400">
-                    {s.full_name || "—"}
-                  </Link>
-                </Td>
-                <Td><code className="text-xs">{s.email}</code></Td>
-                <Td>{s.current_level}</Td>
-                <Td>{subscriptionTypeEs(s.subscription_type)}</Td>
-                <Td>
-                  <StatusDot status={s.subscription_status} />
-                </Td>
-                <Td>
-                  {s.subscription_type === "monthly_subscription"
-                    ? <span className="text-slate-500 dark:text-slate-400">
-                        {s.classes_per_month ?? "?"}/mes · {moneyFromCents(s.monthly_price_cents, s.currency)}
-                      </span>
-                    : s.classes_remaining}
-                </Td>
-                <Td>{new Date(s.converted_at).toLocaleDateString("es-ES")}</Td>
-              </tr>
-            ))}
+            {rows.map(s => {
+              const ov = overview[s.id] ?? { completed: 0, teacher: null };
+              const total = s.clases_totales ?? 0;
+              // Packs viejos se ajustaron a mano (unidades de 50 min, grupales que no cuentan…):
+              // el saldo real es totales − restantes, no el conteo bruto de clases completadas.
+              const done = total > 0 ? Math.max(0, total - s.classes_remaining) : ov.completed;
+              const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+              return (
+                <tr key={s.id} className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 ${s.active ? "" : "opacity-50"}`}>
+                  <Td>
+                    <Link href={`/admin/estudiantes/${s.id}`} className="font-medium text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400">
+                      {s.full_name || "—"}
+                    </Link>
+                    <div className="text-xs text-slate-400"><code>{s.email}</code></div>
+                  </Td>
+                  <Td>{ov.teacher ?? <span className="text-slate-400">—</span>}</Td>
+                  <Td>
+                    <span className="font-medium">{s.current_level}</span>
+                    <span className="text-slate-400 mx-1">→</span>
+                    <span className="font-medium">{goalLevelEs(s.goal)}</span>
+                  </Td>
+                  <Td>{ritmoLabelEs(s)}</Td>
+                  <Td><StatusDot status={s.subscription_status} /></Td>
+                  <Td>
+                    {total > 0 ? (
+                      <div className="flex items-center gap-2" title={`${ov.completed} clases completadas en la plataforma`}>
+                        <div className="h-1.5 w-20 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                          <div className="h-full bg-brand-500" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="tabular-nums text-xs text-slate-600 dark:text-slate-300">
+                          {done}/{total} · {pct}%
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">{ov.completed} hechas</span>
+                    )}
+                  </Td>
+                  <Td>
+                    <span className={`tabular-nums font-medium ${s.classes_remaining <= 4 ? "text-red-600 dark:text-red-400" : ""}`}>
+                      {s.classes_remaining}
+                    </span>
+                  </Td>
+                  <Td className="text-xs text-slate-500">{new Date(s.converted_at).toLocaleDateString("es-ES")}</Td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -150,8 +179,8 @@ export default async function StudentsListPage({
 function Th({ children }: { children: React.ReactNode }) {
   return <th className="px-3 py-2 font-medium whitespace-nowrap">{children}</th>;
 }
-function Td({ children }: { children: React.ReactNode }) {
-  return <td className="px-3 py-2 whitespace-nowrap">{children}</td>;
+function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <td className={`px-3 py-2 whitespace-nowrap ${className}`}>{children}</td>;
 }
 
 function StatusDot({ status }: { status: string }) {

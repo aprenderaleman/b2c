@@ -6,31 +6,22 @@ import {
   RITMOS,
   ONE_TIME_PACKS,
   KIDS_PACK,
+  GOAL_CLASSES,
   type RitmoId,
   type GoalId,
 } from "@/lib/trial-packs";
 
 type PlanCategory = "subscription" | "one_time" | "kids";
 
-const CEFR_LEVELS = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"] as const;
-
-const ONE_TIME_CLASSES: Record<GoalId, number> = {
-  a1_a2: 36,
-  b1: 48,
-  b2: 48,
-  c1: 60,
-  fluidez_total: 96,
-};
+const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1"] as const;
 
 function defaultLevelFrom(level: string | null | undefined): typeof CEFR_LEVELS[number] {
-  if (!level) return "A0";
-  if (level.startsWith("A1")) return "A1";
+  if (!level) return "A1";
   if (level.startsWith("A2")) return "A2";
   if (level.startsWith("B1")) return "B1";
   if (level.startsWith("B2")) return "B2";
-  if (level.startsWith("C1")) return "C1";
-  if (level.startsWith("C2")) return "C2";
-  return "A0";
+  if (level.startsWith("C")) return "C1";
+  return "A1";
 }
 
 type Props = {
@@ -74,15 +65,15 @@ export function ConfirmPaymentModal({
 
   const summary = (() => {
     if (category === "subscription" && selectedGoal) {
-      const totalClasses = selectedRitmo.classesPerMonth * selectedGoal.months;
+      const totalClasses = selectedGoal.classes;
       return {
         classes: totalClasses,
-        detail: `${selectedRitmo.classesPerMonth} clases/mes x ${selectedGoal.months} meses = ${totalClasses} clases`,
+        detail: `${totalClasses} clases · ${selectedRitmo.classesPerMonth} clases/mes (~${selectedGoal.months} meses)`,
         price: `${selectedRitmo.pricePerMonth}€/mes`,
       };
     }
     if (category === "one_time" && selectedOneTime) {
-      const classes = ONE_TIME_CLASSES[oneTimeGoal];
+      const classes = GOAL_CLASSES[oneTimeGoal];
       return {
         classes,
         detail: `${classes} clases incluidas`,
@@ -123,7 +114,7 @@ export function ConfirmPaymentModal({
         } else if (category === "one_time") {
           packId = oneTimeGoal;
           subscriptionType = "package";
-          classesRemaining = ONE_TIME_CLASSES[oneTimeGoal];
+          classesRemaining = GOAL_CLASSES[oneTimeGoal];
         } else {
           packId = "kids";
           subscriptionType = "package";
@@ -259,7 +250,7 @@ export function ConfirmPaymentModal({
                 >
                   {selectedRitmo.goals.map((g) => (
                     <option key={g.id} value={g.id}>
-                      {g.label} ({g.months} meses)
+                      {g.label} ({g.classes} clases · ~{g.months} meses)
                     </option>
                   ))}
                 </select>

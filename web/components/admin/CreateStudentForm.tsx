@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { COUNTRY_CODES } from "@/lib/phone";
 
-const LEVELS = ["A0","A1","A2","B1","B2","C1","C2"] as const;
+const LEVELS = ["A1","A2","B1","B2","C1"] as const;
 const SUB_TYPES = ["package","monthly_subscription","single_classes","combined"] as const;
 
 export function CreateStudentForm() {
@@ -17,7 +17,7 @@ export function CreateStudentForm() {
   const [cc, setCc] = useState("+49");
   const [phoneLocal, setPhoneLocal] = useState("");
   const [language, setLanguage] = useState<"es"|"de">("es");
-  const [level, setLevel] = useState("A0");
+  const [level, setLevel] = useState("A1");
   const [goal, setGoal] = useState("");
   const [subType, setSubType] = useState<typeof SUB_TYPES[number]>("package");
   const [classesPurchased, setClassesPurchased] = useState(96);

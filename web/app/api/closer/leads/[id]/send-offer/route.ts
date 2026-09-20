@@ -5,11 +5,9 @@ import { buildPagoUrl } from "@/lib/enrollment-checkout";
 import { startChain } from "@/lib/chain-engine";
 import { logCloserAction } from "@/lib/closer-actions";
 import { sendWhatsappText } from "@/lib/whatsapp";
-import { RITMOS, ONE_TIME_PACKS, type RitmoId, type GoalId } from "@/lib/trial-packs";
+import { RITMOS, ONE_TIME_PACKS, GOAL_CLASSES, type RitmoId, type GoalId } from "@/lib/trial-packs";
 
-const ONE_TIME_CLASSES: Record<GoalId, number> = {
-  a1_a2: 32, b1: 48, b2: 48, c1: 64, fluidez_total: 96,
-};
+const ONE_TIME_CLASSES = GOAL_CLASSES;
 
 const ESTANDAR_CLASSES_PER_MONTH = 8;
 
@@ -19,7 +17,7 @@ const MONTH_NAMES = [
 ];
 
 const GOAL_SHORT_LABELS: Record<GoalId, string> = {
-  a1_a2: "A1-A2", b1: "B1", b2: "B2", c1: "C1", fluidez_total: "Fluidez Total",
+  a1_a2: "A2", b1: "B1", b2: "B2", c1: "C1", fluidez_total: "Fluidez Total",
 };
 
 function computeFechaLlegada(months: number): string {
@@ -82,7 +80,7 @@ export async function POST(
     meta = goalId;
     ritmo = ritmoId;
     tipo_pago = "suscripcion";
-    clases_totales = g.months * r.classesPerMonth;
+    clases_totales = g.classes;
     clases_por_mes = r.classesPerMonth;
     importe_cents = g.totalCents;
     monthlyPriceCents = r.pricePerMonth * 100;

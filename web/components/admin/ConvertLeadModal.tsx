@@ -14,20 +14,17 @@ type Lead = {
   goal:         string | null;
 };
 
-const CEFR_LEVELS = ["A0", "A1", "A2", "B1", "B2", "C1", "C2"] as const;
+const CEFR_LEVELS = ["A1", "A2", "B1", "B2", "C1"] as const;
 
+// Los estudiantes empiezan en A1: el "A0" del lead es autodeclaración, no nivel de curso.
 function defaultLevelFrom(lead: Lead): typeof CEFR_LEVELS[number] {
   switch (lead.german_level) {
-    case "A0":    return "A0";
-    case "A1.1":  return "A1";
-    case "A1.2":  return "A1";
-    case "A1-A2": return "A1";
     case "A2.1":  return "A2";
     case "A2.2":  return "A2";
     case "B1":    return "B1";
     case "B2":    return "B2";
     case "B2+":   return "B2";
-    default:      return "A0";
+    default:      return "A1";
   }
 }
 

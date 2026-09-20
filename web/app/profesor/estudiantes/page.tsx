@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
-import { getTeacherByUserId } from "@/lib/academy";
+import { getTeacherByUserId, goalLevelEs, ritmoLabelEs, subscriptionStatusEs } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { ViewAsStudentButton } from "@/components/teacher/ViewAsStudentButton";
 import { getClassBalance } from "@/lib/class-balance";
@@ -8,11 +8,28 @@ import { getClassBalance } from "@/lib/class-balance";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mis estudiantes · Profesor" };
 
-/**
- * Unique list of students the teacher has taught or is scheduled to teach.
- * Derives from class_participants joined to classes where
- * teacher_id = me.
- */
+type StudentCore = {
+  current_level: string;
+  goal: string | null;
+  subscription_type: string;
+  subscription_status: string;
+  classes_per_month: number | null;
+  monthly_price_cents: number | null;
+  classes_remaining: number | null;
+  clases_totales: number | null;
+  oferta_id: string | null;
+  users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
+};
+
+type Item = {
+  id: string; name: string | null; email: string;
+  level: string; goal: string | null;
+  subscription_type: string; subscription_status: string;
+  classes_per_month: number | null; monthly_price_cents: number | null;
+  total: number | null; remaining: number | null;
+  hasOferta: boolean; disponibles: number | null;
+};
+
 export default async function TeacherStudentsPage() {
   const session = await requireRoleWithImpersonation(
     ["teacher", "admin", "superadmin"],
@@ -31,74 +48,52 @@ export default async function TeacherStudentsPage() {
   }
 
   const sb = supabaseAdmin();
-  // Source of truth: students in an active group assigned to this teacher.
+  // Fuente de verdad: alumnos en un grupo activo asignado a este profesor.
   const { data: viaGroups } = await sb.from("student_group_members")
     .select(`
       student_id,
-      students!inner(current_level, classes_remaining, oferta_id, clases_totales, users!inner(full_name, email)),
+      students!inner(
+        current_level, goal, subscription_type, subscription_status,
+        classes_per_month, monthly_price_cents, classes_remaining, clases_totales, oferta_id,
+        users!inner(full_name, email, active)
+      ),
       group:student_groups!inner(teacher_id, active)
     `)
     .eq("group.teacher_id", me.id)
-    .eq("group.active", true);
+    .eq("group.active", true)
+    .eq("students.users.active", true);
 
-  type R = {
-    student_id: string;
-    students: {
-      current_level: string;
-      classes_remaining: number | null;
-      oferta_id: string | null;
-      clases_totales: number | null;
-      users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
-    } | Array<{
-      current_level: string;
-      classes_remaining: number | null;
-      oferta_id: string | null;
-      clases_totales: number | null;
-      users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
-    }>;
-  };
-
-  type Item = {
-    id: string; name: string | null; email: string; level: string;
-    classesRemaining: number | null; hasOferta: boolean;
-    disponibles: number | null; desbloqueadas: number | null;
-  };
   const seen = new Map<string, Item>();
-  const ingest = (rows: R[]) => {
-    for (const r of rows) {
-      if (seen.has(r.student_id)) continue;
-      const s = Array.isArray(r.students) ? r.students[0] : r.students;
-      if (!s) continue;
-      const u = Array.isArray(s.users) ? s.users[0] : s.users;
-      seen.set(r.student_id, {
-        id:    r.student_id,
-        name:  u?.full_name ?? null,
-        email: u?.email ?? "",
-        level: s.current_level,
-        classesRemaining: s.classes_remaining ?? null,
-        hasOferta: !!s.oferta_id || s.clases_totales != null,
-        disponibles: null,
-        desbloqueadas: null,
-      });
-    }
-  };
-  ingest((viaGroups ?? []) as R[]);
+  for (const r of (viaGroups ?? []) as Array<{ student_id: string; students: StudentCore | StudentCore[] }>) {
+    if (seen.has(r.student_id)) continue;
+    const s = Array.isArray(r.students) ? r.students[0] : r.students;
+    if (!s) continue;
+    const u = Array.isArray(s.users) ? s.users[0] : s.users;
+    seen.set(r.student_id, {
+      id: r.student_id,
+      name: u?.full_name ?? null,
+      email: u?.email ?? "",
+      level: s.current_level,
+      goal: s.goal,
+      subscription_type: s.subscription_type,
+      subscription_status: s.subscription_status,
+      classes_per_month: s.classes_per_month,
+      monthly_price_cents: s.monthly_price_cents,
+      total: s.clases_totales,
+      remaining: s.classes_remaining,
+      hasOferta: !!s.oferta_id || s.clases_totales != null,
+      disponibles: null,
+    });
+  }
 
-  // Alumnos del Método (con oferta): la agenda descuenta del balance
-  // MENSUAL (desbloqueadas - consumidas - agendadas), no del total del
-  // pack. Caso Jonathan/Nancy 2026-08-20: la lista decía "45 clases"
-  // (total restante) pero al agendar solo había 5 disponibles del mes.
-  // Mostramos AMBOS números para que el profe sepa cuántas puede
-  // agendar YA y cuántas quedan del pack.
+  // "Agendables ahora" = balance mensual (desbloqueadas − consumidas − agendadas),
+  // distinto del total restante del pack. Se muestran ambos.
   await Promise.all(
     Array.from(seen.values())
       .filter(s => s.hasOferta)
       .map(async (s) => {
         const b = await getClassBalance(s.id).catch(() => null);
-        if (b) {
-          s.disponibles = b.disponibles;
-          s.desbloqueadas = b.desbloqueadas;
-        }
+        if (b) s.disponibles = b.disponibles;
       }),
   );
 
@@ -109,67 +104,106 @@ export default async function TeacherStudentsPage() {
       <header>
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Mis estudiantes</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          {list.length} estudiante{list.length === 1 ? "" : "s"} a los que das clase.
+          {list.length} estudiante{list.length === 1 ? "" : "s"} a los que das clase. Los datos se actualizan solos al completar cada clase.
         </p>
       </header>
 
-      <section className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 overflow-hidden">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
         {list.length === 0 ? (
           <p className="p-6 text-sm text-slate-500 dark:text-slate-400">
             Aún no te han asignado estudiantes. Aparecerán aquí cuando el admin agende una clase contigo.
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-            {list.map(s => (
-              <li key={s.id} className="flex items-center gap-2 px-5 py-3 hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
-                <Link
-                  href={`/profesor/estudiantes/${s.id}`}
-                  className="flex flex-1 min-w-0 items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
-                      {s.name ?? s.email}
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-mono truncate">{s.email}</div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    {s.hasOferta && s.disponibles != null ? (
-                      <span className="text-right">
-                        <span className={`block text-xs font-semibold tabular-nums ${
-                          s.disponibles <= 1
-                            ? "text-red-600 dark:text-red-400"
-                            : s.disponibles <= 3
-                              ? "text-amber-600 dark:text-amber-400"
-                              : "text-emerald-600 dark:text-emerald-400"
-                        }`}>
-                          {s.disponibles} agendable{s.disponibles === 1 ? "" : "s"} ahora
-                        </span>
-                        {s.classesRemaining != null && (
-                          <span className="block text-[10px] text-slate-500 dark:text-slate-400 tabular-nums">
-                            {s.classesRemaining} restantes del pack
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 text-left text-slate-600 dark:text-slate-300">
+              <tr>
+                <Th>Nombre</Th>
+                <Th>Nivel → Meta</Th>
+                <Th>Ritmo</Th>
+                <Th>Estado</Th>
+                <Th>Progreso</Th>
+                <Th>Restantes</Th>
+                <Th>Agendables ahora</Th>
+                <Th></Th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
+              {list.map(s => {
+                const total = s.total ?? 0;
+                const remaining = s.remaining ?? 0;
+                const done = Math.max(0, total - remaining);
+                const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
+                return (
+                  <tr key={s.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                    <Td>
+                      <Link href={`/profesor/estudiantes/${s.id}`} className="font-medium text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400">
+                        {s.name ?? s.email}
+                      </Link>
+                      <div className="text-xs text-slate-400 font-mono">{s.email}</div>
+                    </Td>
+                    <Td>
+                      <span className="font-medium">{s.level}</span>
+                      <span className="text-slate-400 mx-1">→</span>
+                      <span className="font-medium">{goalLevelEs(s.goal)}</span>
+                    </Td>
+                    <Td>{ritmoLabelEs(s)}</Td>
+                    <Td><StatusDot status={s.subscription_status} /></Td>
+                    <Td>
+                      {total > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-20 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                            <div className="h-full bg-brand-500" style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className="tabular-nums text-xs text-slate-600 dark:text-slate-300">
+                            {done}/{total} · {pct}%
                           </span>
-                        )}
+                        </div>
+                      ) : <span className="text-xs text-slate-400">—</span>}
+                    </Td>
+                    <Td>
+                      <span className={`tabular-nums font-medium ${remaining <= 4 ? "text-red-600 dark:text-red-400" : ""}`}>
+                        {s.remaining ?? "—"}
                       </span>
-                    ) : s.classesRemaining != null && (
-                      <span className={`text-xs font-medium tabular-nums ${
-                        s.classesRemaining <= 5
-                          ? "text-red-600 dark:text-red-400"
-                          : s.classesRemaining <= 15
-                            ? "text-amber-600 dark:text-amber-400"
-                            : "text-emerald-600 dark:text-emerald-400"
-                      }`}>
-                        {s.classesRemaining} clase{s.classesRemaining === 1 ? "" : "s"}
-                      </span>
-                    )}
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{s.level}</span>
-                  </div>
-                </Link>
-                <ViewAsStudentButton studentId={s.id} />
-              </li>
-            ))}
-          </ul>
+                    </Td>
+                    <Td>
+                      {s.hasOferta && s.disponibles != null ? (
+                        <span className={`text-xs font-semibold tabular-nums ${
+                          s.disponibles <= 1 ? "text-red-600 dark:text-red-400"
+                          : s.disponibles <= 3 ? "text-amber-600 dark:text-amber-400"
+                          : "text-emerald-600 dark:text-emerald-400"
+                        }`}>
+                          {s.disponibles}
+                        </span>
+                      ) : <span className="text-xs text-slate-400">—</span>}
+                    </Td>
+                    <Td><ViewAsStudentButton studentId={s.id} /></Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
-      </section>
+      </div>
     </main>
+  );
+}
+
+function Th({ children }: { children?: React.ReactNode }) {
+  return <th className="px-3 py-2 font-medium whitespace-nowrap">{children}</th>;
+}
+function Td({ children }: { children: React.ReactNode }) {
+  return <td className="px-3 py-2 whitespace-nowrap">{children}</td>;
+}
+function StatusDot({ status }: { status: string }) {
+  const color =
+    status === "active"    ? "bg-emerald-500" :
+    status === "paused"    ? "bg-amber-500"   :
+    status === "cancelled" ? "bg-slate-400"   :
+    status === "expired"   ? "bg-red-500"     : "bg-slate-400";
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className={`h-2 w-2 rounded-full ${color}`} aria-hidden />
+      <span className="text-xs text-slate-700 dark:text-slate-300">{subscriptionStatusEs(status)}</span>
+    </span>
   );
 }
