@@ -107,6 +107,10 @@
       "schedule": "15 7 * * *"
     },
     {
+      "path": "/api/cron/dormant-monthly-nudge",
+      "schedule": "*/15 8-13 1,2,3 * *"
+    },
+    {
       "path": "/api/cron/summer-promo-dispatch",
       "schedule": "15 * * * *"
     },
