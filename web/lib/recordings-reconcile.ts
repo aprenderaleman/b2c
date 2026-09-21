@@ -87,8 +87,22 @@ export async function reconcileStaleRecordings(): Promise<ReconcileSummary> {
         continue;
       }
 
-      // EgressStatus is a numeric protobuf enum at runtime; 3 = EGRESS_COMPLETE.
-      const isComplete = (eg.status as unknown) === 3 || (eg.status as unknown) === "EGRESS_COMPLETE";
+      // EgressStatus is a numeric protobuf enum at runtime;
+      // 3 = COMPLETE, 4 = FAILED, 5 = ABORTED, 6 = LIMIT_REACHED.
+      const st = eg.status as unknown;
+      const isComplete = st === 3 || st === "EGRESS_COMPLETE";
+      const isDead =
+        st === 4 || st === "EGRESS_FAILED" ||
+        st === 5 || st === "EGRESS_ABORTED" ||
+        st === 6 || st === "EGRESS_LIMIT_REACHED";
+      if (isDead) {
+        const errMsg = ((eg as unknown as { error?: string }).error || "egress_failed").slice(0, 500);
+        await sb.from("recordings").update({
+          status: "failed", error: errMsg, processed_at: new Date().toISOString(),
+        }).eq("id", r.id);
+        results.push({ egress_id: r.egress_id, outcome: "failed", error: errMsg });
+        continue;
+      }
       if (!isComplete) {
         results.push({ egress_id: r.egress_id, outcome: "pending" });
         continue;
@@ -131,10 +145,21 @@ export async function reconcileStaleRecordings(): Promise<ReconcileSummary> {
         duration_s: durationS,
       });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "unknown";
+      // LiveKit Cloud purges old egresses; listEgress then throws a twirp
+      // "object cannot be found" instead of returning an empty list. That
+      // recording can never resolve — mark it failed so it stops looping.
+      if (/cannot be found|not_found|does not exist/i.test(msg)) {
+        await sb.from("recordings").update({
+          status: "failed", error: "egress_not_found_in_livekit", processed_at: new Date().toISOString(),
+        }).eq("id", r.id).then(() => {}, () => {});
+        results.push({ egress_id: r.egress_id, outcome: "not_found" });
+        continue;
+      }
       results.push({
         egress_id: r.egress_id,
         outcome:   "error",
-        error:     e instanceof Error ? e.message : "unknown",
+        error:     msg,
       });
     }
   }
