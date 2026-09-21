@@ -12,13 +12,20 @@ export async function createStudentNotesDoc(
 ): Promise<DocResult> {
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!json) {
+    lastDocsError = "GOOGLE_SERVICE_ACCOUNT_JSON no definida";
     console.warn("[google-docs] GOOGLE_SERVICE_ACCOUNT_JSON not set, skipping doc creation");
     return null;
   }
 
   let parsed: { client_email?: string; private_key?: string };
-  try { parsed = JSON.parse(json); } catch { return null; }
-  if (!parsed.client_email || !parsed.private_key) return null;
+  try { parsed = JSON.parse(json); } catch {
+    lastDocsError = `GOOGLE_SERVICE_ACCOUNT_JSON no es JSON válido (len=${json.length}, empieza "${json.slice(0, 12)}")`;
+    return null;
+  }
+  if (!parsed.client_email || !parsed.private_key) {
+    lastDocsError = `GOOGLE_SERVICE_ACCOUNT_JSON sin client_email/private_key (claves: ${Object.keys(parsed).join(",")})`;
+    return null;
+  }
 
   const { JWT } = await import("google-auth-library");
   const { drive } = await import("@googleapis/drive");
