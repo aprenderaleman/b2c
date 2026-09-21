@@ -140,6 +140,8 @@ const ALLOWED_WA_KINDS = new Set([
   // Absent-interest: mandamos pregunta, si dice SÍ → link, si NO → cierre
   "trial_absent_interest_yes",
   "trial_absent_interest_close",
+  // Hitos de clases restantes 10/5/0 de Stiv (cron pack-alerts, 2026-09-21)
+  "pack_milestone",
   "admin_manual",  // bypass para Gelfis desde endpoints admin
   // Notificación al profesor cuando su lead convierte (post-conversion-flow)
   "teacher_conversion_notify",

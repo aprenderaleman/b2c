@@ -770,6 +770,7 @@ import {
   renderPackLowBalance,
   type PackLowBalanceVars,
 } from "./templates/pack-low-balance";
+import { renderPackMilestone, type PackMilestoneVars } from "./templates/pack-milestone";
 
 /**
  * Email when a student completes all classes in their pack.
@@ -780,6 +781,15 @@ export async function sendPackCompletedEmail(
   vars: PackCompletedVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderPackCompleted(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/** Hito de clases restantes (10 / 5 / 0) — cuerpo ya renderizado desde message_templates. */
+export async function sendPackMilestoneEmail(
+  to: string,
+  vars: PackMilestoneVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderPackMilestone(vars);
   return sendRaw(to, subject, html, text);
 }
 

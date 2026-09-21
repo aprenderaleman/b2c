@@ -11,6 +11,7 @@ type AutoConvertOpts = {
   leadId: string;
   ofertaId: string;
   stripeCustomerId: string;
+  stripeSubscriptionId?: string | null;
   stripePiId: string;
   stripeInvoiceId?: string | null;
   amountCents: number;
@@ -104,6 +105,7 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     }
     if (of.tipo_pago === "suscripcion") {
       lateFields.stripe_subscription_status = "active";
+      if (opts.stripeSubscriptionId) lateFields.stripe_subscription_id = opts.stripeSubscriptionId;
     }
     const { error: lateErr } = await sb.from("students").update(lateFields).eq("id", es.id);
     if (lateErr) {
@@ -176,6 +178,7 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     };
     if (of.tipo_pago === "suscripcion") {
       updateFields.stripe_subscription_status = "active";
+      if (opts.stripeSubscriptionId) updateFields.stripe_subscription_id = opts.stripeSubscriptionId;
     }
 
     await sb.from("students").update(updateFields).eq("id", result.studentId);

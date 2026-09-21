@@ -18,7 +18,6 @@ import { getPendingReviewForStudent } from "@/lib/class-reviews";
 import { ClassReviewPrompt } from "@/components/student/ClassReviewPrompt";
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
 import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
-import { RenewButton } from "@/components/student/RenewButton";
 
 export const dynamic = "force-dynamic";
 
@@ -204,7 +203,6 @@ function PlanSection({ student, icalUrl }: {
         </div>
         <div className="flex items-center gap-2">
           {icalUrl && <CalendarSyncButton icalUrl={icalUrl} />}
-          {isSubscription && <RenewButton />}
         </div>
       </div>
 

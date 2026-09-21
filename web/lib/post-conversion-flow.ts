@@ -90,6 +90,21 @@ async function setupStudentWithTeacher(
 
   const doc = await createStudentNotesDoc(studentName, level ?? "A1", teacherName, teacherEmail);
   const documentUrl = doc?.url ?? null;
+  if (!documentUrl) {
+    // Sept 2026: 7 alumnos seguidos sin documento porque el fallo era silencioso.
+    // Avisar al admin (campana) para que lo cree desde la ficha del alumno.
+    console.error(`[post-conversion] documento de apuntes NO creado para ${studentName} (${studentId}) — revisar GOOGLE_SERVICE_ACCOUNT_JSON`);
+    const { data: admins } = await sb.from("users").select("id").in("role", ["superadmin", "admin"]).eq("active", true);
+    for (const a of (admins ?? []) as Array<{ id: string }>) {
+      await createNotification({
+        user_id: a.id,
+        type: "generic",
+        title: `Sin documento de apuntes: ${studentName}`,
+        body: "No se pudo crear el Google Doc al convertir (¿GOOGLE_SERVICE_ACCOUNT_JSON caducada?). Créalo desde su ficha.",
+        link: `/admin/estudiantes/${studentId}`,
+      }).catch(() => null);
+    }
+  }
 
   const { data: group } = await sb.from("student_groups").insert({
     name: studentName,

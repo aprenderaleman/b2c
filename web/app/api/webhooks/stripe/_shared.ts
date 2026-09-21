@@ -118,11 +118,15 @@ async function handleCheckoutCompleted(
     const stripeCustomerId = typeof session.customer === "string"
       ? session.customer
       : (session.customer as { id: string } | null)?.id ?? "";
+    const stripeSubscriptionId = typeof session.subscription === "string"
+      ? session.subscription
+      : (session.subscription as { id: string } | null)?.id ?? null;
     try {
       await handleFirstPayment({
         leadId,
         ofertaId,
         stripeCustomerId,
+        stripeSubscriptionId,
         stripePiId: paymentIntentId ?? session.id,
         amountCents: amountTotal,
         currency,
@@ -336,9 +340,18 @@ async function handleInvoicePaid(
   const invoiceCustomer = typeof invoice.customer === "string"
     ? invoice.customer
     : (invoice.customer as { id: string } | null)?.id ?? null;
+  // SDK nuevo: invoice.parent.subscription_details.subscription; SDK viejo: invoice.subscription
+  type SubRef = string | { id: string } | null | undefined;
+  const invSub = invoice as unknown as {
+    subscription?: SubRef;
+    parent?: { subscription_details?: { subscription?: SubRef } | null } | null;
+  };
+  const subRef: SubRef = invSub.parent?.subscription_details?.subscription ?? invSub.subscription;
+  const invoiceSubscription = typeof subRef === "string" ? subRef : subRef?.id ?? null;
 
   const student = await resolveStudent(sb, {
     stripeCustomerId: invoiceCustomer,
+    stripeSubscriptionId: invoiceSubscription,
     metadata: (invoice.metadata ?? {}) as Record<string, string>,
     email: customerEmail,
   }, account, `invoice.paid ${invoice.id} · ${amountPaid}¢ ${currency}`);
@@ -500,6 +513,7 @@ async function resolveStudent(
   sb: ReturnType<typeof supabaseAdmin>,
   opts: {
     stripeCustomerId?: string | null;
+    stripeSubscriptionId?: string | null;
     metadata?: Record<string, string>;
     email?: string | null;
   },
@@ -512,6 +526,16 @@ async function resolveStudent(
       .from("students")
       .select("id, user_id")
       .eq("stripe_customer_id", opts.stripeCustomerId)
+      .maybeSingle();
+    if (data) return data as { id: string; user_id: string };
+  }
+
+  // 1b. By stripe_subscription_id (guardado en la primera compra)
+  if (opts.stripeSubscriptionId) {
+    const { data } = await sb
+      .from("students")
+      .select("id, user_id")
+      .eq("stripe_subscription_id", opts.stripeSubscriptionId)
       .maybeSingle();
     if (data) return data as { id: string; user_id: string };
   }

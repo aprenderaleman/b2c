@@ -24,12 +24,13 @@ const MONTH_NAMES = [
   "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
 ];
 
+// Meta = nivel al que llega el alumno (regla Gelfis 2026-09-21).
 const GOAL_LABELS: Record<string, string> = {
-  a1_a2:         "A1-A2",
+  a1_a2:         "A2",
   b1:            "B1",
   b2:            "B2",
   c1:            "C1",
-  fluidez_total: "Fluidez Total",
+  fluidez_total: "Fluidez Total (A1→B1)",
   kids:          "Pack Kids",
 };
 
