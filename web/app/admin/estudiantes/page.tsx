@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getStudents, getStudentsOverview, goalLevelEs, ritmoLabelEs, subscriptionStatusEs } from "@/lib/academy";
+import { adminDriveStatus } from "@/lib/admin-google-drive";
 import RefreshButton from "./RefreshButton";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +29,33 @@ export default async function StudentsListPage({
   };
 
   const { rows, total } = await getStudents(filter);
-  const overview = await getStudentsOverview(rows.map(r => r.id));
+  const [overview, drive] = await Promise.all([
+    getStudentsOverview(rows.map(r => r.id)),
+    adminDriveStatus(),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const driveFlash = typeof sp.google_drive === "string" ? sp.google_drive : null;
 
   return (
     <main className="space-y-5">
+      {driveFlash === "connected" && (
+        <p className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/30 px-4 py-2 text-sm text-emerald-800 dark:text-emerald-200">
+          Google Drive conectado. Los documentos de apuntes que falten se crean en el próximo cron (o ahora, si lo lanzas).
+        </p>
+      )}
+      {driveFlash === "error" && (
+        <p className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/30 px-4 py-2 text-sm text-red-800 dark:text-red-200">
+          No se pudo conectar Google Drive ({typeof sp.reason === "string" ? sp.reason : "error"}). Inténtalo de nuevo.
+        </p>
+      )}
+      {!drive.connected && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/30 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+          <span>
+            <strong>Documentos de apuntes desactivados:</strong> conecta tu Google Drive para que cada alumno nuevo reciba su "Apuntes de Clase" automáticamente.
+          </span>
+          <a href="/api/admin/google-drive/connect" className="btn-primary text-xs whitespace-nowrap">Conectar Google Drive</a>
+        </div>
+      )}
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Estudiantes</h1>
@@ -41,6 +64,11 @@ export default async function StudentsListPage({
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {drive.connected && (
+            <span className="text-xs text-slate-500 dark:text-slate-400" title={`Conectado desde ${drive.since ?? ""}`}>
+              Drive: {drive.email ?? "conectado"}
+            </span>
+          )}
           <RefreshButton />
           <a
             href="/admin/estudiantes/nuevo"

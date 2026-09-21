@@ -1,15 +1,55 @@
 import { supabaseAdmin } from "./supabase";
+import { getAdminDriveAccessToken } from "./admin-google-drive";
 
 const APUNTES_FOLDER_ID = "1CcbMuHxOZtcj6TB8-DI6C9I2-88op0s2";
 
 type DocResult = { id: string; url: string } | null;
 
+/**
+ * Crea "Apuntes de Clase - <alumno>" en la carpeta de Apuntes y lo comparte
+ * con el profe. Preferimos el Drive del admin (OAuth, dueño = Gelfis);
+ * la service account queda como fallback (desde sept 2026 Google no le da
+ * almacenamiento: "storage quota has been exceeded").
+ */
 export async function createStudentNotesDoc(
   studentName: string,
   level: string,
   teacherName: string,
   shareWithEmail: string | null,
 ): Promise<DocResult> {
+  const adminToken = await getAdminDriveAccessToken();
+  if (adminToken) {
+    try {
+      const { OAuth2Client } = await import("google-auth-library");
+      const { drive } = await import("@googleapis/drive");
+      const auth = new OAuth2Client();
+      auth.setCredentials({ access_token: adminToken });
+      const driveApi = drive({ version: "v3", auth });
+      const created = await driveApi.files.create({
+        requestBody: {
+          name: `Apuntes de Clase - ${studentName}`,
+          mimeType: "application/vnd.google-apps.document",
+          parents: [APUNTES_FOLDER_ID],
+        },
+      });
+      const fileId = created.data.id;
+      if (fileId) {
+        if (shareWithEmail) {
+          await driveApi.permissions.create({
+            fileId,
+            sendNotificationEmail: false,
+            requestBody: { type: "user", role: "writer", emailAddress: shareWithEmail },
+          }).catch(e => console.warn("[google-docs] share with teacher failed:", e instanceof Error ? e.message : e));
+        }
+        lastDocsError = null;
+        return { id: fileId, url: `https://docs.google.com/document/d/${fileId}/edit` };
+      }
+    } catch (e) {
+      lastDocsError = `admin drive: ${e instanceof Error ? e.message : String(e)}`;
+      console.error("[google-docs] admin Drive create failed, probando service account:", lastDocsError);
+    }
+  }
+
   const json = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!json) {
     lastDocsError = "GOOGLE_SERVICE_ACCOUNT_JSON no definida";
