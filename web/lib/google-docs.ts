@@ -53,10 +53,14 @@ export async function createStudentNotesDoc(
     const url = `https://docs.google.com/document/d/${fileId}/edit`;
     return { id: fileId, url };
   } catch (e) {
-    console.error("[google-docs] createStudentNotesDoc failed:", e instanceof Error ? e.message : e);
+    lastDocsError = e instanceof Error ? e.message : String(e);
+    console.error("[google-docs] createStudentNotesDoc failed:", lastDocsError);
     return null;
   }
 }
+
+/** Último error de Drive (para que el cron docs-backfill lo muestre en su respuesta). */
+export let lastDocsError: string | null = null;
 
 export async function getTeacherEmail(teacherId: string): Promise<string | null> {
   const sb = supabaseAdmin();

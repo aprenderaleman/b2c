@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
-import { createStudentNotesDoc, getTeacherEmail } from "@/lib/google-docs";
+import { createStudentNotesDoc, getTeacherEmail, lastDocsError } from "@/lib/google-docs";
 
 /**
  * GET /api/cron/docs-backfill — diario (vercel.json).
@@ -41,7 +41,7 @@ async function run(req: Request) {
 
   type Row = { id: string; current_level: string | null; trial_teacher_id: string | null;
     users: { full_name: string | null } | Array<{ full_name: string | null }> };
-  const results: Array<{ name: string; ok: boolean; url?: string }> = [];
+  const results: Array<{ name: string; ok: boolean; url?: string; error?: string }> = [];
 
   for (const raw of (data ?? []) as Row[]) {
     const u = Array.isArray(raw.users) ? raw.users[0] : raw.users;
@@ -56,7 +56,7 @@ async function run(req: Request) {
       teacherName = tu?.full_name ?? "Profesor";
     }
     const doc = await createStudentNotesDoc(name, raw.current_level ?? "A1", teacherName, teacherEmail);
-    if (!doc) { results.push({ name, ok: false }); continue; }
+    if (!doc) { results.push({ name, ok: false, error: lastDocsError ?? undefined }); continue; }
     await sb.from("students").update({ document_url: doc.url }).eq("id", raw.id);
     const { data: g } = await sb
       .from("student_group_members")
