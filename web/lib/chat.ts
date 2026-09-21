@@ -168,8 +168,47 @@ export async function wireChatsForClass(args: {
 // Queries for the UI
 // =============================================================================
 
+/**
+ * Con quién puede hablar un usuario. Estudiantes: SOLO los profesores de
+ * sus grupos activos (Gelfis 2026-09-21). Cualquier otro rol → null (sin
+ * restricción). Así un alumno no ve ni escribe a un profe antiguo tras un
+ * cambio de profesor, ni a nadie que no le dé clase.
+ */
+export async function allowedChatCounterparts(userId: string): Promise<Set<string> | null> {
+  const sb = supabaseAdmin();
+  const { data: student } = await sb.from("students").select("id").eq("user_id", userId).maybeSingle();
+  if (!student) return null;
+
+  const { data } = await sb
+    .from("student_group_members")
+    .select("student_groups!inner(active, teachers!inner(user_id))")
+    .eq("student_id", (student as { id: string }).id)
+    .eq("student_groups.active", true);
+
+  const first = <T,>(v: T | T[] | null | undefined): T | undefined => (Array.isArray(v) ? v[0] : v ?? undefined);
+  const allowed = new Set<string>();
+  for (const r of (data ?? []) as Array<{ student_groups: unknown }>) {
+    const g = first(r.student_groups as { teachers: unknown } | { teachers: unknown }[]);
+    const t = first(g?.teachers as { user_id: string } | { user_id: string }[]);
+    if (t?.user_id) allowed.add(t.user_id);
+  }
+  return allowed;
+}
+
+/** Participante del chat Y (si es estudiante) todos los demás participantes son sus profes. */
+export async function canAccessChat(chatId: string, userId: string): Promise<boolean> {
+  if (!(await isChatParticipant(chatId, userId))) return false;
+  const allowed = await allowedChatCounterparts(userId);
+  if (!allowed) return true;
+  const sb = supabaseAdmin();
+  const { data } = await sb.from("chat_participants").select("user_id").eq("chat_id", chatId);
+  const others = ((data ?? []) as Array<{ user_id: string }>).map(p => p.user_id).filter(id => id !== userId);
+  return others.length > 0 && others.every(id => allowed.has(id));
+}
+
 export async function listChatsForUser(userId: string): Promise<ChatListItem[]> {
   const sb = supabaseAdmin();
+  const allowed = await allowedChatCounterparts(userId);
 
   const { data: participations } = await sb
     .from("chat_participants")
@@ -238,7 +277,11 @@ export async function listChatsForUser(userId: string): Promise<ChatListItem[]> 
     unreadByChat[r.chat_id] = count;
   }
 
-  return rows.map(r => {
+  return rows.filter(r => {
+    if (!allowed) return true;
+    const others = (byChat[r.chat_id] ?? []).filter(p => p.user_id !== userId);
+    return others.length > 0 && others.every(p => allowed.has(p.user_id));
+  }).map(r => {
     const chat = Array.isArray(r.chat) ? r.chat[0] : r.chat;
     const parts = byChat[r.chat_id] ?? [];
     const others = parts.filter(p => p.user_id !== userId);

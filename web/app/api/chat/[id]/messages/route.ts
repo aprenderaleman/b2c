@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveChatCaller } from "@/lib/chat-auth";
-import { isChatParticipant, listChatMessages, sendMessage } from "@/lib/chat";
+import { canAccessChat, listChatMessages, sendMessage } from "@/lib/chat";
 
 /**
  * GET /api/chat/[id]/messages    → last 100 messages (oldest first)
@@ -28,7 +28,7 @@ export async function GET(
   const userId = caller.userId;
 
   const { id } = await params;
-  if (!(await isChatParticipant(id, userId))) {
+  if (!(await canAccessChat(id, userId))) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
@@ -45,7 +45,7 @@ export async function POST(
   const userId = caller.userId;
 
   const { id } = await params;
-  if (!(await isChatParticipant(id, userId))) {
+  if (!(await canAccessChat(id, userId))) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
