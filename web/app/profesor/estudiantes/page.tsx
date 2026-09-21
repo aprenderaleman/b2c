@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
-import { getTeacherByUserId, goalLevelEs, ritmoLabelEs, subscriptionStatusEs } from "@/lib/academy";
+import { getTeacherByUserId, goalLevelEs, ritmoLabelEs } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { ViewAsStudentButton } from "@/components/teacher/ViewAsStudentButton";
 import { getClassBalance } from "@/lib/class-balance";
@@ -120,10 +120,9 @@ export default async function TeacherStudentsPage() {
                 <Th>Nombre</Th>
                 <Th>Nivel → Meta</Th>
                 <Th>Ritmo</Th>
-                <Th>Estado</Th>
-                <Th>Progreso</Th>
-                <Th>Restantes</Th>
-                <Th>Agendables ahora</Th>
+                <Th>Progreso del plan</Th>
+                <Th>Clases restantes</Th>
+                <Th>Agendables este mes</Th>
                 <Th></Th>
               </tr>
             </thead>
@@ -139,7 +138,6 @@ export default async function TeacherStudentsPage() {
                       <Link href={`/profesor/estudiantes/${s.id}`} className="font-medium text-slate-900 dark:text-slate-100 hover:text-brand-600 dark:hover:text-brand-400">
                         {s.name ?? s.email}
                       </Link>
-                      <div className="text-xs text-slate-400 font-mono">{s.email}</div>
                     </Td>
                     <Td>
                       <span className="font-medium">{s.level}</span>
@@ -147,33 +145,39 @@ export default async function TeacherStudentsPage() {
                       <span className="font-medium">{goalLevelEs(s.goal)}</span>
                     </Td>
                     <Td>{ritmoLabelEs(s)}</Td>
-                    <Td><StatusDot status={s.subscription_status} /></Td>
                     <Td>
                       {total > 0 ? (
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-20 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
-                            <div className="h-full bg-brand-500" style={{ width: `${pct}%` }} />
-                          </div>
-                          <span className="tabular-nums text-xs text-slate-600 dark:text-slate-300">
-                            {done}/{total} · {pct}%
+                        <div className="flex flex-col gap-1">
+                          <span className="tabular-nums text-xs text-slate-700 dark:text-slate-200">
+                            <strong>{done}</strong> dadas de <strong>{total}</strong> contratadas
                           </span>
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 w-24 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                              <div className="h-full bg-brand-500" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="tabular-nums text-[11px] text-slate-500 dark:text-slate-400">{pct}% del plan</span>
+                          </div>
                         </div>
-                      ) : <span className="text-xs text-slate-400">—</span>}
+                      ) : <span className="text-xs text-slate-400">sin contrato</span>}
                     </Td>
                     <Td>
-                      <span className={`tabular-nums font-medium ${remaining <= 4 ? "text-red-600 dark:text-red-400" : ""}`}>
+                      <span className={`tabular-nums font-semibold ${remaining <= 4 ? "text-red-600 dark:text-red-400" : ""}`}>
                         {s.remaining ?? "—"}
                       </span>
+                      <span className="text-xs text-slate-500 dark:text-slate-400"> por dar</span>
                     </Td>
                     <Td>
                       {s.hasOferta && s.disponibles != null ? (
-                        <span className={`text-xs font-semibold tabular-nums ${
-                          s.disponibles <= 1 ? "text-red-600 dark:text-red-400"
-                          : s.disponibles <= 3 ? "text-amber-600 dark:text-amber-400"
-                          : "text-emerald-600 dark:text-emerald-400"
-                        }`}>
-                          {s.disponibles}
-                        </span>
+                        <>
+                          <span className={`text-sm font-semibold tabular-nums ${
+                            s.disponibles <= 1 ? "text-red-600 dark:text-red-400"
+                            : s.disponibles <= 3 ? "text-amber-600 dark:text-amber-400"
+                            : "text-emerald-600 dark:text-emerald-400"
+                          }`}>
+                            {s.disponibles}
+                          </span>
+                          <span className="text-xs text-slate-500 dark:text-slate-400"> puedes agendar</span>
+                        </>
                       ) : <span className="text-xs text-slate-400">—</span>}
                     </Td>
                     <Td><ViewAsStudentButton studentId={s.id} /></Td>
@@ -193,17 +197,4 @@ function Th({ children }: { children?: React.ReactNode }) {
 }
 function Td({ children }: { children: React.ReactNode }) {
   return <td className="px-3 py-2 whitespace-nowrap">{children}</td>;
-}
-function StatusDot({ status }: { status: string }) {
-  const color =
-    status === "active"    ? "bg-emerald-500" :
-    status === "paused"    ? "bg-amber-500"   :
-    status === "cancelled" ? "bg-slate-400"   :
-    status === "expired"   ? "bg-red-500"     : "bg-slate-400";
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className={`h-2 w-2 rounded-full ${color}`} aria-hidden />
-      <span className="text-xs text-slate-700 dark:text-slate-300">{subscriptionStatusEs(status)}</span>
-    </span>
-  );
 }

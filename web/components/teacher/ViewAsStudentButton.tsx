@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 /**
- * "👁 Ver como alumno" — abre SCHULE con el profe logueado como el
+ * "👁 Ver Schule de Estudiante" — abre SCHULE con el profe logueado como el
  * alumno en solo lectura (banner púrpura + auditoría los pone SCHULE).
  * Outline púrpura: acción sensible, no primaria.
  */
@@ -45,7 +45,7 @@ export function ViewAsStudentButton({ studentId }: { studentId: string }) {
                    hover:bg-violet-50 dark:hover:bg-violet-500/10 disabled:opacity-50 transition"
         title="Abrir SCHULE como este alumno (solo lectura)"
       >
-        👁 {busy ? "Abriendo…" : "Ver como alumno"}
+        👁 {busy ? "Abriendo…" : "Ver Schule de Estudiante"}
       </button>
       {err && <span className="text-[10px] text-red-500 max-w-[160px] truncate" title={err}>{err}</span>}
     </span>
