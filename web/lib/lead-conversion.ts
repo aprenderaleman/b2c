@@ -14,6 +14,7 @@ import { getLeadTrialTeacher } from "./trial-compensation";
 import { startChain, cancelActiveChain } from "./chain-engine";
 import { resolveChainVariables } from "./chain-variables";
 import { renderTemplate } from "./message-stats";
+import { normalizeStudentLevel, resolveStudentPlan } from "./student-plan";
 
 export const ConvertBody = z.object({
   email:             z.string().trim().toLowerCase().email(),
@@ -22,8 +23,17 @@ export const ConvertBody = z.object({
   // Gelfis 2026-07-20: TODO en español. Aceptamos el campo por
   // compat con paneles admin viejos, pero lo pisamos a "es".
   language:          z.enum(["es", "de"]).default("es").transform(() => "es" as const),
-  currentLevel:      z.enum(["A0", "A1", "A2", "B1", "B2", "C1", "C2"]),
+  // Acepta lo que venga del lead ("A0", "A1.1", "B2+", "unsure"…) y lo
+  // normaliza a nivel de curso A1–C1. Los alumnos empiezan en A1.
+  currentLevel:      z.string().trim().max(20).nullable().default(null).transform(normalizeStudentLevel),
   goal:              z.string().trim().max(300).nullable().default(null),
+  // Meta del catálogo (a1_a2 | b1 | b2 | c1 | fluidez_total) y pack
+  // elegido (ritmo, meta única o kids). Con ellos se resuelve el
+  // contrato real en resolveStudentPlan; classesRemaining queda como
+  // pista legada.
+  goalId:            z.string().trim().max(40).nullable().default(null),
+  packId:            z.string().trim().max(40).nullable().default(null),
+  clasesTotales:     z.coerce.number().int().min(0).max(500).nullable().default(null),
   subscriptionType:  z.enum(["single_classes", "package", "monthly_subscription", "combined"]),
   classesRemaining:  z.coerce.number().int().min(0).max(500).default(0),
   classesPerMonth:   z.coerce.number().int().min(0).max(100).nullable().default(null),
@@ -85,9 +95,21 @@ export async function convertLeadToStudent(
     };
   }
 
-  const monthlyPriceCents = body.monthlyPriceEuros !== null
-    ? Math.round(body.monthlyPriceEuros * 100)
-    : null;
+  const plan = resolveStudentPlan({
+    packId:            body.packId,
+    goalId:            body.goalId,
+    goal:              body.goal,
+    subscriptionType:  body.subscriptionType,
+    classesPerMonth:   body.classesPerMonth,
+    monthlyPriceEuros: body.monthlyPriceEuros,
+    clasesTotales:     body.clasesTotales,
+    classesRemaining:  body.classesRemaining,
+  });
+  const monthlyPriceCents = plan.monthlyPriceCents;
+  const subscriptionType: SubscriptionType =
+    plan.subscriptionType === "monthly_subscription" || body.subscriptionType === "monthly_subscription"
+      ? "monthly_subscription"
+      : (body.subscriptionType as SubscriptionType);
 
   const created = await createStudent({
     email:             body.email,
@@ -96,11 +118,13 @@ export async function convertLeadToStudent(
     language:          body.language,
     leadId:            lead.id,
     currentLevel:      body.currentLevel as CefrLevel,
-    goal:              body.goal,
-    subscriptionType:  body.subscriptionType as SubscriptionType,
-    classesRemaining:  body.classesRemaining,
-    classesPerMonth:   body.classesPerMonth,
-    monthlyPriceCents: monthlyPriceCents,
+    // Meta del catálogo si se pudo resolver; si no, el texto libre del lead.
+    goal:              plan.goal ?? body.goal,
+    subscriptionType,
+    clasesTotales:     plan.clasesTotales,
+    clasesDesbloqueadas: plan.clasesDesbloqueadas,
+    classesPerMonth:   plan.classesPerMonth,
+    monthlyPriceCents,
     currency:          body.currency,
   });
 
@@ -157,11 +181,14 @@ export async function convertLeadToStudent(
     lead_id: lead.id,
     type:    "conversion",
     author:  "gelfis",
-    content: `Converted to student (${body.subscriptionType}). Email: ${body.email}`,
+    content: `Converted to student (${subscriptionType}${plan.ritmo ? ` · ${plan.ritmo}` : ""} · meta ${plan.goal ?? body.goal ?? "?"} · ${plan.clasesTotales} clases). Email: ${body.email}`,
     metadata: {
       user_id:           created.userId,
       student_id:        created.studentId,
-      subscription_type: body.subscriptionType,
+      subscription_type: subscriptionType,
+      goal:              plan.goal,
+      ritmo:             plan.ritmo,
+      clases_totales:    plan.clasesTotales,
     },
   });
 
@@ -186,25 +213,20 @@ export async function convertLeadToStudent(
         .maybeSingle();
       const ofr = ofertaRow as { meta: string; ritmo: string | null; tipo_pago: string; clases_totales: number } | null;
       source = {
-        meta:            ofr?.meta ?? body.goal,
-        ritmo:           ofr?.ritmo ?? null,
+        meta:            ofr?.meta ?? plan.goal ?? body.goal,
+        ritmo:           ofr?.ritmo ?? plan.ritmo,
         tipoPago:        ofr?.tipo_pago ?? null,
-        clasesTotales:   ofr?.clases_totales ?? (body.classesRemaining || null),
+        clasesTotales:   ofr?.clases_totales ?? plan.clasesTotales,
         fechaConversion: new Date(),
       };
     } else {
-      // Conversión manual (transferencia / closer): derivar el ritmo
-      // de las clases/mes cuando el combo coincide con el catálogo.
-      const ritmoFromCadence =
-        body.classesPerMonth === 6  ? "viajero"     :
-        body.classesPerMonth === 8  ? "estandar"    :
-        body.classesPerMonth === 12 ? "intensivo"   :
-        body.classesPerMonth === 16 ? "vip_express" : null;
+      // Conversión manual (transferencia / closer / profe): mismo plan
+      // resuelto que se guardó en el estudiante.
       source = {
-        meta:            body.goal,
-        ritmo:           body.subscriptionType === "monthly_subscription" ? ritmoFromCadence : null,
-        tipoPago:        body.subscriptionType === "monthly_subscription" ? "suscripcion" : "unico",
-        clasesTotales:   body.classesRemaining || null,
+        meta:            plan.goal ?? body.goal,
+        ritmo:           plan.ritmo,
+        tipoPago:        subscriptionType === "monthly_subscription" ? "suscripcion" : "unico",
+        clasesTotales:   plan.clasesTotales,
         fechaConversion: new Date(),
       };
     }
@@ -234,12 +256,12 @@ export async function convertLeadToStudent(
     platformUrl,
     hansUrl,
     schuleUrl,
-    subscriptionLabel:   subscriptionTypeLabel(body.subscriptionType as SubscriptionType, body.language),
+    subscriptionLabel:   subscriptionTypeLabel(subscriptionType, body.language),
     subscriptionDetails: subscriptionDetails(
       {
-        subscriptionType:  body.subscriptionType as SubscriptionType,
-        classesRemaining:  body.classesRemaining,
-        classesPerMonth:   body.classesPerMonth,
+        subscriptionType,
+        classesRemaining:  plan.clasesTotales,
+        classesPerMonth:   plan.classesPerMonth,
         monthlyPriceCents: monthlyPriceCents,
         currency:          body.currency,
       },

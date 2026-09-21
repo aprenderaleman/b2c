@@ -26,7 +26,8 @@ export type CreateStudentInput = {
 
   // Plan
   subscriptionType:    SubscriptionType;
-  classesRemaining:    number;       // 0 for monthly_subscription until first cycle
+  clasesTotales:       number;       // contrato: la DB recalcula classes_remaining a partir de aquí
+  clasesDesbloqueadas: number;       // agendables desde el día 1 (el mes en suscripción, todo en pack)
   classesPerMonth:     number | null;
   monthlyPriceCents:   number | null;
   currency:            "EUR" | "USD" | "CHF";
@@ -87,7 +88,10 @@ export async function createStudent(
       goal:                input.goal,
       subscription_type:   input.subscriptionType,
       subscription_status: "active",
-      classes_remaining:   input.classesRemaining,
+      clases_totales:      input.clasesTotales,
+      classes_purchased:   input.clasesTotales,
+      classes_remaining:   input.clasesTotales,
+      clases_desbloqueadas: input.clasesDesbloqueadas,
       classes_per_month:   input.classesPerMonth,
       monthly_price_cents: input.monthlyPriceCents,
       currency:            input.currency,
@@ -163,7 +167,7 @@ export function subscriptionTypeLabel(
 export function subscriptionDetails(
   input: {
     subscriptionType:  SubscriptionType;
-    classesRemaining:  number;
+    classesRemaining:  number;   // clases del contrato
     classesPerMonth:   number | null;
     monthlyPriceCents: number | null;
     currency:          "EUR" | "USD" | "CHF";

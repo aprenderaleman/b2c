@@ -3,9 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { COUNTRY_CODES } from "@/lib/phone";
+import { GOAL_CLASSES, GOAL_LABELS, RITMOS, type GoalId, type RitmoId } from "@/lib/trial-packs";
 
 const LEVELS = ["A1","A2","B1","B2","C1"] as const;
 const SUB_TYPES = ["package","monthly_subscription","single_classes","combined"] as const;
+const GOAL_IDS = Object.keys(GOAL_CLASSES) as GoalId[];
 
 export function CreateStudentForm() {
   const router = useRouter();
@@ -18,10 +20,13 @@ export function CreateStudentForm() {
   const [phoneLocal, setPhoneLocal] = useState("");
   const [language, setLanguage] = useState<"es"|"de">("es");
   const [level, setLevel] = useState("A1");
-  const [goal, setGoal] = useState("");
-  const [subType, setSubType] = useState<typeof SUB_TYPES[number]>("package");
-  const [classesPurchased, setClassesPurchased] = useState(96);
-  const [classesPerMonth, setClassesPerMonth] = useState<number | "">("");
+  const [goal, setGoal] = useState<GoalId>("a1_a2");
+  const [subType, setSubType] = useState<typeof SUB_TYPES[number]>("monthly_subscription");
+  const [ritmo, setRitmo] = useState<RitmoId>("estandar");
+  // Contrato según la meta del catálogo; editable solo para deals custom.
+  const [classesPurchased, setClassesPurchased] = useState<number>(GOAL_CLASSES.a1_a2);
+  const selectedRitmo = RITMOS.find(r => r.id === ritmo)!;
+  const classesPerMonth = subType === "monthly_subscription" ? selectedRitmo.classesPerMonth : "";
 
   const submit = () => {
     setError(null);
@@ -34,7 +39,7 @@ export function CreateStudentForm() {
         email:     email.trim(),
         language_preference: language,
         current_level:       level,
-        goal:                goal.trim() || null,
+        goal,
         subscription_type:   subType,
         classes_purchased:   classesPurchased,
       };
@@ -84,24 +89,37 @@ export function CreateStudentForm() {
           </select>
         </Field>
       </div>
-      <Field label="Meta / objetivo">
-        <input type="text" value={goal} onChange={e=>setGoal(e.target.value)} className="input-text" placeholder="trabajo, viaje, estudios…" />
-      </Field>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Tipo de suscripción">
-          <select value={subType} onChange={e=>setSubType(e.target.value as typeof SUB_TYPES[number])} className="input-text">
-            {SUB_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g," ")}</option>)}
+        <Field label="Meta (nivel al que llega)">
+          <select
+            value={goal}
+            onChange={e => { const g = e.target.value as GoalId; setGoal(g); setClassesPurchased(GOAL_CLASSES[g]); }}
+            className="input-text"
+          >
+            {GOAL_IDS.map(g => <option key={g} value={g}>{GOAL_LABELS[g]} · {GOAL_CLASSES[g]} clases</option>)}
           </select>
         </Field>
-        <Field label="Clases compradas">
+        <Field label="Clases del contrato">
           <input type="number" min={0} max={500} value={classesPurchased} onChange={e=>setClassesPurchased(Number(e.target.value))} className="input-text" />
         </Field>
       </div>
-      {subType === "monthly_subscription" && (
-        <Field label="Clases por mes">
-          <input type="number" min={1} max={50} value={classesPerMonth} onChange={e=>setClassesPerMonth(e.target.value === "" ? "" : Number(e.target.value))} className="input-text" placeholder="14" />
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Tipo de pago">
+          <select value={subType} onChange={e=>setSubType(e.target.value as typeof SUB_TYPES[number])} className="input-text">
+            <option value="monthly_subscription">Suscripción mensual</option>
+            <option value="package">Pago único (paquete)</option>
+            <option value="single_classes">Clases sueltas</option>
+            <option value="combined">Combinado</option>
+          </select>
         </Field>
-      )}
+        {subType === "monthly_subscription" && (
+          <Field label="Ritmo">
+            <select value={ritmo} onChange={e=>setRitmo(e.target.value as RitmoId)} className="input-text">
+              {RITMOS.map(r => <option key={r.id} value={r.id}>{r.name} · {r.classesPerMonth} cl/mes · {r.pricePerMonth} €</option>)}
+            </select>
+          </Field>
+        )}
+      </div>
 
       {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 

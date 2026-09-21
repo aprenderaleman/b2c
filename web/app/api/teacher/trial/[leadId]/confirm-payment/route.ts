@@ -20,9 +20,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   try { rawBody = await req.json(); }
   catch { return NextResponse.json({ error: "invalid_json" }, { status: 400 }); }
 
-  const { packId, paymentType, ...convertFields } = rawBody;
+  const { packId, paymentType } = rawBody;
 
-  const parsed = ConvertBody.safeParse(convertFields);
+  // packId también va a ConvertBody: con él se resuelve ritmo, meta y contrato.
+  const parsed = ConvertBody.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json(
       { error: "validation_failed", details: parsed.error.flatten() },

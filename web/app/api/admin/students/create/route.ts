@@ -5,6 +5,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { normalizePhone } from "@/lib/phone";
+import { normalizeStudentLevel, resolveStudentPlan } from "@/lib/student-plan";
 
 function generateTempPassword(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -36,10 +37,10 @@ const Body = z.object({
   phone_country:        z.string().trim().regex(/^\+?\d{1,4}$/).optional(),
   language_preference:  z.enum(["es","de"]).default("es"),
 
-  current_level:        z.enum(["A0","A1","A2","B1","B2","C1","C2"]).default("A0"),
+  current_level:        z.string().trim().max(20).nullable().default(null).transform(normalizeStudentLevel),
   goal:                 z.string().trim().max(200).nullable().optional(),
   subscription_type:    z.enum(["single_classes","package","monthly_subscription","combined"]).default("package"),
-  classes_purchased:    z.coerce.number().int().min(0).max(500).default(96),
+  classes_purchased:    z.coerce.number().int().min(0).max(500).nullable().optional(),
   classes_per_month:    z.coerce.number().int().min(1).max(50).nullable().optional(),
 });
 
@@ -116,17 +117,28 @@ export async function POST(req: Request) {
     userId = (newUser as { id: string }).id;
   }
 
-  // Crear students row
+  // Crear students row — mismo plan resuelto que en una conversión de lead.
+  const plan = resolveStudentPlan({
+    goalId:           b.goal ?? null,
+    goal:             b.goal ?? null,
+    subscriptionType: b.subscription_type,
+    classesPerMonth:  b.classes_per_month ?? null,
+    clasesTotales:    b.classes_purchased ?? null,
+  });
   const { data: newStu, error: se } = await sb
     .from("students")
     .insert({
       user_id:             userId,
       current_level:       b.current_level,
-      goal:                b.goal ?? null,
-      subscription_type:   b.subscription_type,
+      goal:                plan.goal ?? b.goal ?? null,
+      subscription_type:   b.subscription_type === "monthly_subscription" || plan.ritmo ? "monthly_subscription" : b.subscription_type,
       subscription_status: "active",
-      classes_purchased:   b.classes_purchased,
-      classes_per_month:   b.classes_per_month ?? null,
+      clases_totales:      plan.clasesTotales,
+      classes_purchased:   plan.clasesTotales,
+      classes_remaining:   plan.clasesTotales,
+      clases_desbloqueadas: plan.clasesDesbloqueadas,
+      classes_per_month:   plan.classesPerMonth,
+      monthly_price_cents: plan.monthlyPriceCents,
     })
     .select("id")
     .single();

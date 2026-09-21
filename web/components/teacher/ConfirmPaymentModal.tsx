@@ -131,6 +131,8 @@ export function ConfirmPaymentModal({
             language: leadLanguage,
             currentLevel,
             goal: leadGoal || null,
+            goalId: category === "subscription" ? goalId : category === "one_time" ? oneTimeGoal : null,
+            clasesTotales: summary?.classes ?? null,
             subscriptionType,
             classesRemaining,
             classesPerMonth,

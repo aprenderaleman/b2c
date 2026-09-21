@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { convertLeadToStudent, type ConvertInput } from "./lead-conversion";
+import { ConvertBody, convertLeadToStudent, type ConvertInput } from "./lead-conversion";
 import { registerCommission, registerBonoCierre } from "./commission-engine";
 import { calculateCommissions } from "./closer-commissions";
 import { cancelActiveChain } from "./chain-engine";
@@ -129,22 +129,25 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     : of.clases_totales;
 
   const levelFromMeta = (ld.meta as Record<string, unknown> | null)?.nivel as string | undefined;
-  const resolvedLevel = ld.german_level ?? levelFromMeta ?? "A1";
+  const cur = (opts.currency ?? "EUR").toUpperCase();
 
+  // La oferta trae meta, ritmo y contrato; ConvertBody normaliza el nivel
+  // y resolveStudentPlan saca clases/mes y precio del catálogo por ritmo.
   const convertInput: ConvertInput = {
     email: ld.email ?? `lead-${ld.id}@placeholder.local`,
     fullName: ld.name ?? "Estudiante",
     phone: ld.whatsapp_normalized,
     language: "es",
-    currentLevel: resolvedLevel as ConvertInput["currentLevel"],
+    currentLevel: ConvertBody.shape.currentLevel.parse(ld.german_level ?? levelFromMeta ?? null),
     goal: of.meta,
+    goalId: of.meta,
+    packId: of.ritmo ?? of.meta,
+    clasesTotales: of.clases_totales,
     subscriptionType,
     classesRemaining,
     classesPerMonth: of.clases_por_mes,
-    monthlyPriceEuros: of.tipo_pago === "suscripcion" && of.clases_por_mes
-      ? Math.round(of.importe_cents / ((of.clases_totales / of.clases_por_mes) * 100)) / 1
-      : null,
-    currency: "EUR",
+    monthlyPriceEuros: null,
+    currency: cur === "USD" || cur === "CHF" ? cur : "EUR",
     horarios: null,
   };
 

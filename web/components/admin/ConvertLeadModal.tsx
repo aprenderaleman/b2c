@@ -2,7 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { TRIAL_PACKS, type PackId } from "@/lib/trial-packs";
+import { TRIAL_PACKS, GOAL_CLASSES, GOAL_LABELS, RITMOS, type PackId, type GoalId } from "@/lib/trial-packs";
+
+const GOAL_IDS = Object.keys(GOAL_CLASSES) as GoalId[];
+const isRitmo = (id: string) => RITMOS.some(r => r.id === id);
 
 type Lead = {
   id:    string;
@@ -44,6 +47,7 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
   const [fullName,     setFullName]     = useState(lead.name);
   const [currentLevel, setCurrentLevel] = useState<typeof CEFR_LEVELS[number]>(defaultLevelFrom(lead));
   const [packId,       setPackId]       = useState<PackId | "">("");
+  const [goalId,       setGoalId]       = useState<GoalId>("a1_a2");
   const [horarios,     setHorarios]     = useState("");
 
   const needsEmail = !email.trim();
@@ -52,6 +56,10 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
   if (!open) return null;
 
   const selectedPack = TRIAL_PACKS.find(p => p.id === packId);
+  const packIsRitmo  = packId !== "" && isRitmo(packId);
+  // Meta efectiva: la del select para ritmos, el propio pack para pagos únicos.
+  const effectiveGoal: GoalId | null = packIsRitmo ? goalId : (GOAL_IDS.includes(packId as GoalId) ? packId as GoalId : null);
+  const contractClasses = effectiveGoal ? GOAL_CLASSES[effectiveGoal] : (selectedPack?.classes ?? 32);
 
   const submit = () => {
     setError(null);
@@ -72,8 +80,10 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
         language: lead.language,
         currentLevel,
         goal: lead.goal || null,
-        subscriptionType: "package" as const,
-        classesRemaining: selectedPack?.classes ?? 32,
+        goalId: effectiveGoal,
+        clasesTotales: contractClasses,
+        subscriptionType: packIsRitmo ? ("monthly_subscription" as const) : ("package" as const),
+        classesRemaining: contractClasses,
         horarios: horarios.trim() || null,
         packId,
         currency: "EUR",
@@ -158,11 +168,34 @@ export function ConvertLeadModal({ lead, open, onClose, convertEndpoint }: Props
               >
                 <option value="">— Selecciona —</option>
                 {TRIAL_PACKS.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} ({p.classes} clases)</option>
+                  <option key={p.id} value={p.id}>
+                    {p.name}{p.category === "subscription" ? "" : ` (${p.classes} clases)`}
+                  </option>
                 ))}
               </select>
             </Field>
           </div>
+
+          {packIsRitmo && (
+            <Field label="Meta (nivel al que llega)">
+              <select
+                value={goalId}
+                onChange={(e) => setGoalId(e.target.value as GoalId)}
+                className="input-text"
+              >
+                {GOAL_IDS.map(g => (
+                  <option key={g} value={g}>{GOAL_LABELS[g]} · {GOAL_CLASSES[g]} clases</option>
+                ))}
+              </select>
+            </Field>
+          )}
+          {packId !== "" && (
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Contrato: <strong>{contractClasses} clases</strong>
+              {packIsRitmo && ` · ${selectedPack?.name}`}
+              {effectiveGoal && ` · meta ${GOAL_LABELS[effectiveGoal]}`}
+            </p>
+          )}
 
           <Field label="Horarios">
             <input

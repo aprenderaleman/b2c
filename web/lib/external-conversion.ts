@@ -1,21 +1,11 @@
 import { supabaseAdmin } from "./supabase";
-import { convertLeadToStudent, type ConvertInput } from "./lead-conversion";
+import { ConvertBody, convertLeadToStudent, type ConvertInput } from "./lead-conversion";
 import { cancelActiveChain } from "./chain-engine";
-
-const GOAL_MAP: Record<string, string> = {
-  a1a2: "a1_a2",
-  a1_a2: "a1_a2",
-  b1: "b1",
-  b2: "b2",
-  c1: "c1",
-  zero_to_b1: "fluidez_total",
-  fluidez_total: "fluidez_total",
-  fluidez: "fluidez_total",
-};
+import { normalizeGoalId } from "./student-plan";
+import { GOAL_CLASSES } from "./trial-packs";
 
 function normalizeGoal(raw: string | null): string | null {
-  if (!raw) return null;
-  return GOAL_MAP[raw.toLowerCase()] ?? raw;
+  return normalizeGoalId(raw) ?? raw;
 }
 
 type ExternalConversionOpts = {
@@ -44,7 +34,7 @@ export async function handleExternalConversion(opts: ExternalConversionOpts): Pr
 
   const { data: lead } = await sb
     .from("leads")
-    .select("id, name, email, whatsapp_normalized, status, converted_to_user_id, meta, closer_id, fbclid")
+    .select("id, name, email, whatsapp_normalized, status, converted_to_user_id, meta, closer_id, fbclid, german_level")
     .eq("id", opts.leadId)
     .maybeSingle();
 
@@ -59,6 +49,7 @@ export async function handleExternalConversion(opts: ExternalConversionOpts): Pr
     converted_to_user_id: string | null;
     meta: Record<string, unknown> | null;
     closer_id: string | null; fbclid: string | null;
+    german_level: string | null;
   };
 
   if (ld.converted_to_user_id) {
@@ -67,10 +58,15 @@ export async function handleExternalConversion(opts: ExternalConversionOpts): Pr
   }
 
   const goal = normalizeGoal(opts.goalId);
+  const goalId = normalizeGoalId(opts.goalId);
   const subscriptionType = opts.mode === "subscription" ? "monthly_subscription" : "package";
+  // El webhook externo puede omitir las clases (llegan como 0): caemos al catálogo por meta.
+  const totalClasses = opts.totalClasses > 0
+    ? opts.totalClasses
+    : (goalId ? GOAL_CLASSES[goalId] : 0);
   const classesRemaining = opts.mode === "subscription"
-    ? (opts.classesPerMonth || opts.totalClasses)
-    : opts.totalClasses;
+    ? (opts.classesPerMonth || totalClasses)
+    : totalClasses;
 
   const levelFromMeta = (ld.meta as Record<string, unknown> | null)?.nivel as string | undefined;
 
@@ -83,8 +79,11 @@ export async function handleExternalConversion(opts: ExternalConversionOpts): Pr
     fullName,
     phone,
     language: "es",
-    currentLevel: (levelFromMeta as ConvertInput["currentLevel"]) ?? "A1",
+    currentLevel: ConvertBody.shape.currentLevel.parse(ld.german_level ?? levelFromMeta ?? null),
     goal,
+    goalId,
+    packId: opts.rhythmId ?? goalId,
+    clasesTotales: totalClasses,
     subscriptionType,
     classesRemaining,
     classesPerMonth: opts.classesPerMonth || null,
@@ -114,7 +113,7 @@ export async function handleExternalConversion(opts: ExternalConversionOpts): Pr
     meta: goal ?? "desconocido",
     ritmo: opts.rhythmId,
     tipo_pago: opts.mode === "subscription" ? "suscripcion" : "unico",
-    clases_totales: opts.totalClasses,
+    clases_totales: totalClasses,
     clases_por_mes: opts.classesPerMonth || null,
     importe_cents: opts.amountCents,
     moneda: opts.currency,
@@ -125,7 +124,7 @@ export async function handleExternalConversion(opts: ExternalConversionOpts): Pr
   const ofertaId = (ofertaRow as { id: string } | null)?.id ?? null;
 
   const updateFields: Record<string, unknown> = {
-    clases_totales: opts.totalClasses,
+    clases_totales: totalClasses,
     clases_desbloqueadas: classesRemaining,
     // OJO: students_conversion_source_check solo permite
     // stripe_auto | manual | legacy. El origen externo queda en el
