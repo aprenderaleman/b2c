@@ -47,6 +47,21 @@ const MAX_LEADS_PER_TICK = 20;   // limitado por rate limit interno WA (15s/env�
 const DORMANT_DAYS = 30;
 const DEDUPE_DAYS  = 25;
 
+/**
+ * Fecha de arranque del sistema. Solo notificamos leads cuya
+ * `updated_at` sea >= esta fecha — o sea, leads que han tenido
+ * actividad después del deploy inicial. Excluye la cola histórica
+ * de ~336 leads viejos con updated_at anterior (Gelfis 2026-09-21:
+ * "de ahora en adelante los viejos no").
+ *
+ * Efecto práctico: el primer lead que reciba el nudge lo hará el
+ * primer día 1 del mes después de que su actividad más reciente
+ * cumpla 30 días. Si el sistema arranca 2026-09-21, un lead cuya
+ * última actividad sea 2026-09-25 podría recibir su primer nudge
+ * el 2026-11-01 (primera fecha de nudge después de +30d).
+ */
+const DORMANT_SYSTEM_START = "2026-09-21T00:00:00Z";
+
 async function run(req: Request) {
   if (!authorised(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -161,6 +176,7 @@ async function fallbackCandidates(
     .select("id, updated_at")
     .is("converted_at", null)
     .not("whatsapp_normalized", "is", null)
+    .gte("updated_at", DORMANT_SYSTEM_START)   // cutoff histórico: solo leads del sistema nuevo
     .lt("updated_at", dormantCutoff)
     .order("updated_at", { ascending: true })
     .limit(limit * 5);   // margen amplio para descartar los que tienen chain/clase futura o ya nudgeados
