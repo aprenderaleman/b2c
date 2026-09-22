@@ -150,6 +150,7 @@ const LANDING_META: Record<string, LandingMeta> = {
   "meta-ads-paid":          { label: "Meta Ads · 10€ depósito",     sourceLabel: "Meta Paid",sourceIcon: "💎", sourceCls: SRC_META_ADS  },
   "clase-profe-sabine":     { label: "Reel Meta · Sabine",          sourceLabel: "Meta Reel",sourceIcon: "🎬", sourceCls: SRC_META_ADS  },
   "clase-profe-jonathan":   { label: "Reel Meta · Jonathan",        sourceLabel: "Meta Reel",sourceIcon: "🎬", sourceCls: SRC_META_ADS  },
+  "clase-profe-thomas":     { label: "Reel Meta · Thomas",          sourceLabel: "Meta Reel",sourceIcon: "🎬", sourceCls: SRC_META_ADS  },
   "clase-profe-generico":   { label: "Landing /clase-profe (sin profe)",sourceLabel: "Meta Reel",sourceIcon: "🎬", sourceCls: SRC_META_ADS  },
   "agendar-directo":        { label: "Atajo CTA verde",             sourceLabel: "Directo",  sourceIcon: "⚡", sourceCls: SRC_DIRECT    },
   "sesion-plan":            { label: "Sesión de Plan-Alemán (closer)",     sourceLabel: "Sesión",   sourceIcon: "📋", sourceCls: SRC_SESION    },

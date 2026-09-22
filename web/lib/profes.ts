@@ -10,7 +10,7 @@
  * en BD, solo el UUID en classes.teacher_id (fuente de verdad).
  */
 
-export type ProfeSlug = "sabine" | "jonathan";
+export type ProfeSlug = "sabine" | "jonathan" | "thomas";
 
 export type ProfeInfo = {
   slug:       ProfeSlug;
@@ -33,6 +33,13 @@ export const PROFES_MAP: Record<ProfeSlug, ProfeInfo> = {
     teacherId: "468968b1-4c0a-4759-af4e-4f63ac67eabf",
     firstName: "Jonathan",
     fullName:  "Jonathan Weber",
+    origin:    "DE",
+  },
+  thomas: {
+    slug:      "thomas",
+    teacherId: "481cdbd9-6393-465d-be05-ee2b2e183507",
+    firstName: "Thomas",
+    fullName:  "Thomas Müller",
     origin:    "DE",
   },
 };

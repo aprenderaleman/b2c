@@ -91,6 +91,7 @@ export const SOURCE_META: Record<string, SourceMeta> = {
   "meta-ads-paid":          { label: "Meta Ads · 10€ depósito",     sourceLabel: "Meta Paid", sourceIcon: "💎", sourceCls: SRC_META_ADS  },
   "clase-profe-sabine":     { label: "Reel Meta · Sabine",          sourceLabel: "Meta Reel", sourceIcon: "🎬", sourceCls: SRC_META_ADS  },
   "clase-profe-jonathan":   { label: "Reel Meta · Jonathan",        sourceLabel: "Meta Reel", sourceIcon: "🎬", sourceCls: SRC_META_ADS  },
+  "clase-profe-thomas":     { label: "Reel Meta · Thomas",          sourceLabel: "Meta Reel", sourceIcon: "🎬", sourceCls: SRC_META_ADS  },
   "clase-profe-generico":   { label: "Landing /clase-profe (sin profe)", sourceLabel: "Meta Reel", sourceIcon: "🎬", sourceCls: SRC_META_ADS  },
   "agendar-directo":        { label: "Atajo CTA verde",             sourceLabel: "Directo",   sourceIcon: "⚡", sourceCls: SRC_DIRECT    },
   "(sin landing)":          { label: "(sin atribución)",            sourceLabel: "Otro",      sourceIcon: "❓", sourceCls: SRC_OTHER     },
