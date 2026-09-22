@@ -27,6 +27,7 @@ import type { LocalUserChoices } from "@livekit/components-core";
 import { RoomEvent, Track, ParticipantEvent, type Participant } from "livekit-client";
 import { VirtualBackgroundButton, BRAND_IMAGES, BG_LABELS, type BgMode } from "./VirtualBackgroundButton";
 import { WhiteboardPanel, WhiteboardToggleButton } from "./WhiteboardPanel";
+import { AulaSidePanel } from "./AulaSidePanel";
 
 type Props = {
   classId:          string;
@@ -46,6 +47,13 @@ type Props = {
   /** Sesión de Plan-Alemán (closer). Cuando true y audience=lead,
    *  oculta controles de mic/cámara al lead — experimental. */
   isSesionPlan?: boolean;
+  /** Chat persistente de plataforma vinculado a esta clase (null → el
+   *  aula usa el chat efímero de LiveKit, p.ej. trials). */
+  persistentChatId?: string | null;
+  /** Pestaña Notas (classes.teacher_notes) — solo host en clases normales. */
+  showNotesTab?: boolean;
+  /** user id del viewer logueado — para alinear burbujas del chat. */
+  currentUserId?: string | null;
 };
 
 /**
@@ -99,6 +107,9 @@ export function AulaClient(p: Props) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [chatOpen,  setChatOpen]  = useState(false);
   const [wbOpen,    setWbOpen]    = useState(false);
+  // No leídos del chat persistente (lo reporta AulaSidePanel via callback).
+  const [aulaUnread, setAulaUnread] = useState(0);
+  const usePersistentPanel = Boolean(p.persistentChatId || p.showNotesTab) && Boolean(p.currentUserId);
   const [webViewBlocker, setWebViewBlocker] = useState(false);
 
   // Detección WebView tras hidratación (SSR-safe). Se muestra un
@@ -334,6 +345,7 @@ export function AulaClient(p: Props) {
           onToggleParticipants={() => setPanelOpen(o => !o)}
           chatOpen={chatOpen}
           onToggleChat={() => setChatOpen(o => !o)}
+          externalUnread={usePersistentPanel ? aulaUnread : null}
         />
         {/* relative: el chat flota como overlay sobre el video en vez de
             robarle ancho (queja Gelfis 2026-08 — el <aside> en flex
@@ -349,7 +361,19 @@ export function AulaClient(p: Props) {
           {panelOpen && (
             <ParticipantsPanel onClose={() => setPanelOpen(false)} />
           )}
-          <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+          {usePersistentPanel ? (
+            <AulaSidePanel
+              open={chatOpen}
+              onClose={() => setChatOpen(false)}
+              chatId={p.persistentChatId ?? null}
+              classId={p.classId}
+              showNotes={Boolean(p.showNotesTab)}
+              currentUserId={p.currentUserId ?? ""}
+              onUnreadChange={setAulaUnread}
+            />
+          ) : (
+            <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+          )}
         </div>
         <div className="border-t border-slate-800 bg-slate-900/80 backdrop-blur p-2">
           <div className="flex items-center justify-center gap-3 flex-wrap">
@@ -645,12 +669,15 @@ function LeadAutoAudio() {
 function TopBar({
   classId, title, scheduledAt, durationMinutes, isHost, backHref,
   panelOpen, onToggleParticipants,
-  chatOpen, onToggleChat,
+  chatOpen, onToggleChat, externalUnread,
 }: {
   classId: string; title: string; scheduledAt: string; durationMinutes: number;
   isHost: boolean; backHref: string;
   panelOpen: boolean; onToggleParticipants: () => void;
   chatOpen:  boolean; onToggleChat:         () => void;
+  /** Cuando el aula usa el chat persistente, el badge viene del panel
+   *  (número ya calculado); null → contar mensajes del chat LiveKit. */
+  externalUnread?: number | null;
 }) {
   const participants = useParticipants();
   // Track unread chat messages while the panel is closed. Resets to the
@@ -660,7 +687,9 @@ function TopBar({
   useEffect(() => {
     if (chatOpen) setSeenCount(chatMessages.length);
   }, [chatOpen, chatMessages.length]);
-  const unread = chatOpen ? 0 : Math.max(0, chatMessages.length - seenCount);
+  const unread = externalUnread != null
+    ? externalUnread
+    : chatOpen ? 0 : Math.max(0, chatMessages.length - seenCount);
   const speaking = participants.find(p => p.isSpeaking) ?? null;
   const [elapsed, setElapsed] = useState(() =>
     Math.max(0, Math.floor((Date.now() - new Date(scheduledAt).getTime()) / 1000)));

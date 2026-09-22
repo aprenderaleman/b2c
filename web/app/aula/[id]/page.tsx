@@ -6,6 +6,7 @@ import { getClassById, formatClassTimeEs } from "@/lib/classes";
 import { livekitConfigured } from "@/lib/livekit";
 import { getTrialSession, verifyTrialToken } from "@/lib/trial-token";
 import { supabaseAdmin } from "@/lib/supabase";
+import { canAccessChat, ensureDirectChat, ensureGroupChat } from "@/lib/chat";
 import { AulaClient } from "./AulaClient";
 import { WaitingForAula } from "./WaitingForAula";
 
@@ -155,6 +156,20 @@ export default async function AulaPage({
   const brandBackground =
     sessionRole === "admin" || sessionRole === "superadmin" || sessionRole === "teacher";
 
+  // Panel persistente (petición Sabine 2026-09-22): en clases normales con
+  // usuario logueado, el aula usa el chat de plataforma (persistente, con
+  // adjuntos) + pestaña Notas para el profe. Trials y sesiones-plan siguen
+  // con el chat efímero de LiveKit (el lead no tiene cuenta).
+  const viewerUserId = session?.user ? (session.user as { id: string }).id : null;
+  let persistentChatId: string | null = null;
+  if (viewerUserId && !isTrial && !isSesionPlan) {
+    persistentChatId = await resolveAulaChatId(
+      { id: cls.id, type: cls.type, parent_class_id: cls.parent_class_id, teacher_id: cls.teacher_id, title: cls.title },
+      viewerUserId,
+    );
+  }
+  const showNotesTab = access.role === "host" && !!viewerUserId && !isTrial && !isSesionPlan;
+
   return (
     <AulaClient
       classId={cls.id}
@@ -167,8 +182,49 @@ export default async function AulaPage({
       backHref={backHref}
       brandBackground={brandBackground}
       isSesionPlan={isSesionPlan}
+      persistentChatId={persistentChatId}
+      showNotesTab={showNotesTab}
+      currentUserId={viewerUserId}
     />
   );
+}
+
+// ───────────────────────────────────────────────────────────────────
+// Chat persistente del aula: resuelve (o crea — ensure* es idempotente)
+// el chat de plataforma que corresponde a esta clase y comprueba que el
+// viewer participa en él. Si algo falla devolvemos null y el aula cae
+// al chat efímero de LiveKit — nunca bloquea la entrada a clase.
+// ───────────────────────────────────────────────────────────────────
+async function resolveAulaChatId(
+  cls: { id: string; type: "individual" | "group"; parent_class_id: string | null; teacher_id: string; title: string },
+  viewerUserId: string,
+): Promise<string | null> {
+  try {
+    const sb = supabaseAdmin();
+
+    const { data: t } = await sb
+      .from("teachers").select("user_id").eq("id", cls.teacher_id).maybeSingle();
+    const teacherUserId = (t as { user_id: string } | null)?.user_id;
+    if (!teacherUserId) return null;
+
+    const { data: parts } = await sb
+      .from("class_participants")
+      .select("students!inner(user_id)")
+      .eq("class_id", cls.id);
+    const studentUserIds = ((parts ?? []) as Array<{ students: { user_id: string } | Array<{ user_id: string }> }>)
+      .map(p => (Array.isArray(p.students) ? p.students[0] : p.students)?.user_id)
+      .filter((v): v is string => Boolean(v));
+    if (studentUserIds.length === 0) return null;
+
+    const chatId = cls.type === "group"
+      ? await ensureGroupChat(cls.parent_class_id ?? cls.id, teacherUserId, studentUserIds, cls.title)
+      : await ensureDirectChat(teacherUserId, studentUserIds[0]);
+
+    return (await canAccessChat(chatId, viewerUserId)) ? chatId : null;
+  } catch (e) {
+    console.error("[aula] resolveAulaChatId failed:", e);
+    return null;
+  }
 }
 
 // ───────────────────────────────────────────────────────────────────

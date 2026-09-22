@@ -11,19 +11,19 @@ const Body = z.object({
   shared_with_student: z.boolean().optional(),
 });
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params;
+/** Autorización compartida GET/PATCH: profe dueño de la clase o admin. */
+async function authorize(id: string): Promise<
+  | { ok: true }
+  | { ok: false; res: NextResponse }
+> {
   const session = await auth();
   if (!session?.user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return { ok: false, res: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
   }
 
   const role = (session.user as { role?: string }).role;
   if (role !== "teacher" && role !== "admin" && role !== "superadmin") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    return { ok: false, res: NextResponse.json({ error: "forbidden" }, { status: 403 }) };
   }
 
   const sb = supabaseAdmin();
@@ -33,15 +33,48 @@ export async function PATCH(
     .eq("id", id)
     .maybeSingle();
   if (!cls) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+    return { ok: false, res: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   }
 
   if (role === "teacher") {
     const me = await getTeacherByUserId((session.user as { id: string }).id);
     if (!me || me.id !== (cls as { teacher_id: string | null }).teacher_id) {
-      return NextResponse.json({ error: "not_your_class" }, { status: 403 });
+      return { ok: false, res: NextResponse.json({ error: "not_your_class" }, { status: 403 }) };
     }
   }
+  return { ok: true };
+}
+
+/** GET: usado por la pestaña Notas del aula para cargar el estado actual. */
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const authz = await authorize(id);
+  if (!authz.ok) return authz.res;
+
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("classes")
+    .select("teacher_notes, notes_shared_with_student")
+    .eq("id", id)
+    .maybeSingle();
+
+  return NextResponse.json({
+    teacher_notes:             (data as { teacher_notes: string | null } | null)?.teacher_notes ?? null,
+    notes_shared_with_student: Boolean((data as { notes_shared_with_student: boolean | null } | null)?.notes_shared_with_student),
+  });
+}
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const authz = await authorize(id);
+  if (!authz.ok) return authz.res;
+  const sb = supabaseAdmin();
 
   let raw: unknown;
   try { raw = await req.json(); }
