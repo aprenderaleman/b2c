@@ -48,9 +48,19 @@ async function run(req: Request) {
     const name = u?.full_name ?? "Estudiante";
     let teacherName = "Profesor";
     let teacherEmail: string | null = null;
-    if (raw.trial_teacher_id) {
-      teacherEmail = await getTeacherEmail(raw.trial_teacher_id);
-      const { data: t } = await sb.from("teachers").select("users!inner(full_name)").eq("id", raw.trial_teacher_id).maybeSingle();
+    // Compartir con el profe del grupo activo (el que da las clases); si no hay, con el de la prueba.
+    const { data: grp } = await sb
+      .from("student_group_members")
+      .select("student_groups!inner(teacher_id, active)")
+      .eq("student_id", raw.id)
+      .eq("student_groups.active", true)
+      .limit(1);
+    const sgRaw = (grp?.[0] as { student_groups?: unknown } | undefined)?.student_groups;
+    const sg = (Array.isArray(sgRaw) ? sgRaw[0] : sgRaw) as { teacher_id?: string } | undefined;
+    const teacherId = sg?.teacher_id ?? raw.trial_teacher_id;
+    if (teacherId) {
+      teacherEmail = await getTeacherEmail(teacherId);
+      const { data: t } = await sb.from("teachers").select("users!inner(full_name)").eq("id", teacherId).maybeSingle();
       const tuRaw = (t as { users?: unknown } | null)?.users;
       const tu = (Array.isArray(tuRaw) ? tuRaw[0] : tuRaw) as { full_name?: string | null } | undefined;
       teacherName = tu?.full_name ?? "Profesor";
