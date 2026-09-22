@@ -34,13 +34,16 @@ export async function reassignTeacher(input: {
 
   const { data: group } = await sb
     .from("student_group_members")
-    .select("group_id, student_groups!inner(id, teacher_id, type)")
+    .select("group_id, student_groups!inner(id, teacher_id, class_type, active)")
     .eq("student_id", input.studentId)
     .limit(10);
 
+  // Bug hasta 2026-09-22: se comparaba `type`, que no existe en student_groups
+  // (la columna es class_type), así que el grupo 1:1 nunca cambiaba de profe.
   const individualGroup = (group ?? []).find(g => {
     const sg = Array.isArray(g.student_groups) ? g.student_groups[0] : g.student_groups;
-    return (sg as { type?: string })?.type === "individual";
+    const s = sg as { class_type?: string; active?: boolean } | undefined;
+    return s?.class_type === "individual" && s?.active !== false;
   });
 
   const oldTeacherId = (() => {
