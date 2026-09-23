@@ -41,9 +41,11 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
   const profe = resolveProfe(p?.profe);
   const landingIntent = landingIntentForProfe(profe);
 
-  const heroLine = profe
-    ? `Agenda tu clase de prueba con ${profe.firstName}`
-    : "Agenda tu clase de prueba con un profesor nativo";
+  const heroLine = profe?.slug === "simon"
+    ? "Agenda tu clase de prueba hoy"
+    : profe
+      ? `Agenda tu clase de prueba con ${profe.firstName}`
+      : "Agenda tu clase de prueba con un profesor nativo";
   const subtitle = profe
     ? `${profe.firstName} es profesor nativo alemán y habla español. 30 minutos 1 a 1 online, para conocerte, ver tu nivel y planificar tu ruta al alemán — sin compromiso.`
     : "Profesor nativo alemán que habla español. 30 minutos 1 a 1 online, para conocerte, ver tu nivel y planificar tu ruta al alemán — sin compromiso.";
