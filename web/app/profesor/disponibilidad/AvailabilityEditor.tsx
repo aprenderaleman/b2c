@@ -169,14 +169,37 @@ export function AvailabilityEditor({
   );
 }
 
+/**
+ * Selector de hora en formato 24h con pasos de 15 min.
+ *
+ * Antes era <input type="time">, pero ese widget sigue el formato del
+ * SISTEMA del usuario: en equipos en 12h (locale en-US, etc.) teclear
+ * "15" se convertía en "3 PM" y el desplegable mostraba las horas con
+ * AM/PM — caso Thomas 2026-09-23. Un <select> propio muestra siempre
+ * 00:00–23:45 en 24h, igual en todos los navegadores e idiomas.
+ */
+const TIME_OPTIONS: string[] = [];
+for (let h = 0; h < 24; h++) {
+  for (const m of ["00", "15", "30", "45"]) {
+    TIME_OPTIONS.push(`${String(h).padStart(2, "0")}:${m}`);
+  }
+}
+
 function TimeInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  // Valores legacy fuera de la rejilla (p.ej. "09:07") se conservan como
+  // opción extra para no perder datos al abrir el editor.
+  const options = TIME_OPTIONS.includes(value) || !value
+    ? TIME_OPTIONS
+    : [...TIME_OPTIONS, value].sort();
   return (
-    <input
-      type="time"
-      step={900}   // 15-minute buckets
+    <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40"
-    />
+      className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2.5 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 tabular-nums"
+    >
+      {options.map(t => (
+        <option key={t} value={t}>{t}</option>
+      ))}
+    </select>
   );
 }
