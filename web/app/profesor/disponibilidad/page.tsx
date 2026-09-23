@@ -49,7 +49,11 @@ export default async function TeacherAvailabilityPage() {
         </p>
       </header>
 
-      <AvailabilityEditor initialBlocks={initial} />
+      {/* targetTeacherId siempre: un profe real lo ignora (el API resuelve
+          por sesión), pero cuando un admin entra impersonando ("Ver como
+          profesor") el PUT necesita ?teacherId= o devuelve teacherId_required
+          (caso Thomas 2026-09-23). */}
+      <AvailabilityEditor initialBlocks={initial} targetTeacherId={teacher.id} />
     </main>
   );
 }

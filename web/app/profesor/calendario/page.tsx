@@ -62,7 +62,9 @@ export default async function TeacherCalendarPage() {
             Las franjas marcadas aquí se pintan en verde en el calendario de arriba.
           </p>
         </div>
-        <AvailabilityEditor initialBlocks={initial} />
+        {/* targetTeacherId siempre — necesario cuando un admin edita
+            impersonando; un profe real lo ignora (ver disponibilidad/page). */}
+        <AvailabilityEditor initialBlocks={initial} targetTeacherId={teacher.id} />
       </section>
     </main>
   );
