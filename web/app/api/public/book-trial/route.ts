@@ -18,6 +18,7 @@ import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
 import { createTeacherTrialEvent } from "@/lib/google-calendar-oauth";
 import { sendRaw } from "@/lib/email/send";
 import { attributeReferral } from "@/lib/referrals";
+import { resolveProfe } from "@/lib/profes";
 import { closeRescueChainsForRebook } from "@/lib/rescue-chains";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
@@ -228,17 +229,13 @@ export async function POST(req: Request) {
   // column doesn't exist on our funnel UI; admin can refine later.
   const goal    = b.goal ?? "travel";
   const urgency = "asap";
-  // Normaliza el slug de la campaña /clase-profe. Ver migración 127.
-  // Cualquier valor fuera de sabine|jonathan cae a 'generico' — nunca
-  // NULL cuando el lead vino de esa landing (necesitamos que el reporting
-  // separe "genérico intencional" del NULL "no vino de esa campaña").
-  const profeRaw = (b.profe ?? "").trim().toLowerCase();
-  const profeSlug: "sabine" | "jonathan" | "generico" | null =
-    profeRaw === "sabine"   ? "sabine" :
-    profeRaw === "jonathan" ? "jonathan" :
-    // Solo forzamos "generico" si el body trae la key (aunque venga vacía o
-    // basura); si NO se manda, dejamos NULL — el lead no vino de esa campaña.
-    (b.profe !== undefined && b.profe !== null) ? "generico" : null;
+  // Slug de la campaña /clase-profe, validado contra PROFES_MAP (lib/profes)
+  // para que añadir un profe allí baste. Key presente con valor inválido →
+  // 'generico'; key ausente → NULL (el lead no vino de esa campaña).
+  const profeSlug: string | null =
+    b.profe === undefined || b.profe === null
+      ? null
+      : (resolveProfe(b.profe)?.slug ?? "generico");
 
   let leadId: string;
   let isNewLead = false;
