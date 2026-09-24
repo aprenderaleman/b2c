@@ -15,6 +15,7 @@ import { startChain, cancelActiveChain } from "./chain-engine";
 import { resolveChainVariables } from "./chain-variables";
 import { renderTemplate } from "./message-stats";
 import { normalizeStudentLevel, resolveStudentPlan } from "./student-plan";
+import { runPostConversionFlow } from "./post-conversion-flow";
 
 export const ConvertBody = z.object({
   email:             z.string().trim().toLowerCase().email(),
@@ -62,6 +63,8 @@ export type ConvertOptions = {
   stripeCustomerId?: string;
   ofertaId?: string;
   conversionSource?: string;
+  /** auto-conversion (Stripe) corre su propio post-conversion flow con comisiones; el resto no. */
+  skipPostConversionFlow?: boolean;
 };
 
 export async function convertLeadToStudent(
@@ -73,7 +76,7 @@ export async function convertLeadToStudent(
 
   const { data: lead, error: leadErr } = await sb
     .from("leads")
-    .select("id, status, whatsapp_normalized, converted_to_user_id")
+    .select("id, status, whatsapp_normalized, converted_to_user_id, closer_id")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -167,6 +170,23 @@ export async function convertLeadToStudent(
     await sb.from("students")
       .update({ notes: `Horarios preferidos: ${body.horarios}` })
       .eq("id", created.studentId);
+  }
+
+  // Asignación de profesor + grupo 1:1 + documento de apuntes + aviso al
+  // profe. Hasta 2026-09-24 solo corría en las conversiones por Stripe:
+  // las manuales ("pago confirmado", admin, venta aprobada) dejaban al
+  // alumno sin profe, sin grupo y sin documento (caso Yenny).
+  if (!options?.skipPostConversionFlow) {
+    const trialAttended = !!trial;
+    await runPostConversionFlow({
+      leadId:         lead.id,
+      studentId:      created.studentId,
+      leadName:       body.fullName,
+      closerId:       (lead as { closer_id?: string | null }).closer_id ?? null,
+      trialTeacherId: trial?.teacherId ?? null,
+      trialAttended,
+      packLabel:      `${plan.ritmo ?? subscriptionType} · ${plan.clasesTotales} clases`,
+    }).catch(e => console.error("[convert] post-conversion flow failed (non-fatal):", e instanceof Error ? e.message : e));
   }
 
   // Legacy commission system (trial-compensation.ts) DESACTIVADO.

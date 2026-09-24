@@ -158,6 +158,7 @@ export async function handleFirstPayment(opts: AutoConvertOpts): Promise<void> {
     stripeCustomerId: opts.stripeCustomerId,
     ofertaId: opts.ofertaId,
     conversionSource: "stripe_auto",
+    skipPostConversionFlow: true,   // registerConversionExtras lo corre con escenario/comisiones
   });
 
   if (!result.ok) {

@@ -49,8 +49,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     }).eq("id", leadId);
   }
 
+  // La oferta enviada al lead (send-offer) es la fuente de verdad del plan:
+  // el modal de "pago confirmado" tiene A2 por defecto y el profe suele no
+  // tocarlo (caso Yenny 2026-09-24: oferta Meta B1, alumna creada con A2).
+  const { data: lastOffer } = await sb
+    .from("ofertas_enviadas")
+    .select("id, meta, ritmo, tipo_pago, clases_totales, clases_por_mes")
+    .eq("lead_id", leadId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const of = lastOffer as { id: string; meta: string; ritmo: string | null; tipo_pago: string; clases_totales: number; clases_por_mes: number | null } | null;
+  const input = of ? {
+    ...parsed.data,
+    goalId:           of.meta,
+    packId:           of.ritmo ?? of.meta,
+    clasesTotales:    of.clases_totales,
+    classesPerMonth:  of.clases_por_mes ?? parsed.data.classesPerMonth,
+    subscriptionType: (of.tipo_pago === "suscripcion" ? "monthly_subscription" : "package") as typeof parsed.data.subscriptionType,
+  } : parsed.data;
+
   try {
-    const result = await convertLeadToStudent(leadId, parsed.data);
+    const result = await convertLeadToStudent(leadId, input, {
+      ofertaId: of?.id,
+      conversionSource: "manual",
+    });
+    if (of && !result.alreadyConverted) {
+      await sb.from("ofertas_enviadas").update({ accepted_at: new Date().toISOString() }).eq("id", of.id).is("accepted_at", null);
+    }
 
     await cancelActiveChain(leadId, "payment_confirmed").catch(() => {});
 
