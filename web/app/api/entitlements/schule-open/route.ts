@@ -85,17 +85,19 @@ export async function GET(req: Request) {
   if (!u) return htmlError(404, "No encontramos tu usuario.");
 
   const role = (u as { role: string }).role;
+  let level: string | null = null;
 
   if (role === "student") {
     const { data: s } = await sb
       .from("students")
-      .select("subscription_status, pack_expires_at, classes_remaining")
+      .select("subscription_status, pack_expires_at, classes_remaining, current_level")
       .eq("user_id", userId)
       .maybeSingle();
     if (!s) return htmlError(403, "Tu cuenta no tiene perfil de estudiante.");
     if (!packEligible(s as Parameters<typeof packEligible>[0])) {
       return htmlError(403, "Tu pack no está activo. Contacta con el equipo.");
     }
+    level = (s as { current_level?: string | null }).current_level ?? null;
   }
 
   // Profes y admins entran con su rol real — sin él, Schule los crea
@@ -111,6 +113,7 @@ export async function GET(req: Request) {
     fullName: (u as { full_name: string | null }).full_name,
     phone:    (u as { phone: string | null }).phone,
     role:     ssoRole,
+    level,
   });
 
   if (!link.ok) {

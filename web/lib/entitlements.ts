@@ -69,6 +69,12 @@ export async function createSchuleSsoLink(args: {
    * formulario de login (caso Jonathan 2026-08-28).
    */
   role?:    "teacher" | "admin";
+  /**
+   * Nivel de curso del alumno (students.current_level). Schule lo usa para
+   * fijar el nivel del usuario; sin él, todo alumno creado por SSO quedaba
+   * en A1 (caso Yenny 2026-09-25).
+   */
+  level?:   string | null;
 }): Promise<SchuleLinkResult> {
   const secret = process.env.B2C_SYNC_SECRET;
   if (!secret) {
@@ -86,6 +92,7 @@ export async function createSchuleSsoLink(args: {
     const body: Record<string, unknown> = { email: args.email, secret };
     if (args.fullName) body.full_name = args.fullName;
     if (args.role)     body.role      = args.role;
+    if (args.level)    body.level     = args.level;
     if (includePhone && args.phone) body.phone = args.phone;
     return fetch(`${SCHULE_BASE}/api/b2c/sso-link`, {
       method:  "POST",

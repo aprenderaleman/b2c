@@ -36,13 +36,14 @@ export async function POST() {
   if (!u) return NextResponse.json({ error: "user_not_found" }, { status: 404 });
 
   const role = (u as { role: string }).role;
+  let level: string | null = null;
 
   // Entitlement rule: active students only. Teachers and admins bypass
   // (they can open Schule to see what the student sees).
   if (role === "student") {
     const { data: s } = await sb
       .from("students")
-      .select("subscription_status, pack_expires_at, classes_remaining")
+      .select("subscription_status, pack_expires_at, classes_remaining, current_level")
       .eq("user_id", userId)
       .maybeSingle();
     if (!s) return NextResponse.json({ error: "no_student_profile" }, { status: 403 });
@@ -52,12 +53,14 @@ export async function POST() {
         message: "Tu pack no está activo. Contacta con nosotros si crees que es un error.",
       }, { status: 403 });
     }
+    level = (s as { current_level?: string | null }).current_level ?? null;
   }
 
   const link = await createSchuleSsoLink({
     email:    (u as { email: string }).email,
     fullName: (u as { full_name: string | null }).full_name,
     phone:    (u as { phone: string | null }).phone,
+    level,
   });
 
   if (!link.ok) {
