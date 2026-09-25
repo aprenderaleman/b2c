@@ -196,7 +196,10 @@ export async function POST(req: Request) {
   }
 
   // ── 2. Re-validate the slot is still in the available list.
-  const slots = await listTrialSlots();
+  // Filtrado por el profe elegido: la lista sin filtro solo da un "ganador"
+  // de rotación por hora, así que un hueco válido de un profe concreto
+  // (funnel /clase-profe) se rechazaba si a esa hora ganaba otro profe.
+  const slots = await listTrialSlots({ onlyTeacherId: b.teacher_id });
   const match = slots.find(s =>
     s.startIso === b.slot_iso && s.teacherId === b.teacher_id);
   if (!match) {
