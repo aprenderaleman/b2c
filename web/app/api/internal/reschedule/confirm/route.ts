@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { patchTrialEvent } from "@/lib/google-calendar";
+import { findTeacherConflicts } from "@/lib/teacher-conflicts";
 
 /**
  * POST /api/internal/reschedule/confirm
@@ -75,16 +76,12 @@ export async function POST(req: NextRequest) {
 
   // 2) Race-guard: ¿alguien tomó el slot nuevo entre check y confirm?
   //    Excluye la propia clase (estamos moviéndola, no creando otra).
-  const slotEnd = new Date(newStart.getTime() + duration * 60_000);
-  const { data: collisions } = await sb
-    .from("classes")
-    .select("id")
-    .eq("teacher_id", body.new_teacher_id)
-    .in("status", ["scheduled", "live"])
-    .neq("id", body.class_id)
-    .lt("scheduled_at", slotEnd.toISOString())
-    .gte("scheduled_at", new Date(newStart.getTime() - duration * 60_000).toISOString());
-  if (collisions && collisions.length > 0) {
+  //    Solape real (duración de cada clase + pausa), no solo misma hora.
+  const collisions = await findTeacherConflicts(sb, {
+    teacherId: body.new_teacher_id, startIso: newStart.toISOString(),
+    durationMinutes: duration, excludeClassId: body.class_id,
+  });
+  if (collisions.length > 0) {
     return NextResponse.json({
       ok: false, error: "slot_taken",
       reason: "Otra clase agendada en ese horario entre el check y el confirm",
@@ -103,6 +100,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: false, error: "db_update_failed", reason: updErr.message,
     }, { status: 500 });
+  }
+
+  // 3b) Re-check tras escribir: cierra la carrera con una reserva
+  //     simultánea que pise el mismo hueco. Si hay solape, rollback.
+  const postConflicts = await findTeacherConflicts(sb, {
+    teacherId: body.new_teacher_id, startIso: newStart.toISOString(),
+    durationMinutes: duration, excludeClassId: body.class_id,
+  });
+  if (postConflicts.length > 0) {
+    await sb.from("classes")
+      .update({ scheduled_at: cls.scheduled_at, teacher_id: cls.teacher_id })
+      .eq("id", body.class_id);
+    return NextResponse.json({
+      ok: false, error: "slot_taken",
+      reason: "Otra clase agendada en ese horario entre el check y el confirm",
+    }, { status: 409 });
   }
 
   // 4) Patch evento en Google Calendar (si existe)

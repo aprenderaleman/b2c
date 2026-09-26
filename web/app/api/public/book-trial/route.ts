@@ -19,6 +19,7 @@ import { createTeacherTrialEvent } from "@/lib/google-calendar-oauth";
 import { sendRaw } from "@/lib/email/send";
 import { attributeReferral } from "@/lib/referrals";
 import { resolveProfe } from "@/lib/profes";
+import { findTeacherConflicts, earlierConflicts } from "@/lib/teacher-conflicts";
 import { closeRescueChainsForRebook } from "@/lib/rescue-chains";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
@@ -410,7 +411,7 @@ export async function POST(req: Request) {
   {
     const { data: existingTrials } = await sb
       .from("classes")
-      .select("id, scheduled_at, short_code, google_calendar_event_id, duration_minutes, teacher_id")
+      .select("id, scheduled_at, short_code, google_calendar_event_id, duration_minutes, teacher_id, title, notes_admin, notified_at, notify_after_at")
       .eq("lead_id", leadId)
       .eq("is_trial", true)
       .in("status", ["scheduled", "live"])
@@ -419,7 +420,8 @@ export async function POST(req: Request) {
     type ExistingTrial = {
       id: string; scheduled_at: string; short_code: string;
       google_calendar_event_id: string | null; duration_minutes: number | null;
-      teacher_id: string;
+      teacher_id: string; title: string | null; notes_admin: string | null;
+      notified_at: string | null; notify_after_at: string | null;
     };
     const active = (existingTrials ?? []) as ExistingTrial[];
     if (active.length > 0) {
@@ -470,6 +472,27 @@ export async function POST(req: Request) {
           error:   "auto_reschedule_failed",
           message: rescheduleErr.message,
         }, { status: 500 });
+      }
+
+      // Anti-solape post-update: si al mover la clase pisa otra del profe
+      // (reserva simultánea), la dejamos exactamente como estaba.
+      const moveConflicts = await findTeacherConflicts(sb, {
+        teacherId: b.teacher_id, startIso: requestedSlotIso,
+        durationMinutes: ex.duration_minutes ?? TRIAL_DURATION_MIN, excludeClassId: ex.id,
+      });
+      if (moveConflicts.length > 0) {
+        await sb.from("classes").update({
+          scheduled_at:    ex.scheduled_at,
+          teacher_id:      ex.teacher_id,
+          title:           ex.title,
+          notes_admin:     ex.notes_admin,
+          notified_at:     ex.notified_at,
+          notify_after_at: ex.notify_after_at,
+        }).eq("id", ex.id);
+        return NextResponse.json({
+          error:   "slot_taken",
+          message: "Ese horario acaba de reservarse o dejó de estar disponible. Elige otro.",
+        }, { status: 409 });
       }
 
       // Patchear Google Calendar event del profe (si existe). Si falla
@@ -582,7 +605,24 @@ export async function POST(req: Request) {
     short_code:         shortCode,
     notes_admin:        `auto-booked via funnel · level=${b.german_level ?? "?"}`,
     notify_after_at:    notifyAfterAt,
-  }).select("id").single();
+  }).select("id, created_at").single();
+  if (cls) {
+    // Anti-solape post-insert: si otra clase activa del profe pisa este
+    // hueco y llegó antes (reserva simultánea de un hueco solapado),
+    // deshacemos la nuestra antes de notificar a nadie.
+    const mine = cls as { id: string; created_at: string };
+    const conflicts = await findTeacherConflicts(sb, {
+      teacherId: b.teacher_id, startIso: b.slot_iso,
+      durationMinutes: TRIAL_DURATION_MIN, excludeClassId: mine.id,
+    });
+    if (earlierConflicts(conflicts, mine).length > 0) {
+      await sb.from("classes").delete().eq("id", mine.id);
+      return NextResponse.json({
+        error:   "slot_taken",
+        message: "Ese horario acaba de reservarse o dejó de estar disponible. Elige otro.",
+      }, { status: 409 });
+    }
+  }
   if (classErr || !cls) {
     const isDupe = classErr?.message?.includes("classes_no_double_booking_uidx")
       || classErr?.code === "23505";
