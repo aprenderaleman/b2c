@@ -243,17 +243,53 @@ function StepCuandoInner() {
     setForm(f => (f.countryCode === "+49" ? { ...f, countryCode: det.countryCode } : f));
   }, []);
 
+  // "Ver más horarios" (?todos=1): el lead que viene del funnel de un profe
+  // puede abrir el calendario de todos los profes. La atribución (profe del
+  // reel, landing_intent) se mantiene; solo se quita el filtro de huecos.
+  const [verTodos, setVerTodos] = useState(searchParams?.get("todos") === "1");
+  const [autoFallback, setAutoFallback] = useState(false);
+  const filterTeacherId = profe && !verTodos ? profe.teacherId : null;
+  const slotsUrl = filterTeacherId
+    ? `/api/public/trial-slots?teacher_id=${encodeURIComponent(filterTeacherId)}`
+    : "/api/public/trial-slots";
+
+  const openAllSlots = (auto: boolean) => {
+    setVerTodos(true);
+    setAutoFallback(auto);
+    setSlots(null);
+    setDay(null);
+    trackFunnel("ver_mas_horarios", { landingIntent: effectiveLanding, answer: auto ? "auto_sin_huecos" : "click" });
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("todos", "1");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
+  const backToProfe = () => {
+    setVerTodos(false);
+    setAutoFallback(false);
+    setSlots(null);
+    setDay(null);
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.delete("todos");
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
   useEffect(() => {
     let cancelled = false;
-    const url = profe
-      ? `/api/public/trial-slots?teacher_id=${encodeURIComponent(profe.teacherId)}`
-      : "/api/public/trial-slots";
-    fetch(url, { cache: "no-store" })
+    fetch(slotsUrl, { cache: "no-store" })
       .then(r => r.json())
-      .then(d => { if (!cancelled) setSlots(d.slots ?? []); })
+      .then(d => {
+        if (cancelled) return;
+        const list: SlotItem[] = d.slots ?? [];
+        // Profe sin huecos: abrimos todos los profes en vez de dejar al
+        // lead ante un calendario vacío.
+        if (filterTeacherId && list.length === 0) { openAllSlots(true); return; }
+        setSlots(list);
+      })
       .catch(() => { if (!cancelled) setLoadErr("No pudimos cargar los horarios. Recarga la página."); });
     return () => { cancelled = true; };
-  }, [profe]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotsUrl]);
 
   const slotsByDay = useMemo(() => {
     const map = new Map<string, SlotItem[]>();
@@ -447,15 +483,10 @@ function StepCuandoInner() {
         if (res.status === 409 && json.error === "slot_taken") {
           setSubmitErr("Ese horario se acaba de ocupar. Elige otro.");
           setSelectedSlot(null);
-          {
-            const url = profe
-              ? `/api/public/trial-slots?teacher_id=${encodeURIComponent(profe.teacherId)}`
-              : "/api/public/trial-slots";
-            fetch(url, { cache: "no-store" })
-              .then(r => r.json())
-              .then(d => setSlots(d.slots ?? []))
-              .catch(() => { /* ignore */ });
-          }
+          fetch(slotsUrl, { cache: "no-store" })
+            .then(r => r.json())
+            .then(d => setSlots(d.slots ?? []))
+            .catch(() => { /* ignore */ });
         } else {
           setSubmitErr(json.message ?? "No pudimos confirmar tu clase. Inténtalo de nuevo.");
         }
@@ -578,6 +609,19 @@ function StepCuandoInner() {
           {/* Calendario — se colapsa tras seleccionar slot para que el form se vea limpio */}
           {!selectedSlot && (
             <>
+              {profe && verTodos && (
+                <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-[13px] text-emerald-900 leading-snug">
+                  {autoFallback
+                    ? <>{profe.firstName} no tiene horarios libres ahora mismo. Te mostramos los de <strong>todos nuestros profesores nativos</strong>.</>
+                    : <>Mostrando horarios de <strong>todos nuestros profesores nativos</strong>.</>}
+                  {!autoFallback && (
+                    <button type="button" onClick={backToProfe} className="ml-1 font-semibold underline">
+                      Ver solo los de {profe.firstName}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {showDualTz && (
                 <div className="rounded-xl border border-sky-300 bg-sky-50 px-3.5 py-2.5">
                   <p className="text-[13px] text-sky-900 leading-snug">
@@ -607,6 +651,26 @@ function StepCuandoInner() {
                     lightMode
                     leadTimezone={leadTimezone}
                   />
+                </div>
+              )}
+
+              {profe && filterTeacherId && (
+                <div className="pt-2">
+                  <p className="text-center text-[14px] text-slate-600 mb-2">
+                    ¿Ninguno de estos horarios te encaja?
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openAllSlots(false)}
+                    className="w-full rounded-2xl border-2 border-emerald-600 bg-emerald-50 px-5 py-4
+                               text-[17px] font-bold text-emerald-800 hover:bg-emerald-100
+                               active:scale-[0.99] transition"
+                  >
+                    Ver más horarios
+                    <span className="block text-[13px] font-medium text-emerald-700 mt-0.5">
+                      con otros profesores nativos que hablan español
+                    </span>
+                  </button>
                 </div>
               )}
             </>

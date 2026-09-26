@@ -33,6 +33,8 @@ export const FUNNEL_STEP = {
   slot_picked:       14,
   phone_valid:       15,
   commitment_checked: 16,
+  // funnel /clase-profe: el lead abre los horarios de todos los profes
+  ver_mas_horarios:  17,
 } as const;
 
 export type FunnelStepKey = keyof typeof FUNNEL_STEP;
