@@ -436,14 +436,23 @@ async function handleInvoicePaid(
         .eq("id", s.id);
     }
 
-    if (s?.trial_teacher_id && piId && isInCommissionWindow(s.commission_window_end)) {
+    // Solo renovaciones (billing_reason=subscription_cycle): la primera
+    // cuota ya comisiona en auto-conversion con el id del checkout.
+    // Las APIs nuevas de Stripe no mandan payment_intent en el invoice,
+    // así que la clave de idempotencia cae al invoice id (antes el `&& piId`
+    // dejaba TODAS las renovaciones sin comisión — caso Sonia/Alexandra
+    // sept 2026).
+    const billingReason = (invoice as unknown as { billing_reason?: string | null }).billing_reason;
+    const isRenewal = billingReason === "subscription_cycle";
+    const commissionKey = piId ?? invoice.id ?? null;
+    if (s?.trial_teacher_id && isRenewal && commissionKey && isInCommissionWindow(s.commission_window_end)) {
       try {
         await registerCommission({
           teacherId: s.trial_teacher_id,
           studentId: s.id,
           amountCents: eurCents,
           currency: "EUR",
-          stripePiId: piId,
+          stripePiId: commissionKey,
           stripeInvoiceId: invoice.id,
           escenario: "E1",
         });
