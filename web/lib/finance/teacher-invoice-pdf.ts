@@ -425,8 +425,14 @@ export async function buildTeacherInvoicePdf(args: {
     doc.moveTo(50, y0 + 13).lineTo(550, y0 + 13).strokeColor("#cbd5e1").stroke();
     y0 += 20;
 
-    const comLabel = (tipo: string): string => {
-      if (tipo === "bono_cierre") return "Bono de cierre";
+    const ritmoLabel: Record<string, string> = {
+      viajero: "Viajero", estandar: "Estándar", intensivo: "Intensivo", vip_express: "VIP Express", pago_unico: "pago único",
+    };
+    const comLabel = (tipo: string, escenario?: string): string => {
+      if (tipo === "bono_cierre") {
+        const k = escenario?.startsWith("bono_cierre:") ? escenario.slice("bono_cierre:".length) : null;
+        return k && ritmoLabel[k] ? `Bono de cierre (${ritmoLabel[k]})` : "Bono de cierre";
+      }
       if (tipo === "conversion") return "Comisión por conversión";
       if (tipo === "comision_base") return "Comisión base";
       return tipo.replace(/_/g, " ");
@@ -443,7 +449,7 @@ export async function buildTeacherInvoicePdf(args: {
            .fillColor("#f7fee7").fill();
       }
       doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
-      doc.text(comLabel(cd.tipo),                50,  y0, { width: 245, lineBreak: false });
+      doc.text(comLabel(cd.tipo, cd.escenario), 50,  y0, { width: 245, lineBreak: false });
       doc.text(cd.base_amount_cents > 0 ? euros(cd.base_amount_cents) : "—",
                                                  300, y0, { width: 70,  lineBreak: false, align: "right" });
       doc.text(cd.comision_pct > 0 ? cd.comision_pct + "%" : "—",

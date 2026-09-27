@@ -268,6 +268,8 @@ async function registerConversionExtras({
         studentId,
         stripePiId: opts.stripePiId,
         studentName: ld.name ?? "Estudiante",
+        ritmo: of.ritmo,
+        tipoPago: of.tipo_pago,
       });
 
       await registerCommission({

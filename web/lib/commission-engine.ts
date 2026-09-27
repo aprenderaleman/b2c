@@ -85,12 +85,42 @@ export async function registerCommission(opts: RegisterOpts): Promise<number> {
  * Bono de cierre: monto fijo al confirmarse el primer pago de cada conversión.
  * Idempotente: UNIQUE(stripe_payment_intent_id, usuario_id) previene duplicados.
  */
+/**
+ * Ritmo/pago → clave de config del bono. Decisión Gelfis 2026-09-27: el
+ * bono escala con lo que vende el profe (Viajero 25 · Estándar 35 ·
+ * Intensivo 50 · VIP Express 75 · pago único 150). `bono_cierre_cents`
+ * queda como fallback si el ritmo no se reconoce.
+ */
+export function bonoCierreKey(ritmo: string | null | undefined, tipoPago: string | null | undefined): string {
+  if (tipoPago && tipoPago !== "suscripcion") return "pago_unico";
+  const r = (ritmo ?? "").toLowerCase().replace(/[\s-]+/g, "_");
+  if (r === "viajero" || r === "estandar" || r === "intensivo" || r === "vip_express") return r;
+  return "default";
+}
+
+export async function resolveBonoCierreCents(
+  sb: ReturnType<typeof supabaseAdmin>,
+  ritmo: string | null | undefined,
+  tipoPago: string | null | undefined,
+): Promise<{ cents: number; key: string }> {
+  const key = bonoCierreKey(ritmo, tipoPago);
+  const claves = key === "default" ? ["bono_cierre_cents"] : [`bono_cierre_${key}_cents`, "bono_cierre_cents"];
+  const { data } = await sb.from("config_comisiones").select("clave, valor").in("clave", claves);
+  const rows = (data ?? []) as { clave: string; valor: string }[];
+  const pick = claves.map((c) => rows.find((r) => r.clave === c)).find(Boolean);
+  return { cents: Math.round(Number(pick?.valor ?? 5000)), key };
+}
+
 export async function registerBonoCierre(opts: {
   teacherId: string;
   studentId: string;
   stripePiId: string;
   studentName: string;
   mes?: string;
+  /** Ritmo de la oferta aceptada (viajero/estandar/intensivo/vip_express). */
+  ritmo?: string | null;
+  /** ofertas_enviadas.tipo_pago: "suscripcion" o pago único. */
+  tipoPago?: string | null;
 }): Promise<number> {
   const sb = supabaseAdmin();
 
@@ -102,12 +132,7 @@ export async function registerBonoCierre(opts: {
   if (!teacher) return 0;
   const teacherUserId = (teacher as { user_id: string }).user_id;
 
-  const { data: configRow } = await sb
-    .from("config_comisiones")
-    .select("valor")
-    .eq("clave", "bono_cierre_cents")
-    .maybeSingle();
-  const bonoCents = Math.round(Number((configRow as { valor: string } | null)?.valor ?? 5000));
+  const { cents: bonoCents, key: bonoKey } = await resolveBonoCierreCents(sb, opts.ritmo, opts.tipoPago);
   if (bonoCents <= 0) return 0;
 
   const piKey = `bono_cierre_${opts.stripePiId}`;
@@ -123,7 +148,8 @@ export async function registerBonoCierre(opts: {
       stripe_payment_intent_id: piKey,
       base_amount_cents: 0,
       comision_pct: 0,
-      escenario: "bono_cierre",
+      // "bono_cierre:<ritmo>" — la factura PDF muestra el ritmo premiado.
+      escenario: bonoKey === "default" ? "bono_cierre" : `bono_cierre:${bonoKey}`,
       mes,
       pagado: false,
     })
