@@ -47,7 +47,7 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
       ? `Agenda tu clase de prueba con ${profe.firstName}`
       : "Agenda tu clase de prueba con un profesor nativo";
   const subtitle = profe
-    ? `${profe.firstName} es profesor nativo alemán y habla español. 30 minutos 1 a 1 online, para conocerte, ver tu nivel y planificar tu ruta al alemán — sin compromiso.`
+    ? `${profe.firstName} es ${profe.female ? "profesora nativa alemana" : "profesor nativo alemán"} y habla español. 30 minutos 1 a 1 online, para conocerte, ver tu nivel y planificar tu ruta al alemán — sin compromiso.`
     : "Profesor nativo alemán que habla español. 30 minutos 1 a 1 online, para conocerte, ver tu nivel y planificar tu ruta al alemán — sin compromiso.";
 
   // CTA URL: preserva ?profe= para que /agendar/cuando restrinja el

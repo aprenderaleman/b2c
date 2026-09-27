@@ -10,7 +10,7 @@
  * en BD, solo el UUID en classes.teacher_id (fuente de verdad).
  */
 
-export type ProfeSlug = "sabine" | "jonathan" | "thomas" | "simon";
+export type ProfeSlug = "sabine" | "jonathan" | "thomas" | "simon" | "aracely";
 
 export type ProfeInfo = {
   slug:       ProfeSlug;
@@ -18,6 +18,7 @@ export type ProfeInfo = {
   firstName:  string;   // para H1 dinámico + copy
   fullName:   string;
   origin:     "DE" | "AT" | "CH";
+  female?:    boolean;  // concordancia del copy ("profesora nativa")
 };
 
 export const PROFES_MAP: Record<ProfeSlug, ProfeInfo> = {
@@ -27,6 +28,7 @@ export const PROFES_MAP: Record<ProfeSlug, ProfeInfo> = {
     firstName: "Sabine",
     fullName:  "Sabine Arning",
     origin:    "DE",
+    female:    true,
   },
   jonathan: {
     slug:      "jonathan",
@@ -48,6 +50,14 @@ export const PROFES_MAP: Record<ProfeSlug, ProfeInfo> = {
     firstName: "Simon",
     fullName:  "Simon Heimler Castro",
     origin:    "DE",
+  },
+  aracely: {
+    slug:      "aracely",
+    teacherId: "0c3686bf-89be-41ae-a3af-16469ff6f9ea",
+    firstName: "Aracely",
+    fullName:  "Aracely Fabiola Stock Eschgfäller",
+    origin:    "DE",
+    female:    true,
   },
 };
 
