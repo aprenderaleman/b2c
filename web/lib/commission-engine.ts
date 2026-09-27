@@ -47,6 +47,7 @@ export async function registerCommission(opts: RegisterOpts): Promise<number> {
   const { data: comision, error: insertErr } = await sb
     .from("comisiones")
     .insert({
+      student_id: opts.studentId,
       usuario_id: teacherUserId,
       rol: "teacher",
       tipo: "conversion",
@@ -141,6 +142,7 @@ export async function registerBonoCierre(opts: {
   const { data: comision, error: insertErr } = await sb
     .from("comisiones")
     .insert({
+      student_id: opts.studentId,
       usuario_id: teacherUserId,
       rol: "teacher",
       tipo: "bono_cierre",

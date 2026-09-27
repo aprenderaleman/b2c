@@ -106,7 +106,11 @@ export async function buildTeacherInvoicePdf(args: {
     .maybeSingle();
   const teacherUserId = (teacherUser as { user_id: string } | null)?.user_id;
 
-  type CommDetail = { amount_cents: number; tipo: string; base_amount_cents: number; comision_pct: number; escenario: string };
+  type CommDetail = {
+    amount_cents: number; tipo: string; base_amount_cents: number; comision_pct: number; escenario: string;
+    /** Alumno convertido (comisiones.student_id, migración 135) y fecha del registro. */
+    student_name: string | null; created_at: string;
+  };
   const commDetails: CommDetail[] = [];
   let totalCommissionCents = 0;
 
@@ -114,18 +118,29 @@ export async function buildTeacherInvoicePdf(args: {
     const mesStr = `${args.month}-01`;
     const { data: comisionesData } = await sb
       .from("comisiones")
-      .select("id, tipo, monto_cents, base_amount_cents, comision_pct, escenario")
+      .select("id, tipo, monto_cents, base_amount_cents, comision_pct, escenario, created_at, student:students(user:users(full_name))")
       .eq("usuario_id", teacherUserId)
-      .eq("mes", mesStr);
+      .eq("mes", mesStr)
+      .order("created_at", { ascending: true });
 
-    for (const c of (comisionesData ?? []) as { id: string; tipo: string; monto_cents: number; base_amount_cents: number; comision_pct: number; escenario: string }[]) {
+    type ComRow = {
+      id: string; tipo: string; monto_cents: number; base_amount_cents: number; comision_pct: number;
+      escenario: string; created_at: string;
+      student: { user: { full_name: string | null } | { full_name: string | null }[] | null }
+             | { user: { full_name: string | null } | { full_name: string | null }[] | null }[] | null;
+    };
+    for (const c of (comisionesData ?? []) as unknown as ComRow[]) {
       if (c.monto_cents <= 0) continue;
+      const st = Array.isArray(c.student) ? c.student[0] : c.student;
+      const su = Array.isArray(st?.user) ? st?.user[0] : st?.user;
       commDetails.push({
         amount_cents: c.monto_cents,
         tipo: c.tipo,
         base_amount_cents: c.base_amount_cents ?? 0,
         comision_pct: Number(c.comision_pct ?? 0),
         escenario: c.escenario ?? "",
+        student_name: su?.full_name?.trim() || null,
+        created_at: c.created_at,
       });
       totalCommissionCents += c.monto_cents;
     }
@@ -449,7 +464,11 @@ export async function buildTeacherInvoicePdf(args: {
            .fillColor("#f7fee7").fill();
       }
       doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
-      doc.text(comLabel(cd.tipo, cd.escenario), 50,  y0, { width: 245, lineBreak: false });
+      // "Comisión por conversión · Nathaly rojas (09-09)" — alumno y fecha
+      // del cierre, para que el profe reconozca cada línea (Gelfis 2026-09-27).
+      const when  = cd.created_at.slice(5, 10).replace("-", "/");
+      const who   = cd.student_name ? ` · ${cd.student_name}` : "";
+      doc.text(`${comLabel(cd.tipo, cd.escenario)}${who} (${when})`, 50, y0, { width: 245, lineBreak: false, ellipsis: true });
       doc.text(cd.base_amount_cents > 0 ? euros(cd.base_amount_cents) : "—",
                                                  300, y0, { width: 70,  lineBreak: false, align: "right" });
       doc.text(cd.comision_pct > 0 ? cd.comision_pct + "%" : "—",
