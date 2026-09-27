@@ -259,9 +259,40 @@ export async function buildTeacherInvoicePdf(args: {
   doc.font("Helvetica-Bold").fontSize(20).fillColor("#0f172a").text("Aprender-Aleman.de", 50, 50);
   doc.font("Helvetica").fontSize(9).fillColor("#64748b").text("aprender-aleman.de · Gelfis Horn", 50, 76);
 
-  doc.font("Helvetica-Bold").fontSize(16).fillColor("#0f172a").text("Factura de horas docentes", 50, 110);
-  doc.font("Helvetica").fontSize(11).fillColor("#334155").text(`Periodo: ${monthLabel}`, 50, 130);
-  doc.text(`Emitido: ${new Date().toISOString().slice(0, 10)}`, 50, 145);
+  // Estado del pago (teacher_earnings). El profe recibe este documento
+  // después de cobrar, así que es un recibo/Abrechnung, no una factura
+  // (Gelfis 2026-09-27). Si aún no está pagado (descarga previa del admin)
+  // se marca como pendiente.
+  const { data: earningsRow } = await sb
+    .from("teacher_earnings")
+    .select("id, paid, paid_at, payment_reference, amount_cents")
+    .eq("teacher_id", args.teacherId)
+    .eq("month", `${args.month}-01`)
+    .maybeSingle();
+  const er = earningsRow as { id: string; paid: boolean; paid_at: string | null; payment_reference: string | null; amount_cents: number } | null;
+  const isPaid    = !!er?.paid;
+  const fmtDay    = (iso: string) => { const d = new Date(iso); return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`; };
+  const receiptNo = `AA-${args.month.replace("-", "")}-${(er?.id ?? args.teacherId).replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+  const todayStr  = fmtDay(new Date().toISOString());
+
+  doc.font("Helvetica-Bold").fontSize(16).fillColor("#0f172a").text("Recibo de honorarios docentes", 50, 110);
+  doc.font("Helvetica").fontSize(9).fillColor("#64748b").text("Abrechnung · Honorarbeleg", 50, 128);
+  doc.font("Helvetica").fontSize(11).fillColor("#334155").text(`Periodo: ${monthLabel}`, 50, 142);
+  doc.text(`Nº ${receiptNo} · Emitido: ${todayStr}`, 50, 157);
+
+  // Sello de estado (arriba a la derecha)
+  const stampW = 190;
+  if (isPaid) {
+    doc.rect(550 - stampW, 110, stampW, 44).fillAndStroke("#ecfdf5", "#10b981");
+    doc.fillColor("#047857").font("Helvetica-Bold").fontSize(11).text("PAGADO", 560 - stampW, 118, { width: stampW - 20 });
+    doc.fillColor("#065f46").font("Helvetica").fontSize(9)
+       .text(`Fecha de pago: ${er?.paid_at ? fmtDay(er.paid_at) : "—"}`, 560 - stampW, 133, { width: stampW - 20 })
+       .text(er?.payment_reference ? `Ref.: ${er.payment_reference}` : "", 560 - stampW, 144, { width: stampW - 20, ellipsis: true, height: 10 });
+  } else {
+    doc.rect(550 - stampW, 110, stampW, 44).fillAndStroke("#fffbeb", "#f59e0b");
+    doc.fillColor("#b45309").font("Helvetica-Bold").fontSize(11).text("PENDIENTE DE PAGO", 560 - stampW, 118, { width: stampW - 20 });
+    doc.fillColor("#92400e").font("Helvetica").fontSize(9).text("Borrador previo al pago", 560 - stampW, 133, { width: stampW - 20 });
+  }
 
   // Teacher block
   doc.rect(50, 170, 500, 70).fillAndStroke("#f8fafc", "#e2e8f0");
@@ -495,7 +526,10 @@ export async function buildTeacherInvoicePdf(args: {
       const when  = cd.created_at.slice(5, 10).replace("-", "/");
       // Nombre + primer apellido: los nombres completos no caben en la
       // columna y se partían en dos líneas pisando la fila siguiente.
-      const short = cd.student_name ? cd.student_name.split(/\s+/).slice(0, 2).join(" ") : null;
+      const PARTICLES = new Set(["da", "de", "del", "della", "di", "van", "von", "la", "le", "dos", "das", "y"]);
+      const parts = cd.student_name ? cd.student_name.split(/\s+/) : [];
+      const keep  = parts.length > 2 && PARTICLES.has(parts[1].toLowerCase()) ? 3 : 2;
+      const short = parts.length ? parts.slice(0, keep).join(" ") : null;
       const who   = short ? ` · ${short}` : "";
       doc.text(`${comLabel(cd.tipo, cd.escenario)}${who} (${when})`, 50, y0, { width: 245, height: ROW_H, ellipsis: true });
       doc.text(cd.base_amount_cents > 0 ? euros(cd.base_amount_cents) : "—",
@@ -517,21 +551,30 @@ export async function buildTeacherInvoicePdf(args: {
   // Total box
   doc.moveTo(50, y0 + 8).lineTo(550, y0 + 8).strokeColor("#cbd5e1").stroke();
   doc.rect(340, y0 + 18, 210, 42).fillAndStroke("#0f172a", "#0f172a");
-  doc.fillColor("#cbd5e1").font("Helvetica").fontSize(9).text("TOTAL A PAGAR", 355, y0 + 26);
+  doc.fillColor("#cbd5e1").font("Helvetica").fontSize(9).text(isPaid ? "TOTAL PAGADO" : "TOTAL A PAGAR", 355, y0 + 26);
   doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(18).text(euros(totalCents), 355, y0 + 36, { width: 180, align: "right" });
 
-  // Footer
-  doc.font("Helvetica").fontSize(8).fillColor("#94a3b8").text(
-    `Factura generada automáticamente por la plataforma de Aprender-Aleman.de — ${new Date().toISOString().slice(0, 10)}`,
-    50, 790,
-    { width: 500, align: "center" },
-  );
-  if ((teacher as { payment_method: string | null }).payment_method) {
-    doc.fillColor("#475569").fontSize(9).text(
-      "Pago a: " + (teacher as { payment_method: string }).payment_method,
-      50, 770, { width: 500, align: "center" },
-    );
+  // Desglose del total, a la izquierda de la caja
+  const classesOnlyCents = totalCents - totalCommissionCents;
+  doc.font("Helvetica").fontSize(9).fillColor("#475569")
+     .text(`Clases: ${euros(classesOnlyCents)}`, 50, y0 + 22)
+     .text(`Comisiones y bonos: ${euros(totalCommissionCents)}`, 50, y0 + 35);
+  const payTo = (teacher as { payment_method: string | null }).payment_method;
+  let yInfo = y0 + 48;
+  if (isPaid && er?.paid_at) {
+    doc.text(`Abonado el ${fmtDay(er.paid_at)}${er.payment_reference ? ` · Ref. ${er.payment_reference}` : ""}`, 50, yInfo);
+    yInfo += 13;
   }
+  if (payTo) doc.text(`${isPaid ? "Pagado a" : "Pago a"}: ${payTo}`, 50, yInfo, { width: 280, lineBreak: false, ellipsis: true });
+
+  // Footer. pdfkit abre página nueva si el texto toca el margen inferior
+  // (bottom=50 → y>792): lo escribimos con margen inferior 0 y una sola
+  // línea corta, y así no aparece una página en blanco al final.
+  doc.page.margins.bottom = 0;
+  doc.font("Helvetica").fontSize(8).fillColor("#94a3b8").text(
+    `${isPaid ? "Recibo" : "Borrador"} nº ${receiptNo} · Aprender-Aleman.de · ${todayStr} · ${isPaid ? "acredita el pago" : "importe devengado"} de los honorarios del periodo`,
+    50, 800, { width: 500, align: "center", lineBreak: false },
+  );
 
   doc.end();
   const pdfBuffer = await donePromise;
