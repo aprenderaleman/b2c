@@ -328,6 +328,17 @@ export async function buildTeacherInvoicePdf(args: {
     rowIdx++;
   }
 
+  // Subtotal de las clases del mes, en el mismo estilo que el de
+  // comisiones (Gelfis 2026-09-27: "para más claridad").
+  if (rows.length > 0) {
+    const monthCents = rows.reduce((a, r) => a + r.amount_cents, 0);
+    const monthMin   = rows.reduce((a, r) => a + r.duration_min, 0);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f172a");
+    doc.text(`Subtotal clases (${rows.length} clases · ${monthMin} min):`, 250, y0 + 2, { width: 245, lineBreak: false, align: "right" });
+    doc.text(euros(monthCents), 500, y0 + 2, { width: 50, lineBreak: false, align: "right" });
+    y0 += ROW_H + 4;
+  }
+
   if (rows.length === 0) {
     doc.font("Helvetica-Oblique").fillColor("#94a3b8").text("Sin clases facturables este mes.", 50, y0);
     y0 += 20;
@@ -376,6 +387,11 @@ export async function buildTeacherInvoicePdf(args: {
       y0 += ROW_H;
       cIdx++;
     }
+    const carryCents = carryoverRows.reduce((a, r) => a + r.amount_cents, 0);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f172a");
+    doc.text(`Subtotal pendientes (${carryoverRows.length} clases):`, 250, y0 + 2, { width: 245, lineBreak: false, align: "right" });
+    doc.text(euros(carryCents), 500, y0 + 2, { width: 50, lineBreak: false, align: "right" });
+    y0 += ROW_H + 4;
   }
 
   // ───── Resumen por grupo/alumno ─────
@@ -423,6 +439,16 @@ export async function buildTeacherInvoicePdf(args: {
       y0 += ROW_H;
       idx++;
     }
+
+    // Total de clases (mes + pendientes de meses anteriores) — cuadra con
+    // el bloque de clases del total a pagar.
+    const allCents   = allRows.reduce((a, r) => a + r.amount_cents, 0);
+    const allClasses = allRows.length;
+    const allMin     = allRows.reduce((a, r) => a + r.duration_min, 0);
+    doc.font("Helvetica-Bold").fontSize(10).fillColor("#0f172a");
+    doc.text(`Total clases (${allClasses} clases · ${allMin} min):`, 250, y0 + 2, { width: 220, lineBreak: false, align: "right" });
+    doc.text(euros(allCents), 475, y0 + 2, { width: 75, lineBreak: false, align: "right" });
+    y0 += ROW_H + 4;
   }
 
   // ───── Comisiones ─────
