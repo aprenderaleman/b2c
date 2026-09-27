@@ -467,8 +467,11 @@ export async function buildTeacherInvoicePdf(args: {
       // "Comisión por conversión · Nathaly rojas (09-09)" — alumno y fecha
       // del cierre, para que el profe reconozca cada línea (Gelfis 2026-09-27).
       const when  = cd.created_at.slice(5, 10).replace("-", "/");
-      const who   = cd.student_name ? ` · ${cd.student_name}` : "";
-      doc.text(`${comLabel(cd.tipo, cd.escenario)}${who} (${when})`, 50, y0, { width: 245, lineBreak: false, ellipsis: true });
+      // Nombre + primer apellido: los nombres completos no caben en la
+      // columna y se partían en dos líneas pisando la fila siguiente.
+      const short = cd.student_name ? cd.student_name.split(/\s+/).slice(0, 2).join(" ") : null;
+      const who   = short ? ` · ${short}` : "";
+      doc.text(`${comLabel(cd.tipo, cd.escenario)}${who} (${when})`, 50, y0, { width: 245, height: ROW_H, ellipsis: true });
       doc.text(cd.base_amount_cents > 0 ? euros(cd.base_amount_cents) : "—",
                                                  300, y0, { width: 70,  lineBreak: false, align: "right" });
       doc.text(cd.comision_pct > 0 ? cd.comision_pct + "%" : "—",
