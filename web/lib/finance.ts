@@ -67,10 +67,19 @@ export async function logClassHoursAndRollup(args: {
   // Fetch class.type so we pick the right rate; also record it into classes.
   const { data: cls } = await sb
     .from("classes")
-    .select("type")
+    .select("type, is_trial")
     .eq("id", args.classId)
     .maybeSingle();
   const classType = (cls as { type: "group" | "individual" } | null)?.type ?? "group";
+
+  // Las clases de prueba no se pagan al profe (solo cobra bono + comisión
+  // si el lead convierte). Hasta 2026-09-27 una prueba terminada desde el
+  // aula con duración real se facturaba como clase normal (caso Thomas:
+  // Graciela y Cristian, 13 € cada una).
+  if ((cls as { is_trial?: boolean } | null)?.is_trial) {
+    await sb.from("classes").update({ billed_hours: 0 }).eq("id", args.classId);
+    return;
+  }
 
   const { data: t } = await sb
     .from("teachers")
