@@ -12,7 +12,15 @@ export const metadata = { title: "Mis clases · Profesor" };
  * Full class list for a teacher — upcoming + historic, grouped in two
  * blocks. Same window as the student view (1y back, 6mo forward).
  */
-export default async function TeacherClassesPage() {
+export default async function TeacherClassesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ canceladas?: string }>;
+}) {
+  // Las canceladas se ocultan por defecto: a Simon le salían 177 canceladas
+  // (series de Flora, horarios antiguos) frente a 149 reales. ?canceladas=1
+  // las vuelve a mostrar.
+  const showCancelled = (await searchParams)?.canceladas === "1";
   const session = await requireRoleWithImpersonation(
     ["teacher", "admin", "superadmin"],
     "teacher",
@@ -84,8 +92,10 @@ export default async function TeacherClassesPage() {
     };
   });
 
-  const upcoming = rows.filter(r => new Date(r.scheduled_at) >= now);
-  const past     = rows.filter(r => new Date(r.scheduled_at) <  now).reverse();
+  const cancelledCount = rows.filter(r => r.status === "cancelled").length;
+  const visible  = showCancelled ? rows : rows.filter(r => r.status !== "cancelled");
+  const upcoming = visible.filter(r => new Date(r.scheduled_at) >= now);
+  const past     = visible.filter(r => new Date(r.scheduled_at) <  now).reverse();
   const completedHours = past
     .filter(r => r.status === "completed")
     .reduce((s, r) => s + (r.billed_hours ?? 0), 0);
@@ -99,6 +109,14 @@ export default async function TeacherClassesPage() {
             {upcoming.length} próxima{upcoming.length === 1 ? "" : "s"} · {past.length} en el histórico ·{" "}
             {completedHours} h facturadas
           </p>
+          {cancelledCount > 0 && (
+            <Link
+              href={showCancelled ? "/profesor/clases" : "/profesor/clases?canceladas=1"}
+              className="mt-1 inline-block text-xs text-slate-500 dark:text-slate-400 underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-200"
+            >
+              {showCancelled ? "Ocultar canceladas" : `Mostrar canceladas (${cancelledCount})`}
+            </Link>
+          )}
         </div>
         <NewClassButton />
       </header>

@@ -14,7 +14,14 @@ export const metadata = { title: "Mis clases · Aprender-Aleman.de" };
  * 6 months forward in one go — adequate for today's volume. Pagination
  * lands in Phase 6 when/if someone has >500 classes.
  */
-export default async function StudentClassesPage() {
+export default async function StudentClassesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ canceladas?: string }>;
+}) {
+  // Canceladas ocultas por defecto (series antiguas, cambios de horario o
+  // de profe); ?canceladas=1 las muestra.
+  const showCancelled = (await searchParams)?.canceladas === "1";
   const session = await requireRoleWithImpersonation(
     ["student", "admin", "superadmin"],
     "student",
@@ -78,10 +85,12 @@ export default async function StudentClassesPage() {
     }];
   });
 
-  const upcoming = flattened
+  const cancelledCount = flattened.filter(r => r.status === "cancelled").length;
+  const visible = showCancelled ? flattened : flattened.filter(r => r.status !== "cancelled");
+  const upcoming = visible
     .filter(r => new Date(r.scheduled_at).getTime() >= now.getTime())
     .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
-  const past = flattened
+  const past = visible
     .filter(r => new Date(r.scheduled_at).getTime() < now.getTime())
     .sort((a, b) => b.scheduled_at.localeCompare(a.scheduled_at));
 
@@ -93,6 +102,14 @@ export default async function StudentClassesPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">
             {upcoming.length} próxima{upcoming.length === 1 ? "" : "s"} · {past.length} en el histórico
           </p>
+          {cancelledCount > 0 && (
+            <Link
+              href={showCancelled ? "/estudiante/clases" : "/estudiante/clases?canceladas=1"}
+              className="mt-1 inline-block text-xs text-slate-500 dark:text-slate-400 underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-200"
+            >
+              {showCancelled ? "Ocultar canceladas" : `Mostrar canceladas (${cancelledCount})`}
+            </Link>
+          )}
         </div>
         <RefreshRemainingButton initial={student.classes_remaining ?? null} />
       </header>
