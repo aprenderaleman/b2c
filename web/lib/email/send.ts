@@ -7,6 +7,7 @@ import {
 import { renderWelcomeStaff,   type WelcomeStaffVars }   from "./templates/welcome-staff";
 import { renderTeacherInvitation, type TeacherInvitationVars } from "./templates/teacher-invitation";
 import { renderTeacherWelcomeSetPassword, type TeacherWelcomeSetPasswordVars } from "./templates/teacher-welcome-setpassword";
+import { renderTeacherOnboardingFunnel, type TeacherOnboardingFunnelVars } from "./templates/teacher-onboarding-funnel";
 import { renderPasswordReset,  type PasswordResetVars }  from "./templates/password-reset";
 import { renderDailyDigest,    type DailyDigestVars }    from "./templates/daily-digest";
 import {
@@ -415,6 +416,15 @@ export async function sendTeacherWelcomeSetPasswordEmail(
   vars: TeacherWelcomeSetPasswordVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderTeacherWelcomeSetPassword(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/** Acceso + primeros pasos para un profe que entra en la campaña /clase-profe. */
+export async function sendTeacherOnboardingFunnelEmail(
+  to: string,
+  vars: TeacherOnboardingFunnelVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderTeacherOnboardingFunnel(vars);
   return sendRaw(to, subject, html, text);
 }
 
