@@ -156,8 +156,22 @@ export async function POST(req: Request) {
         recurrencePattern: s.recurrencePattern, recurrenceEndDate: s.recurrenceEndDate,
       });
     } catch (e) {
+      const raw = e instanceof Error ? e.message : "unknown";
+      // Índice único (teacher_id, scheduled_at): ya hay una clase del profe
+      // a esa misma hora. Mensaje legible en vez del error de Postgres.
+      if (/classes_no_double_booking_uidx/.test(raw)) {
+        const when = new Date(s.scheduledAt).toLocaleString("es-ES", {
+          weekday: "long", day: "numeric", month: "long",
+          hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin",
+        });
+        return NextResponse.json(
+          { error: "double_booking", failed_slot: s, created_so_far: results.length,
+            message: `Ya tienes otra clase agendada el ${when} (hora de Berlín). Elige otra hora o cancela primero la clase existente.` },
+          { status: 409 },
+        );
+      }
       return NextResponse.json(
-        { error: "create_failed", failed_slot: s, message: e instanceof Error ? e.message : "unknown",
+        { error: "create_failed", failed_slot: s, message: raw,
           created_so_far: results.length },
         { status: 500 },
       );

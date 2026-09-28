@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { berlinWallClockToIso } from "@/lib/schedule";
 
 /**
  * Actions visible only while a class is in status='scheduled':
@@ -103,8 +104,9 @@ function RescheduleModal({
   const save = () => {
     setError(null);
     if (!dateStr || !timeStr) { setError("Indica fecha y hora."); return; }
-    // Berlin local → UTC ISO. Browser is Europe/Berlin for Gelfis + profes.
-    const iso = new Date(`${dateStr}T${timeStr}:00`).toISOString();
+    // Berlin local → UTC ISO, sin depender de la zona horaria del
+    // navegador (hay profes fuera de Europa: caso Thomas 2026-09-28).
+    const iso = berlinWallClockToIso(dateStr, timeStr.slice(0, 5));
     start(async () => {
       const res  = await fetch(`/api/teacher/classes/${classId}`, {
         method:  "PATCH",

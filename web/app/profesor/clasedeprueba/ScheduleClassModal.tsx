@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { berlinWallClockToIso } from "@/lib/schedule";
 
 /**
  * Modal para agendar clases regulares de un estudiante ya convertido
@@ -77,7 +78,11 @@ export function ScheduleClassModal({
           studentIds: [studentId],
           title: title.trim(),
           slots: slots.map(s => ({
-            scheduledAt:       new Date(s.dateTime).toISOString(),
+            // La hora que escribe el profe es SIEMPRE hora de Berlín, esté
+            // donde esté su ordenador. Antes se usaba la zona del navegador:
+            // Thomas escribía 17:00 y la clase se creaba a las 07:00 Berlín
+            // (caso Jeannete 2026-09-26 y 09-28).
+            scheduledAt:       berlinWallClockToIso(s.dateTime.slice(0, 10), s.dateTime.slice(11, 16)),
             durationMinutes:   s.duration,
             recurrencePattern: s.recurrence,
             recurrenceEndDate: s.recurrence === "none" ? null : s.endDate,
@@ -176,7 +181,7 @@ export function ScheduleClassModal({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-slate-600 dark:text-slate-400">
-                    Fecha y hora <span className="text-rose-500">*</span>
+                    Fecha y hora (Berlín) <span className="text-rose-500">*</span>
                   </label>
                   <input
                     type="datetime-local"
