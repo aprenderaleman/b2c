@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import { createTrialEvent } from "@/lib/google-calendar";
+import { createTrialEvent, deleteTrialEvent } from "@/lib/google-calendar";
 
 /**
  * POST /api/admin/classes/[id]/gcal-create
@@ -19,6 +19,35 @@ import { createTrialEvent } from "@/lib/google-calendar";
 export const runtime = "nodejs";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+
+/**
+ * DELETE /api/admin/classes/[id]/gcal-create
+ * Quita el evento del calendar central (Gelfis) de una clase y limpia
+ * google_calendar_event_id. No toca la clase ni notifica a nadie.
+ */
+export async function DELETE(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const bearer = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  const cronOk = Boolean(process.env.CRON_SECRET) && bearer === process.env.CRON_SECRET;
+  if (!cronOk) {
+    const session = await auth();
+    const role = (session?.user as { role?: string } | undefined)?.role;
+    if (!session?.user || (role !== "admin" && role !== "superadmin")) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+  }
+  const { id } = await params;
+  const sb = supabaseAdmin();
+  const { data: cls } = await sb.from("classes").select("google_calendar_event_id").eq("id", id).maybeSingle();
+  const eventId = (cls as { google_calendar_event_id: string | null } | null)?.google_calendar_event_id;
+  if (!eventId) return NextResponse.json({ ok: true, deleted: false, reason: "no_event" });
+  const deleted = await deleteTrialEvent(eventId);
+  if (!deleted) return NextResponse.json({ ok: false, error: "gcal_delete_failed" }, { status: 502 });
+  await sb.from("classes").update({ google_calendar_event_id: null }).eq("id", id);
+  return NextResponse.json({ ok: true, deleted: true, event_id: eventId });
+}
 
 export async function POST(
   req: Request,

@@ -499,7 +499,25 @@ export async function POST(req: Request) {
       // → rollback de la BD para no dejar inconsistencia. Caso Pedro
       // 2026-06-25: antes la BD se actualizaba pero Calendar quedaba en
       // el slot viejo → el profe se conectaba a la hora equivocada.
-      if (ex.google_calendar_event_id) {
+      // El evento del calendar central (google_calendar_event_id) solo
+      // existe para clases de Gelfis (superadmin). Si la clase pasa a otro
+      // profe, se BORRA en vez de moverla — si no, Gelfis la seguía viendo
+      // en su calendar a la hora nueva (caso Giovanni 2026-09-28).
+      let movedAwayFromAdmin = false;
+      if (ex.google_calendar_event_id && ex.teacher_id !== b.teacher_id) {
+        const { data: nt } = await sb.from("teachers").select("users(role)").eq("id", b.teacher_id).maybeSingle();
+        const nu = (nt as { users: { role: string } | Array<{ role: string }> | null } | null)?.users;
+        movedAwayFromAdmin = ((Array.isArray(nu) ? nu[0]?.role : nu?.role) ?? "") !== "superadmin";
+      }
+      if (movedAwayFromAdmin && ex.google_calendar_event_id) {
+        const { deleteTrialEvent } = await import("@/lib/google-calendar");
+        const deleted = await deleteTrialEvent(ex.google_calendar_event_id).catch(() => false);
+        if (deleted) {
+          await sb.from("classes").update({ google_calendar_event_id: null }).eq("id", ex.id);
+        } else {
+          console.error(`[book-trial] no se pudo borrar el evento central ${ex.google_calendar_event_id} de la clase ${ex.id}`);
+        }
+      } else if (ex.google_calendar_event_id) {
         const { patchTrialEvent } = await import("@/lib/google-calendar");
         let patched = false;
         try {
