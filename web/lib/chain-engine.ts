@@ -518,7 +518,15 @@ export async function advanceChain(chain: ChainRow): Promise<{
       }
     }
 
-    const res = await sendWhatsappText(phone, text, { kind: templateKind });
+    // Pasar bypassNightGate cuando la chain es transaccional (bypassPause
+    // en def o bypass_gate_on_start en metadata). Bug Myriam 2026-09-30:
+    // chain4_absent salta gate del chain-engine pero era bloqueada por
+    // night_gate independiente en whatsapp.ts a las 06:00 Berlin.
+    const isTransactional = def.bypassPause === true || bypassGateOnce;
+    const res = await sendWhatsappText(phone, text, {
+      kind: templateKind,
+      bypassNightGate: isTransactional,
+    });
 
     // R4: update last_auto_sent_at after successful send. También
     // consumimos bypass_gate_on_start (si estaba en metadata) — el flag
@@ -563,6 +571,32 @@ export async function advanceChain(chain: ChainRow): Promise<{
         `enviado a lead ${chain.lead_id} en ${chain.chain_type} paso ${stepIndex + 1}. ` +
         `Body: ${JSON.stringify(text)}`,
       );
+    }
+
+    // Bug Myriam 2026-09-30: si el fallo fue por gate temporal
+    // (night_gate, daily_cap_reached, whatsapp_globally_disabled) NO
+    // avanzar step — reintentar más tarde. Antes el motor daba el step
+    // por procesado y el mensaje se perdía para siempre.
+    const RETRIABLE_REASONS = new Set([
+      "night_gate", "daily_cap_reached", "whatsapp_globally_disabled",
+    ]);
+    if (!res.ok && RETRIABLE_REASONS.has(res.reason ?? "")) {
+      // Reprogramar next_fire: si night_gate → próximas 08:00 Berlin;
+      // si cap/kill → +1h para reintentar cuando ceda.
+      const now = new Date();
+      let retryAt: Date;
+      if (res.reason === "night_gate") {
+        // Próximas 08:00 Berlin (una hora antes que 09:00 gate del chain-engine).
+        retryAt = getNext9amBerlin();
+        retryAt = new Date(retryAt.getTime() - 3600_000);   // 08:00 en vez de 09:00
+      } else {
+        retryAt = new Date(now.getTime() + 60 * 60_000);    // +1h
+      }
+      await sb.from("lead_chains").update({
+        next_fire_at: retryAt.toISOString(),
+        updated_at:   now.toISOString(),
+      }).eq("id", chain.id);
+      return { action: "skipped_paid", templateKind };
     }
 
     // Bug Leidy 2026-08-19: si Evolution responde `exists:false` el número

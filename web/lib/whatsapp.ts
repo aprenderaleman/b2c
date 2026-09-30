@@ -248,6 +248,13 @@ export type SendWaOpts = {
   kind?: string;
   /** Bypass total del kill switch (uso interno admin). */
   bypassKillSwitch?: boolean;
+  /** Bypass del gate nocturno 22-08 Berlin. chain-engine lo pasa true
+   *  para cadenas transaccionales (bypassPause en def o
+   *  bypass_gate_on_start en metadata) — el mensaje ya fue autorizado
+   *  por chain-engine, sería doble-gate absurdo bloquearlo aquí también.
+   *  Bug Myriam 2026-09-30: chain4_absent bypassPause salta gate del
+   *  chain-engine pero era bloqueado por este gate independiente. */
+  bypassNightGate?: boolean;
 };
 
 /**
@@ -284,8 +291,10 @@ export async function sendWhatsappText(
       }
     }
   }
-  // Anti-ban gate nocturno: 22:00-08:00 Berlin, salvo T-30m / T-15m.
-  if (!opts.bypassKillSwitch && isBerlinNight()) {
+  // Anti-ban gate nocturno: 22:00-08:00 Berlin, salvo T-30m / T-15m
+  // o si el caller pasó bypassNightGate=true (chain-engine para
+  // cadenas transaccionales con bypassPause / bypass_gate_on_start).
+  if (!opts.bypassKillSwitch && !opts.bypassNightGate && isBerlinNight()) {
     const gateOn = await isNightGateEnabled();
     if (gateOn && !NIGHT_EXEMPT_KINDS.has(opts.kind ?? "")) {
       return { ok: false, reason: "night_gate" };
