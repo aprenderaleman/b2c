@@ -19,7 +19,7 @@ import { markBonoConversacion } from "@/lib/bono-conversacion";
  */
 export async function POST(
   req: Request,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ studentId: string }> },
 ) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -27,7 +27,7 @@ export async function POST(
   if (role !== "teacher" && role !== "admin" && role !== "superadmin") {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const { id: studentId } = await params;
+  const { studentId } = await params;
 
   if (role === "teacher") {
     const me = await getTeacherByUserId((session.user as { id: string }).id);
