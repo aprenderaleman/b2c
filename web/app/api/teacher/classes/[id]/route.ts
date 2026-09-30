@@ -124,14 +124,27 @@ export async function PATCH(
     }
   }
 
-  // scheduled_at: directo para "this", delta para "series"
+  // scheduled_at: directo para "this", delta para "series".
+  // El índice classes_no_double_booking_uidx (profe + misma hora exacta,
+  // clases scheduled/live) rechaza el UPDATE si el profe ya tiene otra
+  // clase en ese slot — traducimos el error crudo de Postgres a un
+  // mensaje claro (caso Thomas/Myriam 2026-09-30).
+  const rescheduleError = (message: string) => {
+    if (/classes_no_double_booking_uidx|duplicate key/i.test(message)) {
+      return NextResponse.json(
+        { error: "double_booking", message: "Ya tienes otra clase agendada exactamente a esa hora. Elige un horario libre (revisa tu calendario)." },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ error: "update_failed", message }, { status: 500 });
+  };
   if (changes.scheduledAt) {
     const deltaMs = new Date(changes.scheduledAt).getTime() - new Date(cls.scheduled_at).getTime();
     if (changes.scope === "this" || deltaMs === 0) {
       const { error } = await sb.from("classes")
         .update({ scheduled_at: changes.scheduledAt })
         .eq("id", cls.id);
-      if (error) return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
+      if (error) return rescheduleError(error.message);
     } else {
       const { data: currents } = await sb
         .from("classes").select("id, scheduled_at").in("id", targetIds);
@@ -139,7 +152,7 @@ export async function PATCH(
         const shifted = new Date(new Date(c.scheduled_at).getTime() + deltaMs).toISOString();
         const { error } = await sb.from("classes")
           .update({ scheduled_at: shifted }).eq("id", c.id);
-        if (error) return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
+        if (error) return rescheduleError(error.message);
       }
     }
   }
