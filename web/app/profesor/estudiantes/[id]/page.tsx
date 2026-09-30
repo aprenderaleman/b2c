@@ -94,14 +94,28 @@ export default async function TeacherStudentDetail({
       </Link>
 
       {bonoPendiente && (
-        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-4 flex items-start gap-3">
-          <span className="text-xl" aria-hidden>🎁</span>
-          <div className="text-sm text-amber-800 dark:text-amber-200">
-            <strong>Bono pendiente:</strong> este estudiante ganó una clase de
-            conversación <strong>gratis</strong> (se inscribió en sus primeras 48h).
-            Agéndala como una clase normal — es adicional, no descuenta de su
-            paquete. Cuando esté dada, avisa al admin para cerrarla.
+        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <span className="text-xl" aria-hidden>🎁</span>
+            <div className="text-sm text-amber-800 dark:text-amber-200">
+              <strong>Bono pendiente:</strong> este estudiante ganó una clase de
+              conversación <strong>gratis</strong> (se inscribió en sus primeras 48h).
+              Agéndala como una clase normal — es adicional, no descuenta de su
+              paquete.
+            </div>
           </div>
+          <form
+            method="POST"
+            action={`/api/teacher/students/${studentId}/bono-conversacion`}
+            className="mt-3 flex justify-end"
+          >
+            <button
+              type="submit"
+              className="text-xs rounded-full border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
+            >
+              ✓ Ya di la clase de conversación
+            </button>
+          </form>
         </div>
       )}
 

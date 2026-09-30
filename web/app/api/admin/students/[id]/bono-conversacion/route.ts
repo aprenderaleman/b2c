@@ -1,15 +1,14 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase";
+import { markBonoConversacion } from "@/lib/bono-conversacion";
 
 /**
  * POST /api/admin/students/[id]/bono-conversacion
  *
- * Marca la clase de conversación del bono 48h como dada/agendada
- * (bono_conversacion_usada_at = now). Se usa desde la sección
- * "Bonos de conversación pendientes" del dashboard /admin.
- *
- * Con { undo: true } (JSON) revierte la marca.
+ * Marca la clase de conversación del bono 48h como dada/agendada.
+ * Se usa desde la sección "Bonos de conversación pendientes" del
+ * dashboard /admin. Con { undo: true } (JSON) revierte la marca.
+ * El profe tiene su propio endpoint (/api/teacher/students/...).
  */
 export async function POST(
   req: Request,
@@ -28,40 +27,10 @@ export async function POST(
     undo = Boolean((raw as { undo?: boolean })?.undo);
   } catch { /* form post sin body JSON — undo=false */ }
 
-  const sb = supabaseAdmin();
-  const { data: stu } = await sb
-    .from("students")
-    .select("id, bono_conversacion_at, bono_conversacion_usada_at, classes_adjustment")
-    .eq("id", id)
-    .maybeSingle();
-  if (!stu) return NextResponse.json({ error: "student_not_found" }, { status: 404 });
-  const row = stu as { bono_conversacion_at: string | null; bono_conversacion_usada_at: string | null; classes_adjustment: number | null };
-  if (!row.bono_conversacion_at) {
-    return NextResponse.json({ error: "no_bono" }, { status: 400 });
-  }
-  // Idempotencia: marcar dos veces (o deshacer sin marcar) no debe
-  // duplicar el ajuste de clases.
-  if (!undo && row.bono_conversacion_usada_at) {
-    return NextResponse.json({ ok: true, used: true, already: true });
-  }
-  if (undo && !row.bono_conversacion_usada_at) {
-    return NextResponse.json({ ok: true, used: false, already: true });
-  }
-
-  // La clase del bono es ADICIONAL (decisión Gelfis 2026-09-30): al darla
-  // se consume 1 clase del balance como cualquier clase normal, así que
-  // compensamos con +1 en classes_adjustment para que el paquete pagado
-  // quede intacto. El undo revierte el ajuste.
-  const delta = undo ? -1 : 1;
-  const { error } = await sb
-    .from("students")
-    .update({
-      bono_conversacion_usada_at: undo ? null : new Date().toISOString(),
-      classes_adjustment: (row.classes_adjustment ?? 0) + delta,
-    })
-    .eq("id", id);
-  if (error) {
-    return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
+  const result = await markBonoConversacion(id, undo);
+  if (!result.ok) {
+    const status = result.error === "student_not_found" ? 404 : result.error === "no_bono" ? 400 : 500;
+    return NextResponse.json({ error: result.error, message: result.message }, { status });
   }
 
   // Form post desde el dashboard → volver a /admin. Fetch JSON → ok.
@@ -69,5 +38,5 @@ export async function POST(
   if (accept.includes("text/html")) {
     return NextResponse.redirect(new URL("/admin", req.url), { status: 303 });
   }
-  return NextResponse.json({ ok: true, used: !undo });
+  return NextResponse.json({ ok: true, used: result.used, already: result.already });
 }
