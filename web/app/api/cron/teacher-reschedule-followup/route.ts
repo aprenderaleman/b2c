@@ -140,6 +140,20 @@ async function run(req: Request) {
           content: `💬 Falló FU2 teacher-reschedule`,
           metadata: { kind: "trial_teacher_reschedule_fu2", error: res.reason },
         });
+        // Bug reputación 2026-09-30: si el número no existe en WhatsApp
+        // (exists:false), marcar el followup como enviado para no seguir
+        // reintentando cada 30 min — mancha el rep score de la instancia
+        // y contribuye a bans preventivos. Igual patrón que advanceChain
+        // aplica para chains (cancel_reason='invalid_whatsapp_number').
+        if (/\"exists\"\s*:\s*false/.test(res.reason ?? "")) {
+          await sb.from("leads")
+            .update({ reschedule_state: {
+              ...rs,
+              followup2_sent_at: new Date().toISOString(),
+              followup2_skipped_reason: "invalid_whatsapp_number",
+            } })
+            .eq("id", l.id);
+        }
       }
       continue;
     }
