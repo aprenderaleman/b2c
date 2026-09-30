@@ -227,13 +227,23 @@ export async function POST(req: NextRequest) {
   const b = parsed.data;
 
   // WhatsApp puede venir null (form en 2 pasos, paso 5a sin WA).
-  // Si viene, lo saneamos; si no, queda como null para el upsert.
+  // Si viene, validamos estrictamente (Gelfis 2026-09-30) — si es
+  // inválido, guardamos null en vez de números basura que después
+  // fallan con exists:false.
   let whatsappE164: string | null = null;
   if (b.whatsapp_e164) {
-    whatsappE164 = sanitizeE164(b.whatsapp_e164);
-    whatsappE164 = rescueDoublePrefix(whatsappE164);
-    const parsed = parsePhoneNumberFromString(whatsappE164);
-    if (parsed && parsed.isValid()) whatsappE164 = parsed.number;
+    let candidate = sanitizeE164(b.whatsapp_e164);
+    candidate = rescueDoublePrefix(candidate);
+    const parsed = parsePhoneNumberFromString(candidate);
+    if (parsed && parsed.isValid()) {
+      whatsappE164 = parsed.number;
+    } else {
+      // Descartamos silenciosamente el WA inválido — el diagnóstico
+      // sigue registrándose por email. Log queda en console para
+      // depurar patrones de input erróneo.
+      console.warn(`[diagnostico/register] WhatsApp inválido descartado: "${b.whatsapp_e164}" → "${candidate}"`);
+      whatsappE164 = null;
+    }
   }
 
   // País: del WhatsApp si lo tenemos, sino se queda null por ahora.

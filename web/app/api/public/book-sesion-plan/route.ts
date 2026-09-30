@@ -6,7 +6,7 @@ import { listSesionSlots, SESION_MINUTES } from "@/lib/sesion-slots";
 import { buildTrialToken, buildLeadJoinUrl } from "@/lib/trial-token";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { pauseAllOutbound } from "@/lib/chain-engine";
-import { sanitizeE164 } from "@/lib/phone";
+import { sanitizeE164, validateWhatsappE164 } from "@/lib/phone";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { notifyCloserOnBooking } from "@/lib/sesion-notifications";
 import { notifyCloserSesionChanged } from "@/lib/assignee-notifications";
@@ -107,7 +107,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "validation_failed", details: parsed.error.flatten() }, { status: 400 });
   }
   const b = parsed.data;
-  const whatsapp = b.whatsapp_e164 ? sanitizeE164(b.whatsapp_e164) : null;
+  // Validación estricta (Gelfis 2026-09-30) — rechazar números malformados
+  // antes de guardarlos y evitar exists:false posteriores.
+  let whatsapp: string | null = null;
+  if (b.whatsapp_e164) {
+    const check = validateWhatsappE164(b.whatsapp_e164);
+    if (!check.ok) {
+      return NextResponse.json({
+        error: "invalid_whatsapp",
+        reason: check.reason,
+        message: "El número de WhatsApp no es válido. Revísalo antes de continuar.",
+      }, { status: 400 });
+    }
+    whatsapp = sanitizeE164(check.e164);
+  }
 
   const sb = supabaseAdmin();
 

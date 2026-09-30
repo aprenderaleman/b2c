@@ -10,7 +10,7 @@ import { buildTrialToken, buildLeadJoinUrl } from "@/lib/trial-token";
 // no se usan aquí — están importados en el cron.
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { createTrialEvent } from "@/lib/google-calendar";
-import { sanitizeE164 } from "@/lib/phone";
+import { sanitizeE164, validateWhatsappE164 } from "@/lib/phone";
 // buildTrialIcs se usa desde el cron send-trial-notifications ahora
 // (para adjuntar el .ics al email de confirmación 5min después).
 import { notifyTeacherOfTrial } from "@/lib/teacher-trial-notification";
@@ -176,7 +176,28 @@ export async function POST(req: Request) {
   // country code (caso Juan José 2026-05-07: "+3434615541087"). El
   // frontend ya lo hace pero este endpoint también lo llaman otras
   // entradas (mobile dev, WP plugin, etc.).
+  // Validación estricta E.164 (Gelfis 2026-09-30, bug Gabriel):
+  // el funnel guardó "+5731899708673189970867" (22 dígitos) y el
+  // sistema intentó enviarle mensajes durante días. Rechazamos ya
+  // antes de guardar el lead — pedimos al frontend corregir el
+  // número con mensaje claro.
+  if (b.whatsapp_e164) {
+    const check = validateWhatsappE164(b.whatsapp_e164);
+    if (!check.ok) {
+      return NextResponse.json({
+        error: "invalid_whatsapp",
+        reason: check.reason,
+        message: check.reason === "malformed_length"
+          ? "Formato de número no válido. Revisa que tenga entre 8 y 15 dígitos, con prefijo internacional (ej. +49...)."
+          : check.reason === "invalid_number"
+          ? "El número no corresponde a un plan de numeración válido. Revisa que sea correcto."
+          : "Falta el número de WhatsApp.",
+      }, { status: 400 });
+    }
+    b.whatsapp_e164 = check.e164;
+  }
   // sanitizeE164 espera string; con null/undefined lo dejamos tal cual.
+  // (Redundante tras validateWhatsappE164 pero defense in depth.)
   if (b.whatsapp_e164) {
     b.whatsapp_e164 = sanitizeE164(b.whatsapp_e164);
   }

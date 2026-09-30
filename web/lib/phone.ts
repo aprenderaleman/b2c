@@ -79,6 +79,39 @@ export function isValidE164(phone: string): boolean {
   return /^\+\d{8,15}$/.test(phone || "");
 }
 
+/**
+ * Valida estrictamente un número WhatsApp usando libphonenumber-js
+ * (plan de numeración real por país, no solo longitud). Gelfis 2026-09-30:
+ * caso Gabriel — el funnel guardó "+5731899708673189970867" (22 dígitos)
+ * y el sistema intentó enviarle a un número imposible durante días,
+ * generando fallos `exists:false` que manchan la reputación de la
+ * instancia y contribuyen a bans preventivos.
+ *
+ * Reglas de validación:
+ *   1. Formato E.164 básico (+ + 8-15 dígitos)
+ *   2. libphonenumber-js.isValid() según el plan real del país
+ *
+ * Devuelve el número sanitizado si es válido; null + reason si no.
+ */
+export function validateWhatsappE164(input: string | null | undefined): {
+  ok: true;
+  e164: string;
+} | {
+  ok: false;
+  reason: "empty" | "malformed_length" | "invalid_number";
+} {
+  if (!input || !input.trim()) return { ok: false, reason: "empty" };
+  const sanitized = sanitizeE164(input);
+  if (!isValidE164(sanitized)) {
+    return { ok: false, reason: "malformed_length" };
+  }
+  const parsed = parsePhoneNumberFromString(sanitized);
+  if (!parsed || !parsed.isValid()) {
+    return { ok: false, reason: "invalid_number" };
+  }
+  return { ok: true, e164: parsed.number };
+}
+
 // ── Resolución inteligente de teléfono (libphonenumber) ────────────
 //
 // Caso real Gelfis 2026-05-27: lead español dejó el prefijo por defecto
