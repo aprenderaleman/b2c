@@ -442,13 +442,28 @@ function VideoArea({ classId, isHost }: { classId: string; isHost: boolean }) {
     );
   }
 
+  // El wrapper fija la altura del focus layout al hueco disponible.
+  // Sin esto, .lk-focus-layout (grid) crece con el contenido: si lo
+  // compartido es más alto que el hueco, el vídeo se desborda por abajo
+  // y la barra de botones tapa la franja inferior (reporte Simon
+  // 2026-09-30: "los alumnos no ven la parte inferior de lo que
+  // comparto"). min-h-0/min-w-0 en los items del grid permiten que el
+  // tile encoja; el vídeo ya usa object-fit:contain (letterbox).
   return (
-    <FocusLayoutContainer>
-      <CarouselLayout tracks={others}>
-        <ModeratedTile classId={classId} isHost={isHost} />
-      </CarouselLayout>
-      <FocusLayout trackRef={focused} />
-    </FocusLayoutContainer>
+    <div
+      className="h-full overflow-hidden
+                 [&_.lk-focus-layout]:h-full
+                 [&_.lk-focus-layout]:max-h-full
+                 [&_.lk-focus-layout>*]:min-h-0
+                 [&_.lk-focus-layout>*]:min-w-0"
+    >
+      <FocusLayoutContainer>
+        <CarouselLayout tracks={others}>
+          <ModeratedTile classId={classId} isHost={isHost} />
+        </CarouselLayout>
+        <FocusLayout trackRef={focused} />
+      </FocusLayoutContainer>
+    </div>
   );
 }
 
