@@ -215,13 +215,13 @@ async function getDailySendState(): Promise<{ limit: number; sent: number }> {
     const cfg = new Map((rows ?? []).map(r => [r.key as string, r.value as string]));
     const baseCap = parseInt(cfg.get("wa_daily_send_cap") ?? "300", 10) || 300;
     const warmupDay = parseInt(cfg.get("wa_warmup_day") ?? "", 10);
-    // Warm-up post-ban: 30/día días 1-3, 100/día días 4-7, luego sin masivos.
+    // Warm-up post-ban (Gelfis 2026-09-29 tras caída v4): rampa gradual
+    // en vez de saltos. Cada día suma 50 respecto al anterior, plateau
+    // día 5-7 en 250 y día 8+ vuelve al cap normal (300 por default).
     let effectiveCap = baseCap;
-    if (Number.isFinite(warmupDay) && warmupDay >= 1 && warmupDay <= 14) {
-      if (warmupDay <= 3) effectiveCap = Math.min(effectiveCap, 30);
-      else if (warmupDay <= 7) effectiveCap = Math.min(effectiveCap, 100);
-      // 8-14: sin masivos → cap efectivo = baseCap normal, pero comunicados
-      // deberían pausarse manualmente.
+    if (Number.isFinite(warmupDay) && warmupDay >= 1 && warmupDay <= 7) {
+      const scale: Record<number, number> = { 1: 50, 2: 100, 3: 150, 4: 200, 5: 250, 6: 250, 7: 250 };
+      effectiveCap = Math.min(effectiveCap, scale[warmupDay]);
     }
     // Contar sends WA de hoy (medianoche Berlin).
     const midnightBerlin = new Date(

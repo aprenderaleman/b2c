@@ -216,12 +216,61 @@ function overallStatus(checks: Check[]): Status {
   return "info";
 }
 
+/**
+ * Avanza wa_warmup_day si hay warm-up activo. Gelfis 2026-09-29:
+ * tras la caída de v4 arrancamos día 1 (cap 50) y cada 24h subimos
+ * un escalón hasta llegar a día 8 (donde el warm-up desactiva solo).
+ */
+async function advanceWarmupIfActive(): Promise<{ day: number; cap: number } | null> {
+  const sb = supabaseAdmin();
+  const { data } = await sb.from("system_config")
+    .select("key,value")
+    .in("key", ["wa_warmup_day", "wa_warmup_started_at"]);
+  const cfg = new Map((data ?? []).map(r => [r.key as string, r.value as string]));
+  const day = parseInt(cfg.get("wa_warmup_day") ?? "", 10);
+  const startedAt = cfg.get("wa_warmup_started_at") ?? "";
+  if (!Number.isFinite(day) || day < 1 || day > 7 || !startedAt) return null;
+
+  const hoursSinceStart = (Date.now() - new Date(startedAt).getTime()) / 3_600_000;
+  const expectedDay = Math.min(8, 1 + Math.floor(hoursSinceStart / 24));
+  if (expectedDay <= day) return null;   // aún no toca avanzar
+
+  const nowIso = new Date().toISOString();
+  if (expectedDay >= 8) {
+    // Warm-up completado: limpiar los flags para volver al cap normal.
+    await sb.from("system_config").upsert(
+      [{ key: "wa_warmup_day", value: "", updated_at: nowIso },
+       { key: "wa_warmup_started_at", value: "", updated_at: nowIso },
+       { key: "wa_burst_cap_per_tick", value: "20", updated_at: nowIso }],
+      { onConflict: "key" },
+    );
+    return { day: 8, cap: 300 };
+  }
+  const scale: Record<number, number> = { 1: 50, 2: 100, 3: 150, 4: 200, 5: 250, 6: 250, 7: 250 };
+  await sb.from("system_config").upsert(
+    { key: "wa_warmup_day", value: String(expectedDay), updated_at: nowIso },
+    { onConflict: "key" },
+  );
+  return { day: expectedDay, cap: scale[expectedDay] };
+}
+
 async function run(req: Request) {
   if (!authorised(req)) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const warmupAdvance = await advanceWarmupIfActive();
+
   const checks = await runAudit();
+  if (warmupAdvance) {
+    checks.push({
+      name:   "warmup_advanced",
+      status: "info",
+      detail: warmupAdvance.day >= 8
+        ? "Warm-up completado — cap normal restaurado."
+        : `Warm-up avanzado a día ${warmupAdvance.day} (cap ${warmupAdvance.cap}).`,
+    });
+  }
   const overall = overallStatus(checks);
   const crit = checks.filter(c => c.status === "critical").length;
   const warn = checks.filter(c => c.status === "warning").length;

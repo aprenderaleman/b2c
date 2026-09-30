@@ -769,9 +769,36 @@ async function createCloserTask(
 
 // ── Get pending chains for cron ────────────────────────────────────────
 
+/**
+ * Prioridad de procesamiento (menor = primero). Gelfis 2026-09-29:
+ * cuando hay backlog tras caída de WhatsApp, priorizar leads que YA
+ * se comprometieron (asistieron a trial o sesión) sobre las cadenas
+ * de rescate y drip.
+ *
+ * 0 = leads activos que esperan respuesta post-compromiso
+ * 1 = rescate transaccional post-no-show
+ * 2 = cadenas conversacionales y objeciones (drip)
+ * 3 = pings marketing (dormant, testimonios)
+ */
+const CHAIN_PRIORITY: Record<string, number> = {
+  chain1_attended:      0,
+  chain2_link_sent:     0,
+  sesion_attended:      0,
+  welcome_week:         0,
+  chain4_absent:        1,
+  chain6_cancel:        1,
+  sesion_absent:        1,
+};
+
 export async function getPendingChains(): Promise<ChainRow[]> {
   const sb = supabaseAdmin();
   const now = new Date().toISOString();
+
+  // Cap por tick — configurable en system_config.wa_burst_cap_per_tick.
+  // Durante warm-up bajamos este cap para reducir ráfagas.
+  const { data: capRow } = await sb.from("system_config")
+    .select("value").eq("key", "wa_burst_cap_per_tick").maybeSingle();
+  const burstCap = parseInt((capRow as { value?: string } | null)?.value ?? "20", 10) || 20;
 
   const { data, error } = await sb
     .from("lead_chains")
@@ -779,12 +806,21 @@ export async function getPendingChains(): Promise<ChainRow[]> {
     .is("completed_at", null)
     .lte("next_fire_at", now)
     .or(`paused_until.is.null,paused_until.lte.${now}`)
-    .limit(50);
+    .limit(200);   // fetch amplio para permitir ordenamiento por prioridad
 
   if (error) {
     console.error("[chain-engine] getPendingChains error:", error.message);
     return [];
   }
 
-  return (data ?? []) as ChainRow[];
+  const rows = (data ?? []) as ChainRow[];
+  rows.sort((a, b) => {
+    const pa = CHAIN_PRIORITY[a.chain_type] ?? 2;
+    const pb = CHAIN_PRIORITY[b.chain_type] ?? 2;
+    if (pa !== pb) return pa - pb;
+    // Secundario: más antiguo (next_fire vencido) primero.
+    return (a.next_fire_at ?? "").localeCompare(b.next_fire_at ?? "");
+  });
+
+  return rows.slice(0, burstCap);
 }
