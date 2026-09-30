@@ -44,6 +44,18 @@ export default async function StudentHome() {
     );
   }
 
+  // Bono clase de conversación 48h (Gelfis 2026-09-30): banner mientras
+  // esté pendiente de agendar. Desaparece al marcarse como dada en /admin.
+  const { data: bonoRow } = await supabaseAdmin()
+    .from("students")
+    .select("bono_conversacion_at, bono_conversacion_usada_at")
+    .eq("id", student.id)
+    .maybeSingle();
+  const bonoPendiente = Boolean(
+    (bonoRow as { bono_conversacion_at: string | null; bono_conversacion_usada_at: string | null } | null)
+      ?.bono_conversacion_at && !(bonoRow as { bono_conversacion_usada_at: string | null })?.bono_conversacion_usada_at,
+  );
+
   const [upcoming, progress, icalToken, streak, live, pendingReview] = await Promise.all([
     getStudentUpcomingClasses(student.id, new Date(), 60),
     getStudentProgress(student.id),
@@ -64,6 +76,25 @@ export default async function StudentHome() {
           Bienvenido a tu plataforma. Aquí está lo próximo.
         </p>
       </header>
+
+      {/* 🎁 Bono de clase de conversación gratis (convirtió <48h post-trial) */}
+      {bonoPendiente && (
+        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-5">
+          <div className="flex items-start gap-3">
+            <span className="text-2xl" aria-hidden>🎁</span>
+            <div>
+              <div className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+                Tienes una clase de conversación GRATIS
+              </div>
+              <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">
+                Por haberte inscrito en tus primeras 48 horas te regalamos una clase
+                de conversación adicional (no descuenta de tu paquete). Tu profesor
+                te escribirá para agendarla — o pídesela tú en Mensajes.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Live-now CTA — auto-polls every 15s, auto-hides when class ends */}
       <LiveClassCta initial={live} />

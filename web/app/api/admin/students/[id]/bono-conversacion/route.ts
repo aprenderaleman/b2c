@@ -31,17 +31,34 @@ export async function POST(
   const sb = supabaseAdmin();
   const { data: stu } = await sb
     .from("students")
-    .select("id, bono_conversacion_at")
+    .select("id, bono_conversacion_at, bono_conversacion_usada_at, classes_adjustment")
     .eq("id", id)
     .maybeSingle();
   if (!stu) return NextResponse.json({ error: "student_not_found" }, { status: 404 });
-  if (!(stu as { bono_conversacion_at: string | null }).bono_conversacion_at) {
+  const row = stu as { bono_conversacion_at: string | null; bono_conversacion_usada_at: string | null; classes_adjustment: number | null };
+  if (!row.bono_conversacion_at) {
     return NextResponse.json({ error: "no_bono" }, { status: 400 });
   }
+  // Idempotencia: marcar dos veces (o deshacer sin marcar) no debe
+  // duplicar el ajuste de clases.
+  if (!undo && row.bono_conversacion_usada_at) {
+    return NextResponse.json({ ok: true, used: true, already: true });
+  }
+  if (undo && !row.bono_conversacion_usada_at) {
+    return NextResponse.json({ ok: true, used: false, already: true });
+  }
 
+  // La clase del bono es ADICIONAL (decisión Gelfis 2026-09-30): al darla
+  // se consume 1 clase del balance como cualquier clase normal, así que
+  // compensamos con +1 en classes_adjustment para que el paquete pagado
+  // quede intacto. El undo revierte el ajuste.
+  const delta = undo ? -1 : 1;
   const { error } = await sb
     .from("students")
-    .update({ bono_conversacion_usada_at: undo ? null : new Date().toISOString() })
+    .update({
+      bono_conversacion_usada_at: undo ? null : new Date().toISOString(),
+      classes_adjustment: (row.classes_adjustment ?? 0) + delta,
+    })
     .eq("id", id);
   if (error) {
     return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });

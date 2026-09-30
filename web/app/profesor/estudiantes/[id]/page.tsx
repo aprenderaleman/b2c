@@ -71,8 +71,13 @@ export default async function TeacherStudentDetail({
   const [progress, notes, ofertaRow] = await Promise.all([
     getStudentProgress(studentId),
     listNotesForStudent(studentId, teacherId ?? undefined),
-    sbBal.from("students").select("oferta_id, clases_totales").eq("id", studentId).maybeSingle(),
+    sbBal.from("students").select("oferta_id, clases_totales, bono_conversacion_at, bono_conversacion_usada_at").eq("id", studentId).maybeSingle(),
   ]);
+  // Bono clase de conversación 48h (Gelfis 2026-09-30): aviso al profe
+  // mientras esté pendiente. La clase es ADICIONAL — no descuenta del
+  // paquete (el ajuste +1 lo aplica el admin al marcarla como dada).
+  const bonoData = ofertaRow.data as { bono_conversacion_at?: string | null; bono_conversacion_usada_at?: string | null } | null;
+  const bonoPendiente = Boolean(bonoData?.bono_conversacion_at && !bonoData?.bono_conversacion_usada_at);
 
   // Balance de clases (caso Jonathan/Nancy 2026-08-20). Tras la
   // unificación 2026-08-21 aplica a todo estudiante con balance
@@ -87,6 +92,18 @@ export default async function TeacherStudentDetail({
       <Link href="/profesor" className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400">
         ← Volver al inicio
       </Link>
+
+      {bonoPendiente && (
+        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-4 flex items-start gap-3">
+          <span className="text-xl" aria-hidden>🎁</span>
+          <div className="text-sm text-amber-800 dark:text-amber-200">
+            <strong>Bono pendiente:</strong> este estudiante ganó una clase de
+            conversación <strong>gratis</strong> (se inscribió en sus primeras 48h).
+            Agéndala como una clase normal — es adicional, no descuenta de su
+            paquete. Cuando esté dada, avisa al admin para cerrarla.
+          </div>
+        </div>
+      )}
 
       <header className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
