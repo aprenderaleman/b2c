@@ -279,3 +279,35 @@ export async function getMotivoDistribution(days: number): Promise<MotivoBucket[
     .map(([motivo, count]) => ({ motivo, count }) as MotivoBucket)
     .sort((a, b) => b.count - a.count);
 }
+
+// ── Bonos de conversación 48h pendientes (Gelfis 2026-09-30) ─────
+//
+// Estudiantes que convirtieron dentro de las 48h post-trial (ganaron
+// una clase de conversación gratis, migración 136) y a los que aún no
+// se les ha agendado/dado. Alimenta la sección 🎁 del dashboard /admin.
+
+export type BonoConversacionRow = {
+  studentId: string;
+  name:      string;
+  dias:      number;
+};
+
+export async function getBonosConversacionPendientes(): Promise<BonoConversacionRow[]> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("students")
+    .select("id, bono_conversacion_at, users!inner(full_name, email)")
+    .not("bono_conversacion_at", "is", null)
+    .is("bono_conversacion_usada_at", null)
+    .order("bono_conversacion_at", { ascending: true });
+  if (error) throw error;
+  return ((data ?? []) as Array<{ id: string; bono_conversacion_at: string; users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }> }>)
+    .map(r => {
+      const u = Array.isArray(r.users) ? r.users[0] : r.users;
+      return {
+        studentId: r.id,
+        name:      u?.full_name ?? u?.email ?? "Estudiante",
+        dias:      Math.floor((Date.now() - new Date(r.bono_conversacion_at).getTime()) / 86_400_000),
+      };
+    });
+}

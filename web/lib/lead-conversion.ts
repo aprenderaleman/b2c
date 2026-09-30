@@ -76,7 +76,7 @@ export async function convertLeadToStudent(
 
   const { data: lead, error: leadErr } = await sb
     .from("leads")
-    .select("id, status, whatsapp_normalized, converted_to_user_id, closer_id")
+    .select("id, status, whatsapp_normalized, converted_to_user_id, closer_id, trial_attended_at")
     .eq("id", leadId)
     .maybeSingle();
 
@@ -137,6 +137,30 @@ export async function convertLeadToStudent(
     if (options.ofertaId) extraFields.oferta_id = options.ofertaId;
     if (options.conversionSource) extraFields.conversion_source = options.conversionSource;
     await sb.from("students").update(extraFields).eq("id", created.studentId);
+  }
+
+  // ═══ Bono clase de conversación (Gelfis 2026-09-30) ═══
+  // Si convierte dentro de las 48h posteriores a asistir a su trial,
+  // gana una clase de conversación gratis. Aquí solo se REGISTRA el
+  // derecho (students.bono_conversacion_at) — la clase se agenda a mano
+  // desde el panel (sección "Bonos de conversación pendientes" en /admin).
+  // La promesa la lleva chain1_attended variante _bonus_vivo.
+  try {
+    const attendedAt = (lead as { trial_attended_at?: string | null }).trial_attended_at;
+    if (attendedAt && Date.now() - new Date(attendedAt).getTime() <= 48 * 3_600_000) {
+      await sb.from("students")
+        .update({ bono_conversacion_at: new Date().toISOString() })
+        .eq("id", created.studentId);
+      const horas = Math.round((Date.now() - new Date(attendedAt).getTime()) / 3_600_000);
+      await sb.from("lead_timeline").insert({
+        lead_id: lead.id,
+        type:    "status_change",
+        author:  "system",
+        content: `🎁 Bono GANADO: clase de conversación gratis (convirtió ${horas}h después del trial, dentro de la ventana de 48h). Pendiente de agendar.`,
+      });
+    }
+  } catch (e) {
+    console.error("[convert] bono conversacion check failed (non-fatal):", e instanceof Error ? e.message : e);
   }
 
   const trial = await getLeadTrialTeacher(lead.id);

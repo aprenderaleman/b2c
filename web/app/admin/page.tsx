@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  getBonosConversacionPendientes,
   getLeadsNeedingHuman,
   getQuickStats,
   getStaleConversations,
@@ -12,12 +13,13 @@ import { StatusBadge } from "@/components/admin/StatusBadge";
 export const dynamic = "force-dynamic"; // always fresh — this is the nerve-center
 
 export default async function TodayView() {
-  const [trials, needsHuman, stale, stats, risks] = await Promise.all([
+  const [trials, needsHuman, stale, stats, risks, bonos] = await Promise.all([
     getTodaysTrials(),
     getLeadsNeedingHuman(),
     getStaleConversations(),
     getQuickStats(),
     computeRiskAlerts().catch(() => []),
+    getBonosConversacionPendientes().catch(() => []),
   ]);
 
   return (
@@ -95,6 +97,34 @@ export default async function TodayView() {
           ? <EmptyState text="Todas las conversaciones activas están al día." />
           : <LeadList leads={stale} />}
       </Section>
+
+      {/* Bonos de conversación 48h pendientes de agendar (Gelfis 2026-09-30) */}
+      {bonos.length > 0 && (
+        <Section title="🎁 Bonos de conversación pendientes" count={bonos.length} tone="amber">
+          <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+            {bonos.map(b => (
+              <li key={b.studentId} className="py-2.5 flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <Link href={`/admin/estudiantes/${b.studentId}`} className="text-sm font-medium text-slate-900 dark:text-slate-100 hover:underline">
+                    {b.name}
+                  </Link>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    Ganó su clase de conversación gratis hace {b.dias} {b.dias === 1 ? "día" : "días"} — agendarla con su profe.
+                  </div>
+                </div>
+                <form method="POST" action={`/api/admin/students/${b.studentId}/bono-conversacion`}>
+                  <button
+                    type="submit"
+                    className="text-xs rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
+                  >
+                    ✓ Clase dada / agendada
+                  </button>
+                </form>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
     </main>
   );
 }

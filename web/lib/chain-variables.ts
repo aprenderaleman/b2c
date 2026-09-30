@@ -172,9 +172,12 @@ export async function resolveChainVariables(
 /**
  * ¿Hay bono real activo? Cumple AUTHORING_RULES ("prohibida la escasez
  * inventada"): si `chainMeta.bonus_activo` no es explícitamente true,
- * NO se sirve la variante _bonus_vivo. La ventana temporal de 48h
- * antigua queda deprecada — el handler que arranca la chain debe
- * pasar `bonus_activo: true` cuando decidamos ofrecer el bono real.
+ * NO se sirve la variante _bonus_vivo.
+ *
+ * Desde 2026-09-30 el bono ES real: markTrialAttendedNoLink pasa
+ * bonus_activo=true y convertLeadToStudent registra el derecho
+ * (students.bono_conversacion_at) cuando el lead convierte dentro de
+ * las 48h posteriores al trial. Ver migración 136.
  */
 export function isBonusAlive(chainStartedAt: string, chainMeta?: Record<string, unknown>): boolean {
   return chainMeta?.bonus_activo === true;

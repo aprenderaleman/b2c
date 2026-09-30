@@ -487,6 +487,12 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
     chainMetadata.packId = priorMeta.last_offered_pack;
   }
 
+  // Bono REAL activo (Gelfis 2026-09-30): quien se inscribe dentro de las
+  // 48h gana una clase de conversación gratis — el derecho se registra en
+  // convertLeadToStudent (students.bono_conversacion_at). Con el flag,
+  // el motor sirve las variantes chain1_attended_bonus_vivo y {dia_bonus}
+  // (= started_at + 48h) deja de ser escasez inventada.
+  chainMetadata.bonus_activo = true;
   await startChain(leadId, "chain1_attended", chainMetadata, { bypassGateOnStart: true })
     .catch(err => console.warn("[markTrialAttendedNoLink] startChain error:", err));
 }
