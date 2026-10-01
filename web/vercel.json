@@ -40,7 +40,7 @@
     },
     {
       "path": "/api/cron/trial-auto-absent",
-      "schedule": "0 3 * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/comunicados-dispatch",
