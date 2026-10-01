@@ -445,10 +445,33 @@ async function handleInvoicePaid(
     const billingReason = (invoice as unknown as { billing_reason?: string | null }).billing_reason;
     const isRenewal = billingReason === "subscription_cycle";
     const commissionKey = piId ?? invoice.id ?? null;
-    if (s?.trial_teacher_id && isRenewal && commissionKey && isInCommissionWindow(s.commission_window_end)) {
+    // Profe que cobra la renovación = el que DIO la clase de prueba (misma
+    // regla que auto-conversion). students.trial_teacher_id a veces guarda
+    // el profe asignado (caso Saidys/Sonia sept 2026: cobró Jonathan sin
+    // haber dado la prueba); solo se usa como respaldo.
+    let commissionTeacherId: string | null = s?.trial_teacher_id ?? null;
+    if (s) {
+      const { data: leadRow } = await sb.from("students").select("lead_id").eq("id", s.id).maybeSingle();
+      const leadId = (leadRow as { lead_id: string | null } | null)?.lead_id;
+      if (leadId) {
+        const { data: trialCls } = await sb
+          .from("classes")
+          .select("teacher_id")
+          .eq("lead_id", leadId)
+          .eq("is_trial", true)
+          .eq("status", "completed")
+          .order("scheduled_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const tid = (trialCls as { teacher_id?: string } | null)?.teacher_id;
+        if (tid) commissionTeacherId = tid;
+      }
+    }
+
+    if (s && commissionTeacherId && isRenewal && commissionKey && isInCommissionWindow(s.commission_window_end)) {
       try {
         await registerCommission({
-          teacherId: s.trial_teacher_id,
+          teacherId: commissionTeacherId,
           studentId: s.id,
           amountCents: eurCents,
           currency: "EUR",
