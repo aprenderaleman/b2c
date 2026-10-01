@@ -135,10 +135,17 @@ export function buildGarantiaPdf(v: GarantiaPdfVars): Promise<Buffer> {
   y = doc.y + 12;
 
   sectionTitle("TU PARTE DEL COMPROMISO");
-  body("Esta garantía se mantiene activa cumpliendo dos condiciones — las mismas que garantizan tu aprendizaje:");
-  body("✓  Asistir al menos al 85% de tus clases programadas", { bold: true });
+  body("Esta garantía se mantiene activa cumpliendo tres condiciones — las mismas que garantizan tu aprendizaje:");
+  body("•  Asistir al menos al 85% de tus clases programadas", { bold: true });
   y -= 4;
-  body("✓  Completar al menos el 85% de tus ejercicios en la plataforma SCHULE", { bold: true });
+  body("•  Completar al menos el 85% de tus ejercicios en la plataforma SCHULE", { bold: true });
+  y -= 4;
+  // Gelfis 2026-10-01: plazo cerrado para SCHULE — los ejercicios cuentan
+  // solo si están hechos antes de la última clase del programa.
+  body(
+    `•  Tener los ejercicios de SCHULE completados, como máximo, el último día de clases de tu programa${v.fechaLlegada ? ` (previsto para ${v.fechaLlegada})` : ""}`,
+    { bold: true },
+  );
   body("Podrás consultar el estado de tu garantía en cualquier momento desde tu panel de estudiante.");
 
   sectionTitle("CONDICIONES GENERALES");
@@ -147,6 +154,7 @@ export function buildGarantiaPdf(v: GarantiaPdfVars): Promise<Buffer> {
     "Aplica a todos los ritmos de suscripción activa y pagos únicos",
     "Las pausas acordadas con la academia no rompen la garantía; la cancelación de la suscripción la finaliza",
     "Las clases de continuación gratuitas mantienen tu mismo formato individual",
+    "El cumplimiento de la garantía se comprueba al finalizar la última clase del programa; los ejercicios de SCHULE completados después de esa fecha no se tienen en cuenta",
   ];
   for (const c of conds) {
     doc.font("Helvetica").fontSize(9).fillColor(NAVY_LIGHT)
