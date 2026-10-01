@@ -61,15 +61,25 @@ export async function POST(
     return NextResponse.json({ error: "update_failed", message: error.message }, { status: 500 });
   }
 
-  // Fire the "te hemos pagado" email when flipping to paid. Failures
-  // are logged but don't break the response — the admin's already
-  // moved on to the next row.
+  // Fire the "te hemos pagado" email when flipping to paid.
+  // Bug Veronica 2026-10-01: antes era fire-and-forget con .catch() —
+  // si Vercel terminaba el lambda antes de que terminara la generación
+  // del PDF + envío Resend, el email se perdía silenciosamente y el
+  // teacher nunca sabía que se le pagó. Ahora await para garantizar
+  // completar antes de responder al admin.
+  let emailResult: { teacher?: { ok: boolean; error?: string }; admin?: { ok: boolean; error?: string } | null } = {};
   if (body.paid) {
-    sendInvoicePaidEmails(id, body.paymentReference ?? null).catch(e => {
+    try {
+      const res = await sendInvoicePaidEmails(id, body.paymentReference ?? null);
+      if (res) {
+        emailResult = { teacher: res.teacherEmail, admin: res.adminEmail };
+      }
+    } catch (e) {
       console.error("[earnings/pay] invoice-paid email failed:", e);
-    });
+      emailResult = { teacher: { ok: false, error: e instanceof Error ? e.message : "unknown" } };
+    }
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, emailResult });
 }
 
