@@ -51,19 +51,23 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Mensajes",         href: "/profesor/mensajes",        icon: "messageCircle",  priority: 3.5 },
     { label: "Ganancias",        href: "/profesor/ganancias",       icon: "wallet",         priority: 4 },
     { label: "Disponibilidad",   href: "/profesor/disponibilidad",  icon: "clock",          priority: 5 },
-    { label: "Materiales",       href: "/profesor/materiales",      icon: "folder",         priority: 6 },
+    // "Materiales" oculto del menú (Gelfis 2026-10-01) — la ruta sigue viva,
+    // pero el contenido canónico ahora son los Cursos (SCHULE).
     { label: "Recursos",         href: "/profesor/recursos",        icon: "bookOpen",       priority: 6.2 },
     { label: "Grabaciones",      href: "/profesor/grabaciones",     icon: "video",          priority: 6.5 },
-    { label: "Cursos",           href: "/profesor/cursos",          icon: "bookOpen",       priority: 1.3 },
+    // Cursos destacado: justo debajo de "Hoy" (Gelfis 2026-10-01).
+    { label: "Cursos",           href: "/profesor/cursos",          icon: "graduationCap",  priority: 1.1 },
   ],
   student: [
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
     { label: "Mis clases",   href: "/estudiante/clases",        icon: "calendarDays",   priority: 2 },
     { label: "Apuntes",     href: "/estudiante/apuntes",       icon: "fileText",       priority: 2.3 },
     { label: "Mensajes",    href: "/estudiante/mensajes",      icon: "messageCircle",  priority: 2.5 },
-    { label: "Material",     href: "/estudiante/materiales",    icon: "bookOpen",       priority: 3 },
+    // "Material" oculto del menú (Gelfis 2026-10-01) — ruta viva; el
+    // contenido canónico son los Cursos (SCHULE).
     { label: "Grabaciones",  href: "/estudiante/grabaciones",   icon: "video",          priority: 3.5 },
-    { label: "Cursos",       href: "/estudiante/cursos",        icon: "bookOpen",       priority: 1.5 },
+    // Cursos destacado: justo debajo de "Hoy" (Gelfis 2026-10-01).
+    { label: "Cursos",       href: "/estudiante/cursos",        icon: "graduationCap",  priority: 1.1 },
     { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
   ],
   closer: closerItems(),
