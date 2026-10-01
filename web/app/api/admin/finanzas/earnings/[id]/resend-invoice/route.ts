@@ -18,17 +18,30 @@ export const runtime = "nodejs";
  *
  * Devuelve un JSON con el resultado de cada envío para feedback en UI.
  */
+function isCronAuthd(req: Request): boolean {
+  const expected = process.env.CRON_SECRET;
+  if (!expected) return false;
+  const bearer = req.headers.get("authorization");
+  if (bearer && bearer.toLowerCase().startsWith("bearer ")) {
+    if (bearer.slice(7).trim() === expected) return true;
+  }
+  return req.headers.get("x-cron-secret") === expected;
+}
+
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-  const role = (session.user as { role?: string }).role;
-  if (role !== "admin" && role !== "superadmin") {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const cronAuthd = isCronAuthd(req);
+  if (!cronAuthd) {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+    const role = (session.user as { role?: string }).role;
+    if (role !== "admin" && role !== "superadmin") {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
   }
 
   const { id } = await params;
