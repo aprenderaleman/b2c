@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { berlinWallClockToIso } from "@/lib/schedule";
+import { LocalTimeHint } from "@/components/classes/LocalTimeHint";
 
 /**
  * Actions visible only while a class is in status='scheduled':
@@ -149,6 +150,7 @@ function RescheduleModal({
               <span className="text-xs font-medium text-slate-700 dark:text-slate-200">Hora (Berlín)</span>
               <input type="time" step={300} value={timeStr} onChange={(e) => setTimeStr(e.target.value)}
                 className="mt-1 input-text w-full" />
+              <LocalTimeHint dateYmd={dateStr} hhmm={timeStr} />
             </label>
             <label className="block">
               <span className="text-xs font-medium text-slate-700 dark:text-slate-200">Duración</span>

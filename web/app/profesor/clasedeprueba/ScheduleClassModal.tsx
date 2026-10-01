@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { berlinWallClockToIso } from "@/lib/schedule";
+import { LocalTimeHint } from "@/components/classes/LocalTimeHint";
 
 /**
  * Modal para agendar clases regulares de un estudiante ya convertido
@@ -190,6 +191,7 @@ export function ScheduleClassModal({
                     className="mt-1 w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400"
                     required
                   />
+                  <LocalTimeHint dateYmd={s.dateTime.slice(0, 10)} hhmm={s.dateTime.slice(11, 16)} />
                 </div>
                 <div>
                   <label className="block text-xs text-slate-600 dark:text-slate-400">
