@@ -30,7 +30,7 @@ export function renderTeacherOnboardingFunnel(v: TeacherOnboardingFunnelVars): R
     ${p(`<em style="color:#64748b;">El enlace es personal y válido ${v.validDays} días. Si caduca, usa "¿Olvidaste tu contraseña?" en la pantalla de acceso.</em>`)}
     ${p(`<strong>2. Marca tu disponibilidad</strong><br>En <a href="${disponibilidad}">${escapeHtml(disponibilidad)}</a> indica las franjas (hora de Berlín) en las que puedes dar clases de prueba. Puedes poner varias franjas el mismo día. Los alumnos solo podrán reservar contigo dentro de esas franjas, así que cuanto más abras, más clases recibirás.`)}
     ${p(`<strong>3. Vincula tu Google Calendar (recomendado)</strong><br>En tu panel, <a href="${panel}">${escapeHtml(panel)}</a>, pulsa "Vincular Google Calendar". Así las clases se añaden solas a tu calendario y nadie podrá reservar encima de un compromiso personal tuyo.`)}
-    ${p(`Cuando tengas la disponibilidad marcada, avísanos y activamos tus clases de prueba. Si tienes cualquier duda, escríbenos a info@aprender-aleman.de.`)}
+    ${p(`Cuando tengas la disponibilidad marcada, avísanos y activamos tus clases de prueba. Si tienes cualquier duda, escríbenos a aprenderaleman2026@gmail.com.`)}
     ${p(`<em style="color:#64748b;">El equipo de Aprender-Aleman.de</em>`)}
   `;
   const footerNote = "Recibes este correo porque tu cuenta de profe en Aprender-Aleman.de fue activada.";
@@ -49,7 +49,7 @@ export function renderTeacherOnboardingFunnel(v: TeacherOnboardingFunnelVars): R
     ``,
     `3. Vincula tu Google Calendar (recomendado): en ${panel} pulsa "Vincular Google Calendar".`,
     ``,
-    `Cuando tengas la disponibilidad marcada, avísanos. Si tienes dudas, escríbenos a info@aprender-aleman.de.`,
+    `Cuando tengas la disponibilidad marcada, avísanos. Si tienes dudas, escríbenos a aprenderaleman2026@gmail.com.`,
     ``,
     `El equipo de Aprender-Aleman.de`,
   ].join("\n");

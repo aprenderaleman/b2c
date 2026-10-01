@@ -20,7 +20,7 @@ export function renderPackLowBalance(vars: PackLowBalanceVars): RenderedEmail {
     `<div style="text-align:center;margin:20px 0;">`,
     button(whatsappUrl, "Escribir a Gelfis por WhatsApp"),
     `</div>`,
-    p(`O escríbenos a <a href="mailto:info@aprender-aleman.de" style="color:#ea580c;text-decoration:none;font-weight:600;">info@aprender-aleman.de</a>`),
+    p(`O escríbenos a <a href="mailto:aprenderaleman2026@gmail.com" style="color:#ea580c;text-decoration:none;font-weight:600;">aprenderaleman2026@gmail.com</a>`),
     p("Seguimos con todo — cada clase cuenta!"),
     p("Tu equipo de <strong>Aprender-Aleman.de</strong>"),
   ].join("\n");
@@ -35,7 +35,7 @@ Para que no se interrumpa tu progreso en alemán, te recomendamos coordinar los 
 
 Escríbele a Gelfis Horn para renovar tu plan o resolver cualquier duda:
 - WhatsApp: ${whatsappUrl}
-- Email: info@aprender-aleman.de
+- Email: aprenderaleman2026@gmail.com
 
 Seguimos con todo — cada clase cuenta!
 

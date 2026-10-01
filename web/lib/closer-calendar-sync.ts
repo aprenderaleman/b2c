@@ -61,7 +61,7 @@ async function resolveCloserCalendarKind(closerId: string): Promise<CalendarKind
   //    (a) role admin/superadmin (uso del CEO desde consola admin).
   //    (b) el user es el propio Gelfis actuando como closer: mismo
   //        email que ADMIN_EMAIL o que GOOGLE_CALENDAR_ID. Esto cubre
-  //        el perfil "Gelfis Closer" (info@aprender-aleman.de, role
+  //        el perfil "Gelfis Closer" (aprenderaleman2026@gmail.com, role
   //        closer) para que sus sesiones se agenden en el mismo
   //        calendar personal donde viven los trials, sin OAuth aparte.
   const { data: user } = await sb

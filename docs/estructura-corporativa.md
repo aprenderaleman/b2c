@@ -113,7 +113,7 @@ Estudiante paga (tarjeta/SEPA)
 | Servicio | Función | Factura a |
 |----------|---------|-----------|
 | **Anthropic** | Claude AI (agentes, Hans, automaciones) | Mercury/tarjeta |
-| **Resend** | Email transaccional (info@aprender-aleman.de) | Mercury/tarjeta |
+| **Resend** | Email transaccional (aprenderaleman2026@gmail.com) | Mercury/tarjeta |
 | **Evolution API** | WhatsApp Business gateway (self-hosted) | Solo VPS cost |
 | **Calendly** | Booking de sesiones de prueba | Free/Pro plan |
 | **Google Ads** | Campañas España (Customer ID: `380-055-0611`) | Tarjeta vinculada |

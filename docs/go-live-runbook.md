@@ -33,7 +33,7 @@ Sin esto el código corre pero los emails sólo se loguean en stdout
 (la conversión crea al estudiante igual; solo que el estudiante
 no recibe el correo con password).
 
-1. Crea cuenta en https://resend.com con `info@aprender-aleman.de`.
+1. Crea cuenta en https://resend.com con `aprenderaleman2026@gmail.com`.
 2. *Domains* → *Add Domain* → `aprender-aleman.de`.
 3. Resend te dará 3 registros DNS (SPF TXT + 2 DKIM CNAME). Pégalos
    en Hostinger.

@@ -166,7 +166,7 @@ async function run(req: Request) {
         `Aula virtual: ${joinUrl}\n\n` +
         `Importante: al abrir el enlace tu navegador te pedirá permiso para micrófono y cámara — pulsa "Permitir".`,
       organizerName:  "Aprender-Aleman.de",
-      organizerEmail: "info@aprender-aleman.de",
+      organizerEmail: "aprenderaleman2026@gmail.com",
       attendeeName:   lead.name ?? "",
       attendeeEmail:  lead.email ?? "",
       location:       joinUrl,

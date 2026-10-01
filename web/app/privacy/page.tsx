@@ -42,7 +42,7 @@ function ES() {
 
       <H2>Contacto</H2>
       <Block>
-        Email: <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a><br />
+        Email: <a href="mailto:aprenderaleman2026@gmail.com">aprenderaleman2026@gmail.com</a><br />
         Web: <a href="https://aprender-aleman.de" target="_blank" rel="noopener noreferrer">https://aprender-aleman.de</a>
       </Block>
 
@@ -159,7 +159,7 @@ function ES() {
         31832 Springe<br />
         Alemania<br />
         <br />
-        Email: <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a>
+        Email: <a href="mailto:aprenderaleman2026@gmail.com">aprenderaleman2026@gmail.com</a>
       </Block>
 
       <H2>2. Aspectos generales sobre el tratamiento</H2>
@@ -467,7 +467,7 @@ function ES() {
       <H2>9. Contacto por email</H2>
       <p>
         Cuando nos contactas por email ({" "}
-        <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a>),
+        <a href="mailto:aprenderaleman2026@gmail.com">aprenderaleman2026@gmail.com</a>),
         los datos que nos comunicas (dirección de email, nombre,
         contenido del mensaje) se almacenan para tramitar tu consulta.
         La base jurídica es el Art. 6 apdo. 1 letra f RGPD o, en su
@@ -582,7 +582,7 @@ function ES() {
         consentimientos otorgados, contáctanos en:
       </p>
       <Block>
-        Email: <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a>
+        Email: <a href="mailto:aprenderaleman2026@gmail.com">aprenderaleman2026@gmail.com</a>
       </Block>
     </article>
   );
@@ -613,7 +613,7 @@ function DE() {
 
       <H2>Kontakt</H2>
       <Block>
-        E-Mail: <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a><br />
+        E-Mail: <a href="mailto:aprenderaleman2026@gmail.com">aprenderaleman2026@gmail.com</a><br />
         Webseite: <a href="https://aprender-aleman.de" target="_blank" rel="noopener noreferrer">https://aprender-aleman.de</a>
       </Block>
 
@@ -725,7 +725,7 @@ function DE() {
         31832 Springe<br />
         Deutschland<br />
         <br />
-        E-Mail: <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a>
+        E-Mail: <a href="mailto:aprenderaleman2026@gmail.com">aprenderaleman2026@gmail.com</a>
       </Block>
 
       <H2>2. Allgemeines zur Datenverarbeitung</H2>
@@ -1034,7 +1034,7 @@ function DE() {
       <H2>9. Kontaktaufnahme per E-Mail</H2>
       <p>
         Wenn Sie uns per E-Mail kontaktieren ({" "}
-        <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a>),
+        <a href="mailto:aprenderaleman2026@gmail.com">aprenderaleman2026@gmail.com</a>),
         werden die von Ihnen mitgeteilten Daten (E-Mail-Adresse, Name,
         Inhalt der Nachricht) zur Bearbeitung Ihrer Anfrage gespeichert.
         Rechtsgrundlage ist Art. 6 Abs. 1 lit. f DSGVO bzw. Art. 6 Abs. 1
@@ -1149,7 +1149,7 @@ function DE() {
         wenden Sie sich bitte an:
       </p>
       <Block>
-        E-Mail: <a href="mailto:info@aprender-aleman.de">info@aprender-aleman.de</a>
+        E-Mail: <a href="mailto:aprenderaleman2026@gmail.com">aprenderaleman2026@gmail.com</a>
       </Block>
     </article>
   );

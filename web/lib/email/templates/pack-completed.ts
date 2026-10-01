@@ -21,7 +21,7 @@ export function renderPackCompleted(vars: PackCompletedVars): RenderedEmail {
     `<div style="text-align:center;margin:20px 0;">`,
     button(whatsappUrl, "Escribir a Gelfis por WhatsApp"),
     `</div>`,
-    p(`O escríbenos a <a href="mailto:info@aprender-aleman.de" style="color:#ea580c;text-decoration:none;font-weight:600;">info@aprender-aleman.de</a>`),
+    p(`O escríbenos a <a href="mailto:aprenderaleman2026@gmail.com" style="color:#ea580c;text-decoration:none;font-weight:600;">aprenderaleman2026@gmail.com</a>`),
     p("Gracias por confiar en nosotros — ha sido un gusto acompañarte en este camino!"),
     p("Tu equipo de <strong>Aprender-Aleman.de</strong>"),
   ].join("\n");
@@ -38,7 +38,7 @@ Tu opinión nos ayuda a seguir mejorando.
 
 Para continuar avanzando con tu alemán, escríbele a Gelfis Horn y juntos vemos los siguientes pasos:
 - WhatsApp: ${whatsappUrl}
-- Email: info@aprender-aleman.de
+- Email: aprenderaleman2026@gmail.com
 
 Gracias por confiar en nosotros — ha sido un gusto acompañarte en este camino!
 

@@ -172,7 +172,7 @@ export async function sendSesionConfirmations(sb: SB): Promise<number> {
         summary: `${leadFirst} + Sesión de Plan-Alemán 📋`,
         description: `Videollamada de ${SESION_DURATION_MIN} minutos con ${closerForIcs} para armar tu plan de alemán.\n\nEntra aquí: ${joinUrl}`,
         organizerName: "Aprender-Aleman.de",
-        organizerEmail: "info@aprender-aleman.de",
+        organizerEmail: "aprenderaleman2026@gmail.com",
         attendeeName: lead.name ?? undefined,
         attendeeEmail: lead.email,
         location: joinUrl,

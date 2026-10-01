@@ -24,7 +24,7 @@ export async function GET() {
   const backend   = emailBackendConfigured();
   const hasResend = Boolean(process.env.RESEND_API_KEY);
   const hasSmtp   = Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-  const fromAddr  = process.env.EMAIL_FROM ?? "(default) Aprender-Aleman.de <info@aprender-aleman.de>";
+  const fromAddr  = process.env.EMAIL_FROM ?? "(default) Aprender-Aleman.de <aprenderaleman2026@gmail.com>";
 
   return NextResponse.json({
     node_env:       process.env.NODE_ENV,

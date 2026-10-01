@@ -28,7 +28,7 @@ export type IcsTrialArgs = {
   summary:       string;          // título del evento (ya formateado)
   description:   string;          // cuerpo del invite
   organizerName: string;          // p.ej. "Gelfis Horn"
-  organizerEmail: string;         // p.ej. "info@aprender-aleman.de"
+  organizerEmail: string;         // p.ej. "aprenderaleman2026@gmail.com"
   attendeeName?:  string;         // nombre del lead (para que sea cita y no anuncio)
   attendeeEmail?: string;
   location?:     string;          // URL del aula virtual
