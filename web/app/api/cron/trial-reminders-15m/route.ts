@@ -108,7 +108,18 @@ async function run(req: Request) {
         : `⏰ 15 minutos para tu clase.\n\nÚnete ahora: ${joinUrl}`;
       const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_15m" });
       if (res.ok) { sentWa++; waDelivered = true; }
-      else { failed++; console.error(`[trial-reminders-15m] WA failed for ${r.id}: ${res.reason}`); }
+      else {
+        failed++;
+        // Visible en timeline del lead + desactivar número si exists:false.
+        const { handleWaPermanentFail } = await import("@/lib/wa-permanent-fail");
+        await handleWaPermanentFail(sb, {
+          leadId:  lead.id,
+          phone:   lead.whatsapp_normalized,
+          kind:    "trial_reminder_15m",
+          reason:  res.reason,
+          context: "trial-reminders-15m",
+        });
+      }
     }
 
     // ── Email ──

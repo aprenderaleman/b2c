@@ -156,7 +156,17 @@ async function run(req: Request) {
         : `RECORDATORIO:\n\n¡Hola ${leadFirst}!\nMañana ${dayLabel} a las ${timeLabel} es tu clase de alemán.\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}`;
       const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_24h" });
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
-      else console.error(`[trial-reminders-24h] lead WA failed for ${r.id}: ${wa.reason}`);
+      else {
+        // Visible en timeline del lead + desactivar número si exists:false.
+        const { handleWaPermanentFail } = await import("@/lib/wa-permanent-fail");
+        await handleWaPermanentFail(sb, {
+          leadId:  lead.id,
+          phone:   lead.whatsapp_normalized,
+          kind:    "trial_reminder_24h",
+          reason:  wa.reason,
+          context: "trial-reminders-24h",
+        });
+      }
     }
 
     // ── Teacher email (only if we have one)

@@ -204,7 +204,17 @@ async function run(req: Request) {
       const waText = `¡Buenos días ${leadFirst}! Hoy es el día 😊\n\nTu clase de alemán es a las ${timeLabel}.\n\nTe recomiendo:\n- Computador con cámara y micrófono\n- Lugar tranquilo\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}`;
       const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_morning" });
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
-      else console.error(`[trial-reminders-morning] lead WA failed for ${r.id}: ${wa.reason}`);
+      else {
+        // Visible en timeline del lead + desactivar número si exists:false.
+        const { handleWaPermanentFail } = await import("@/lib/wa-permanent-fail");
+        await handleWaPermanentFail(sb, {
+          leadId:  lead.id,
+          phone:   lead.whatsapp_normalized,
+          kind:    "trial_reminder_morning",
+          reason:  wa.reason,
+          context: "trial-reminders-morning",
+        });
+      }
     }
 
     // ── Timeline entry for /admin/leads/{id}
