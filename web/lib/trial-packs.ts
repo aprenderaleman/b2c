@@ -8,12 +8,13 @@
  *   2. Pagos únicos por meta — 5 opciones con URL directa.
  *   3. Kids — pack especial con pago único / flexible.
  *
- * Regla de clases (Gelfis, 2026-09-21): la meta es el nivel al que LLEGA el
- * estudiante. Cursos: A1 = 32, A2 = 32, B1 = 48, B2 = 48, C1 = 60.
- *   a1_a2         → hace el A1 y llega a A2 ........ 32 clases
- *   b1            → hace el A2 y llega a B1 ........ 32 clases
- *   b2            → hace el B1 y llega a B2 ........ 48 clases
- *   c1            → hace el B2 y llega a C1 ........ 48 clases
+ * Regla de clases (Gelfis, 2026-09-21; corrección 2026-10-02): la meta es
+ * el nivel al que LLEGA el estudiante, y las clases son las del CURSO de
+ * ese nivel. Cursos: A1 = 32, A2 = 32, B1 = 48, B2 = 48, C1 = 60.
+ *   a1_a2         → llega a A2 ..................... 32 clases
+ *   b1            → llega a B1 (curso B1) .......... 48 clases (antes 32 — fix Gelfis: Viajero+B1 = 8 meses)
+ *   b2            → llega a B2 (curso B2) .......... 48 clases
+ *   c1            → llega a C1 .................... 48 clases
  *   fluidez_total → 3 niveles (A1 → B1) ............ 92 clases
  * Un plan cubre 1 o 3 niveles, nunca 2. Los meses de suscripción se derivan
  * de las clases (redondeo hacia arriba) — el número de clases manda.
@@ -26,7 +27,7 @@ export type GoalId  = "a1_a2" | "b1" | "b2" | "c1" | "fluidez_total";
 
 export const GOAL_CLASSES: Record<GoalId, number> = {
   a1_a2:         32,
-  b1:            32,
+  b1:            48,
   b2:            48,
   c1:            48,
   fluidez_total: 92,
