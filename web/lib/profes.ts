@@ -10,7 +10,9 @@
  * en BD, solo el UUID en classes.teacher_id (fuente de verdad).
  */
 
-export type ProfeSlug = "sabine" | "jonathan" | "thomas" | "simon" | "aracely";
+// Aracely salió de la academia el 2026-10-05: su slug ya no resuelve y
+// /clase-profe?profe=aracely cae a la variante genérica.
+export type ProfeSlug = "sabine" | "jonathan" | "thomas" | "simon";
 
 export type ProfeInfo = {
   slug:       ProfeSlug;
@@ -50,14 +52,6 @@ export const PROFES_MAP: Record<ProfeSlug, ProfeInfo> = {
     firstName: "Simon",
     fullName:  "Simon Heimler Castro",
     origin:    "DE",
-  },
-  aracely: {
-    slug:      "aracely",
-    teacherId: "0c3686bf-89be-41ae-a3af-16469ff6f9ea",
-    firstName: "Aracely",
-    fullName:  "Aracely Fabiola Stock Eschgfäller",
-    origin:    "DE",
-    female:    true,
   },
 };
 
