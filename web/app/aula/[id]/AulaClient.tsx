@@ -1328,7 +1328,7 @@ function ErrorScreen({ reason, backHref, onRetry }: {
     reason === "too_early_or_too_late" ? "El aula no está abierta ahora." :
     reason === "not_authorized"        ? "No tienes acceso a esta clase." :
     reason === "cancelled"             ? "Esta clase fue cancelada." :
-    isUnsupported                      ? "Tu navegador no permite videollamadas (suele pasar con navegadores de privacidad o el modo hermético/incógnito reforzado). Copia el enlace con el botón de abajo y ábrelo en Safari (iPhone) o Chrome (Android) — ahí funcionará." :
+    isUnsupported                      ? "Tu navegador no permite videollamadas. Si tienes iPhone con «Modo hermético» activado (sale un aviso abajo en Safari), permite este sitio: abre el enlace en Safari → botón aA → Ajustes del sitio web → desactiva Modo hermético → recarga. Si no, copia el enlace y ábrelo en Safari (iPhone) o Chrome (Android)." :
     isClientDisconnect                 ? "La conexión se interrumpió antes de completarse. Suele pasar en iPhone si la app estuvo en segundo plano o si el navegador tardó en soltar la cámara. Pulsa 'Reintentar'." :
     isMediaError                       ? "No pudimos usar la cámara o el micrófono. Comprueba los permisos y reintenta." :
                                          `No se pudo conectar (${reason}).`;
