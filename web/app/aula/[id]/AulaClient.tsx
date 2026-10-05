@@ -1317,12 +1317,18 @@ function ErrorScreen({ reason, backHref, onRetry }: {
   // red antes que se rinda.
   const isClientDisconnect = /client initiated disconnect/i.test(reason);
   const isMediaError       = /permission|notallowed|notfound|constraint/i.test(reason);
+  // Navegador sin WebRTC: navegadores de privacidad (DuckDuckGo, Firefox
+  // Focus, "modo hermético"...) o WebViews que lo bloquean. El aula no
+  // puede funcionar ahí — guiamos a copiar el enlace y abrirlo en
+  // Safari/Chrome (reporte lead clase de prueba 2026-10-05).
+  const isUnsupported      = /doesn't seem to be supported|webrtc|not supported on this browser/i.test(reason);
 
   const label =
     reason === "not_configured"        ? "La sala de video aún no está configurada en el servidor." :
     reason === "too_early_or_too_late" ? "El aula no está abierta ahora." :
     reason === "not_authorized"        ? "No tienes acceso a esta clase." :
     reason === "cancelled"             ? "Esta clase fue cancelada." :
+    isUnsupported                      ? "Tu navegador no permite videollamadas (suele pasar con navegadores de privacidad o el modo hermético/incógnito reforzado). Copia el enlace con el botón de abajo y ábrelo en Safari (iPhone) o Chrome (Android) — ahí funcionará." :
     isClientDisconnect                 ? "La conexión se interrumpió antes de completarse. Suele pasar en iPhone si la app estuvo en segundo plano o si el navegador tardó en soltar la cámara. Pulsa 'Reintentar'." :
     isMediaError                       ? "No pudimos usar la cámara o el micrófono. Comprueba los permisos y reintenta." :
                                          `No se pudo conectar (${reason}).`;
@@ -1333,6 +1339,7 @@ function ErrorScreen({ reason, backHref, onRetry }: {
         <div className="text-5xl mb-4" aria-hidden>⚠️</div>
         <h1 className="text-xl font-semibold">Error al entrar al aula</h1>
         <p className="mt-2 text-sm text-slate-400 leading-relaxed">{label}</p>
+        {isUnsupported && <CopyAulaLinkButton />}
         <div className="mt-6 flex items-center justify-center gap-2 flex-wrap">
           {onRetry && (
             <button
@@ -1356,6 +1363,32 @@ function ErrorScreen({ reason, backHref, onRetry }: {
         </div>
       </div>
     </main>
+  );
+}
+
+/** Botón "Copiar enlace del aula" para la pantalla de error en
+ *  navegadores sin WebRTC — el usuario lo pega en Safari/Chrome. */
+function CopyAulaLinkButton() {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    const url = window.location.href;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      // Clipboard bloqueado (algunos navegadores de privacidad):
+      // selección manual como fallback.
+      window.prompt("Copia este enlace y ábrelo en Safari o Chrome:", url);
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/20"
+    >
+      {copied ? "✓ Enlace copiado — pégalo en Safari o Chrome" : "📋 Copiar enlace del aula"}
+    </button>
   );
 }
 
