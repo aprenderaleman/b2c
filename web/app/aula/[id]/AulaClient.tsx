@@ -24,7 +24,7 @@ import {
   type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
 import type { LocalUserChoices } from "@livekit/components-core";
-import { RoomEvent, Track, ParticipantEvent, type Participant } from "livekit-client";
+import { RoomEvent, Track, ParticipantEvent, DisconnectReason, type Participant } from "livekit-client";
 import { VirtualBackgroundButton, BRAND_IMAGES, BG_LABELS, type BgMode } from "./VirtualBackgroundButton";
 import { WhiteboardPanel, WhiteboardToggleButton } from "./WhiteboardPanel";
 import { AulaSidePanel } from "./AulaSidePanel";
@@ -291,12 +291,29 @@ export function AulaClient(p: Props) {
               : "Tu dispositivo no pudo activar cámara o micrófono. Sigues conectado como espectador.",
           );
         }}
-        onDisconnected={() => {
+        onDisconnected={(reason) => {
           // Un connect fallido también dispara onDisconnected. Si nunca
           // llegamos a estar conectados, NO redirigir — dejar que el
           // auto-retry / pantalla de error manejen la situación (hoy
           // esto echaba al lead a la web pública en pleno reintento).
           if (!connectedRef.current) return;
+          // Desconexión INVOLUNTARIA a mitad de clase (caída de red,
+          // reinicio del servidor…): re-entrar al aula en vez de
+          // expulsar. Antes un microcorte de datos móviles mandaba al
+          // lead a la web pública en plena clase ("entra pero lo saca",
+          // reporte 2026-10-05) y al estudiante a su dashboard. Solo
+          // las salidas DELIBERADAS siguen redirigiendo: colgar
+          // (CLIENT_INITIATED), fin de clase (ROOM_DELETED), expulsión
+          // (PARTICIPANT_REMOVED) o identidad duplicada.
+          const deliberate =
+            reason === DisconnectReason.CLIENT_INITIATED ||
+            reason === DisconnectReason.ROOM_DELETED ||
+            reason === DisconnectReason.PARTICIPANT_REMOVED ||
+            reason === DisconnectReason.DUPLICATE_IDENTITY;
+          if (!deliberate) {
+            window.location.reload();
+            return;
+          }
           // Decide where to send the user when LiveKit disconnects:
           //   host    → /profesor (handled by HostTeardown via custom event)
           //   student → su dashboard /estudiante (decisión Gelfis 2026-05-14:
