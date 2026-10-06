@@ -12,6 +12,7 @@ import { IssueCertificateButton } from "@/components/admin/IssueCertificateButto
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
 import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
 import { getClassBalance } from "@/lib/class-balance";
+import { formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 
 export const dynamic = "force-dynamic";
 
@@ -86,6 +87,24 @@ export default async function TeacherStudentDetail({
   const ofData = ofertaRow.data as { oferta_id: string | null; clases_totales: number | null } | null;
   const hasBalance = !!ofData?.oferta_id || ofData?.clases_totales != null;
   const balance = hasBalance ? await getClassBalance(studentId).catch(() => null) : null;
+
+  // Próximas clases con este estudiante (Gelfis 2026-10-06). Un profe ve
+  // SUS clases con él; un admin las ve todas. Clicables hacia la ficha de
+  // la clase, donde ya existen reprogramar/cancelar.
+  let upcomingQuery = sbBal
+    .from("class_participants")
+    .select("class:classes!inner(id, title, scheduled_at, duration_minutes, status, type, teacher_id)")
+    .eq("student_id", studentId)
+    .in("class.status", ["scheduled", "live"])
+    .gte("class.scheduled_at", new Date().toISOString());
+  if (teacherId) upcomingQuery = upcomingQuery.eq("class.teacher_id", teacherId);
+  const { data: upcomingRaw } = await upcomingQuery;
+  type UpcomingCls = { id: string; title: string; scheduled_at: string; duration_minutes: number; status: string; type: string };
+  const upcoming: UpcomingCls[] = ((upcomingRaw ?? []) as Array<{ class: UpcomingCls | UpcomingCls[] }>)
+    .map(r => (Array.isArray(r.class) ? r.class[0] : r.class))
+    .filter(Boolean)
+    .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
+    .slice(0, 12);
 
   return (
     <main className="space-y-5">
@@ -202,6 +221,47 @@ export default async function TeacherStudentDetail({
           </div>
         </section>
       )}
+
+      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Próximas clases con este estudiante
+        </h2>
+        {upcoming.length === 0 ? (
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            No hay clases futuras agendadas. Usa «📅 Programar clases» arriba.
+          </p>
+        ) : (
+          <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
+            {upcoming.map(c => (
+              <li key={c.id}>
+                <Link
+                  href={`/profesor/clases/${c.id}`}
+                  className="flex items-center justify-between gap-3 py-2.5 -mx-2 px-2 rounded-lg hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{c.title}</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      <span className="capitalize">{formatClassDateEs(c.scheduled_at)}</span>
+                      <span className="mx-1">·</span>
+                      <span className="font-mono">{formatClassTimeEs(c.scheduled_at)}</span>
+                      <span className="mx-1">·</span>
+                      {c.duration_minutes} min
+                      {c.type === "group" && <><span className="mx-1">·</span>Grupal</>}
+                    </div>
+                  </div>
+                  <span className={`shrink-0 text-[11px] font-semibold rounded-full px-2 py-0.5 ${
+                    c.status === "live"
+                      ? "bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"}`}
+                  >
+                    {c.status === "live" ? "EN VIVO" : "Agendada"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <GarantiaNivelCard
         attendanceRate={student.attendance_rate}
