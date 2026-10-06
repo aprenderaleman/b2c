@@ -87,6 +87,23 @@ export async function deactivateStudent(
   const { error: te } = await sb.from("students").update({ subscription_status: status }).eq("id", studentId);
   if (te) throw new Error(`students_update_failed: ${te.message}`);
 
+  // Cerrar sus grupos individuales: si quedan activos, el profe sigue
+  // viéndolo en /profesor/estudiantes y en los chats (caso Ayman/Marcela/
+  // Sandra/María S. 2026-10-06, grupos huérfanos tras la baja).
+  const { data: memberships } = await sb
+    .from("student_group_members")
+    .select("group_id, student_groups!inner(class_type, active)")
+    .eq("student_id", studentId)
+    .eq("student_groups.active", true);
+  for (const m of (memberships ?? []) as Array<{ group_id: string; student_groups: unknown }>) {
+    const g = (Array.isArray(m.student_groups) ? m.student_groups[0] : m.student_groups) as { class_type?: string } | undefined;
+    if (g?.class_type === "individual") {
+      await sb.from("student_groups").update({ active: false }).eq("id", m.group_id);
+    } else {
+      await sb.from("student_group_members").delete().eq("group_id", m.group_id).eq("student_id", studentId);
+    }
+  }
+
   const studentName = u.full_name ?? u.email;
   if (opts.notifyTeachers !== false) {
     for (const [, n] of teacherNotifs) {

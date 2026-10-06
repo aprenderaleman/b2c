@@ -61,7 +61,10 @@ export default async function TeacherStudentsPage() {
     `)
     .eq("group.teacher_id", me.id)
     .eq("group.active", true)
-    .eq("students.users.active", true);
+    .eq("students.users.active", true)
+    // Solo alumnos con plan vigente: un alumno dado de baja (expired/
+    // cancelled) no debe aparecer aunque su grupo siga abierto.
+    .in("students.subscription_status", ["active", "paused"]);
 
   const seen = new Map<string, Item>();
   for (const r of (viaGroups ?? []) as Array<{ student_id: string; students: StudentCore | StudentCore[] }>) {
