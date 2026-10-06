@@ -117,3 +117,63 @@ export const DAY_LABELS_ES = [
 
 // EU-friendly display order: Mon → Sun.
 export const WEEK_ORDER: number[] = [1, 2, 3, 4, 5, 6, 0];
+
+// ── Bloqueos puntuales (teacher_availability_exceptions, migración 137) ──
+//
+// "El lunes 4/5 de 17:00 a 18:00 no estoy". Horas en reloj de Berlín.
+// El motor de huecos (trial-slots) los resta como intervalos ocupados,
+// así que afectan al funnel de trials y al agendado de alumnos.
+
+export type AvailabilityException = {
+  id:         string;
+  teacher_id: string;
+  date:       string;      // "YYYY-MM-DD" (día Berlín)
+  start_time: string;      // "HH:MM:SS"
+  end_time:   string;
+  reason:     string | null;
+};
+
+/** Bloqueos desde hoy (Berlín) en adelante, ordenados. */
+export async function listAvailabilityExceptions(teacherId: string): Promise<AvailabilityException[]> {
+  const sb = supabaseAdmin();
+  const todayBerlin = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date());
+  const { data, error } = await sb
+    .from("teacher_availability_exceptions")
+    .select("id, teacher_id, date, start_time, end_time, reason")
+    .eq("teacher_id", teacherId)
+    .gte("date", todayBerlin)
+    .order("date", { ascending: true })
+    .order("start_time", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as AvailabilityException[];
+}
+
+export async function addAvailabilityException(input: {
+  teacherId: string; date: string; startTime: string; endTime: string; reason?: string | null;
+}): Promise<AvailabilityException> {
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("teacher_availability_exceptions")
+    .insert({
+      teacher_id: input.teacherId,
+      date:       input.date,
+      start_time: input.startTime,
+      end_time:   input.endTime,
+      reason:     input.reason ?? null,
+    })
+    .select("id, teacher_id, date, start_time, end_time, reason")
+    .single();
+  if (error || !data) throw new Error(error?.message ?? "insert_failed");
+  return data as AvailabilityException;
+}
+
+/** Borra un bloqueo, scoped al teacher para que nadie borre los de otro. */
+export async function deleteAvailabilityException(teacherId: string, id: string): Promise<void> {
+  const sb = supabaseAdmin();
+  const { error } = await sb
+    .from("teacher_availability_exceptions")
+    .delete()
+    .eq("id", id)
+    .eq("teacher_id", teacherId);
+  if (error) throw new Error(error.message);
+}

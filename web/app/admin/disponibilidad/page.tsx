@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getTeacherByUserId } from "@/lib/academy";
 import { getTeacherAvailability } from "@/lib/availability";
 import { AvailabilityEditor } from "@/app/profesor/disponibilidad/AvailabilityEditor";
+import { ExceptionsEditor } from "@/app/profesor/disponibilidad/ExceptionsEditor";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Mi disponibilidad · Admin" };
@@ -100,6 +101,8 @@ export default async function AdminAvailabilityPage() {
       </header>
 
       <AvailabilityEditor initialBlocks={initial} targetTeacherId={teacher.id} />
+
+      <ExceptionsEditor targetTeacherId={teacher.id} />
     </main>
   );
 }

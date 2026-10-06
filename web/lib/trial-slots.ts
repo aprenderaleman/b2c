@@ -158,8 +158,11 @@ async function computeSlots(
     last_trial_at:   stats.get(t.id)?.latestIso || null,
   }));
 
-  // 2. Availability windows + existing scheduled classes for everyone in the pool.
-  const [{ data: avail }, { data: existing }] = await Promise.all([
+  // 2. Availability windows + existing scheduled classes + bloqueos
+  //    puntuales (migración 137) for everyone in the pool.
+  const todayBerlin   = new Intl.DateTimeFormat("en-CA", { timeZone: BERLIN_TZ }).format(now);
+  const horizonBerlin = new Intl.DateTimeFormat("en-CA", { timeZone: BERLIN_TZ }).format(horizonEnd);
+  const [{ data: avail }, { data: existing }, { data: exceptions }] = await Promise.all([
     sb.from("teacher_availability")
       .select("teacher_id, day_of_week, start_time, end_time, available, valid_from, valid_until")
       .in("teacher_id", teacherIds)
@@ -171,6 +174,11 @@ async function computeSlots(
       .in("status", ["scheduled", "live"])
       .gte("scheduled_at", now.toISOString())
       .lte("scheduled_at", horizonEnd.toISOString()),
+    sb.from("teacher_availability_exceptions")
+      .select("teacher_id, date, start_time, end_time")
+      .in("teacher_id", teacherIds)
+      .gte("date", todayBerlin)
+      .lte("date", horizonBerlin),
   ]);
 
   const availByTeacher = new Map<string, AvailabilityRow[]>();
@@ -186,6 +194,19 @@ async function computeSlots(
     const startMs = new Date(r.scheduled_at).getTime();
     const list = busyByTeacher.get(r.teacher_id) ?? [];
     list.push({ startMs, endMs: startMs + r.duration_minutes * 60_000 });
+    busyByTeacher.set(r.teacher_id, list);
+  }
+
+  // Bloqueos puntuales → intervalos ocupados. date + horas son reloj de
+  // Berlín; el ancla T12:00Z garantiza que el día Berlín del anchor es
+  // exactamente `date` (a mediodía UTC nunca cruza medianoche en Berlín).
+  for (const r of (exceptions ?? []) as Array<{ teacher_id: string; date: string; start_time: string; end_time: string }>) {
+    const anchor = new Date(`${r.date}T12:00:00Z`);
+    const list = busyByTeacher.get(r.teacher_id) ?? [];
+    list.push({
+      startMs: berlinClockToUtcMs(anchor, r.start_time),
+      endMs:   berlinClockToUtcMs(anchor, r.end_time),
+    });
     busyByTeacher.set(r.teacher_id, list);
   }
 

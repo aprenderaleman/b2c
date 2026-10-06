@@ -3,6 +3,7 @@ import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
 import { getTeacherAvailability } from "@/lib/availability";
 import { AvailabilityEditor } from "./AvailabilityEditor";
+import { ExceptionsEditor } from "./ExceptionsEditor";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Disponibilidad · Profesor" };
@@ -54,6 +55,8 @@ export default async function TeacherAvailabilityPage() {
           profesor") el PUT necesita ?teacherId= o devuelve teacherId_required
           (caso Thomas 2026-09-23). */}
       <AvailabilityEditor initialBlocks={initial} targetTeacherId={teacher.id} />
+
+      <ExceptionsEditor targetTeacherId={teacher.id} />
     </main>
   );
 }

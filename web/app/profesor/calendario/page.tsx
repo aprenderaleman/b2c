@@ -4,6 +4,7 @@ import { getTeacherByUserId } from "@/lib/academy";
 import { getTeacherAvailability } from "@/lib/availability";
 import { WeekCalendar } from "@/components/calendar/WeekCalendar";
 import { AvailabilityEditor } from "../disponibilidad/AvailabilityEditor";
+import { ExceptionsEditor } from "../disponibilidad/ExceptionsEditor";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Calendario · Profesor" };
@@ -65,6 +66,7 @@ export default async function TeacherCalendarPage() {
         {/* targetTeacherId siempre — necesario cuando un admin edita
             impersonando; un profe real lo ignora (ver disponibilidad/page). */}
         <AvailabilityEditor initialBlocks={initial} targetTeacherId={teacher.id} />
+        <ExceptionsEditor targetTeacherId={teacher.id} />
       </section>
     </main>
   );
