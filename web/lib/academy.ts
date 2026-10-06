@@ -428,31 +428,93 @@ export async function getTeacherById(id: string): Promise<TeacherRow | null> {
 export type StudentOverview = {
   completed: number;
   teacher:   string | null;
+  /** Última clase completada (ISO) y próxima agendada (ISO), para alertas. */
+  lastClassAt: string | null;
+  nextClassAt: string | null;
+  /** Último pago registrado (ISO). */
+  lastPaymentAt: string | null;
+  /** students.stripe_subscription_status (canceled / past_due / unpaid / active…). */
+  stripeStatus: string | null;
 };
+
+export type StudentAlert = { kind: "stripe" | "sin_clases" | "pago"; label: string; severity: "red" | "amber" };
+
+/**
+ * Alertas operativas por alumno (caso Nancy 2026-10-06: suscripción cancelada
+ * en Stripe y un mes sin clases sin que nadie lo viera).
+ */
+export function studentAlerts(
+  s: { subscription_status: string; subscription_type: string; active: boolean },
+  ov: StudentOverview,
+  now: Date = new Date(),
+): StudentAlert[] {
+  const out: StudentAlert[] = [];
+  if (!s.active || !["active", "paused"].includes(s.subscription_status)) return out;
+  const days = (iso: string | null) => iso ? Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000) : null;
+  if (s.subscription_type === "monthly_subscription" && ov.stripeStatus && ["canceled", "unpaid", "past_due", "incomplete_expired"].includes(ov.stripeStatus)) {
+    out.push({ kind: "stripe", label: ov.stripeStatus === "canceled" ? "Stripe cancelada" : `Stripe ${ov.stripeStatus}`, severity: "red" });
+  }
+  const dPay = days(ov.lastPaymentAt);
+  if (s.subscription_type === "monthly_subscription" && dPay != null && dPay > 35 && !out.some(a => a.kind === "stripe")) {
+    out.push({ kind: "pago", label: `Sin pago ${dPay} días`, severity: "red" });
+  }
+  const dLast = days(ov.lastClassAt);
+  if (s.subscription_status === "active" && !ov.nextClassAt && (dLast == null || dLast > 21)) {
+    out.push({ kind: "sin_clases", label: dLast == null ? "Sin clases aún" : `Sin clases ${dLast} días`, severity: "amber" });
+  }
+  return out;
+}
 
 export async function getStudentsOverview(
   studentIds: string[],
 ): Promise<Record<string, StudentOverview>> {
   const out: Record<string, StudentOverview> = {};
   if (studentIds.length === 0) return out;
-  for (const id of studentIds) out[id] = { completed: 0, teacher: null };
+  for (const id of studentIds) out[id] = { completed: 0, teacher: null, lastClassAt: null, nextClassAt: null, lastPaymentAt: null, stripeStatus: null };
   const sb = supabaseAdmin();
+  const nowIso = new Date().toISOString();
 
-  const [{ data: parts, error: e1 }, { data: members, error: e2 }] = await Promise.all([
+  const [{ data: parts, error: e1 }, { data: members, error: e2 }, { data: upcoming }, { data: pays }, { data: strp }] = await Promise.all([
     sb.from("class_participants")
-      .select("student_id, classes!inner(status)")
+      .select("student_id, classes!inner(status, scheduled_at, is_trial)")
       .in("student_id", studentIds)
       .eq("classes.status", "completed"),
     sb.from("student_group_members")
       .select("student_id, student_groups!inner(active, teachers!inner(users!inner(full_name)))")
       .in("student_id", studentIds)
       .eq("student_groups.active", true),
+    sb.from("class_participants")
+      .select("student_id, classes!inner(status, scheduled_at)")
+      .in("student_id", studentIds)
+      .eq("classes.status", "scheduled")
+      .gte("classes.scheduled_at", nowIso),
+    sb.from("payments")
+      .select("student_id, paid_at")
+      .in("student_id", studentIds)
+      .eq("status", "paid"),
+    sb.from("students")
+      .select("id, stripe_subscription_status")
+      .in("id", studentIds),
   ]);
   if (e1) throw e1;
   if (e2) throw e2;
 
-  for (const p of (parts ?? []) as Array<{ student_id: string }>) {
+  const firstC = <T,>(v: T | T[] | null | undefined): T | undefined => (Array.isArray(v) ? v[0] : v ?? undefined);
+  for (const p of (parts ?? []) as Array<{ student_id: string; classes: unknown }>) {
+    const c = firstC(p.classes as { scheduled_at: string; is_trial: boolean } | { scheduled_at: string; is_trial: boolean }[]);
+    if (c?.is_trial) continue;
     out[p.student_id].completed += 1;
+    if (c?.scheduled_at && (!out[p.student_id].lastClassAt || c.scheduled_at > out[p.student_id].lastClassAt!)) out[p.student_id].lastClassAt = c.scheduled_at;
+  }
+  for (const p of (upcoming ?? []) as Array<{ student_id: string; classes: unknown }>) {
+    const c = firstC(p.classes as { scheduled_at: string } | { scheduled_at: string }[]);
+    if (c?.scheduled_at && (!out[p.student_id].nextClassAt || c.scheduled_at < out[p.student_id].nextClassAt!)) out[p.student_id].nextClassAt = c.scheduled_at;
+  }
+  for (const p of (pays ?? []) as Array<{ student_id: string; paid_at: string | null }>) {
+    if (p.paid_at && (!out[p.student_id].lastPaymentAt || p.paid_at > out[p.student_id].lastPaymentAt!)) out[p.student_id].lastPaymentAt = p.paid_at;
+  }
+  for (const r of (strp ?? []) as Array<{ id: string; stripe_subscription_status: string | null }>) {
+    if (out[r.id]) out[r.id].stripeStatus = r.stripe_subscription_status;
   }
   const first = <T,>(v: T | T[] | null | undefined): T | undefined => (Array.isArray(v) ? v[0] : v ?? undefined);
   for (const m of (members ?? []) as Array<{ student_id: string; student_groups: unknown }>) {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getStudents, getStudentsOverview, goalLevelEs, ritmoLabelEs, subscriptionStatusEs } from "@/lib/academy";
+import { getStudents, getStudentsOverview, goalLevelEs, ritmoLabelEs, subscriptionStatusEs, studentAlerts } from "@/lib/academy";
 import { adminDriveStatus } from "@/lib/admin-google-drive";
 import RefreshButton from "./RefreshButton";
 
@@ -150,7 +150,8 @@ export default async function StudentsListPage({
               </tr>
             )}
             {rows.map(s => {
-              const ov = overview[s.id] ?? { completed: 0, teacher: null };
+              const ov = overview[s.id] ?? { completed: 0, teacher: null, lastClassAt: null, nextClassAt: null, lastPaymentAt: null, stripeStatus: null };
+              const alerts = studentAlerts(s, ov);
               const total = s.clases_totales ?? 0;
               // Packs viejos se ajustaron a mano (unidades de 50 min, grupales que no cuentan…):
               // el saldo real es totales − restantes, no el conteo bruto de clases completadas.
@@ -171,7 +172,17 @@ export default async function StudentsListPage({
                     <span className="font-medium">{goalLevelEs(s.goal)}</span>
                   </Td>
                   <Td>{ritmoLabelEs(s)}</Td>
-                  <Td><StatusDot status={s.subscription_status} /></Td>
+                  <Td>
+                    <StatusDot status={s.subscription_status} />
+                    {alerts.map(a => (
+                      <span
+                        key={a.kind}
+                        className={`mt-1 block w-fit rounded-full px-2 py-0.5 text-[11px] font-medium ${a.severity === "red" ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300" : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300"}`}
+                      >
+                        {a.label}
+                      </span>
+                    ))}
+                  </Td>
                   <Td>
                     {total > 0 ? (
                       <div className="flex items-center gap-2" title={`${ov.completed} clases completadas en la plataforma`}>
