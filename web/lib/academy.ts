@@ -444,12 +444,14 @@ export type StudentAlert = { kind: "stripe" | "sin_clases" | "pago"; label: stri
  * en Stripe y un mes sin clases sin que nadie lo viera).
  */
 export function studentAlerts(
-  s: { subscription_status: string; subscription_type: string; active: boolean },
+  s: { subscription_status: string; subscription_type: string; active: boolean; converted_at?: string | null },
   ov: StudentOverview,
   now: Date = new Date(),
 ): StudentAlert[] {
   const out: StudentAlert[] = [];
   if (!s.active || !["active", "paused"].includes(s.subscription_status)) return out;
+  // Recién convertidos (<7 días): aún no toca alertar por falta de clases.
+  const sinceConv = s.converted_at ? (now.getTime() - new Date(s.converted_at).getTime()) / 86_400_000 : 99;
   const days = (iso: string | null) => iso ? Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000) : null;
   if (s.subscription_type === "monthly_subscription" && ov.stripeStatus && ["canceled", "unpaid", "past_due", "incomplete_expired"].includes(ov.stripeStatus)) {
     out.push({ kind: "stripe", label: ov.stripeStatus === "canceled" ? "Stripe cancelada" : `Stripe ${ov.stripeStatus}`, severity: "red" });
@@ -459,7 +461,7 @@ export function studentAlerts(
     out.push({ kind: "pago", label: `Sin pago ${dPay} días`, severity: "red" });
   }
   const dLast = days(ov.lastClassAt);
-  if (s.subscription_status === "active" && !ov.nextClassAt && (dLast == null || dLast > 21)) {
+  if (s.subscription_status === "active" && !ov.nextClassAt && sinceConv >= 7 && (dLast == null || dLast > 21)) {
     out.push({ kind: "sin_clases", label: dLast == null ? "Sin clases aún" : `Sin clases ${dLast} días`, severity: "amber" });
   }
   return out;
