@@ -76,40 +76,74 @@ type TeacherRow = {
   last_trial_at:   string | null;
 };
 
+type SlotOpts = {
+  onlyTeacherId?:   string;
+  /** true → NO filtra por accepts_trials (agendado de clases normales,
+   *  donde el profe del alumno puede no aceptar trials). */
+  anyTeacher?:      boolean;
+  /** Duración del bloque a ofrecer. Default: TRIAL_MINUTES (40). */
+  durationMinutes?: number;
+  /** Antelación mínima en horas. Default: MIN_LEAD_TIME_HOURS (4). */
+  minLeadHours?:    number;
+};
+
 /**
  * Public entrypoint for the funnel.
  * Returns up to MAX_RESULTS upcoming free slots. Auto-extends from 14
  * to 30 days if the shorter window came up empty.
  */
 export async function listTrialSlots(
-  opts: { onlyTeacherId?: string } = {},
+  opts: SlotOpts = {},
 ): Promise<TrialSlot[]> {
   const first = await computeSlots(DEFAULT_HORIZON_DAYS, opts);
   if (first.length > 0) return first;
   return computeSlots(EXTENDED_HORIZON_DAYS, opts);
 }
 
+/**
+ * Huecos libres de UN profesor para clases normales de 50 min
+ * (agendado self-service del alumno, fase 3 — Gelfis 2026-10-06).
+ * Mismo motor que los trials: disponibilidad semanal − clases ocupadas
+ * − bloqueos puntuales − Google Calendar, con pausa de 10 min y
+ * antelación mínima de 12 h (regla confirmada).
+ */
+export async function listTeacherClassSlots(teacherId: string): Promise<TrialSlot[]> {
+  return listTrialSlots({
+    onlyTeacherId:   teacherId,
+    anyTeacher:      true,
+    durationMinutes: 50,
+    minLeadHours:    12,
+  });
+}
+
 async function computeSlots(
   horizonDays: number,
-  opts: { onlyTeacherId?: string } = {},
+  opts: SlotOpts = {},
 ): Promise<TrialSlot[]> {
   const sb = supabaseAdmin();
   const now = new Date();
-  const earliestStart = new Date(now.getTime() + MIN_LEAD_TIME_HOURS * 3600_000);
+  const slotMinutes   = opts.durationMinutes ?? TRIAL_MINUTES;
+  const granularityMin = slotMinutes + BREAK_MINUTES;
+  const minLeadHours  = opts.minLeadHours ?? MIN_LEAD_TIME_HOURS;
+  const earliestStart = new Date(now.getTime() + minLeadHours * 3600_000);
   const horizonEnd = new Date(now.getTime() + horizonDays * 24 * 3600_000);
 
   // 1. Eligible teachers + per-teacher load (last 30 days of trial classes).
   const since30 = new Date(now.getTime() - 30 * 24 * 3600_000).toISOString();
 
-  const { data: rawTeachers } = await sb
+  let teachersQuery = sb
     .from("teachers")
     .select(`
       id, user_id, active, accepts_trials,
       users!inner(full_name, email, active)
     `)
-    .eq("accepts_trials", true)
     .eq("active", true)
     .eq("users.active", true);
+  // El funnel de trials solo rota entre profes con accepts_trials; el
+  // agendado de clases normales (anyTeacher) usa al profe asignado
+  // aunque no acepte trials.
+  if (!opts.anyTeacher) teachersQuery = teachersQuery.eq("accepts_trials", true);
+  const { data: rawTeachers } = await teachersQuery;
 
   type TeacherRaw = {
     id: string; user_id: string;
@@ -275,14 +309,14 @@ async function computeSlots(
         .filter(w => isWindowValid(w, dayDate));
 
       for (const w of windows) {
-        // For each start time in [w.start_time, w.end_time - 30min)
+        // For each start time in [w.start_time, w.end_time - slot)
         const winStartMs = berlinClockToUtcMs(dayDate, w.start_time);
         const winEndMs   = berlinClockToUtcMs(dayDate, w.end_time);
-        const lastValidStart = winEndMs - TRIAL_MINUTES * 60_000;
+        const lastValidStart = winEndMs - slotMinutes * 60_000;
 
-        for (let t = winStartMs; t <= lastValidStart; t += SLOT_GRANULARITY_MIN * 60_000) {
+        for (let t = winStartMs; t <= lastValidStart; t += granularityMin * 60_000) {
           if (t < earliestStart.getTime()) continue;
-          const slotEnd = t + TRIAL_MINUTES * 60_000;
+          const slotEnd = t + slotMinutes * 60_000;
 
           // Reject if it overlaps any of this teacher's existing classes,
           // con colchón BREAK_MINUTES a ambos lados (pausa entre clases).

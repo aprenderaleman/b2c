@@ -115,6 +115,19 @@ export default async function StudentClassDetail({
                 >
                   Entrar al aula →
                 </Link>
+                {/* Reagenda self-service (fase 3, Gelfis 2026-10-06): solo
+                    individuales en 'scheduled' y hasta 24h antes — el API
+                    revalida; aquí solo decidimos si mostrar el botón. */}
+                {cls.type === "individual"
+                  && cls.status === "scheduled"
+                  && start.getTime() - Date.now() > 24 * 3600_000 && (
+                  <Link
+                    href={`/estudiante/agendar?mover=${cls.id}`}
+                    className="mt-3 block text-center rounded-2xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    📅 Reagendar esta clase
+                  </Link>
+                )}
               </>
             ) : (
               <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
