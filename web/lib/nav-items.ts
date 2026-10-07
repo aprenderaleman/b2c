@@ -80,29 +80,28 @@ function adminItems(): NavItem[] {
     { label: "Hoy",                href: "/admin",                icon: "home",          priority: 1 },
     { label: "Clases",             href: "/admin/clases",         icon: "calendarDays",  priority: 2 },
     { label: "Clases de prueba",   href: "/admin/clasedeprueba",  icon: "userCheck",     priority: 2.3 },
-    { label: "Sesiones Plan",      href: "/admin/sesiones",       icon: "userCheck",     priority: 2.35 },
     { label: "Mi disponibilidad",  href: "/admin/disponibilidad", icon: "clock",         priority: 2.4 },
     { label: "Grabaciones",      href: "/admin/grabaciones",    icon: "video",         priority: 2.5 },
     { label: "Estudiantes", href: "/admin/estudiantes", icon: "graduationCap", priority: 3 },
     { label: "Empresa",    href: "/admin/empresa",     icon: "trendingUp",    priority: 3.5 },
     { label: "Finanzas",    href: "/admin/finanzas",    icon: "wallet",        priority: 4 },
     { label: "Horas",       href: "/admin/horas",       icon: "clock",         priority: 4.5 },
-    { label: "Grupos",      href: "/admin/grupos",      icon: "folder",        priority: 5 },
     // "Funnel" unifica los antiguos /admin/leads + /admin/ads en una
     // sola página (KPIs + lista de leads + atribución por landing). Las
     // rutas viejas siguen redirigiendo aquí, pero el menú apunta directo.
     { label: "Funnel",      href: "/admin/funnel",      icon: "users",         priority: 6 },
-    { label: "Semáforo",    href: "/admin/semaforo",    icon: "clock",         priority: 6.5 },
     { label: "Profesores",  href: "/admin/profesores",  icon: "userCheck",     priority: 7 },
-    { label: "Reportes",    href: "/admin/reportes",    icon: "barChart3",     priority: 8 },
     { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },
     { label: "Referidos",   href: "/admin/referidos",   icon: "heart",         priority: 8.7 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
     { label: "Closers",     href: "/admin/closers",     icon: "userCheck",     priority: 9.5 },
-    { label: "Setters",     href: "/admin/setters",     icon: "userCheck",     priority: 9.52 },
-    { label: "Reactivacion",href: "/admin/reactivacion", icon: "refreshCw",   priority: 9.55 },
-    { label: "Aprobaciones",href: "/admin/aprobaciones", icon: "wallet",       priority: 9.6 },
-    { label: "Config CRM",  href: "/admin/config/cadencia", icon: "barChart3", priority: 9.7 },
+    // Ocultos del menú (Gelfis 2026-10-07, simplificación de la vista
+    // admin) — las rutas siguen vivas por enlace directo: Sesiones Plan
+    // (/admin/sesiones), Grupos (/admin/grupos), Semáforo
+    // (/admin/semaforo), Reportes (/admin/reportes), Setters
+    // (/admin/setters), Reactivación (/admin/reactivacion),
+    // Aprobaciones (/admin/aprobaciones) y Config CRM
+    // (/admin/config/cadencia).
   ];
 }
 
