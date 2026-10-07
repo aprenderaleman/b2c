@@ -21,11 +21,17 @@ export type ConflictRow = {
 
 export async function findTeacherConflicts(
   sb: SupabaseClient,
-  opts: { teacherId: string; startIso: string; durationMinutes: number; excludeClassId?: string },
+  opts: {
+    teacherId: string; startIso: string; durationMinutes: number; excludeClassId?: string;
+    /** Otros ids a ignorar (p. ej. el resto de una serie que se mueve a la vez). */
+    excludeIds?: string[];
+    /** Pausa exigida entre clases. Default 10 (reservas de leads); 0 = solo solape real (ediciones manuales). */
+    breakMinutes?: number;
+  },
 ): Promise<ConflictRow[]> {
   const start = new Date(opts.startIso).getTime();
   const end = start + opts.durationMinutes * 60_000;
-  const buf = CLASS_BREAK_MINUTES * 60_000;
+  const buf = (opts.breakMinutes ?? CLASS_BREAK_MINUTES) * 60_000;
 
   let q = sb
     .from("classes")
@@ -40,7 +46,9 @@ export async function findTeacherConflicts(
   const { data, error } = await q;
   if (error) throw new Error(`conflict_check_failed: ${error.message}`);
 
+  const skip = new Set(opts.excludeIds ?? []);
   return ((data ?? []) as ConflictRow[]).filter(r => {
+    if (skip.has(r.id)) return false;
     const s = new Date(r.scheduled_at).getTime();
     const e = s + (r.duration_minutes ?? 40) * 60_000;
     return s < end + buf && e > start - buf;

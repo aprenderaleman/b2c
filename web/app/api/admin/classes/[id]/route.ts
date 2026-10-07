@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { cancelClass } from "@/lib/classes";
 import { supabaseAdmin } from "@/lib/supabase";
 import { syncTeacherCalendarAfterReschedule, removeTeacherCalendarEvents } from "@/lib/teacher-calendar-sync";
+import { findTeacherConflicts } from "@/lib/teacher-conflicts";
 
 /**
  * PATCH  /api/admin/classes/[id]   → edit a class or a whole series.
@@ -48,8 +49,10 @@ const PatchBody = z.object({
   teacher_id:       z.string().uuid().optional(),
   decouple_group:   z.boolean().optional(),
   participants_set: z.array(z.string().uuid()).max(50).optional(),
+  /** true = guardar aunque el cambio pise otra clase del profe. */
+  force:            z.boolean().optional(),
 }).refine(b => {
-  const keys = Object.keys(b).filter(k => k !== "scope");
+  const keys = Object.keys(b).filter(k => k !== "scope" && k !== "force");
   return keys.length > 0;
 }, { message: "no_changes" });
 
@@ -106,6 +109,36 @@ export async function PATCH(
       .in("status", ["scheduled", "live"]);
     targetIds = ((siblings ?? []) as Array<{ id: string }>).map(r => r.id);
     if (!targetIds.includes(anchorId)) targetIds.push(anchorId);
+  }
+
+  // ── 0. Anti-solape antes de escribir (hora, duración o profe nuevos).
+  //       Solape real, sin pausa obligatoria. `force: true` lo salta.
+  if (!b.force && (b.scheduled_at !== undefined || b.duration_minutes !== undefined || b.teacher_id !== undefined)) {
+    const deltaMs = b.scheduled_at !== undefined
+      ? new Date(b.scheduled_at).getTime() - new Date(anchorIso).getTime()
+      : 0;
+    const { data: targets } = await sb
+      .from("classes").select("id, scheduled_at, duration_minutes, teacher_id").in("id", targetIds);
+    for (const t of (targets ?? []) as Array<{ id: string; scheduled_at: string; duration_minutes: number; teacher_id: string | null }>) {
+      const teacherId = b.teacher_id ?? t.teacher_id;
+      if (!teacherId) continue;
+      const conflicts = await findTeacherConflicts(sb, {
+        teacherId,
+        startIso:        new Date(new Date(t.scheduled_at).getTime() + deltaMs).toISOString(),
+        durationMinutes: b.duration_minutes ?? t.duration_minutes,
+        excludeIds:      targetIds,
+        breakMinutes:    0,
+      });
+      if (conflicts.length > 0) {
+        const other = new Date(conflicts[0].scheduled_at).toLocaleString("es-ES", {
+          timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+        });
+        return NextResponse.json(
+          { error: "double_booking", message: `Ese cambio se pisa con otra clase del profesor (${other}, hora de Berlín). Elige otro horario.` },
+          { status: 409 },
+        );
+      }
+    }
   }
 
   // ── 1. Plain field updates (title / topic / duration / teacher_id) ──

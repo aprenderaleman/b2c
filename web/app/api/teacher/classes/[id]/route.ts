@@ -6,6 +6,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
 import { sendClassLifecycleEmail, lifecycleEmailsEnabled } from "@/lib/email/send";
 import { syncTeacherCalendarAfterReschedule, removeTeacherCalendarEvents } from "@/lib/teacher-calendar-sync";
+import { findTeacherConflicts } from "@/lib/teacher-conflicts";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -111,6 +112,36 @@ export async function PATCH(
 
   const sb = supabaseAdmin();
   const targetIds = changes.scope === "series" ? await seriesTargetIds(cls) : [cls.id];
+
+  // Anti-solape ANTES de escribir: el índice único solo frena la misma
+  // hora exacta, así que mover una clase 10 min después de otra pasaba
+  // (caso Thomas 2026-10-07: 19:10/19:20 y 20:00/20:10). Solape real,
+  // sin exigir pausa, para no bloquear clases seguidas legítimas.
+  if (cls.teacher_id && (changes.scheduledAt || changes.durationMinutes)) {
+    const deltaMs = changes.scheduledAt
+      ? new Date(changes.scheduledAt).getTime() - new Date(cls.scheduled_at).getTime()
+      : 0;
+    const { data: targets } = await sb
+      .from("classes").select("id, scheduled_at, duration_minutes").in("id", targetIds);
+    for (const t of (targets ?? []) as Array<{ id: string; scheduled_at: string; duration_minutes: number }>) {
+      const conflicts = await findTeacherConflicts(sb, {
+        teacherId:       cls.teacher_id,
+        startIso:        new Date(new Date(t.scheduled_at).getTime() + deltaMs).toISOString(),
+        durationMinutes: changes.durationMinutes ?? t.duration_minutes,
+        excludeIds:      targetIds,
+        breakMinutes:    0,
+      });
+      if (conflicts.length > 0) {
+        const other = new Date(conflicts[0].scheduled_at).toLocaleString("es-ES", {
+          timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit",
+        });
+        return NextResponse.json(
+          { error: "double_booking", message: `Ese horario se pisa con otra clase tuya (${other}, hora de Berlín). Elige un horario libre.` },
+          { status: 409 },
+        );
+      }
+    }
+  }
 
   // Campos planos → a todos los targets
   const patch: Record<string, unknown> = {};
