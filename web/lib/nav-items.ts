@@ -54,7 +54,9 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     // igual desde Calendario, que incluye el mismo editor + bloqueos.
     // "Materiales" oculto del menú (Gelfis 2026-10-01) — la ruta sigue viva,
     // pero el contenido canónico ahora son los Cursos (SCHULE).
-    // "Recursos" oculto (Gelfis 2026-10-07, simplificación del panel).
+    // "Recursos" restaurado (Gelfis 2026-10-09 — Sabine los necesita;
+    // estuvo oculto del 07 al 09).
+    { label: "Recursos",         href: "/profesor/recursos",        icon: "bookOpen",       priority: 6.2 },
     { label: "Grabaciones",      href: "/profesor/grabaciones",     icon: "video",          priority: 6.5 },
     // Cursos destacado: justo debajo de "Hoy" (Gelfis 2026-10-01).
     { label: "Cursos",           href: "/profesor/cursos",          icon: "graduationCap",  priority: 1.1 },
