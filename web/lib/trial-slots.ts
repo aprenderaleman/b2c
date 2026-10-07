@@ -209,7 +209,7 @@ async function computeSlots(
       .gte("scheduled_at", now.toISOString())
       .lte("scheduled_at", horizonEnd.toISOString()),
     sb.from("teacher_availability_exceptions")
-      .select("teacher_id, date, start_time, end_time")
+      .select("teacher_id, date, start_time, end_time, kind")
       .in("teacher_id", teacherIds)
       .gte("date", todayBerlin)
       .lte("date", horizonBerlin),
@@ -231,10 +231,22 @@ async function computeSlots(
     busyByTeacher.set(r.teacher_id, list);
   }
 
-  // Bloqueos puntuales → intervalos ocupados. date + horas son reloj de
+  // Excepciones puntuales (migración 137/138). date + horas son reloj de
   // Berlín; el ancla T12:00Z garantiza que el día Berlín del anchor es
   // exactamente `date` (a mediodía UTC nunca cruza medianoche en Berlín).
-  for (const r of (exceptions ?? []) as Array<{ teacher_id: string; date: string; start_time: string; end_time: string }>) {
+  //   - 'bloqueo'  → intervalo ocupado (resta)
+  //   - 'apertura' → ventana EXTRA solo para esa fecha (suma, sin recurrir
+  //                  semanalmente — "franjas puntuales" estilo Preply)
+  type ExceptionRow = { teacher_id: string; date: string; start_time: string; end_time: string; kind: "bloqueo" | "apertura" };
+  const openByTeacherDate = new Map<string, Array<{ start_time: string; end_time: string }>>();
+  for (const r of (exceptions ?? []) as ExceptionRow[]) {
+    if (r.kind === "apertura") {
+      const key = `${r.teacher_id}|${r.date}`;
+      const list = openByTeacherDate.get(key) ?? [];
+      list.push({ start_time: r.start_time, end_time: r.end_time });
+      openByTeacherDate.set(key, list);
+      continue;
+    }
     const anchor = new Date(`${r.date}T12:00:00Z`);
     const list = busyByTeacher.get(r.teacher_id) ?? [];
     list.push({
@@ -303,10 +315,16 @@ async function computeSlots(
     const dayDate = new Date(now.getTime() + i * 24 * 3600_000);
     const berlinDow = berlinDayOfWeek(dayDate);
 
+    const berlinDate = new Intl.DateTimeFormat("en-CA", { timeZone: BERLIN_TZ }).format(dayDate);
+
     for (const teacher of teachers) {
-      const windows = (availByTeacher.get(teacher.id) ?? [])
+      const weekly = (availByTeacher.get(teacher.id) ?? [])
         .filter(w => w.day_of_week === berlinDow)
         .filter(w => isWindowValid(w, dayDate));
+      // Franjas puntuales de ESTA fecha → ventanas extra (no recurren).
+      const extra = (openByTeacherDate.get(`${teacher.id}|${berlinDate}`) ?? [])
+        .map(o => ({ start_time: o.start_time, end_time: o.end_time }));
+      const windows = [...weekly, ...extra];
 
       for (const w of windows) {
         // For each start time in [w.start_time, w.end_time - slot)

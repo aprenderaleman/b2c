@@ -18,11 +18,14 @@ type ExceptionRow = {
   start_time: string;   // HH:MM:SS
   end_time:   string;
   reason:     string | null;
+  kind:       "bloqueo" | "apertura";
 };
 
+// Rejilla de 10 min — alineada con clases de 50 min y trials de 40
+// (petición profes 2026-10-08; con pasos de 15 era imposible 17:00–17:50).
 const TIME_OPTIONS: string[] = [];
 for (let h = 0; h < 24; h++) {
-  for (const m of ["00", "15", "30", "45"]) {
+  for (const m of ["00", "10", "20", "30", "40", "50"]) {
     TIME_OPTIONS.push(`${String(h).padStart(2, "0")}:${m}`);
   }
 }
@@ -44,6 +47,7 @@ export function ExceptionsEditor({ targetTeacherId }: { targetTeacherId: string 
   const [start, setStart] = useState("17:00");
   const [end,   setEnd]   = useState("18:00");
   const [reason, setReason] = useState("");
+  const [kind,   setKind]   = useState<"bloqueo" | "apertura">("bloqueo");
 
   const load = async () => {
     try {
@@ -65,7 +69,7 @@ export function ExceptionsEditor({ targetTeacherId }: { targetTeacherId: string 
       const res = await fetch(api, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, start_time: start, end_time: end, reason: reason || undefined }),
+        body: JSON.stringify({ date, start_time: start, end_time: end, reason: reason || undefined, kind }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { setError(data?.message ?? data?.error ?? "Error al guardar."); return; }
@@ -83,12 +87,38 @@ export function ExceptionsEditor({ targetTeacherId }: { targetTeacherId: string 
 
   return (
     <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
-      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-50">Bloqueos puntuales</h3>
+      <h3 className="text-sm font-bold text-slate-900 dark:text-slate-50">Excepciones puntuales</h3>
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 max-w-2xl">
-        Para días concretos en los que NO estás disponible dentro de tu horario
-        habitual (médico, viaje…). Ese hueco deja de ofrecerse para clases de
-        prueba y agendados. Horas de Berlín.
+        Para fechas concretas, sin tocar tu horario semanal: <strong>bloquea</strong> una
+        franja en la que NO estás (médico, viaje…) o <strong>abre</strong> una franja extra
+        solo ese día (p. ej. el martes 14 a las 17:00, sin que se repita los
+        martes siguientes). Horas de Berlín.
       </p>
+
+      <div className="mt-3 flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => setKind("bloqueo")}
+          className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            kind === "bloqueo"
+              ? "bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-300 ring-1 ring-red-300 dark:ring-red-500/40"
+              : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"}`}
+          aria-pressed={kind === "bloqueo"}
+        >
+          🚫 Bloquear franja
+        </button>
+        <button
+          type="button"
+          onClick={() => setKind("apertura")}
+          className={`rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+            kind === "apertura"
+              ? "bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-300 dark:ring-emerald-500/40"
+              : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"}`}
+          aria-pressed={kind === "apertura"}
+        >
+          ✅ Abrir franja extra
+        </button>
+      </div>
 
       <div className="mt-3 flex items-end gap-2 flex-wrap">
         <label className="text-xs text-slate-600 dark:text-slate-300">
@@ -126,7 +156,7 @@ export function ExceptionsEditor({ targetTeacherId }: { targetTeacherId: string 
           disabled={saving}
           className="rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-50"
         >
-          {saving ? "…" : "+ Bloquear"}
+          {saving ? "…" : kind === "bloqueo" ? "+ Bloquear" : "+ Abrir franja"}
         </button>
       </div>
       {error && <p className="mt-2 text-xs text-red-600 dark:text-red-400" role="alert">{error}</p>}
@@ -134,13 +164,20 @@ export function ExceptionsEditor({ targetTeacherId }: { targetTeacherId: string 
       <div className="mt-4">
         {loading && <p className="text-xs text-slate-500">Cargando…</p>}
         {!loading && rows.length === 0 && (
-          <p className="text-xs text-slate-500 dark:text-slate-400">Sin bloqueos futuros.</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Sin excepciones futuras.</p>
         )}
         {rows.length > 0 && (
           <ul className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.map(r => (
               <li key={r.id} className="py-2 flex items-center justify-between gap-3 flex-wrap">
                 <div className="text-sm text-slate-800 dark:text-slate-200">
+                  <span className={`mr-1.5 text-[11px] font-semibold rounded-full px-2 py-0.5 ${
+                    r.kind === "apertura"
+                      ? "bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                      : "bg-red-100 dark:bg-red-500/15 text-red-700 dark:text-red-300"}`}
+                  >
+                    {r.kind === "apertura" ? "✅ Abierta" : "🚫 Bloqueada"}
+                  </span>
                   <span className="capitalize font-medium">{fmtDateEs(r.date)}</span>
                   <span className="mx-1.5 text-slate-400">·</span>
                   <span className="font-mono">{r.start_time.slice(0, 5)}–{r.end_time.slice(0, 5)}</span>

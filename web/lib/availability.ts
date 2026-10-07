@@ -124,6 +124,8 @@ export const WEEK_ORDER: number[] = [1, 2, 3, 4, 5, 6, 0];
 // El motor de huecos (trial-slots) los resta como intervalos ocupados,
 // así que afectan al funnel de trials y al agendado de alumnos.
 
+export type ExceptionKind = "bloqueo" | "apertura";
+
 export type AvailabilityException = {
   id:         string;
   teacher_id: string;
@@ -131,6 +133,9 @@ export type AvailabilityException = {
   start_time: string;      // "HH:MM:SS"
   end_time:   string;
   reason:     string | null;
+  /** bloqueo = cerrar esa franja solo esa fecha; apertura = abrirla solo
+   *  esa fecha sin que recurra semanalmente (migración 138, idea Preply). */
+  kind:       ExceptionKind;
 };
 
 /** Bloqueos desde hoy (Berlín) en adelante, ordenados. */
@@ -139,7 +144,7 @@ export async function listAvailabilityExceptions(teacherId: string): Promise<Ava
   const todayBerlin = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date());
   const { data, error } = await sb
     .from("teacher_availability_exceptions")
-    .select("id, teacher_id, date, start_time, end_time, reason")
+    .select("id, teacher_id, date, start_time, end_time, reason, kind")
     .eq("teacher_id", teacherId)
     .gte("date", todayBerlin)
     .order("date", { ascending: true })
@@ -149,7 +154,8 @@ export async function listAvailabilityExceptions(teacherId: string): Promise<Ava
 }
 
 export async function addAvailabilityException(input: {
-  teacherId: string; date: string; startTime: string; endTime: string; reason?: string | null;
+  teacherId: string; date: string; startTime: string; endTime: string;
+  reason?: string | null; kind?: ExceptionKind;
 }): Promise<AvailabilityException> {
   const sb = supabaseAdmin();
   const { data, error } = await sb
@@ -160,8 +166,9 @@ export async function addAvailabilityException(input: {
       start_time: input.startTime,
       end_time:   input.endTime,
       reason:     input.reason ?? null,
+      kind:       input.kind ?? "bloqueo",
     })
-    .select("id, teacher_id, date, start_time, end_time, reason")
+    .select("id, teacher_id, date, start_time, end_time, reason, kind")
     .single();
   if (error || !data) throw new Error(error?.message ?? "insert_failed");
   return data as AvailabilityException;

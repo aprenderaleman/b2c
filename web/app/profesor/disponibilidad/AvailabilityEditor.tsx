@@ -178,9 +178,12 @@ export function AvailabilityEditor({
  * AM/PM — caso Thomas 2026-09-23. Un <select> propio muestra siempre
  * 00:00–23:45 en 24h, igual en todos los navegadores e idiomas.
  */
+// Pasos de 10 min (antes 15): las clases regulares duran 50 min y los
+// trials 40, así que una franja de 17:00–17:50 debe ser expresable —
+// con rejilla de 15 era imposible (petición profes 2026-10-08).
 const TIME_OPTIONS: string[] = [];
 for (let h = 0; h < 24; h++) {
-  for (const m of ["00", "15", "30", "45"]) {
+  for (const m of ["00", "10", "20", "30", "40", "50"]) {
     TIME_OPTIONS.push(`${String(h).padStart(2, "0")}:${m}`);
   }
 }

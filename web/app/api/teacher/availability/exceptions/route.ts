@@ -26,6 +26,9 @@ const PostBody = z.object({
   start_time: z.string().regex(/^\d{2}:\d{2}$/, "HH:MM"),
   end_time:   z.string().regex(/^\d{2}:\d{2}$/, "HH:MM"),
   reason:     z.string().trim().max(200).optional(),
+  // bloqueo (default) = cerrar la franja esa fecha; apertura = abrirla
+  // solo esa fecha (franja puntual, migración 138).
+  kind:       z.enum(["bloqueo", "apertura"]).default("bloqueo"),
 });
 
 async function resolveTeacherId(req: Request): Promise<string | NextResponse> {
@@ -64,7 +67,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "validation_failed", details: parsed.error.flatten() }, { status: 400 });
   }
-  const { date, start_time, end_time, reason } = parsed.data;
+  const { date, start_time, end_time, reason, kind } = parsed.data;
   if (end_time <= start_time) {
     return NextResponse.json(
       { error: "validation_failed", message: "La hora fin debe ser mayor que la de inicio." },
@@ -86,6 +89,7 @@ export async function POST(req: Request) {
       startTime: start_time + ":00",
       endTime:   end_time + ":00",
       reason:    reason ?? null,
+      kind,
     });
     return NextResponse.json({ ok: true, exception });
   } catch (e) {
