@@ -266,6 +266,10 @@ export async function DELETE(
 ) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const role = (session.user as { role?: string }).role;
+  if (role !== "admin" && role !== "superadmin") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   const { id } = await params;
   const url = new URL(req.url);
