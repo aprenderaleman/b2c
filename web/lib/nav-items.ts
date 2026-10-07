@@ -84,6 +84,10 @@ function adminItems(): NavItem[] {
     { label: "Clases de prueba",   href: "/admin/clasedeprueba",  icon: "userCheck",     priority: 2.3 },
     { label: "Mi disponibilidad",  href: "/admin/disponibilidad", icon: "clock",         priority: 2.4 },
     { label: "Grabaciones",      href: "/admin/grabaciones",    icon: "video",         priority: 2.5 },
+    // Chat de plataforma del admin (Gelfis 2026-10-09) — sus directos
+    // con profes/estudiantes. No confundir con "Mensajes"
+    // (/admin/mensajes = estadísticas de plantillas).
+    { label: "Chats",       href: "/admin/chats",       icon: "messageCircle", priority: 2.7 },
     { label: "Estudiantes", href: "/admin/estudiantes", icon: "graduationCap", priority: 3 },
     { label: "Empresa",    href: "/admin/empresa",     icon: "trendingUp",    priority: 3.5 },
     { label: "Finanzas",    href: "/admin/finanzas",    icon: "wallet",        priority: 4 },
