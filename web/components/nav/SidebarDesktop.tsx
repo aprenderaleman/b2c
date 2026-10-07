@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { NavIcon } from "./NavIcon";
+import { CHAT_HREFS } from "./useChatUnread";
 import type { NavItem } from "@/lib/nav-items";
 import type { Role } from "@/lib/rbac";
 
@@ -17,11 +18,14 @@ export function SidebarDesktop({
   role,
   impersonated,
   onOpenImpersonate,
+  chatUnread = 0,
 }: {
   items:        NavItem[];
   role:         Role;
   impersonated: boolean;
   onOpenImpersonate: () => void;
+  /** Mensajes sin leer del chat — pinta el ítem Mensajes/Chats de amarillo. */
+  chatUnread?:  number;
 }) {
   const pathname = usePathname();
   const isAdmin  = role === "admin" || role === "superadmin";
@@ -35,15 +39,23 @@ export function SidebarDesktop({
       <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-0.5">
         {items.map(it => {
           const active = !it.external && isActive(pathname, it.href);
+          const hasUnread = chatUnread > 0 && CHAT_HREFS.has(it.href);
           const className = `group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors
                 ${active
                   ? "bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300"
-                  : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  : hasUnread
+                    ? "bg-amber-100 text-amber-900 dark:bg-amber-500/20 dark:text-amber-200 hover:bg-amber-200 dark:hover:bg-amber-500/30"
+                    : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
                 }`;
           const inner = (
             <>
-              <NavIcon name={it.icon} className={`h-[18px] w-[18px] ${it.icon === "heart" ? "text-red-500" : active ? "text-brand-600 dark:text-brand-400" : ""}`} />
+              <NavIcon name={it.icon} className={`h-[18px] w-[18px] ${it.icon === "heart" ? "text-red-500" : hasUnread && !active ? "text-amber-600 dark:text-amber-300" : active ? "text-brand-600 dark:text-brand-400" : ""}`} />
               <span className="truncate">{it.label}</span>
+              {hasUnread && (
+                <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-500 px-1.5 text-[11px] font-bold text-white">
+                  {chatUnread > 9 ? "9+" : chatUnread}
+                </span>
+              )}
               {it.external && <span aria-hidden className="ml-auto text-xs text-slate-400">↗</span>}
             </>
           );

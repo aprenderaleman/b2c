@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { NavIcon } from "./NavIcon";
+import { CHAT_HREFS } from "./useChatUnread";
 import type { NavItem } from "@/lib/nav-items";
 
 /**
@@ -14,23 +15,36 @@ export function BottomNavMobile({
   primary,
   extras,
   logoutForm,
+  chatUnread = 0,
 }: {
   primary:    NavItem[];
   extras:     NavItem[];
   logoutForm: React.ReactNode;     // a <form action={serverAction}><button>Cerrar sesión</button></form> from the shell
+  /** Mensajes sin leer del chat — pinta el ítem Mensajes/Chats de amarillo. */
+  chatUnread?: number;
 }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
   const renderTab = (it: NavItem) => {
     const active = !it.external && isActive(pathname, it.href);
+    const hasUnread = chatUnread > 0 && CHAT_HREFS.has(it.href);
     const cls = `flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium
           ${active
             ? "text-brand-600 dark:text-brand-400"
-            : "text-slate-500 dark:text-slate-400"}`;
+            : hasUnread
+              ? "text-amber-600 dark:text-amber-300"
+              : "text-slate-500 dark:text-slate-400"}`;
     const inner = (
       <>
-        <NavIcon name={it.icon} className={`h-5 w-5 ${it.icon === "heart" ? "text-red-500" : ""}`} />
+        <span className="relative inline-flex">
+          <NavIcon name={it.icon} className={`h-5 w-5 ${it.icon === "heart" ? "text-red-500" : ""}`} />
+          {hasUnread && (
+            <span className="absolute -top-1 -right-2 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
+              {chatUnread > 9 ? "9+" : chatUnread}
+            </span>
+          )}
+        </span>
         <span className="truncate max-w-[64px]">{it.label}</span>
       </>
     );

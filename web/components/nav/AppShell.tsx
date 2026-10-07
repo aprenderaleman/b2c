@@ -11,6 +11,7 @@ import { SystemHealthDot } from "@/components/admin/SystemHealthDot";
 import { LmsHealthDot } from "@/components/admin/LmsHealthDot";
 import { ReferralWidget } from "@/components/referrals/ReferralWidget";
 import { bottomNavItems, drawerExtras, type NavItem } from "@/lib/nav-items";
+import { useChatUnread, CHAT_HREFS } from "./useChatUnread";
 import type { Role } from "@/lib/rbac";
 
 /**
@@ -40,6 +41,10 @@ export function AppShell({
   const [pickerOpen, setPickerOpen] = useState(false);
   const primary = bottomNavItems(items);
   const extras  = drawerExtras(items);
+  // Resaltado amarillo del ítem Mensajes/Chats cuando hay no leídos
+  // (Gelfis 2026-10-10). Solo se consulta si este rol tiene ítem de chat.
+  const hasChatItem = items.some(it => CHAT_HREFS.has(it.href));
+  const chatUnread  = useChatUnread(hasChatItem);
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex">
@@ -48,6 +53,7 @@ export function AppShell({
         role={role}
         impersonated={impersonated}
         onOpenImpersonate={() => setPickerOpen(true)}
+        chatUnread={chatUnread}
       />
 
       <div className="flex-1 min-w-0 flex flex-col">
@@ -85,6 +91,7 @@ export function AppShell({
         primary={primary}
         extras={extras}
         logoutForm={logoutForm}
+        chatUnread={chatUnread}
       />
 
       <ImpersonatePicker open={pickerOpen} onClose={() => setPickerOpen(false)} />
