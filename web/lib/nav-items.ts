@@ -46,14 +46,15 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Calendario",       href: "/profesor/calendario",      icon: "calendarDays",   priority: 1.5 },
     { label: "Mis clases",       href: "/profesor/clases",          icon: "calendarDays",   priority: 2 },
     { label: "Clases de prueba", href: "/profesor/clasedeprueba",   icon: "userCheck",      priority: 2.5 },
-    { label: "Mis leads",        href: "/profesor/leads",           icon: "users",          priority: 2.7 },
+    // "Mis leads" oculto (Gelfis 2026-10-07, simplificación del panel).
     { label: "Estudiantes",      href: "/profesor/estudiantes",     icon: "graduationCap",  priority: 3 },
     { label: "Mensajes",         href: "/profesor/mensajes",        icon: "messageCircle",  priority: 3.5 },
     { label: "Ganancias",        href: "/profesor/ganancias",       icon: "wallet",         priority: 4 },
-    { label: "Disponibilidad",   href: "/profesor/disponibilidad",  icon: "clock",          priority: 5 },
+    // "Disponibilidad" oculta del menú (Gelfis 2026-10-07) — se edita
+    // igual desde Calendario, que incluye el mismo editor + bloqueos.
     // "Materiales" oculto del menú (Gelfis 2026-10-01) — la ruta sigue viva,
     // pero el contenido canónico ahora son los Cursos (SCHULE).
-    { label: "Recursos",         href: "/profesor/recursos",        icon: "bookOpen",       priority: 6.2 },
+    // "Recursos" oculto (Gelfis 2026-10-07, simplificación del panel).
     { label: "Grabaciones",      href: "/profesor/grabaciones",     icon: "video",          priority: 6.5 },
     // Cursos destacado: justo debajo de "Hoy" (Gelfis 2026-10-01).
     { label: "Cursos",           href: "/profesor/cursos",          icon: "graduationCap",  priority: 1.1 },
