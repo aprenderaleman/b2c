@@ -4,6 +4,8 @@ import { ImpersonationBanner } from "@/components/nav/ImpersonationBanner";
 import { SystemHealthBanner } from "@/components/admin/SystemHealthBanner";
 import { NAV_BY_ROLE } from "@/lib/nav-items";
 import { getImpersonation } from "@/lib/impersonation";
+import { AsistenteWidget } from "@/components/asistente/AsistenteWidget";
+import { asistenteVisible } from "@/lib/asistente/config";
 
 export const metadata = { title: "Admin · Aprender-Aleman.de" };
 
@@ -46,6 +48,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <SystemHealthBanner />
         {children}
       </AppShell>
+      {asistenteVisible("admin") && <AsistenteWidget rol="admin" nombre={display.split(/\s+/)[0] ?? ""} />}
     </>
   );
 }
