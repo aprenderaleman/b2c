@@ -15,12 +15,18 @@ export const metadata = { title: "Mis clases · Profesor" };
 export default async function TeacherClassesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ canceladas?: string }>;
+  searchParams: Promise<{ canceladas?: string; q?: string }>;
 }) {
   // Las canceladas se ocultan por defecto: a Simon le salían 177 canceladas
   // (series de Flora, horarios antiguos) frente a 149 reales. ?canceladas=1
   // las vuelve a mostrar.
-  const showCancelled = (await searchParams)?.canceladas === "1";
+  const sp = await searchParams;
+  const showCancelled = sp?.canceladas === "1";
+  // Buscador por alumno (petición Gelfis 2026-10-07): filtra por nombre o
+  // email del alumno y por título de la clase, sin acentos ni mayúsculas.
+  const q = (sp?.q ?? "").trim();
+  const norm = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const qn = norm(q);
   const session = await requireRoleWithImpersonation(
     ["teacher", "admin", "superadmin"],
     "teacher",
@@ -93,7 +99,11 @@ export default async function TeacherClassesPage({
   });
 
   const cancelledCount = rows.filter(r => r.status === "cancelled").length;
-  const visible  = showCancelled ? rows : rows.filter(r => r.status !== "cancelled");
+  const byStatus = showCancelled ? rows : rows.filter(r => r.status !== "cancelled");
+  const visible  = qn
+    ? byStatus.filter(r => norm(r.title ?? "").includes(qn) || r.students.some(s => norm(s.full_name ?? "").includes(qn) || norm(s.email).includes(qn)))
+    : byStatus;
+  const cancelLink = (show: boolean) => `/profesor/clases?${new URLSearchParams({ ...(show ? { canceladas: "1" } : {}), ...(q ? { q } : {}) }).toString()}`;
   const upcoming = visible.filter(r => new Date(r.scheduled_at) >= now);
   const past     = visible.filter(r => new Date(r.scheduled_at) <  now).reverse();
   const completedHours = past
@@ -111,18 +121,42 @@ export default async function TeacherClassesPage({
           </p>
           {cancelledCount > 0 && (
             <Link
-              href={showCancelled ? "/profesor/clases" : "/profesor/clases?canceladas=1"}
+              href={cancelLink(!showCancelled)}
               className="mt-1 inline-block text-xs text-slate-500 dark:text-slate-400 underline underline-offset-2 hover:text-slate-700 dark:hover:text-slate-200"
             >
               {showCancelled ? "Ocultar canceladas" : `Mostrar canceladas (${cancelledCount})`}
             </Link>
           )}
         </div>
-        <NewClassButton />
+        <div className="flex items-center gap-2">
+          <form method="get" action="/profesor/clases" className="flex items-center gap-1">
+            {showCancelled && <input type="hidden" name="canceladas" value="1" />}
+            <input
+              type="search"
+              name="q"
+              defaultValue={q}
+              placeholder="Buscar alumno…"
+              aria-label="Buscar por alumno"
+              className="w-44 sm:w-56 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-400"
+            />
+            {q && (
+              <Link href={cancelLink(showCancelled)} className="text-xs text-slate-500 dark:text-slate-400 hover:underline" aria-label="Quitar filtro">
+                Limpiar
+              </Link>
+            )}
+          </form>
+          <NewClassButton />
+        </div>
       </header>
 
-      <Block title="Próximas" rows={upcoming} empty="No tienes clases agendadas." />
-      <Block title="Historial" rows={past}    empty="Aún no has dado clases en esta plataforma." />
+      {q && (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Mostrando solo clases de <strong className="text-slate-700 dark:text-slate-200">{q}</strong>: {visible.length} resultado{visible.length === 1 ? "" : "s"}.
+        </p>
+      )}
+
+      <Block title="Próximas" rows={upcoming} empty={q ? `Sin clases próximas de "${q}".` : "No tienes clases agendadas."} />
+      <Block title="Historial" rows={past}    empty={q ? `Sin clases pasadas de "${q}".` : "Aún no has dado clases en esta plataforma."} />
     </main>
   );
 }
