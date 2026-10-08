@@ -118,6 +118,8 @@ function PersistentChat({ chatId, currentUserId, visible, onUnreadChange }: {
   const [loading,  setLoading]  = useState(true);
   const [seenOthers, setSeenOthers] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // No arrastrar al lector al final si está repasando el historial.
+  const nearBottomRef = useRef(true);
 
   const load = async () => {
     try {
@@ -168,7 +170,7 @@ function PersistentChat({ chatId, currentUserId, visible, onUnreadChange }: {
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (el && visible) el.scrollTop = el.scrollHeight;
+    if (el && visible && nearBottomRef.current) el.scrollTop = el.scrollHeight;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages.length]);
 
@@ -177,7 +179,14 @@ function PersistentChat({ chatId, currentUserId, visible, onUnreadChange }: {
       <p className="px-3 pt-2 text-[10px] text-slate-500 shrink-0">
         Este chat se guarda — lo verás también en «Mensajes» después de clase.
       </p>
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2">
+      <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        }}
+        className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-2"
+      >
         {loading && <p className="text-xs text-slate-500">Cargando mensajes…</p>}
         {!loading && messages.length === 0 && (
           <p className="text-xs text-slate-500 text-center py-8">Aún no hay mensajes. Envía el primero 👋</p>

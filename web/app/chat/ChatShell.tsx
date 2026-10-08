@@ -64,12 +64,17 @@ export function ChatShell({ currentUserId, currentUserName: _currentUserName, em
   const active = chats.find(c => c.id === activeId) ?? null;
 
   return (
+    // Móvil: UN panel a la vez (lista O conversación, con botón ← volver).
+    // Antes se apilaban ambos dentro de la altura fija con overflow-hidden
+    // y el historial quedaba cortado sin poder hacer scroll (reporte
+    // Gelfis 2026-10-11).
     <main className={`grid grid-cols-1 md:grid-cols-[320px_1fr] bg-slate-50 dark:bg-slate-950
       ${embedded
         ? "h-[calc(100vh-10rem)] min-h-[420px] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
         : "h-[calc(100vh-3.5rem)]"}`}>
       {/* Conversations list */}
-      <aside className="border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-y-auto">
+      <aside className={`border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-y-auto min-h-0
+        ${activeId ? "hidden md:block" : ""}`}>
         <header className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 z-10">
           <h1 className="text-lg font-bold text-slate-900 dark:text-slate-50">Conversaciones</h1>
           <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -120,7 +125,7 @@ export function ChatShell({ currentUserId, currentUserName: _currentUserName, em
       </aside>
 
       {/* Active conversation */}
-      <section className="flex flex-col min-w-0">
+      <section className={`flex-col min-w-0 min-h-0 ${active ? "flex" : "hidden md:flex"}`}>
         {active ? (
           <ActiveChat
             key={active.id}
@@ -128,6 +133,7 @@ export function ChatShell({ currentUserId, currentUserName: _currentUserName, em
             currentUserId={currentUserId}
             onChange={(updatedChats) => setChats(updatedChats)}
             chats={chats}
+            onBack={() => setActiveId(null)}
           />
         ) : (
           <EmptyActive />
@@ -156,15 +162,21 @@ function EmptyActive() {
   );
 }
 
-function ActiveChat({ chat, currentUserId, chats, onChange }: {
+function ActiveChat({ chat, currentUserId, chats, onChange, onBack }: {
   chat:          ChatListItem;
   currentUserId: string;
   chats:         ChatListItem[];
   onChange:      (c: ChatListItem[]) => void;
+  onBack:        () => void;
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading,  setLoading]  = useState(true);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Auto-scroll SOLO si el usuario está abajo (o en la carga inicial).
+  // Antes, cada mensaje nuevo del polling te arrastraba al final aunque
+  // estuvieras leyendo el historial arriba.
+  const nearBottomRef = useRef(true);
+  const didInitialScrollRef = useRef(false);
 
   const load = async () => {
     try {
@@ -190,10 +202,15 @@ function ActiveChat({ chat, currentUserId, chats, onChange }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.id]);
 
-  // Auto-scroll to bottom on new messages.
+  // Auto-scroll to bottom on new messages — pero respetando al lector:
+  // si está repasando el historial (lejos del final), no lo movemos.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (!el || messages.length === 0) return;
+    if (!didInitialScrollRef.current || nearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      didInitialScrollRef.current = true;
+    }
   }, [messages.length]);
 
   // Legacy plain-text sender kept for backward compat; now unused — Composer
@@ -216,14 +233,30 @@ function ActiveChat({ chat, currentUserId, chats, onChange }: {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <header className="px-4 sm:px-6 py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
-        <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">{chat.title}</h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400">
-          {chat.type === "group" ? "Chat de grupo" : "Conversación directa"}
-        </p>
+      <header className="px-3 sm:px-6 py-3 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="md:hidden shrink-0 rounded-lg p-1.5 text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400"
+          aria-label="Volver a conversaciones"
+        >
+          ←
+        </button>
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50 truncate">{chat.title}</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {chat.type === "group" ? "Chat de grupo" : "Conversación directa"}
+          </p>
+        </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 space-y-2 bg-slate-50 dark:bg-slate-950">
+      <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        }}
+        className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 space-y-2 bg-slate-50 dark:bg-slate-950">
         {loading && <p className="text-sm text-slate-500">Cargando mensajes…</p>}
         {!loading && messages.length === 0 && (
           <p className="text-sm text-slate-500 dark:text-slate-400 text-center py-10">
