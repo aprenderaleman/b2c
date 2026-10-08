@@ -412,6 +412,39 @@ type BusyCacheEntry = { intervals: BusyInterval[]; expiresAtMs: number };
 const teacherBusyCache = new Map<string, BusyCacheEntry>();
 const TEACHER_BUSY_CACHE_TTL_MS = 60_000;
 
+// Lista de calendarios del profe (ids) — cacheada 10 min. El freeBusy
+// debe cubrir TODOS sus calendarios, no solo "primary": el caso
+// Verónica (2026-10-12) tenía su clase de las 10 en un calendario
+// secundario y el funnel le reservó un trial encima.
+const calendarListCache = new Map<string, { ids: string[]; expiresAtMs: number }>();
+const CALENDAR_LIST_CACHE_TTL_MS = 10 * 60_000;
+const MAX_CALENDARS = 25;
+
+async function getTeacherCalendarIds(
+  teacherId: string,
+  cal: calendar_v3.Calendar,
+): Promise<string[]> {
+  const now = Date.now();
+  const cached = calendarListCache.get(teacherId);
+  if (cached && cached.expiresAtMs > now) return cached.ids;
+
+  try {
+    const res = await cal.calendarList.list({ maxResults: MAX_CALENDARS });
+    const items = res.data.items ?? [];
+    // Todos los calendarios visibles del profe (propios y suscritos),
+    // con "primary" garantizado aunque la lista fallara en incluirlo.
+    const ids = [...new Set([
+      "primary",
+      ...items.map(c => c.id).filter((id): id is string => Boolean(id)),
+    ])].slice(0, MAX_CALENDARS);
+    calendarListCache.set(teacherId, { ids, expiresAtMs: now + CALENDAR_LIST_CACHE_TTL_MS });
+    return ids;
+  } catch (e) {
+    console.error(`[gcal-oauth] calendarList failed for teacher ${teacherId}:`, e instanceof Error ? e.message : e);
+    return ["primary"];
+  }
+}
+
 function teacherCacheKey(teacherId: string, min: string, max: string): string {
   const round = (iso: string) => {
     const d = new Date(iso);
@@ -436,22 +469,27 @@ export async function getTeacherCalendarBusy(
   if (!cal) return [];
 
   try {
+    // TODOS los calendarios del profe (caso Verónica 2026-10-12: su
+    // clase vivía en un calendario secundario y "primary" salía libre).
+    const calendarIds = await getTeacherCalendarIds(teacherId, cal);
     const res = await cal.freebusy.query({
       requestBody: {
         timeMin: timeMinIso,
         timeMax: timeMaxIso,
-        items: [{ id: "primary" }],
+        items: calendarIds.map(id => ({ id })),
       },
     });
     const cals = res.data.calendars ?? {};
-    const entry = cals["primary"];
-    const busy = entry?.busy ?? [];
-    const intervals: BusyInterval[] = busy
-      .filter(b => b.start && b.end)
-      .map(b => ({
-        startMs: new Date(b.start as string).getTime(),
-        endMs:   new Date(b.end as string).getTime(),
-      }));
+    const intervals: BusyInterval[] = [];
+    for (const entry of Object.values(cals)) {
+      for (const b of entry?.busy ?? []) {
+        if (!b.start || !b.end) continue;
+        intervals.push({
+          startMs: new Date(b.start).getTime(),
+          endMs:   new Date(b.end).getTime(),
+        });
+      }
+    }
 
     teacherBusyCache.set(key, { intervals, expiresAtMs: now + TEACHER_BUSY_CACHE_TTL_MS });
     if (teacherBusyCache.size > 200) {
