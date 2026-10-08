@@ -26,7 +26,8 @@ import {
 import type { LocalUserChoices } from "@livekit/components-core";
 import { RoomEvent, Track, ParticipantEvent, DisconnectReason, type Participant } from "livekit-client";
 import { VirtualBackgroundButton, BRAND_IMAGES, BG_LABELS, type BgMode } from "./VirtualBackgroundButton";
-import { WhiteboardPanel, WhiteboardToggleButton } from "./WhiteboardPanel";
+// Pizarra retirada del aula (Gelfis 2026-10-12) — ./WhiteboardPanel queda
+// en el repo por si se reactiva.
 import { AulaSidePanel } from "./AulaSidePanel";
 
 type Props = {
@@ -106,7 +107,6 @@ export function AulaClient(p: Props) {
   const [error, setError]         = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [chatOpen,  setChatOpen]  = useState(false);
-  const [wbOpen,    setWbOpen]    = useState(false);
   // No leídos del chat persistente (lo reporta AulaSidePanel via callback).
   const [aulaUnread, setAulaUnread] = useState(0);
   const usePersistentPanel = Boolean(p.persistentChatId || p.showNotesTab) && Boolean(p.currentUserId);
@@ -371,10 +371,8 @@ export function AulaClient(p: Props) {
           <div className="flex-1 min-w-0 h-full">
             <VideoArea classId={p.classId} isHost={p.isHost} />
           </div>
-          {/* Pizarra: overlay z-10 sobre el video (debajo del chat z-20).
-              Montada siempre para escuchar el data channel; Excalidraw
-              solo se carga al abrirse. */}
-          <WhiteboardPanel open={wbOpen} onOpenChange={setWbOpen} isHost={p.isHost} />
+          {/* Pizarra RETIRADA del aula (Gelfis 2026-10-12). El componente
+              WhiteboardPanel sigue en el repo por si se reactiva. */}
           {panelOpen && (
             <ParticipantsPanel onClose={() => setPanelOpen(false)} />
           )}
@@ -408,7 +406,6 @@ export function AulaClient(p: Props) {
                   }}
                 />
                 {p.audience !== "lead" && <SafeScreenShareButton />}
-                <WhiteboardToggleButton active={wbOpen} onToggle={() => setWbOpen(o => !o)} />
                 <VirtualBackgroundButton
                   canCamera={userChoices?.videoEnabled ?? false}
                   brandEnabled={p.brandBackground}
