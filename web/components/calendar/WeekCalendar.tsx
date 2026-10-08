@@ -108,6 +108,7 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
   const [events, setEvents]         = useState<CalEvent[]>([]);
   const [bands, setBands]           = useState<AvailBand[]>([]);
   const [exceptions, setExceptions] = useState<CalException[]>([]);
+  const [gcalBusy, setGcalBusy]     = useState<Array<{ start: string; end: string }>>([]);
   const [teacherId, setTeacherId]   = useState<string | null>(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
@@ -140,6 +141,7 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
         setEvents(data.events ?? []);
         setBands(data.availability ?? []);
         setExceptions(data.exceptions ?? []);
+        setGcalBusy(data.gcalBusy ?? []);
         setTeacherId(data.teacherId ?? null);
       })
       .catch(e => { if (live) setError(String(e)); })
@@ -184,6 +186,9 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
           <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-slate-400 inline-block" /> Pasada</span>
           <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-200 dark:bg-emerald-500/30 inline-block" /> Disponible</span>
           <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-red-300 dark:bg-red-500/40 inline-block" /> Bloqueado</span>
+          {gcalBusy.length > 0 && (
+            <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-slate-300 dark:bg-slate-600 inline-block" /> Google Calendar</span>
+          )}
         </div>
         {role === "teacher" && (
           <button type="button" className="btn-primary text-sm" onClick={() => setCreateOpen(true)}>
@@ -229,6 +234,7 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
               const dayBands = bands.filter(b => b.day_of_week === dow);
               const dayEvents = byDay.get(d) ?? [];
               const dayExceptions = exceptions.filter(x => x.date === d);
+              const dayGcal = gcalBusy.filter(g => berlinDateStr(new Date(g.start)) === d);
               return (
                 <div
                   key={d}
@@ -256,6 +262,27 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
                     const { top, height } = pos(s, e);
                     if (height <= 0) return null;
                     return <div key={i} className="absolute inset-x-0 bg-emerald-100/70 dark:bg-emerald-500/10 pointer-events-none" style={{ top, height }} aria-hidden />;
+                  })}
+                  {/* Ocupado en el Google Calendar del profe (estilo Preply,
+                      petición Verónica 2026-10-12). Solo informativo: se
+                      pinta DEBAJO de clases y excepciones; los espejos de
+                      nuestras propias clases en su GCal quedan tapados por
+                      la tarjeta azul de la clase. */}
+                  {dayGcal.map((g, i) => {
+                    const s = berlinMinutes(g.start), e = berlinMinutes(g.end);
+                    const { top, height } = pos(s, e);
+                    if (height <= 0) return null;
+                    return (
+                      <div
+                        key={`g${i}`}
+                        className="absolute inset-x-0.5 rounded-md bg-slate-300/50 dark:bg-slate-600/40 border border-slate-300 dark:border-slate-600 pointer-events-none bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,rgba(100,116,139,0.18)_5px,rgba(100,116,139,0.18)_10px)]"
+                        style={{ top, height: Math.max(height, 12) }}
+                        title="Ocupado en tu Google Calendar"
+                        aria-hidden
+                      >
+                        <span className="px-1 text-[9px] font-semibold text-slate-600 dark:text-slate-300">📆 Google</span>
+                      </div>
+                    );
                   })}
                   {/* Excepciones puntuales: bloqueos (rojo) y aperturas (verde fuerte) */}
                   {dayExceptions.map(x => {

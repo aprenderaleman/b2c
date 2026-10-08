@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getTeacherAvailability } from "@/lib/availability";
+import { getConnectedTeacherIds, getTeacherCalendarBusy } from "@/lib/google-calendar-oauth";
 import { resolveEffectiveUser } from "@/lib/impersonation";
 
 /**
@@ -165,6 +166,23 @@ export async function GET(req: Request) {
     .gte("date", berlinDate(start))
     .lte("date", berlinDate(end));
 
+  // Ocupado del Google Calendar del profe (si lo tiene vinculado) — se
+  // pinta en gris en el grid, estilo Preply (petición Verónica
+  // 2026-10-12). Best-effort: si Google falla, el calendario carga igual.
+  let gcalBusy: Array<{ start: string; end: string }> = [];
+  try {
+    const connected = await getConnectedTeacherIds([teacherId]);
+    if (connected.length > 0) {
+      const intervals = await getTeacherCalendarBusy(teacherId, start, end);
+      gcalBusy = intervals.map(b => ({
+        start: new Date(b.startMs).toISOString(),
+        end:   new Date(b.endMs).toISOString(),
+      }));
+    }
+  } catch (e) {
+    console.error("[teacher/calendar] gcal busy failed (non-fatal):", e instanceof Error ? e.message : e);
+  }
+
   return NextResponse.json({
     // El cliente lo necesita para crear/borrar excepciones desde el grid
     // (el API de excepciones lo ignora para profes y lo exige para admin
@@ -175,5 +193,6 @@ export async function GET(req: Request) {
       .filter(b => b.available)
       .map(b => ({ day_of_week: b.day_of_week, start_time: b.start_time, end_time: b.end_time })),
     exceptions: exceptionRows ?? [],
+    gcalBusy,
   });
 }
