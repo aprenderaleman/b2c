@@ -28,9 +28,12 @@ type Props = {
    * (forced to the caller's own teacher_id).
    */
   mode?: "admin" | "teacher";
+  /** Prellenado al abrir desde un hueco del calendario (Gelfis 2026-10-11). */
+  initialDate?: string;   // yyyy-mm-dd (Berlín)
+  initialTime?: string;   // HH:mm (Berlín)
 };
 
-export function CreateClassModal({ open, onClose, mode = "admin" }: Props) {
+export function CreateClassModal({ open, onClose, mode = "admin", initialDate, initialTime }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -55,6 +58,10 @@ export function CreateClassModal({ open, onClose, mode = "admin" }: Props) {
   // own students; teacherId is forced server-side so the picker is hidden.
   useEffect(() => {
     if (!open) return;
+    // Prellenar fecha/hora si venimos de un click en el grid y el form
+    // está virgen (no pisamos lo que el profe ya haya tecleado).
+    if (initialDate) setDateStr(cur => cur || initialDate);
+    if (initialTime) setTimeStr(cur => cur || initialTime);
     setLoadingOpts(true);
     const url = mode === "teacher" ? "/api/teacher/picker" : "/api/admin/picker";
     fetch(url)

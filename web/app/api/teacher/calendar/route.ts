@@ -154,10 +154,26 @@ export async function GET(req: Request) {
 
   const availability = await getTeacherAvailability(teacherId).catch(() => []);
 
+  // Excepciones puntuales de la ventana (migración 137/138) para
+  // pintarlas en el grid: bloqueos en rojo, aperturas en verde fuerte.
+  const berlinDate = (iso: string) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin" }).format(new Date(iso));
+  const { data: exceptionRows } = await sb
+    .from("teacher_availability_exceptions")
+    .select("id, date, start_time, end_time, kind, reason")
+    .eq("teacher_id", teacherId)
+    .gte("date", berlinDate(start))
+    .lte("date", berlinDate(end));
+
   return NextResponse.json({
+    // El cliente lo necesita para crear/borrar excepciones desde el grid
+    // (el API de excepciones lo ignora para profes y lo exige para admin
+    // impersonando).
+    teacherId,
     events,
     availability: availability
       .filter(b => b.available)
       .map(b => ({ day_of_week: b.day_of_week, start_time: b.start_time, end_time: b.end_time })),
+    exceptions: exceptionRows ?? [],
   });
 }

@@ -31,6 +31,15 @@ type CalEvent = {
 
 type AvailBand = { day_of_week: number; start_time: string; end_time: string };
 
+type CalException = {
+  id:         string;
+  date:       string;   // YYYY-MM-DD (Berlín)
+  start_time: string;   // HH:MM:SS
+  end_time:   string;
+  kind:       "bloqueo" | "apertura";
+  reason:     string | null;
+};
+
 const HOUR_START = 7;
 const HOUR_END   = 22;               // exclusive: grid muestra 07:00–22:00
 const HOUR_PX    = 48;
@@ -98,10 +107,15 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [events, setEvents]         = useState<CalEvent[]>([]);
   const [bands, setBands]           = useState<AvailBand[]>([]);
+  const [exceptions, setExceptions] = useState<CalException[]>([]);
+  const [teacherId, setTeacherId]   = useState<string | null>(null);
   const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
   const [selected, setSelected]     = useState<CalEvent | null>(null);
+  const [exSelected, setExSelected] = useState<CalException | null>(null);
+  const [slotPick, setSlotPick]     = useState<{ date: string; time: string } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createPrefill, setCreatePrefill] = useState<{ date: string; time: string } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const monday = useMemo(
@@ -125,6 +139,8 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
         if (!ok) { setError(data?.message ?? data?.error ?? "Error al cargar"); return; }
         setEvents(data.events ?? []);
         setBands(data.availability ?? []);
+        setExceptions(data.exceptions ?? []);
+        setTeacherId(data.teacherId ?? null);
       })
       .catch(e => { if (live) setError(String(e)); })
       .finally(() => { if (live) setLoading(false); });
@@ -167,6 +183,7 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
           {role === "closer" && <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-violet-500 inline-block" /> Sesión</span>}
           <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-slate-400 inline-block" /> Pasada</span>
           <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-emerald-200 dark:bg-emerald-500/30 inline-block" /> Disponible</span>
+          <span className="inline-flex items-center gap-1"><i className="h-2.5 w-2.5 rounded-sm bg-red-300 dark:bg-red-500/40 inline-block" /> Bloqueado</span>
         </div>
         {role === "teacher" && (
           <button type="button" className="btn-primary text-sm" onClick={() => setCreateOpen(true)}>
@@ -211,18 +228,57 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
               const dow = new Date(d + "T12:00:00Z").getUTCDay();
               const dayBands = bands.filter(b => b.day_of_week === dow);
               const dayEvents = byDay.get(d) ?? [];
+              const dayExceptions = exceptions.filter(x => x.date === d);
               return (
-                <div key={d} className="relative border-l border-slate-100 dark:border-slate-800" style={{ height: hours.length * HOUR_PX }}>
+                <div
+                  key={d}
+                  className="relative border-l border-slate-100 dark:border-slate-800"
+                  style={{ height: hours.length * HOUR_PX }}
+                  onClick={role === "teacher" ? (e) => {
+                    // Click en hueco vacío → gestionar esa franja (Gelfis
+                    // 2026-10-11). Los eventos/excepciones son <button>,
+                    // así que si el click vino de uno, lo ignoramos aquí.
+                    if ((e.target as HTMLElement).closest("button")) return;
+                    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                    const mins = HOUR_START * 60 + ((e.clientY - rect.top) / HOUR_PX) * 60;
+                    const snapped = Math.max(HOUR_START * 60, Math.min((HOUR_END - 1) * 60, Math.floor(mins / 30) * 30));
+                    const time = `${String(Math.floor(snapped / 60)).padStart(2, "0")}:${String(snapped % 60).padStart(2, "0")}`;
+                    setSlotPick({ date: d, time });
+                  } : undefined}
+                >
                   {/* Hour lines */}
                   {hours.map((h, i) => (
-                    <div key={h} className="absolute inset-x-0 border-t border-slate-100 dark:border-slate-800/70" style={{ top: i * HOUR_PX }} />
+                    <div key={h} className="absolute inset-x-0 border-t border-slate-100 dark:border-slate-800/70 pointer-events-none" style={{ top: i * HOUR_PX }} />
                   ))}
                   {/* Availability bands */}
                   {dayBands.map((b, i) => {
                     const s = toMin(b.start_time), e = toMin(b.end_time);
                     const { top, height } = pos(s, e);
                     if (height <= 0) return null;
-                    return <div key={i} className="absolute inset-x-0 bg-emerald-100/70 dark:bg-emerald-500/10" style={{ top, height }} aria-hidden />;
+                    return <div key={i} className="absolute inset-x-0 bg-emerald-100/70 dark:bg-emerald-500/10 pointer-events-none" style={{ top, height }} aria-hidden />;
+                  })}
+                  {/* Excepciones puntuales: bloqueos (rojo) y aperturas (verde fuerte) */}
+                  {dayExceptions.map(x => {
+                    const s = toMin(x.start_time), e = toMin(x.end_time);
+                    const { top, height } = pos(s, e);
+                    if (height <= 0) return null;
+                    const isBlock = x.kind === "bloqueo";
+                    return (
+                      <button
+                        key={x.id}
+                        type="button"
+                        onClick={() => setExSelected(x)}
+                        className={`absolute inset-x-0.5 rounded-md border px-1.5 py-0.5 text-left text-[10px] leading-tight overflow-hidden transition hover:ring-2 hover:ring-brand-400 ${
+                          isBlock
+                            ? "bg-red-100/90 dark:bg-red-500/20 border-red-300 dark:border-red-500/40 text-red-800 dark:text-red-200 bg-[repeating-linear-gradient(45deg,transparent,transparent_6px,rgba(239,68,68,0.12)_6px,rgba(239,68,68,0.12)_12px)]"
+                            : "bg-emerald-200/80 dark:bg-emerald-500/25 border-emerald-400 dark:border-emerald-500/50 text-emerald-900 dark:text-emerald-200"}`}
+                        style={{ top, height: Math.max(height, 18) }}
+                        title={`${isBlock ? "Bloqueado" : "Franja extra"} ${x.start_time.slice(0, 5)}–${x.end_time.slice(0, 5)}${x.reason ? ` · ${x.reason}` : ""}`}
+                      >
+                        {isBlock ? "🚫" : "✅"} {x.start_time.slice(0, 5)}
+                        {x.reason && <span className="ml-1 opacity-80">{x.reason}</span>}
+                      </button>
+                    );
                   })}
                   {/* Events */}
                   {dayEvents.map(ev => {
@@ -270,9 +326,164 @@ export function WeekCalendar({ role }: { role: "teacher" | "closer" }) {
         />
       )}
 
-      {role === "teacher" && (
-        <CreateClassModal open={createOpen} mode="teacher" onClose={() => { setCreateOpen(false); refresh(); }} />
+      {exSelected && (
+        <ExceptionModal
+          ex={exSelected}
+          teacherId={teacherId}
+          canEdit={role === "teacher"}
+          onClose={() => setExSelected(null)}
+          onChanged={() => { setExSelected(null); refresh(); }}
+        />
       )}
+
+      {slotPick && role === "teacher" && (
+        <SlotModal
+          pick={slotPick}
+          teacherId={teacherId}
+          onClose={() => setSlotPick(null)}
+          onSchedule={() => { setCreatePrefill(slotPick); setSlotPick(null); }}
+          onChanged={() => { setSlotPick(null); refresh(); }}
+        />
+      )}
+
+      {role === "teacher" && (
+        <CreateClassModal
+          open={createOpen || createPrefill !== null}
+          mode="teacher"
+          initialDate={createPrefill?.date}
+          initialTime={createPrefill?.time}
+          onClose={() => { setCreateOpen(false); setCreatePrefill(null); refresh(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Modal de un hueco vacío: agendar clase o bloquear/abrir franja ──
+
+function SlotModal({
+  pick, teacherId, onClose, onSchedule, onChanged,
+}: {
+  pick: { date: string; time: string };
+  teacherId: string | null;
+  onClose: () => void;
+  onSchedule: () => void;
+  onChanged: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const dayLabel = new Date(pick.date + "T12:00:00Z").toLocaleDateString("es-ES", {
+    weekday: "long", day: "numeric", month: "long", timeZone: "UTC",
+  });
+  const plus50 = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    const total = h * 60 + m + 50;
+    return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  };
+
+  const addException = (kind: "bloqueo" | "apertura") => {
+    setError(null);
+    start(async () => {
+      const qs = teacherId ? `?teacherId=${encodeURIComponent(teacherId)}` : "";
+      const res = await fetch(`/api/teacher/availability/exceptions${qs}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: pick.date, start_time: pick.time, end_time: plus50(pick.time), kind }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data?.message ?? data?.error ?? "No se pudo guardar."); return; }
+      onChanged();
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-5 space-y-3">
+        <h2 className="text-base font-bold text-slate-900 dark:text-white capitalize">
+          {dayLabel} · {pick.time}
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400">¿Qué quieres hacer con esta franja? (50 min, hora Berlín)</p>
+        <div className="grid gap-2">
+          <button type="button" className="btn-primary text-sm w-full" onClick={onSchedule} disabled={pending}>
+            ➕ Agendar clase aquí
+          </button>
+          <button type="button" onClick={() => addException("bloqueo")} disabled={pending}
+            className="w-full rounded-full border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 px-3 py-2 text-sm font-medium hover:bg-red-100 dark:hover:bg-red-500/20">
+            🚫 Bloquear esta franja ({pick.time}–{plus50(pick.time)})
+          </button>
+          <button type="button" onClick={() => addException("apertura")} disabled={pending}
+            className="w-full rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-3 py-2 text-sm font-medium hover:bg-emerald-100 dark:hover:bg-emerald-500/20">
+            ✅ Abrir franja extra solo este día
+          </button>
+        </div>
+        {error && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{error}</p>}
+        <div className="flex justify-end">
+          <button type="button" className="btn-secondary text-xs" onClick={onClose} disabled={pending}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal de una excepción existente: ver + eliminar ───────────────
+
+function ExceptionModal({
+  ex, teacherId, canEdit, onClose, onChanged,
+}: {
+  ex: CalException;
+  teacherId: string | null;
+  canEdit: boolean;
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const isBlock = ex.kind === "bloqueo";
+
+  const dayLabel = new Date(ex.date + "T12:00:00Z").toLocaleDateString("es-ES", {
+    weekday: "long", day: "numeric", month: "long", timeZone: "UTC",
+  });
+
+  const remove = () => {
+    setError(null);
+    start(async () => {
+      const qs = teacherId ? `&teacherId=${encodeURIComponent(teacherId)}` : "";
+      const res = await fetch(`/api/teacher/availability/exceptions?id=${encodeURIComponent(ex.id)}${qs}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data?.message ?? data?.error ?? "No se pudo eliminar."); return; }
+      onChanged();
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-5 space-y-3">
+        <h2 className="text-base font-bold text-slate-900 dark:text-white">
+          {isBlock ? "🚫 Franja bloqueada" : "✅ Franja extra abierta"}
+        </h2>
+        <p className="text-sm text-slate-700 dark:text-slate-200 capitalize">
+          {dayLabel} · <span className="font-mono">{ex.start_time.slice(0, 5)}–{ex.end_time.slice(0, 5)}</span> (Berlín)
+          {ex.reason && <span className="block mt-1 text-xs text-slate-500 dark:text-slate-400 normal-case">Motivo: {ex.reason}</span>}
+        </p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {isBlock
+            ? "Este hueco no se ofrece para clases de prueba ni agendados. Solo aplica a esta fecha."
+            : "Este hueco se ofrece SOLO esta fecha — no se repite semanalmente."}
+        </p>
+        {error && <p className="text-xs text-red-600 dark:text-red-400" role="alert">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary text-xs" onClick={onClose} disabled={pending}>Cerrar</button>
+          {canEdit && (
+            <button type="button" onClick={remove} disabled={pending}
+              className="rounded-full bg-red-600 text-white px-3 py-1.5 text-xs font-medium hover:bg-red-700">
+              {pending ? "…" : "Eliminar"}
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
