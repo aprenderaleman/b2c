@@ -41,16 +41,23 @@ export async function getClassBalance(studentId: string): Promise<ClassBalance> 
     (sum: number, r: { billed_hours: number }) => sum + (r.billed_hours ?? 0), 0
   );
 
-  const { count: agendadas } = await sb
+  // Agendadas del alumno: clases futuras en 'scheduled' entre SUS clases.
+  // Antes se pasaba a .in() la lista de TODAS las clases futuras de la
+  // academia (cientos de ids): la URL se truncaba y devolvía 0 (caso
+  // Francisco 2026-10-09: 19 agendadas, contador en 0).
+  const { data: myClassIds } = await sb
     .from("class_participants")
-    .select("id", { count: "exact", head: true })
-    .eq("student_id", studentId)
-    .in("class_id", (await sb
-      .from("classes")
-      .select("id")
-      .eq("status", "scheduled")
-      .gte("scheduled_at", new Date().toISOString())
-    ).data?.map((r: { id: string }) => r.id) ?? []);
+    .select("class_id")
+    .eq("student_id", studentId);
+  const ids = (myClassIds ?? []).map((r: { class_id: string }) => r.class_id);
+  const { count: agendadas } = ids.length === 0
+    ? { count: 0 }
+    : await sb
+        .from("classes")
+        .select("id", { count: "exact", head: true })
+        .in("id", ids)
+        .eq("status", "scheduled")
+        .gte("scheduled_at", new Date().toISOString());
 
   const desbloqueadas = s.clases_desbloqueadas ?? 0;
   const cpm = s.classes_per_month;

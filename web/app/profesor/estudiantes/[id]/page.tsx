@@ -214,7 +214,10 @@ export default async function TeacherStudentDetail({
             </div>
             <div className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
               <div className="text-2xl font-bold tabular-nums text-slate-700 dark:text-slate-200">
-                {balance.total != null ? balance.total - balance.consumidas : "—"}
+                {/* Fuente de verdad: students.classes_remaining (incluye ajustes).
+                    total − consumidas ignoraba classes_adjustment y mostraba −3 a
+                    Francisco (50 contratadas + 24 de ajuste, 53 tomadas). */}
+                {student.classes_remaining ?? (balance.total != null ? balance.total - balance.consumidas : "—")}
               </div>
               <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Restantes del pack</div>
             </div>
