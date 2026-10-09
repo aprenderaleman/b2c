@@ -12,7 +12,7 @@
 
 // Aracely salió de la academia el 2026-10-05: su slug ya no resuelve y
 // /clase-profe?profe=aracely cae a la variante genérica.
-export type ProfeSlug = "sabine" | "jonathan" | "thomas" | "simon";
+export type ProfeSlug = "sabine" | "jonathan" | "thomas" | "simon" | "veronica";
 
 export type ProfeInfo = {
   slug:       ProfeSlug;
@@ -52,6 +52,14 @@ export const PROFES_MAP: Record<ProfeSlug, ProfeInfo> = {
     firstName: "Simon",
     fullName:  "Simon Heimler Castro",
     origin:    "DE",
+  },
+  veronica: {
+    slug:      "veronica",
+    teacherId: "6b4c894e-05dc-4008-9be9-8fd53767a73a",
+    firstName: "Verónica",
+    fullName:  "Veronica Fusco",
+    origin:    "DE",
+    female:    true,
   },
 };
 
