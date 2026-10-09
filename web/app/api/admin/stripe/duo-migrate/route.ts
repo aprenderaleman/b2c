@@ -50,8 +50,25 @@ export async function POST(req: Request) {
 
   let stripe: Stripe;
   try { stripe = getStripeClient(account); }
-  catch { return NextResponse.json({ error: "stripe_not_configured" }, { status: 503 }); }
+  catch { return NextResponse.json({ error: "stripe_not_configured", account }, { status: 503 }); }
 
+  try {
+    return await run(stripe, { email, creditCents, duoPriceCents, dryRun });
+  } catch (e) {
+    // Endpoint admin: el mensaje real ayuda a depurar (no se filtra a usuarios).
+    return NextResponse.json(
+      { error: "exception", message: e instanceof Error ? e.message : String(e) },
+      { status: 500 },
+    );
+  }
+}
+
+async function run(
+  stripe: Stripe,
+  { email, creditCents, duoPriceCents, dryRun }: {
+    email: string; creditCents: number; duoPriceCents: number; dryRun: boolean;
+  },
+): Promise<NextResponse> {
   // 1. Customer + suscripción activa
   const customers = await stripe.customers.list({ email, limit: 5 });
   if (customers.data.length === 0) {
@@ -80,12 +97,18 @@ export async function POST(req: Request) {
   ) ?? null;
 
   if (dryRun) {
+    // current_period_end vive en el item en las versiones nuevas del API
+    // de Stripe (y en la raíz en las viejas) — probamos ambas y si no,
+    // null en vez de crashear.
+    const periodEndSec =
+      (item as unknown as { current_period_end?: number }).current_period_end ??
+      (sub as unknown as { current_period_end?: number }).current_period_end ?? null;
     return NextResponse.json({
       ok: true, dryRun: true,
       customerId: customer.id,
       subscriptionId: sub.id,
       currentPrice: { id: currentPrice.id, amount: currentPrice.unit_amount, interval: currentPrice.recurring?.interval },
-      currentPeriodEnd: new Date((sub as unknown as { current_period_end: number }).current_period_end * 1000).toISOString(),
+      currentPeriodEnd: periodEndSec ? new Date(periodEndSec * 1000).toISOString() : null,
       existingDuoPrice: duoPrice?.id ?? null,
       wouldCredit: creditCents,
     });
