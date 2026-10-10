@@ -15,6 +15,7 @@ import { detectBrowserTimezone, detectCountryFromBrowser, effectiveLeadTimezone 
 import { captureAttributionFromUrl, readAttribution, clearAttribution } from "@/lib/ads-attribution";
 import { trackFunnel } from "@/lib/track-funnel";
 import { resolveProfe, landingIntentForProfe } from "@/lib/profes";
+import { NIVEL_ESCOLAR, TIEMPO_ALEMANIA, OBJETIVO_MENOR, EDADES_MENOR } from "@/lib/menor";
 
 /**
  * Step 1 — slot picker. Mobile pattern: horizontal day strip + vertical
@@ -171,9 +172,14 @@ function StepCuandoInner() {
   // motivo + nivel. Si no, asumimos atajo desde landing.
   // Con ?profe= válido, forzamos landing_intent=clase-profe-{slug} para
   // que reporting en /admin filtre por variante de la campaña.
-  const effectiveLanding = profe
-    ? landingIntentForProfe(profe)
-    : (landingFromUrl ?? "agendar-directo");
+  // ?tipo=menor (landing /clase-ninos): reserva un padre/madre para su
+  // hijo/a — formulario con datos del menor y landing_intent propio.
+  const isMenor = searchParams?.get("tipo") === "menor";
+  const effectiveLanding = isMenor
+    ? `clase-ninos-${profe?.slug ?? "generico"}`
+    : profe
+      ? landingIntentForProfe(profe)
+      : (landingFromUrl ?? "agendar-directo");
 
   // Captura gclid/utm de URL al montar. Si el lead vino directo aquí
   // con ?gclid=... (Google Ads), lo persistimos para spread en book-trial.
@@ -223,6 +229,7 @@ function StepCuandoInner() {
     germanLevel: null as null | "A0" | "A1" | "A2" | "B1" | "B2" | "C1",
     whatsapp: "", countryCode: "+49",
     commitment: false,
+    hijoNombre: "", hijoEdad: "", nivelEscolar: "", tiempoAlemania: "", objetivoMenor: "",
   });
 
   // TZ efectiva del lead — combina browser + prefijo WA. Si el
@@ -423,7 +430,10 @@ function StepCuandoInner() {
     : phoneInfo.state === "invalid" ? "Número no válido. Revisa el prefijo y los dígitos."
     : null;
   const phoneOk    = phoneInfo.state === "ok" || phoneInfo.state === "mismatch";
-  const canSubmitForm = nameValid && emailValid && phoneOk && form.commitment && !!selectedSlot && !submitting;
+  const menorValid = !isMenor || (
+    form.hijoNombre.trim().length >= 2 && !!form.hijoEdad && !!form.nivelEscolar && !!form.tiempoAlemania && !!form.objetivoMenor
+  );
+  const canSubmitForm = nameValid && emailValid && phoneOk && menorValid && form.commitment && !!selectedSlot && !submitting;
 
   // ── Instrumentación funnel — hitos idempotentes (trackFunnel dedupe
   //    por session_id+step, así que estos useEffect son seguros). ──
@@ -455,7 +465,17 @@ function StepCuandoInner() {
           whatsapp_e164,
           whatsapp_raw,
           german_level:  form.germanLevel ?? levelFromUrl ?? "A0",
-          goal:          "work",
+          goal:          isMenor ? "studies" : "work",
+          ...(isMenor ? {
+            lead_tipo: "menor",
+            menor: {
+              hijo_nombre:     form.hijoNombre.trim(),
+              hijo_edad:       Number(form.hijoEdad),
+              nivel_escolar:   form.nivelEscolar,
+              tiempo_alemania: form.tiempoAlemania,
+              objetivo:        form.objetivoMenor,
+            },
+          } : {}),
           language:      lang,
           slot_iso:      selectedSlot.startIso,
           teacher_id:    selectedSlot.teacherId,
@@ -557,13 +577,17 @@ function StepCuandoInner() {
             <em className="italic">Fast geschafft!</em> <span className="text-slate-500 font-normal">(¡Ya casi!)</span> 🎉
           </>
         ) : (
-          "Selecciona fecha y hora para clase de Alemán"
+          isMenor ? "Elige fecha y hora para la clase de tu hijo/a" : "Selecciona fecha y hora para clase de Alemán"
         )
       }
       subtitle={
         showForm
-          ? "El alemán te abre las puertas a los mejores salarios y la mejor calidad de vida de Europa."
-          : "40 min con profesor nativo + diagnóstico de nivel + plan de estudios personalizado"
+          ? (isMenor
+              ? "Con un buen alemán, tu hijo/a gana confianza en el colegio y con sus compañeros."
+              : "El alemán te abre las puertas a los mejores salarios y la mejor calidad de vida de Europa.")
+          : isMenor
+            ? "Clase 1 a 1 online con la profesora + valoración de su nivel + plan adaptado a su colegio"
+            : "40 min con profesor nativo + diagnóstico de nivel + plan de estudios personalizado"
       }
     >
       {/* Loading skeleton */}
@@ -716,7 +740,7 @@ function StepCuandoInner() {
               {/* Slot card — tipografía más limpia, un solo emoji */}
               <div className="rounded-2xl bg-emerald-50/60 border border-emerald-100 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700/80">
-                  Tu clase de prueba
+                  {isMenor ? "La clase de prueba de tu hijo/a" : "Tu clase de prueba"}
                 </p>
                 <p className="mt-1.5 text-[17px] font-semibold text-slate-900 capitalize leading-tight">
                   {slotLabel.day}
@@ -733,7 +757,7 @@ function StepCuandoInner() {
 
               {/* ── Nombre ── */}
               <Field
-                label="Tu nombre"
+                label={isMenor ? "Tu nombre (padre/madre)" : "Tu nombre"}
                 required
                 valid={nameValid}
               >
@@ -764,8 +788,48 @@ function StepCuandoInner() {
                 />
               </Field>
 
-              {/* ── Nivel (opcional) ── */}
-              <div>
+              {/* ── Datos del hijo/a (solo ?tipo=menor) ── */}
+              {isMenor && (
+                <div className="space-y-5 rounded-2xl bg-sky-50/60 border border-sky-100 p-4">
+                  <p className="text-[13px] font-semibold uppercase tracking-wider text-sky-700">Sobre tu hijo/a</p>
+                  <Field label="Nombre de tu hijo/a" required valid={form.hijoNombre.trim().length >= 2}>
+                    <input
+                      type="text"
+                      value={form.hijoNombre}
+                      onChange={e => setForm(f => ({ ...f, hijoNombre: e.target.value }))}
+                      className={inputCls(form.hijoNombre.trim().length >= 2, false)}
+                      placeholder="Lucas"
+                    />
+                  </Field>
+                  <Field label="Edad" required valid={!!form.hijoEdad}>
+                    <select value={form.hijoEdad} onChange={e => setForm(f => ({ ...f, hijoEdad: e.target.value }))} className={inputCls(!!form.hijoEdad, false)}>
+                      <option value="">Selecciona…</option>
+                      {EDADES_MENOR.map(n => <option key={n} value={n}>{n} años</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Nivel escolar actual" required valid={!!form.nivelEscolar}>
+                    <select value={form.nivelEscolar} onChange={e => setForm(f => ({ ...f, nivelEscolar: e.target.value }))} className={inputCls(!!form.nivelEscolar, false)}>
+                      <option value="">Selecciona…</option>
+                      {NIVEL_ESCOLAR.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Tiempo que lleva en Alemania" required valid={!!form.tiempoAlemania}>
+                    <select value={form.tiempoAlemania} onChange={e => setForm(f => ({ ...f, tiempoAlemania: e.target.value }))} className={inputCls(!!form.tiempoAlemania, false)}>
+                      <option value="">Selecciona…</option>
+                      {Object.entries(TIEMPO_ALEMANIA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Objetivo principal" required valid={!!form.objetivoMenor}>
+                    <select value={form.objetivoMenor} onChange={e => setForm(f => ({ ...f, objetivoMenor: e.target.value }))} className={inputCls(!!form.objetivoMenor, false)}>
+                      <option value="">Selecciona…</option>
+                      {Object.entries(OBJETIVO_MENOR).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  </Field>
+                </div>
+              )}
+
+              {/* ── Nivel (opcional) — no se pide a padres ── */}
+              {!isMenor && <div>
                 <div className="flex items-baseline justify-between mb-2">
                   <label className="text-[15px] font-medium text-slate-900">
                     Tu nivel de alemán
@@ -794,7 +858,7 @@ function StepCuandoInner() {
                 <p className="mt-2 text-[12.5px] text-slate-500 leading-relaxed">
                   A0 = empiezas de cero · C1 = ya hablas con fluidez. Si dudas, déjalo en blanco.
                 </p>
-              </div>
+              </div>}
 
               {/* ── WhatsApp ── */}
               <Field
@@ -872,7 +936,9 @@ function StepCuandoInner() {
                   className="mt-0.5 h-5 w-5 accent-emerald-600 shrink-0 cursor-pointer"
                 />
                 <span className="text-[14px] text-slate-700 leading-relaxed">
-                  Reservo este espacio con la intención real de aprender alemán. Me comprometo a asistir puntualmente a mi clase.
+                  {isMenor
+                    ? "Reservo este espacio para mi hijo/a con intención real de que aprenda alemán. Nos comprometemos a asistir puntualmente a la clase."
+                    : "Reservo este espacio con la intención real de aprender alemán. Me comprometo a asistir puntualmente a mi clase."}
                 </span>
               </label>
 

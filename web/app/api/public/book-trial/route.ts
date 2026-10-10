@@ -20,6 +20,7 @@ import { sendRaw } from "@/lib/email/send";
 import { attributeReferral } from "@/lib/referrals";
 import { resolveProfe } from "@/lib/profes";
 import { findTeacherConflicts, earlierConflicts } from "@/lib/teacher-conflicts";
+import { NIVEL_ESCOLAR, TIEMPO_ALEMANIA, OBJETIVO_MENOR, nombreMenorParaProfe, resumenMenor, type MenorDatos } from "@/lib/menor";
 import { closeRescueChainsForRebook } from "@/lib/rescue-chains";
 
 /** Random URL-safe 8-char code, used as the magic-link short ID. */
@@ -114,7 +115,17 @@ const Body = z.object({
   // que originó al lead. Normalizado a sabine|jonathan|generico.
   // Cualquier otro valor se coerce a 'generico' antes de persistir.
   profe:         z.string().trim().max(20).nullable().optional(),
-});
+  // Landing /clase-ninos: el lead es el padre/madre y la clase es para
+  // su hijo/a. Con lead_tipo="menor" los datos del menor son obligatorios.
+  lead_tipo:     z.enum(["adulto", "menor"]).nullable().optional(),
+  menor:         z.object({
+    hijo_nombre:     z.string().trim().min(2).max(80),
+    hijo_edad:       z.coerce.number().int().min(6).max(17),
+    nivel_escolar:   z.enum(NIVEL_ESCOLAR),
+    tiempo_alemania: z.enum(Object.keys(TIEMPO_ALEMANIA) as [keyof typeof TIEMPO_ALEMANIA, ...Array<keyof typeof TIEMPO_ALEMANIA>]),
+    objetivo:        z.enum(Object.keys(OBJETIVO_MENOR) as [keyof typeof OBJETIVO_MENOR, ...Array<keyof typeof OBJETIVO_MENOR>]),
+  }).nullable().optional(),
+}).refine(b => b.lead_tipo !== "menor" || !!b.menor, { message: "menor_datos_required", path: ["menor"] });
 
 export async function POST(req: Request) {
   // Rate limit BEFORE parsing the body — keeps Postgres + Resend safe
@@ -261,6 +272,11 @@ export async function POST(req: Request) {
     b.profe === undefined || b.profe === null
       ? null
       : (resolveProfe(b.profe)?.slug ?? "generico");
+  // Clase para un menor: el profe ve el nombre y la edad del hijo/a, no
+  // solo el del padre/madre que reserva.
+  const menor: MenorDatos | null = b.lead_tipo === "menor" && b.menor ? b.menor : null;
+  const teacherFacingName = menor ? nombreMenorParaProfe(menor, b.name) : b.name;
+  const classPersonFirst  = menor ? `${menor.hijo_nombre.split(/\s+/)[0]} (${menor.hijo_edad}a)` : b.name.split(/\s+/)[0];
 
   let leadId: string;
   let isNewLead = false;
@@ -330,6 +346,7 @@ export async function POST(req: Request) {
       // válido de una campaña previa con NULL cuando el lead vuelve
       // desde otro flow).
       ...(profeSlug !== null ? { profe: profeSlug } : {}),
+      ...(menor ? { lead_tipo: "menor", menor_datos: menor } : {}),
       gdpr_accepted:        true,
       gdpr_accepted_at:     new Date().toISOString(),
       source:               "funnel_trial_self_book",
@@ -360,6 +377,8 @@ export async function POST(req: Request) {
       utm_term:             b.utm_term     ?? null,
       utm_content:          b.utm_content  ?? null,
       profe:                profeSlug,
+      lead_tipo:            menor ? "menor" : null,
+      menor_datos:          menor,
       gdpr_accepted:        true,
       gdpr_accepted_at:     new Date().toISOString(),
       source:               "funnel_trial_self_book",
@@ -472,7 +491,7 @@ export async function POST(req: Request) {
       // Bug Francisco 2026-08-19: título tampoco se actualizaba →
       // profe veía "(Simon)" en su calendario pero teacher_id era Jonathan.
       const newTeacherFirst = (match.teacherName.split(/\s+/)[0]) || match.teacherName;
-      const newTitle = `Clase de prueba — ${b.name.split(/\s+/)[0]} (${newTeacherFirst})`;
+      const newTitle = `Clase de prueba — ${classPersonFirst} (${newTeacherFirst})`;
       const { error: rescheduleErr } = await sb
         .from("classes")
         .update({
@@ -578,7 +597,7 @@ export async function POST(req: Request) {
       if (teacherChanged) {
         await notifyTeacherOfTrial({
           teacherId:   b.teacher_id,
-          leadName:    b.name,
+          leadName:    teacherFacingName,
           startIso:    requestedSlotIso,
           germanLevel: b.german_level ?? null,
           goal:        b.goal ?? "travel",
@@ -586,7 +605,7 @@ export async function POST(req: Request) {
         }).catch(e => console.error("[book-trial] reschedule teacher notification failed:", e));
 
         await createTeacherTrialEvent(b.teacher_id, {
-          leadName:        b.name,
+          leadName:        teacherFacingName,
           teacherName:     match.teacherName,
           startIso:        requestedSlotIso,
           durationMinutes: ex.duration_minutes ?? TRIAL_DURATION_MIN,
@@ -621,7 +640,7 @@ export async function POST(req: Request) {
   // públicos. Para uso interno (DB row, admin UI) dejamos un título
   // separado que sí incluye al profe.
   const classTitle         = `${b.name.split(/\s+/)[0]} + Sesión de Prueba de Alemán ☀️`;
-  const classTitleInternal = `Clase de prueba — ${b.name.split(/\s+/)[0]} (${teacherFirst})`;
+  const classTitleInternal = `Clase de prueba — ${classPersonFirst} (${teacherFirst})`;
   // Pre-generate a short code now so we don't need a follow-up update.
   // Collision is astronomically unlikely (8 base36 chars ≈ 2.8 trillion
   // values, and the unique index would catch one if it ever happened).
@@ -683,6 +702,17 @@ export async function POST(req: Request) {
   // sentido seguirle diciendo "¿te agendo la clase?" (chain4_absent)
   // ni "¿reagendamos la que cancelaste?" (chain6_cancel).
   await closeRescueChainsForRebook(sb, leadId, "trial");
+
+  // Clase para un menor: nota visible en la ficha (profe, closer, admin).
+  if (menor) {
+    await sb.from("lead_timeline").insert({
+      lead_id:  leadId,
+      type:     "agent_note",
+      author:   "system",
+      content:  `👦 Clase de prueba para un menor. ${resumenMenor(menor)}. Contacto: ${b.name} (padre/madre).`,
+      metadata: { kind: "menor_datos", class_id: classId, ...menor },
+    });
+  }
 
   // ── 5. Magic-link URLs.
   // Long URL (still issued for the email + the /confirmacion deep-link
@@ -809,7 +839,7 @@ export async function POST(req: Request) {
     if (isAdminTeacher) {
       const [gcalResult] = await Promise.allSettled([
         createTrialEvent({
-          leadName:        b.name,
+          leadName:        teacherFacingName,
           teacherName:     match.teacherName,
           startIso:        b.slot_iso,
           durationMinutes: TRIAL_DURATION_MIN,
@@ -850,7 +880,7 @@ export async function POST(req: Request) {
     // ── Notify the assigned teacher (in-app bell + email) ──
     await notifyTeacherOfTrial({
       teacherId:   b.teacher_id,
-      leadName:    b.name,
+      leadName:    teacherFacingName,
       startIso:    b.slot_iso,
       germanLevel: b.german_level ?? null,
       goal:        goal,
@@ -881,7 +911,7 @@ export async function POST(req: Request) {
 
     // ── Mirror event to teacher's personal Google Calendar (if connected) ──
     await createTeacherTrialEvent(b.teacher_id, {
-      leadName:        b.name,
+      leadName:        teacherFacingName,
       teacherName:     match.teacherName,
       startIso:        b.slot_iso,
       durationMinutes: TRIAL_DURATION_MIN,
