@@ -506,6 +506,7 @@ export async function buildTeacherInvoicePdf(args: {
         return k && ritmoLabel[k] ? `Bono de cierre (${ritmoLabel[k]})` : "Bono de cierre";
       }
       if (tipo === "conversion" && escenario?.startsWith("ajuste")) return "Ajuste de comisión (mes anterior)";
+      if (escenario?.startsWith("adelanto")) return "Descuento: adelanto de equipo";
       if (tipo === "conversion") return "Comisión por conversión";
       if (tipo === "comision_base") return "Comisión base";
       return tipo.replace(/_/g, " ");
