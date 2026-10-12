@@ -1,65 +1,87 @@
--- Clases en dúo de 90 min que cuentan 1,5 clases (Gelfis 2026-10-12: Dúo
--- Annette & Gastón con Simon). billed_hours pasa a decimal y cada grupo
--- puede fijar cuántas unidades vale una sesión (billing_units_per_session);
--- el saldo del alumno acepta medias clases.
+-- Clases en dúo de 90 min (Gelfis 2026-10-12, Dúo Annette & Gastón con Simon):
+--   · cada sesión descuenta 1 clase del pack de CADA alumno,
+--   · el profe cobra 1,5 unidades (15 € × 1,5 = 22,50 €).
+-- Dos ajustes por grupo: billing_units_per_session (lo que consume el alumno y
+-- se escribe en classes.billed_hours) y teacher_units_per_session (lo que se
+-- paga al profe). Sin cambios de tipo en columnas existentes.
 BEGIN;
 
--- Vistas legacy que dependen de las columnas: se recrean con sumas numéricas.
-DROP VIEW IF EXISTS v_student_packs;
-DROP VIEW IF EXISTS v_teacher_earnings;
+ALTER TABLE student_groups
+  ADD COLUMN IF NOT EXISTS billing_units_per_session NUMERIC(4,2),
+  ADD COLUMN IF NOT EXISTS teacher_units_per_session NUMERIC(4,2);
+COMMENT ON COLUMN student_groups.billing_units_per_session IS 'Unidades que consume cada alumno por sesión completada del grupo (sustituye al cálculo por duración).';
+COMMENT ON COLUMN student_groups.teacher_units_per_session IS 'Unidades que cobra el profe por sesión completada del grupo (p. ej. 1.5 para dúos de 90 min). Si es NULL, cobra billed_hours.';
 
-ALTER TABLE classes  ALTER COLUMN billed_hours       TYPE NUMERIC(5,2) USING billed_hours::numeric;
-ALTER TABLE students ALTER COLUMN classes_remaining  TYPE NUMERIC(6,2) USING classes_remaining::numeric;
-
-CREATE VIEW v_student_packs AS
- SELECT s.id AS student_id, s.user_id, u.full_name, u.email, s.current_level, s.subscription_type,
-        s.classes_purchased, s.classes_adjustment, s.pack_started_at, s.pack_expires_at,
-        COALESCE(consumed.n, 0) AS classes_consumed,
-        s.classes_purchased + s.classes_adjustment - COALESCE(consumed.n, 0) AS classes_remaining
-   FROM students s
-   JOIN users u ON u.id = s.user_id
-   LEFT JOIN LATERAL (
-     SELECT sum(c.billed_hours) AS n
-       FROM class_participants cp JOIN classes c ON c.id = cp.class_id
-      WHERE cp.student_id = s.id AND cp.counts_as_session = true AND c.status = 'completed' AND c.billed_hours > 0
-   ) consumed ON true;
-
-CREATE VIEW v_teacher_earnings AS
- SELECT t.id AS teacher_id, u.full_name, u.email,
-        date_trunc('month', c.started_at)::date AS period_start,
-        c.type AS class_type,
-        count(*)::integer AS classes_count,
-        sum(c.billed_hours) AS hours_total,
-        sum(c.billed_hours * CASE c.type WHEN 'group' THEN t.rate_group_cents WHEN 'individual' THEN t.rate_individual_cents ELSE 0 END)::integer AS amount_cents
-   FROM teachers t JOIN users u ON u.id = t.user_id JOIN classes c ON c.teacher_id = t.id
-  WHERE c.status = 'completed' AND c.billed_hours > 0
-  GROUP BY t.id, u.full_name, u.email, date_trunc('month', c.started_at), c.type;
-ALTER TABLE student_groups ADD COLUMN IF NOT EXISTS billing_units_per_session NUMERIC(4,2);
-COMMENT ON COLUMN student_groups.billing_units_per_session IS 'Si está definido, cada clase completada del grupo factura/consume estas unidades (p. ej. 1.5 para dúos de 90 min) en vez de calcularlas por duración.';
-
--- recompute_classes_remaining sin el cast a entero (migración 128).
-CREATE OR REPLACE FUNCTION recompute_classes_remaining(p_student_id uuid) RETURNS void
-LANGUAGE plpgsql SET search_path TO 'public' AS $$
+CREATE OR REPLACE FUNCTION public.tg_classes_auto_log_hours()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+    rate_cents int;
+    is_individual boolean;
+    log_amount_cents int;
+    log_rate numeric;
+    log_currency text;
+    teacher_units numeric;
 BEGIN
-  UPDATE students s
-     SET classes_remaining = GREATEST(0,
-            COALESCE(s.clases_totales, s.classes_purchased, 0)
-            + COALESCE(s.classes_adjustment, 0)
-            - COALESCE((
-                SELECT SUM(c.billed_hours)
-                  FROM class_participants cp
-                  JOIN classes c ON c.id = cp.class_id
-                 WHERE cp.student_id = s.id
-                   AND cp.counts_as_session = TRUE
-                   AND c.status = 'completed'
-                   AND COALESCE(c.is_trial, false) = false
-                   AND c.billed_hours > 0
-              ), 0))
-   WHERE s.id = p_student_id;
-END $$;
+    IF NEW.status <> 'completed' OR COALESCE(NEW.billed_hours, 0) <= 0 THEN
+        RETURN NEW;
+    END IF;
 
--- Dúo Annette & Gastón (Simon): 90 min = 1,5 clases.
-UPDATE student_groups SET billing_units_per_session = 1.5
+    IF COALESCE(NEW.is_trial, FALSE) = TRUE THEN
+        SELECT t.rate_individual_cents INTO rate_cents
+          FROM teachers t WHERE t.id = NEW.teacher_id;
+        IF rate_cents IS NULL OR rate_cents = 0 THEN
+            RETURN NEW;
+        END IF;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM class_hours_log WHERE class_id = NEW.id) THEN
+        RETURN NEW;
+    END IF;
+
+    is_individual := (NEW.type = 'individual');
+    SELECT
+        CASE WHEN is_individual THEN t.rate_individual_cents ELSE t.rate_group_cents END,
+        t.currency
+      INTO rate_cents, log_currency
+      FROM teachers t
+     WHERE t.id = NEW.teacher_id;
+
+    IF rate_cents IS NULL OR rate_cents = 0 THEN
+        RETURN NEW;
+    END IF;
+
+    -- Unidades que cobra el profe: las del grupo si están definidas
+    -- (dúo 90 min = 1,5), si no, las mismas que consume el alumno.
+    teacher_units := NEW.billed_hours;
+    IF NEW.group_id IS NOT NULL THEN
+        SELECT COALESCE(sg.teacher_units_per_session, NEW.billed_hours)
+          INTO teacher_units
+          FROM student_groups sg WHERE sg.id = NEW.group_id;
+        teacher_units := COALESCE(teacher_units, NEW.billed_hours);
+    END IF;
+
+    log_amount_cents := ROUND(teacher_units * rate_cents);
+    log_rate := rate_cents / 100.0;
+
+    INSERT INTO class_hours_log
+        (class_id, teacher_id, duration_minutes, rate_at_time, amount_cents, currency, created_at)
+    VALUES
+        (NEW.id, NEW.teacher_id, ROUND(teacher_units * 50), log_rate, log_amount_cents,
+         COALESCE(log_currency, 'EUR'), COALESCE(NEW.scheduled_at, now()))
+    ON CONFLICT (class_id) DO NOTHING;
+
+    PERFORM recompute_teacher_month(NEW.teacher_id, NEW.scheduled_at);
+
+    RETURN NEW;
+END;
+$function$;
+
+-- Dúo Annette & Gastón (Simon): alumnos 1 clase/sesión, Simon 1,5.
+UPDATE student_groups
+   SET billing_units_per_session = 1, teacher_units_per_session = 1.5
  WHERE id = '8bf7646d-e2a2-4de6-9bb1-0206b0b64272';
 
 COMMIT;
