@@ -52,12 +52,9 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Ganancias",        href: "/profesor/ganancias",       icon: "wallet",         priority: 4 },
     // "Disponibilidad" oculta del menú (Gelfis 2026-10-07) — se edita
     // igual desde Calendario, que incluye el mismo editor + bloqueos.
-    // "Materiales" restaurado (Gelfis 2026-10-10 — Sabine los necesita;
-    // estuvo oculto del 01 al 10).
-    { label: "Materiales",       href: "/profesor/materiales",      icon: "folder",         priority: 6 },
-    // "Recursos" restaurado (Gelfis 2026-10-09 — Sabine los necesita;
-    // estuvo oculto del 07 al 09).
-    { label: "Recursos",         href: "/profesor/recursos",        icon: "bookOpen",       priority: 6.2 },
+    // "Materiales" y "Recursos" ocultos de nuevo (Gelfis 2026-10-12;
+    // habían vuelto el 09-10 para Sabine). Rutas vivas por enlace
+    // directo: /profesor/materiales y /profesor/recursos.
     { label: "Grabaciones",      href: "/profesor/grabaciones",     icon: "video",          priority: 6.5 },
     // Cursos destacado: justo debajo de "Hoy" (Gelfis 2026-10-01).
     { label: "Cursos",           href: "/profesor/cursos",          icon: "graduationCap",  priority: 1.1 },
