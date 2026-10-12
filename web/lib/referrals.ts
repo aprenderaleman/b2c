@@ -241,22 +241,41 @@ export async function applyReferralReward(leadId: string): Promise<{
 
   const friendFirst = (ld.name ?? "tu amigo").trim().split(/\s+/)[0] || "tu amigo";
 
-  // (a) +3 clases al REFERIDOR
-  await sb.from("students")
-    .update({ clases_desbloqueadas: (rf.clases_desbloqueadas ?? 0) + 3 })
-    .eq("id", rf.id);
+  // (a) +3 clases al REFERIDOR y (b) +1 al NUEVO.
+  // Hasta 2026-10-12 solo se sumaba clases_desbloqueadas: el saldo real
+  // (classes_remaining = totales + ajuste − consumidas) no cambiaba, así
+  // que el regalo era inutilizable (caso Fernanda K.: 73 desbloqueadas y
+  // 4 restantes). Ahora se suma al ajuste del contrato (crea saldo real)
+  // y, en suscripciones, también a las desbloqueadas para poder agendarlas
+  // ya; en packs el trigger (migración 131) recalcula las desbloqueadas.
+  const grant = async (studentId: string, n: number, reason: string) => {
+    const { data: st } = await sb
+      .from("students")
+      .select("classes_adjustment, clases_desbloqueadas, subscription_type")
+      .eq("id", studentId)
+      .maybeSingle();
+    const cur = st as { classes_adjustment: number | null; clases_desbloqueadas: number | null; subscription_type: string } | null;
+    if (!cur) return;
+    const newAdj = (cur.classes_adjustment ?? 0) + n;
+    const patch: Record<string, number> = { classes_adjustment: newAdj };
+    if (cur.subscription_type === "monthly_subscription") {
+      patch.clases_desbloqueadas = (cur.clases_desbloqueadas ?? 0) + n;
+    }
+    await sb.from("students").update(patch).eq("id", studentId);
+    await sb.from("student_class_adjustments").insert({
+      student_id: studentId, admin_user_id: null, delta: n, reason, new_adjustment: newAdj,
+    }).then(() => undefined, () => undefined);
+  };
 
-  // (b) +1 clase al NUEVO estudiante
+  await grant(rf.id, 3, `Referido: ${friendFirst} se inscribió con tu código (+3 clases de regalo)`);
+
   const { data: newStudent } = await sb
     .from("students")
-    .select("id, clases_desbloqueadas")
+    .select("id")
     .eq("user_id", ld.converted_to_user_id)
     .maybeSingle();
   if (newStudent) {
-    const ns = newStudent as { id: string; clases_desbloqueadas: number | null };
-    await sb.from("students")
-      .update({ clases_desbloqueadas: (ns.clases_desbloqueadas ?? 0) + 1 })
-      .eq("id", ns.id);
+    await grant((newStudent as { id: string }).id, 1, `Referido por ${rfu?.full_name ?? "un alumno"} (+1 clase de regalo)`);
   }
 
   // (c) Notificaciones al referidor — celebración

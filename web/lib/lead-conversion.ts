@@ -16,6 +16,7 @@ import { resolveChainVariables } from "./chain-variables";
 import { renderTemplate } from "./message-stats";
 import { normalizeStudentLevel, resolveStudentPlan } from "./student-plan";
 import { runPostConversionFlow } from "./post-conversion-flow";
+import { applyReferralReward } from "./referrals";
 
 export const ConvertBody = z.object({
   email:             z.string().trim().toLowerCase().email(),
@@ -200,6 +201,11 @@ export async function convertLeadToStudent(
   // profe. Hasta 2026-09-24 solo corría en las conversiones por Stripe:
   // las manuales ("pago confirmado", admin, venta aprobada) dejaban al
   // alumno sin profe, sin grupo y sin documento (caso Yenny).
+  // Recompensa de referido también en conversiones manuales (idempotente:
+  // solo actúa si el lead vino con código y aún no se premió).
+  try { await applyReferralReward(lead.id); }
+  catch (e) { console.warn("[lead-conversion] applyReferralReward failed:", e instanceof Error ? e.message : e); }
+
   if (!options?.skipPostConversionFlow) {
     const trialAttended = !!trial;
     await runPostConversionFlow({
