@@ -156,7 +156,7 @@ function RecordingGroup({ title, subtitle, recs, tone }: {
   );
 }
 
-function StatusBadge({ status }: { status: "processing" | "ready" | "failed" }) {
+function StatusBadge({ status }: { status: "processing" | "ready" | "failed" | "deleted" }) {
   if (status === "ready") return null;
   const styles =
     status === "processing" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
