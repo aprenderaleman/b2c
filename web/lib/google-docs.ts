@@ -106,6 +106,34 @@ export async function createStudentNotesDoc(
   }
 }
 
+/**
+ * Comparte un documento ya existente (por URL o id) como editor con un
+ * email, usando el Drive del admin (OAuth). Para reasignaciones de profe:
+ * hasta 2026-10-12 el nuevo profe no recibía acceso al doc de apuntes.
+ */
+export async function shareDocWithEmail(docUrlOrId: string, email: string): Promise<boolean> {
+  const fileId = docUrlOrId.match(/\/d\/([A-Za-z0-9_-]+)/)?.[1] ?? docUrlOrId;
+  if (!fileId || !email) return false;
+  const adminToken = await getAdminDriveAccessToken();
+  if (!adminToken) { console.warn("[google-docs] shareDocWithEmail: sin token de Drive admin"); return false; }
+  try {
+    const { OAuth2Client } = await import("google-auth-library");
+    const { drive } = await import("@googleapis/drive");
+    const auth = new OAuth2Client();
+    auth.setCredentials({ access_token: adminToken });
+    const driveApi = drive({ version: "v3", auth });
+    await driveApi.permissions.create({
+      fileId,
+      sendNotificationEmail: false,
+      requestBody: { type: "user", role: "writer", emailAddress: email },
+    });
+    return true;
+  } catch (e) {
+    console.warn("[google-docs] shareDocWithEmail failed:", e instanceof Error ? e.message : e);
+    return false;
+  }
+}
+
 /** Último error de Drive (para que el cron docs-backfill lo muestre en su respuesta). */
 export let lastDocsError: string | null = null;
 

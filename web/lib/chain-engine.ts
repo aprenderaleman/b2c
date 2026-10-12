@@ -148,7 +148,12 @@ export async function cancelActiveChain(
   reason: string,
 ): Promise<boolean> {
   const sb = supabaseAdmin();
-  const { data, error } = await sb
+  // La cadena de bienvenida (welcome_week) es POST-conversión: un pago
+  // confirmado/recibido/reconciliado después de convertir no debe cerrarla
+  // (caso Zulma 2026-10-10: se canceló a los 6 min y perdía los 5 mensajes).
+  // Solo la cierra una cadena nueva o una baja/cancelación explícita.
+  const paymentReasons = ["payment_confirmed", "payment_received", "converted_stripe_auto", "converted_started_welcome_week"];
+  let q = sb
     .from("lead_chains")
     .update({
       completed_at: new Date().toISOString(),
@@ -156,9 +161,9 @@ export async function cancelActiveChain(
       updated_at: new Date().toISOString(),
     })
     .eq("lead_id", leadId)
-    .is("completed_at", null)
-    .select("id, chain_type")
-    .maybeSingle();
+    .is("completed_at", null);
+  if (paymentReasons.includes(reason)) q = q.neq("chain_type", "welcome_week");
+  const { data, error } = await q.select("id, chain_type").maybeSingle();
 
   if (error) {
     console.error(`[chain-engine] cancelActiveChain error:`, error.message);

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "./supabase";
 import { ensureDirectChat } from "./chat";
 import { createNotification } from "./notifications";
+import { getTeacherEmail, shareDocWithEmail } from "./google-docs";
 
 export async function reassignTeacher(input: {
   studentId: string;
@@ -99,6 +100,17 @@ export async function reassignTeacher(input: {
   const studentUserId = (student as { user_id: string }).user_id;
   const newTeacherUserId = (newTeacher as { user_id: string }).user_id;
   await ensureDirectChat(newTeacherUserId, studentUserId);
+
+  // Documento de apuntes: el nuevo profe debe poder editarlo. Best-effort
+  // (si falla, el admin lo comparte a mano; caso Jeannete/María/Paola oct 2026).
+  try {
+    const teacherEmail = await getTeacherEmail(input.newTeacherId);
+    const { data: docRow } = await sb.from("students").select("document_url").eq("id", input.studentId).maybeSingle();
+    const docUrl = (docRow as { document_url: string | null } | null)?.document_url;
+    if (teacherEmail && docUrl) await shareDocWithEmail(docUrl, teacherEmail);
+  } catch (e) {
+    console.warn("[reassign] compartir doc de apuntes falló:", e instanceof Error ? e.message : e);
+  }
 
   // 4. Log the reassignment
   await sb.from("teacher_reassignments").insert({
