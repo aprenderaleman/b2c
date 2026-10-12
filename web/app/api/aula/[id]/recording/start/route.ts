@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { EgressClient, EncodedFileOutput, EncodedFileType, S3Upload } from "livekit-server-sdk";
+import { EgressClient, EncodedFileOutput, EncodedFileType, EncodingOptionsPreset, S3Upload } from "livekit-server-sdk";
 import { auth } from "@/lib/auth";
 import { authorizeAulaAccess } from "@/lib/aula";
 import { livekitConfigured, livekitUrl } from "@/lib/livekit";
@@ -98,6 +98,10 @@ export async function POST(
   try {
     const info = await eg.startRoomCompositeEgress(roomName, { file: fileOutput }, {
       layout: "speaker",
+      // 720p30 en vez del preset 1080p por defecto (Gelfis 2026-10-12):
+      // ~30-40% menos coste de egress en LiveKit y ~la mitad de GB en
+      // R2, sin pérdida apreciable en clases habladas.
+      encodingOptions: EncodingOptionsPreset.H264_720P_30,
     });
 
     // Mirror into our recordings table with status=processing so the UI

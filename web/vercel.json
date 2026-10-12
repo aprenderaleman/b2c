@@ -51,6 +51,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/recordings-retention",
+      "schedule": "20 4 * * *"
+    },
+    {
       "path": "/api/cron/diagnostico-followups",
       "schedule": "*/5 * * * *"
     },

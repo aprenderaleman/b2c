@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 
-export type RecordingStatus = "processing" | "ready" | "failed";
+export type RecordingStatus = "processing" | "ready" | "failed" | "deleted";
 
 export type RecordingRow = {
   id:                string;
@@ -32,6 +32,7 @@ export async function getRecordingsForClass(classId: string): Promise<RecordingR
     .from("recordings")
     .select("id, class_id, file_url, file_size_bytes, duration_seconds, status, error, downloadable, created_at, processed_at")
     .eq("class_id", classId)
+    .neq("status", "deleted")              // purgadas por retención 90d
     .order("created_at", { ascending: false });
   if (error) return [];
   return (data ?? []) as RecordingRow[];
@@ -72,6 +73,7 @@ export async function getStudentRecordings(studentId: string): Promise<
     if (!c) continue;
     const recs = (c.recordings as Record<string, unknown>[] | undefined) ?? [];
     for (const rec of recs) {
+      if (rec.status === "deleted") continue;   // purgadas por retención 90d
       out.push({
         id:               rec.id as string,
         class_id:         c.id as string,
@@ -123,6 +125,7 @@ export async function getTeacherRecordings(teacherId: string): Promise<
   for (const c of (data ?? []) as Raw[]) {
     const recs = c.recordings ?? [];
     for (const rec of recs) {
+      if (rec.status === "deleted") continue;   // purgadas por retención 90d
       out.push({
         id:               rec.id as string,
         class_id:         c.id,
@@ -171,6 +174,7 @@ export async function getCloserRecordings(closerUserId: string): Promise<
     const recs = c.recordings ?? [];
     const leadFlat = Array.isArray(c.lead) ? c.lead[0] : c.lead;
     for (const rec of recs) {
+      if (rec.status === "deleted") continue;   // purgadas por retención 90d
       out.push({
         id:               rec.id as string,
         class_id:         c.id,
