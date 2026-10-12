@@ -67,10 +67,25 @@ export async function logClassHoursAndRollup(args: {
   // Fetch class.type so we pick the right rate; also record it into classes.
   const { data: cls } = await sb
     .from("classes")
-    .select("type, is_trial")
+    .select("type, is_trial, group_id")
     .eq("id", args.classId)
     .maybeSingle();
   const classType = (cls as { type: "group" | "individual" } | null)?.type ?? "group";
+
+  // Grupos con unidades fijas por sesión (dúo de 90 min = 1,5 clases para
+  // el profe y para cada alumno; Gelfis 2026-10-12). Si el grupo lo define,
+  // manda sobre el cálculo por duración.
+  let fixedUnits: number | null = null;
+  const groupId = (cls as { group_id?: string | null } | null)?.group_id ?? null;
+  if (groupId) {
+    const { data: grp } = await sb
+      .from("student_groups")
+      .select("billing_units_per_session")
+      .eq("id", groupId)
+      .maybeSingle();
+    const u = (grp as { billing_units_per_session: number | string | null } | null)?.billing_units_per_session;
+    if (u != null && Number(u) > 0) fixedUnits = Number(u);
+  }
 
   // Las clases de prueba no se pagan al profe (solo cobra bono + comisión
   // si el lead convierte). Hasta 2026-09-27 una prueba terminada desde el
@@ -103,7 +118,7 @@ export async function logClassHoursAndRollup(args: {
   //
   // The same value is used for student credit consumption (via the trigger
   // that sums billed_hours) and teacher pay (rate × billed_hours).
-  const billedHours = computeBillingUnits(args.durationMinutes);
+  const billedHours = fixedUnits ?? computeBillingUnits(args.durationMinutes);
   const amountCents = billedHours * rateCents;
 
   // Also stamp billed_hours on the class itself for the pack-consumption view.
