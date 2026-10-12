@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import { createTrialEvent, deleteTrialEvent } from "@/lib/google-calendar";
+import { createTrialEvent } from "@/lib/google-calendar";
+import { removeTeacherCalendarEvents } from "@/lib/teacher-calendar-sync";
 
 /**
  * POST /api/admin/classes/[id]/gcal-create
@@ -22,8 +23,8 @@ const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.d
 
 /**
  * DELETE /api/admin/classes/[id]/gcal-create
- * Quita el evento del calendar central (Gelfis) de una clase y limpia
- * google_calendar_event_id. No toca la clase ni notifica a nadie.
+ * Quita los eventos de Google Calendar de una clase (profe, central y
+ * closer) y limpia sus ids. No toca la clase ni notifica a nadie.
  */
 export async function DELETE(
   req: Request,
@@ -40,13 +41,14 @@ export async function DELETE(
   }
   const { id } = await params;
   const sb = supabaseAdmin();
-  const { data: cls } = await sb.from("classes").select("google_calendar_event_id").eq("id", id).maybeSingle();
-  const eventId = (cls as { google_calendar_event_id: string | null } | null)?.google_calendar_event_id;
-  if (!eventId) return NextResponse.json({ ok: true, deleted: false, reason: "no_event" });
-  const deleted = await deleteTrialEvent(eventId);
-  if (!deleted) return NextResponse.json({ ok: false, error: "gcal_delete_failed" }, { status: 502 });
-  await sb.from("classes").update({ google_calendar_event_id: null }).eq("id", id);
-  return NextResponse.json({ ok: true, deleted: true, event_id: eventId });
+  // Borra TODOS los espejos de la clase: calendar del profe (OAuth),
+  // calendar central y calendar del closer. Sin notificaciones.
+  const sel = "teacher_gcal_event_id, google_calendar_event_id, closer_gcal_event_id";
+  const { data: before } = await sb.from("classes").select(sel).eq("id", id).maybeSingle();
+  if (!before) return NextResponse.json({ error: "class_not_found" }, { status: 404 });
+  await removeTeacherCalendarEvents([id]);
+  const { data: after } = await sb.from("classes").select(sel).eq("id", id).maybeSingle();
+  return NextResponse.json({ ok: true, before, after });
 }
 
 export async function POST(
