@@ -58,4 +58,8 @@ BEGIN
    WHERE s.id = p_student_id;
 END $$;
 
+-- Dúo Annette & Gastón (Simon): 90 min = 1,5 clases.
+UPDATE student_groups SET billing_units_per_session = 1.5
+ WHERE id = '8bf7646d-e2a2-4de6-9bb1-0206b0b64272';
+
 COMMIT;
