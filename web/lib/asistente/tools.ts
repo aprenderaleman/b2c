@@ -439,7 +439,7 @@ function staffTools(ctx: Extract<AsistenteCtx, { role: "teacher" | "admin" }>): 
       {
         spec: {
           name: "clases",
-          description: "Clases de la academia en un rango de fechas (máx. 31 días), opcionalmente filtradas por profesor o estudiante. Incluye clase_id y estado.",
+          description: "Clases de la academia en un rango de fechas (máx. 120 días), opcionalmente filtradas por profesor o estudiante. Incluye clase_id y estado. Para ver TODAS las clases futuras de un estudiante usa un rango amplio (p. ej. hoy + 120 días) y filtra por estudiante_id. Si la respuesta trae rango_recortado o truncado, faltan clases: dilo o vuelve a consultar.",
           input_schema: {
             type: "object",
             properties: {
@@ -455,12 +455,16 @@ function staffTools(ctx: Extract<AsistenteCtx, { role: "teacher" | "admin" }>): 
         run: async (i: { desde: string; hasta?: string; profesor_id?: string; estudiante_id?: string }) => {
           const from = new Date(berlinToIso(i.desde, "00:00"));
           let to = new Date(new Date(berlinToIso(i.hasta ?? i.desde, "23:59")).getTime() + 59_000);
-          const max = from.getTime() + 31 * 24 * 3600_000;
-          if (to.getTime() > max) to = new Date(max);
+          const max = from.getTime() + 120 * 24 * 3600_000;
+          const recortado = to.getTime() > max;
+          if (recortado) to = new Date(max);
           let rows = await getClassesInRange(from, to);
           if (i.profesor_id)   rows = rows.filter(c => c.teacher_id === i.profesor_id);
           if (i.estudiante_id) rows = rows.filter(c => c.participants.some(p => p.student_id === i.estudiante_id));
-          return { total: rows.length, truncado: rows.length > 60, clases: rows.slice(0, 60).map(claseDto) };
+          return {
+            total: rows.length, consultado_hasta: berlinDate(to), rango_recortado: recortado,
+            truncado: rows.length > 150, clases: rows.slice(0, 150).map(claseDto),
+          };
         },
       },
     );
@@ -470,11 +474,22 @@ function staffTools(ctx: Extract<AsistenteCtx, { role: "teacher" | "admin" }>): 
       {
         spec: {
           name: "mis_clases",
-          description: "Próximas clases del profesor (30 días), con clase_id, estudiantes y tipo.",
-          input_schema: { type: "object", properties: {} },
+          description: "Próximas clases agendadas del profesor, con clase_id, estudiantes y tipo. Por defecto los próximos 30 días; para ver TODAS las clases futuras con un estudiante pasa su estudiante_id y dias=120. Si la respuesta trae truncado, faltan clases: dilo o filtra por estudiante.",
+          input_schema: {
+            type: "object",
+            properties: {
+              dias: { type: "integer", description: "Días hacia delante a consultar (1–120). Por defecto 30." },
+              estudiante_id: { type: "string", description: "Filtra por un estudiante (estudiante_id de mis_estudiantes)." },
+            },
+          },
         },
-        input: z.object({}),
-        run: async () => ({ clases: (await getTeacherUpcomingClasses(teacherId)).map(claseDto) }),
+        input: z.object({ dias: z.number().int().min(1).max(120).optional(), estudiante_id: Uuid.optional() }),
+        run: async (i: { dias?: number; estudiante_id?: string }) => {
+          const dias = i.dias ?? 30;
+          let rows = await getTeacherUpcomingClasses(teacherId, new Date(), dias);
+          if (i.estudiante_id) rows = rows.filter(c => c.participants.some(p => p.student_id === i.estudiante_id));
+          return { total: rows.length, dias_consultados: dias, truncado: rows.length > 150, clases: rows.slice(0, 150).map(claseDto) };
+        },
       },
       {
         spec: {
@@ -626,7 +641,7 @@ function staffTools(ctx: Extract<AsistenteCtx, { role: "teacher" | "admin" }>): 
     {
       spec: {
         name: "proponer_modificar",
-        description: "Prepara (sin ejecutar) un cambio sobre una clase agendada: moverla de día/hora (`fecha` + `hora`), cambiar su duración (`duracion_minutos`, p. ej. 100 para una clase doble), o ambas. Con alcance «serie» se aplica a esa clase y a TODAS las posteriores de su serie: todas se desplazan el mismo intervalo que la clase indicada, así que usa como clase_id la PRÓXIMA clase de la serie. Comprueba solapes con otras clases del profesor.",
+        description: "Prepara (sin ejecutar) un cambio sobre una clase agendada: moverla de día/hora (`fecha` + `hora`), cambiar su duración (`duracion_minutos`), o ambas. Con alcance «serie» se aplica a esa clase y a TODAS las posteriores de su serie: todas se desplazan el mismo intervalo que la clase indicada, así que usa como clase_id la PRÓXIMA clase de la serie. Comprueba solapes con otras clases del profesor.",
         input_schema: {
           type: "object",
           properties: {
