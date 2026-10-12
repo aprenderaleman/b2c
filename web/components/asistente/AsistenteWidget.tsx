@@ -18,6 +18,7 @@ type Accion = {
   titulo:  string;
   lineas:  string[];
   nota:    string | null;
+  hecho?:  string;
   request: { method: "POST" | "PATCH" | "DELETE"; url: string; body: Record<string, unknown> | null };
 };
 type AccionEstado = "pendiente" | "ejecutando" | "hecha" | "error" | "descartada";
@@ -29,7 +30,7 @@ type Rol = "student" | "teacher" | "admin";
 
 const SUGERENCIAS: Record<Rol, string[]> = {
   student: ["¿Cuándo es mi próxima clase?", "¿Cuántas clases me quedan?", "Quiero agendar una clase esta semana"],
-  teacher: ["¿Qué clases tengo mañana?", "Agéndame una clase con…", "Cancela mi clase de…"],
+  teacher: ["¿Qué clases tengo mañana?", "Agéndame una clase con…", "Cambia mi serie con…"],
   admin:   ["¿Qué clases hay hoy?", "Huecos libres de un profesor mañana", "Agenda una clase de… con…"],
 };
 
@@ -230,7 +231,7 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
                     {a.nota && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{a.nota}</p>}
 
                     {a.estado === "hecha" && (
-                      <p className="mt-3 text-sm font-semibold text-emerald-600 dark:text-emerald-400">✓ {HECHO[a.tipo]}</p>
+                      <p className="mt-3 text-sm font-semibold text-emerald-600 dark:text-emerald-400">✓ {a.hecho ?? HECHO[a.tipo]}</p>
                     )}
                     {a.estado === "descartada" && (
                       <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Descartada</p>

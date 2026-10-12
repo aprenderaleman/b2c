@@ -5,6 +5,7 @@ import {
   getStudentUpcomingClasses,
   getTeacherUpcomingClasses,
   getClassesInRange,
+  expandRecurrence,
   formatClassDateEs,
   formatClassTimeEs,
   type ClassWithPeople,
@@ -37,6 +38,8 @@ export type AccionPropuesta = {
   titulo:  string;
   lineas:  string[];
   nota:    string | null;
+  /** Texto de éxito tras confirmar (si no, el genérico del tipo). */
+  hecho?:  string;
   request: { method: "POST" | "PATCH" | "DELETE"; url: string; body: Record<string, unknown> | null };
 };
 
@@ -114,6 +117,8 @@ function claseDto(c: ClassWithPeople) {
     titulo:      c.title,
     estado:      c.status,
     es_clase_de_prueba: c.is_trial,
+    // Las clases de una misma serie recurrente comparten serie_id.
+    serie_id:    c.recurrence_pattern !== "none" ? (c.parent_class_id ?? c.id) : null,
     profesor:    c.teacher_name,
     estudiantes: c.participants.map(p => p.student_name ?? p.student_email),
   };
@@ -124,7 +129,7 @@ function claseDto(c: ClassWithPeople) {
 type ClaseLite = {
   id: string; type: string; status: string; is_trial: boolean; teacher_id: string | null;
   scheduled_at: string; duration_minutes: number; title: string;
-  recurrence_pattern: string | null; teacherName: string | null;
+  recurrence_pattern: string | null; parent_class_id: string | null; teacherName: string | null;
   students: Array<{ id: string; name: string | null }>;
 };
 
@@ -133,7 +138,7 @@ async function loadClase(id: string): Promise<ClaseLite | null> {
   const { data } = await sb
     .from("classes")
     .select(`
-      id, type, status, is_trial, teacher_id, scheduled_at, duration_minutes, title, recurrence_pattern,
+      id, type, status, is_trial, teacher_id, scheduled_at, duration_minutes, title, recurrence_pattern, parent_class_id,
       teacher:teachers(users(full_name)),
       class_participants(student_id, student:students(users(full_name)))
     `)
@@ -156,6 +161,7 @@ async function loadClase(id: string): Promise<ClaseLite | null> {
     duration_minutes:   r.duration_minutes as number,
     title:              r.title as string,
     recurrence_pattern: (r.recurrence_pattern as string | null) ?? null,
+    parent_class_id:    (r.parent_class_id as string | null) ?? null,
     teacherName:        tu?.full_name ?? null,
     students: parts.map(p => {
       const s = one(p.student as { users: unknown } | Array<{ users: unknown }>);
@@ -208,6 +214,37 @@ async function teacherName(teacherId: string): Promise<string | null> {
   const u = (data as { users: unknown }).users;
   const uu = (Array.isArray(u) ? u[0] : u) as { full_name: string | null; email: string } | undefined;
   return uu?.full_name ?? uu?.email ?? null;
+}
+
+type SerieRow = { id: string; scheduled_at: string; duration_minutes: number };
+
+/** Esta clase y las posteriores de su serie (misma regla que el PATCH de profe/admin). */
+async function seriesFrom(c: ClaseLite, statuses: string[]): Promise<SerieRow[]> {
+  const sb = supabaseAdmin();
+  const parentId = c.parent_class_id ?? c.id;
+  const { data } = await sb
+    .from("classes")
+    .select("id, scheduled_at, duration_minutes")
+    .or(`id.eq.${parentId},parent_class_id.eq.${parentId}`)
+    .gte("scheduled_at", c.scheduled_at)
+    .in("status", statuses);
+  const rows = (data ?? []) as SerieRow[];
+  if (!rows.some(r => r.id === c.id)) rows.push({ id: c.id, scheduled_at: c.scheduled_at, duration_minutes: c.duration_minutes });
+  return rows.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
+}
+
+/** Todas las clases aún agendadas de la serie (lo que cancela cancelClass({ whole: true })). */
+async function seriesAllScheduled(c: ClaseLite): Promise<SerieRow[]> {
+  const self = [{ id: c.id, scheduled_at: c.scheduled_at, duration_minutes: c.duration_minutes }];
+  if (!c.parent_class_id) return self;
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("classes")
+    .select("id, scheduled_at, duration_minutes")
+    .eq("parent_class_id", c.parent_class_id)
+    .eq("status", "scheduled");
+  const rows = (data ?? []) as SerieRow[];
+  return rows.length > 0 ? rows.sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)) : self;
 }
 
 async function saldoDto(studentId: string) {
@@ -507,15 +544,17 @@ function staffTools(ctx: Extract<AsistenteCtx, { role: "teacher" | "admin" }>): 
     {
       spec: {
         name: "proponer_agendar",
-        description: "Prepara (sin ejecutar) una clase individual suelta con un estudiante. Comprueba solapes con otras clases del profesor y el saldo del estudiante. Si hay solape devuelve alternativas reales.",
+        description: "Prepara (sin ejecutar) una clase individual con un estudiante: suelta o, con `repetir`, una serie semanal o quincenal el mismo día y hora hasta `repetir_hasta`. Comprueba solapes con otras clases del profesor (en todas las fechas de la serie) y el saldo del estudiante. Para dos días por semana, haz una propuesta por día.",
         input_schema: {
           type: "object",
           properties: {
             ...(isAdmin ? { profesor_id: profesorProp } : {}),
             estudiante_id: estudianteProp,
-            fecha: fechaProp,
+            fecha: { type: "string", description: "Fecha de la primera clase en Berlín, YYYY-MM-DD." },
             hora: horaProp,
             duracion_minutos: { type: "integer", description: "Duración en minutos (15–240). Por defecto 50." },
+            repetir: { type: "string", enum: ["no", "semanal", "quincenal"], description: "Recurrencia. Por defecto «no» (clase suelta)." },
+            repetir_hasta: { type: "string", description: "Última fecha posible de la serie, YYYY-MM-DD. Obligatoria si `repetir` no es «no»; pregúntala al usuario si no la dijo." },
           },
           required: [...(isAdmin ? ["profesor_id"] : []), "estudiante_id", "fecha", "hora"],
         },
@@ -523,104 +562,191 @@ function staffTools(ctx: Extract<AsistenteCtx, { role: "teacher" | "admin" }>): 
       input: z.object({
         profesor_id: Uuid.optional(), estudiante_id: Uuid, fecha: Fecha, hora: Hora,
         duracion_minutos: z.number().int().min(15).max(240).optional(),
+        repetir: z.enum(["no", "semanal", "quincenal"]).optional(),
+        repetir_hasta: Fecha.optional(),
       }),
-      run: async (i: { profesor_id?: string; estudiante_id: string; fecha: string; hora: string; duracion_minutos?: number }, acciones) => {
+      run: async (i: {
+        profesor_id?: string; estudiante_id: string; fecha: string; hora: string;
+        duracion_minutos?: number; repetir?: "no" | "semanal" | "quincenal"; repetir_hasta?: string;
+      }, acciones) => {
         const t = await resolveTeacher(i.profesor_id);
         if (typeof t === "string") return fail(t);
         const s = await resolveStudent(i.estudiante_id);
         if (typeof s === "string") return fail(s);
         const startIso = berlinToIso(i.fecha, i.hora);
-        const target = new Date(startIso).getTime();
-        if (target <= Date.now()) return fail("Ese horario ya pasó.");
+        if (new Date(startIso).getTime() <= Date.now()) return fail("Ese horario ya pasó.");
         const minutes = i.duracion_minutos ?? DEFAULT_MINUTES;
-        const conflicts = await findTeacherConflicts(sb, { teacherId: t.id, startIso, durationMinutes: minutes, breakMinutes: 0 });
-        if (conflicts.length > 0) {
-          return fail(`Ese horario se pisa con otra clase del profesor (${fmt(conflicts[0].scheduled_at)}).`,
-            { alternativas: alternativas(await listTeacherClassSlots(t.id), target) });
+
+        const pattern = i.repetir === "semanal" ? "weekly" : i.repetir === "quincenal" ? "biweekly" : "none";
+        if (pattern !== "none" && !i.repetir_hasta) return fail("Falta `repetir_hasta`: pregunta al usuario hasta qué fecha se repite la serie.");
+        if (pattern !== "none" && i.repetir_hasta! <= i.fecha) return fail("`repetir_hasta` debe ser posterior a la primera clase.");
+        // Mismas fechas que generará createClass (hora de reloj de Berlín estable).
+        const dates = expandRecurrence(
+          new Date(startIso), pattern,
+          pattern === "none" ? null : new Date(`${i.repetir_hasta}T23:59:59Z`),
+        );
+
+        for (const d of dates) {
+          const conflicts = await findTeacherConflicts(sb, { teacherId: t.id, startIso: d.toISOString(), durationMinutes: minutes, breakMinutes: 0 });
+          if (conflicts.length > 0) {
+            return fail(`El ${fmt(d.toISOString())} se pisa con otra clase del profesor (${fmt(conflicts[0].scheduled_at)}).`,
+              dates.length === 1 ? { alternativas: alternativas(await listTeacherClassSlots(t.id), d.getTime()) } : {});
+          }
         }
-        const check = await canBookClass(s.id, 1);
-        if (!check.allowed) return fail(`${s.name} no tiene clases disponibles en su plan.`);
+        const check = await canBookClass(s.id, dates.length);
+        if (!check.allowed) {
+          return fail(`${s.name} no tiene suficientes clases disponibles en su plan para ${dates.length === 1 ? "esta clase" : `${dates.length} clases`}.`,
+            { saldo: await saldoDto(s.id) });
+        }
+
         const title = `Clase de alemán — ${firstName(s.name) || s.name}`;
+        const serie = dates.length > 1;
+        const last = dates[dates.length - 1].toISOString();
+        const body = {
+          type: "individual", ...(isAdmin ? { teacherId: t.id } : {}), studentIds: [s.id],
+          scheduledAt: startIso, durationMinutes: minutes, title,
+          ...(pattern !== "none" ? { recurrencePattern: pattern, recurrenceEndDate: i.repetir_hasta } : {}),
+        };
         return propuesta(acciones, {
           tipo:   "agendar",
-          titulo: "Agendar clase",
-          lineas: [fmt(startIso), `${s.name} con ${t.name} · individual · ${minutes} min`],
+          titulo: serie ? `Agendar serie (${dates.length} clases)` : "Agendar clase",
+          lineas: [
+            serie ? `Primera: ${fmt(startIso)}` : fmt(startIso),
+            ...(serie ? [`Se repite ${pattern === "weekly" ? "cada semana" : "cada dos semanas"} · última: ${formatClassDateEs(last)}`] : []),
+            `${s.name} con ${t.name} · individual · ${minutes} min`,
+          ],
           nota:   isAdmin
             ? "El estudiante y el profesor recibirán email y notificación."
             : "El estudiante recibirá email y notificación.",
-          request: isAdmin
-            ? { method: "POST", url: "/api/admin/classes", body: { type: "individual", teacherId: t.id, studentIds: [s.id], scheduledAt: startIso, durationMinutes: minutes, title } }
-            : { method: "POST", url: "/api/teacher/classes", body: { type: "individual", studentIds: [s.id], scheduledAt: startIso, durationMinutes: minutes, title } },
+          hecho:  serie ? `Serie agendada (${dates.length} clases)` : undefined,
+          request: { method: "POST", url: `/api/${isAdmin ? "admin" : "teacher"}/classes`, body },
         });
       },
     },
     {
       spec: {
-        name: "proponer_reagendar",
-        description: "Prepara (sin ejecutar) mover UNA clase agendada a otro horario (no la serie). Comprueba solapes con otras clases del profesor.",
+        name: "proponer_modificar",
+        description: "Prepara (sin ejecutar) un cambio sobre una clase agendada: moverla de día/hora (`fecha` + `hora`), cambiar su duración (`duracion_minutos`, p. ej. 100 para una clase doble), o ambas. Con alcance «serie» se aplica a esa clase y a TODAS las posteriores de su serie: todas se desplazan el mismo intervalo que la clase indicada, así que usa como clase_id la PRÓXIMA clase de la serie. Comprueba solapes con otras clases del profesor.",
         input_schema: {
           type: "object",
-          properties: { clase_id: { type: "string", description: "clase_id obtenido de una consulta de clases." }, fecha: fechaProp, hora: horaProp },
-          required: ["clase_id", "fecha", "hora"],
+          properties: {
+            clase_id: { type: "string", description: "clase_id obtenido de una consulta de clases." },
+            fecha: { type: "string", description: "Nueva fecha de ESA clase en Berlín, YYYY-MM-DD (junto con `hora`)." },
+            hora: { type: "string", description: "Nueva hora de inicio en Berlín, HH:MM (junto con `fecha`)." },
+            duracion_minutos: { type: "integer", description: "Nueva duración en minutos (15–240)." },
+            alcance: { type: "string", enum: ["esta", "serie"], description: "«esta» (por defecto) solo esa clase; «serie» esa y las posteriores de la serie." },
+          },
+          required: ["clase_id"],
         },
       },
-      input: z.object({ clase_id: Uuid, fecha: Fecha, hora: Hora }),
-      run: async (i: { clase_id: string; fecha: string; hora: string }, acciones) => {
+      input: z.object({
+        clase_id: Uuid, fecha: Fecha.optional(), hora: Hora.optional(),
+        duracion_minutos: z.number().int().min(15).max(240).optional(),
+        alcance: z.enum(["esta", "serie"]).optional(),
+      }),
+      run: async (i: { clase_id: string; fecha?: string; hora?: string; duracion_minutos?: number; alcance?: "esta" | "serie" }, acciones) => {
         const c = await loadClase(i.clase_id);
         if (!c || !ownsClass(c)) return fail("No encuentro esa clase.");
         const bad = claseNoEditable(c);
         if (bad) return fail(bad);
-        const startIso = berlinToIso(i.fecha, i.hora);
-        const target = new Date(startIso).getTime();
-        if (target <= Date.now()) return fail("Ese horario ya pasó.");
+        if (Boolean(i.fecha) !== Boolean(i.hora)) return fail("Para mover la clase hacen falta `fecha` y `hora` juntas.");
+        const moves = Boolean(i.fecha && i.hora);
+        const newMinutes = i.duracion_minutos !== undefined && i.duracion_minutos !== c.duration_minutes ? i.duracion_minutos : undefined;
+        const startIso = moves ? berlinToIso(i.fecha!, i.hora!) : c.scheduled_at;
+        const deltaMs = new Date(startIso).getTime() - new Date(c.scheduled_at).getTime();
+        if (deltaMs === 0 && newMinutes === undefined) return fail("No hay ningún cambio: la clase ya tiene ese horario y esa duración.");
+        if (moves && new Date(startIso).getTime() <= Date.now()) return fail("Ese horario ya pasó.");
+
+        const serie = i.alcance === "serie";
+        const targets = serie ? await seriesFrom(c, isAdmin ? ["scheduled", "live"] : ["scheduled"]) : [c];
+        const ids = targets.map(x => x.id);
         if (c.teacher_id) {
-          const conflicts = await findTeacherConflicts(sb, {
-            teacherId: c.teacher_id, startIso, durationMinutes: c.duration_minutes, excludeClassId: c.id, breakMinutes: 0,
-          });
-          if (conflicts.length > 0) {
-            return fail(`Ese horario se pisa con otra clase del profesor (${fmt(conflicts[0].scheduled_at)}).`,
-              { alternativas: alternativas(await listTeacherClassSlots(c.teacher_id), target) });
+          for (const x of targets) {
+            const at = new Date(new Date(x.scheduled_at).getTime() + deltaMs).toISOString();
+            const conflicts = await findTeacherConflicts(sb, {
+              teacherId: c.teacher_id, startIso: at, durationMinutes: newMinutes ?? x.duration_minutes, excludeIds: ids, breakMinutes: 0,
+            });
+            if (conflicts.length > 0) {
+              return fail(`Con ese cambio, la clase del ${fmt(at)} se pisa con otra clase del profesor (${fmt(conflicts[0].scheduled_at)}).`,
+                !serie && moves ? { alternativas: alternativas(await listTeacherClassSlots(c.teacher_id), new Date(startIso).getTime()) } : {});
+            }
           }
         }
+
         const quien = c.students.map(s => s.name).filter(Boolean).join(", ");
+        const n = targets.length;
+        const lineas = [
+          ...(deltaMs !== 0 ? [`${n > 1 ? "Próxima, antes" : "Antes"}: ${fmt(c.scheduled_at)}`, `${n > 1 ? "Próxima, ahora" : "Ahora"}: ${fmt(startIso)}`] : [fmt(c.scheduled_at)]),
+          ...(newMinutes !== undefined ? [`Duración: ${c.duration_minutes} → ${newMinutes} min`] : []),
+          ...(n > 1 ? [`Se aplica a ${n} clases de la serie (hasta el ${formatClassDateEs(new Date(new Date(targets[n - 1].scheduled_at).getTime() + deltaMs))})`] : []),
+          [c.title, quien].filter(Boolean).join(" · "),
+        ];
+        const titulo =
+          (deltaMs !== 0 ? (n > 1 ? "Reprogramar serie" : "Reagendar clase") : (n > 1 ? "Cambiar duración de la serie" : "Cambiar duración"));
         return propuesta(acciones, {
           tipo:   "reagendar",
-          titulo: "Reagendar clase",
-          lineas: [`Antes: ${fmt(c.scheduled_at)}`, `Ahora: ${fmt(startIso)}`, [c.title, quien].filter(Boolean).join(" · ")],
+          titulo,
+          lineas,
           nota:   isAdmin
             ? "Desde el panel de admin este cambio NO avisa automáticamente al estudiante ni al profesor."
             : "Los estudiantes recibirán email y notificación.",
+          hecho:  n > 1 ? `Serie actualizada (${n} clases)` : deltaMs !== 0 ? undefined : "Duración actualizada",
           request: isAdmin
-            ? { method: "PATCH", url: `/api/admin/classes/${c.id}`, body: { scope: "this", scheduled_at: startIso } }
-            : { method: "PATCH", url: `/api/teacher/classes/${c.id}`, body: { scope: "this", scheduledAt: startIso } },
+            ? { method: "PATCH", url: `/api/admin/classes/${c.id}`, body: {
+                scope: serie ? "series" : "this",
+                ...(deltaMs !== 0 ? { scheduled_at: startIso } : {}),
+                ...(newMinutes !== undefined ? { duration_minutes: newMinutes } : {}),
+              } }
+            : { method: "PATCH", url: `/api/teacher/classes/${c.id}`, body: {
+                scope: serie ? "series" : "this",
+                ...(deltaMs !== 0 ? { scheduledAt: startIso } : {}),
+                ...(newMinutes !== undefined ? { durationMinutes: newMinutes } : {}),
+              } },
         });
       },
     },
     {
       spec: {
         name: "proponer_cancelar",
-        description: "Prepara (sin ejecutar) cancelar UNA clase agendada (no la serie).",
+        description: `Prepara (sin ejecutar) cancelar una clase agendada. Con alcance «serie» cancela ${isAdmin ? "todas las clases aún agendadas de su serie" : "esa clase y todas las posteriores de su serie"}.`,
         input_schema: {
           type: "object",
-          properties: { clase_id: { type: "string", description: "clase_id obtenido de una consulta de clases." } },
+          properties: {
+            clase_id: { type: "string", description: "clase_id obtenido de una consulta de clases." },
+            alcance: { type: "string", enum: ["esta", "serie"], description: "«esta» (por defecto) o «serie»." },
+          },
           required: ["clase_id"],
         },
       },
-      input: z.object({ clase_id: Uuid }),
-      run: async (i: { clase_id: string }, acciones) => {
+      input: z.object({ clase_id: Uuid, alcance: z.enum(["esta", "serie"]).optional() }),
+      run: async (i: { clase_id: string; alcance?: "esta" | "serie" }, acciones) => {
         const c = await loadClase(i.clase_id);
         if (!c || !ownsClass(c)) return fail("No encuentro esa clase.");
         const bad = claseNoEditable(c);
         if (bad) return fail(bad);
+        const serie = i.alcance === "serie";
+        // Admin: cancelClass({whole}) cancela TODA la serie aún agendada; profe: desde esta clase en adelante.
+        const targets = !serie ? [c] : isAdmin ? await seriesAllScheduled(c) : await seriesFrom(c, ["scheduled"]);
+        const n = targets.length;
         const quien = c.students.map(s => s.name).filter(Boolean).join(", ");
         return propuesta(acciones, {
           tipo:   "cancelar",
-          titulo: "Cancelar clase",
-          lineas: [fmt(c.scheduled_at), [c.title, quien, c.teacherName && isAdmin ? `Prof. ${c.teacherName}` : null].filter(Boolean).join(" · ")],
+          titulo: n > 1 ? `Cancelar serie (${n} clases)` : "Cancelar clase",
+          lineas: [
+            n > 1 ? `Del ${fmt(targets[0].scheduled_at)} al ${formatClassDateEs(targets[n - 1].scheduled_at)}` : fmt(c.scheduled_at),
+            [c.title, quien, c.teacherName && isAdmin ? `Prof. ${c.teacherName}` : null].filter(Boolean).join(" · "),
+          ],
           nota:   isAdmin
             ? "Desde el panel de admin la cancelación NO avisa automáticamente al estudiante ni al profesor."
             : "Los estudiantes recibirán email y notificación de la cancelación.",
-          request: { method: "DELETE", url: `/api/${isAdmin ? "admin" : "teacher"}/classes/${c.id}`, body: null },
+          hecho:  n > 1 ? `Serie cancelada (${n} clases)` : undefined,
+          request: {
+            method: "DELETE",
+            url: isAdmin
+              ? `/api/admin/classes/${c.id}${serie ? "?whole=1" : ""}`
+              : `/api/teacher/classes/${c.id}${serie ? "?scope=series" : ""}`,
+            body: null,
+          },
         });
       },
     },
