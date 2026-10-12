@@ -201,13 +201,18 @@ export async function createClass(input: CreateClassInput): Promise<{
  * Expand a single scheduled_at + pattern + end_date into the list of dates
  * that actually become classes. Always returns at least one date (the head).
  */
-function expandRecurrence(
+export function expandRecurrence(
   start: Date,
   pattern: RecurrencePattern,
   endDate: Date | null,
 ): Date[] {
   if (pattern === "none" || !endDate) return [start];
 
+  // Cada instancia conserva la hora de RELOJ de Berlin de la primera:
+  // sumar dias en UTC desplazaba la serie 1 h al cruzar el cambio de
+  // hora (una clase de las 20:30 pasaba a las 19:30 tras el ultimo
+  // domingo de octubre).
+  const startOffset = berlinOffsetMs(start);
   const out: Date[] = [start];
   const stride =
     pattern === "weekly"   ? 7  :
@@ -223,11 +228,19 @@ function expandRecurrence(
       // that behaviour (it matches user intuition "same day each month").
       cursor.setUTCMonth(cursor.getUTCMonth() + 1);
     }
-    if (cursor.getTime() > endDate.getTime()) break;
-    out.push(new Date(cursor));
+    const instance = new Date(cursor.getTime() + startOffset - berlinOffsetMs(cursor));
+    if (instance.getTime() > endDate.getTime()) break;
+    out.push(instance);
     if (out.length >= MAX_RECURRING_INSTANCES) break;
   }
   return out;
+}
+
+/** Desfase Berlin - UTC en ms para ese instante (+1 h en invierno, +2 h en verano). */
+function berlinOffsetMs(d: Date): number {
+  const berlin = new Date(d.toLocaleString("en-US", { timeZone: "Europe/Berlin" }));
+  const utc    = new Date(d.toLocaleString("en-US", { timeZone: "UTC" }));
+  return berlin.getTime() - utc.getTime();
 }
 
 // =============================================================================
