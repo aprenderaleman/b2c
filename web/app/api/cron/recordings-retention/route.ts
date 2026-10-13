@@ -6,21 +6,22 @@ import { deleteRecordingObject } from "@/lib/r2";
  * GET/POST /api/cron/recordings-retention
  *
  * Retención de grabaciones (Gelfis 2026-10-12, reducción de coste R2):
- * borra de R2 las grabaciones 'ready' con más de 90 días que NO estén
- * compartidas con profes (shared_with_teachers=false) y marca la fila
- * como status='deleted' (migración 139) conservándola para auditoría.
+ * borra de R2 las grabaciones 'ready' más viejas que RETENTION_DAYS que
+ * NO estén compartidas con profes (shared_with_teachers=false) y marca
+ * la fila como status='deleted' (migración 139) para auditoría.
  *
- * Lotes de 40 por ejecución (cron diario — el backlog inicial de ~300
- * se drena en ~8 días). Si el borrado en R2 falla, la fila se queda
- * 'ready' y se reintenta mañana.
+ * Si el borrado en R2 falla, la fila se queda 'ready' y se reintenta
+ * mañana.
  *
  * Auth: Bearer CRON_SECRET o X-Cron-Secret (mismo patrón que el resto).
  */
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const RETENTION_DAYS = 90;
-const BATCH = 40;
+// 90 → 30 días (Gelfis 2026-10-13). El lote sube a 100 para drenar el
+// backlog (~800 grabaciones de 30-90 días) en ~8 días.
+const RETENTION_DAYS = 30;
+const BATCH = 100;
 
 function authorised(req: Request): boolean {
   const expected = process.env.CRON_SECRET;

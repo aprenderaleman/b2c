@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { EgressClient, EncodedFileOutput, EncodedFileType, EncodingOptionsPreset, S3Upload } from "livekit-server-sdk";
 import { auth } from "@/lib/auth";
@@ -18,6 +19,9 @@ import { supabaseAdmin } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// % de clases regulares que se graban de verdad (trials: siempre 100%).
+const RECORDING_SAMPLE_PCT = 50;
 
 export async function POST(
   _req:   Request,
@@ -63,9 +67,24 @@ export async function POST(
 
   const sb = supabaseAdmin();
   const { data: cls } = await sb
-    .from("classes").select("livekit_room_id, status").eq("id", classId).maybeSingle();
+    .from("classes").select("livekit_room_id, status, is_trial").eq("id", classId).maybeSingle();
   if (!cls) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const roomName = (cls as { livekit_room_id: string }).livekit_room_id;
+  const isTrial  = (cls as { is_trial: boolean | null }).is_trial === true;
+
+  // Muestreo de grabación (Gelfis 2026-10-13, reducción de coste LiveKit):
+  // las clases regulares solo se graban de verdad el 50% de las veces.
+  // Sorteo DETERMINISTA por id de clase (hash md5 % 100), así un refresh
+  // o una reconexión del profe cae siempre en el mismo lado. Los trials
+  // se graban SIEMPRE (evidencia de asistencia). La respuesta simulada
+  // es indistinguible para el cliente: el aula muestra el pill REC igual.
+  // Un admin que llame al endpoint sin ser el host graba de verdad.
+  if (!isTrial && isHost && !isAdmin) {
+    const bucket = parseInt(createHash("md5").update(classId).digest("hex").slice(0, 8), 16) % 100;
+    if (bucket >= RECORDING_SAMPLE_PCT) {
+      return NextResponse.json({ ok: true, egress_id: `sim-${classId.slice(0, 8)}` });
+    }
+  }
 
   const httpsUrl = livekitUrl().replace(/^wss:/, "https:");
   const eg = new EgressClient(httpsUrl, process.env.LIVEKIT_API_KEY!, process.env.LIVEKIT_API_SECRET!);
