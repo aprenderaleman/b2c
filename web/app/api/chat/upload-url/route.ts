@@ -14,7 +14,7 @@ import { supabaseAdmin } from "@/lib/supabase";
  */
 export const dynamic = "force-dynamic";
 
-export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB: tope global del proyecto Supabase (Storage → Settings); el bucket está al máximo
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB: tope global del proyecto Supabase (Storage → Settings); el bucket está al máximo
 const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 const Start = z.object({ name: z.string().min(1).max(200), type: z.string().max(120).optional().default("application/octet-stream"), size: z.number().int().min(1) });
