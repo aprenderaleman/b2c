@@ -505,7 +505,7 @@ function MessageBubble({ message, mine, showAuthor }: {
             ? "bg-brand-500 text-white"
             : "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700"}`}
         >
-          {message.content}
+          <Linkify text={message.content} mine={mine} />
           {message.attachments.length > 0 && (
             <div className={`mt-2 space-y-1 text-xs ${mine ? "text-white/90" : "text-slate-600 dark:text-slate-300"}`}>
               {message.attachments.map((a, i) => (
@@ -535,4 +535,34 @@ function formatTime(iso: string): string {
     hour: "2-digit", minute: "2-digit",
     timeZone: "Europe/Berlin",
   });
+}
+
+/**
+ * Convierte URLs y correos del texto en enlaces clicables (Gelfis
+ * 2026-10-13: los enlaces salían como texto plano). Abre en pestaña nueva
+ * con rel seguro; el resto del texto se mantiene tal cual.
+ */
+const LINK_RE = /((?:https?:\/\/|www\.)[^\s<>"']+[^\s<>"'.,;:!?)\]]|[\w.+-]+@[\w-]+\.[\w.-]+)/gi;
+function Linkify({ text, mine }: { text: string; mine: boolean }) {
+  const parts = text.split(LINK_RE);
+  return (
+    <>
+      {parts.map((part, i) => {
+        if (i % 2 === 0) return <span key={i}>{part}</span>;
+        const isMail = part.includes("@") && !/^(https?:\/\/|www\.)/i.test(part);
+        const href = isMail ? `mailto:${part}` : part.startsWith("www.") ? `https://${part}` : part;
+        return (
+          <a
+            key={i}
+            href={href}
+            target={isMail ? undefined : "_blank"}
+            rel="noopener noreferrer"
+            className={`underline underline-offset-2 break-all ${mine ? "text-white hover:text-white/80" : "text-brand-600 dark:text-brand-400 hover:opacity-80"}`}
+          >
+            {part}
+          </a>
+        );
+      })}
+    </>
+  );
 }
