@@ -295,6 +295,58 @@ async function getDailySendState(): Promise<{ limit: number; sent: number }> {
   }
 }
 
+/**
+ * Pre-check de número en WhatsApp (Gelfis 2026-10-13).
+ *
+ * Llama a Evolution `/chat/whatsappNumbers/{instance}` que verifica si
+ * un número está registrado en WA sin consumir un "message attempt" en
+ * el log de WhatsApp. Devuelve:
+ *   - true  → número está en WhatsApp, enviar normal
+ *   - false → número NO está en WhatsApp, no gastar un envío
+ *   - null  → no se pudo chequear (timeout, Evolution down), enviar
+ *             normal como fallback (el error llegará por otro camino)
+ *
+ * Cache 24h en memoria del worker Vercel. Un número que confirma válido
+ * raramente deja de estarlo; si cambia, al próximo deploy el cache se
+ * resetea igual.
+ */
+const _waNumberCache = new Map<string, { valid: boolean; ts: number }>();
+const WA_PRECHECK_CACHE_MS = 24 * 3600_000;
+
+async function checkWhatsappNumberExists(
+  evoUrl: string,
+  evoKey: string,
+  instance: string,
+  digits: string,
+): Promise<boolean | null> {
+  const cached = _waNumberCache.get(digits);
+  if (cached && Date.now() - cached.ts < WA_PRECHECK_CACHE_MS) {
+    return cached.valid;
+  }
+  try {
+    const res = await fetch(`${evoUrl}/chat/whatsappNumbers/${instance}`, {
+      method:  "POST",
+      headers: { apikey: evoKey, "Content-Type": "application/json" },
+      body:    JSON.stringify({ numbers: [digits] }),
+      signal:  AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) {
+      console.warn(`[whatsapp precheck] http_${res.status} for ${digits}`);
+      return null;
+    }
+    const data = (await res.json().catch(() => [])) as Array<{
+      exists?: boolean; jid?: string; number?: string;
+    }>;
+    const row = Array.isArray(data) ? data.find(r => r.number === digits) ?? data[0] : null;
+    if (!row || typeof row.exists !== "boolean") return null;
+    _waNumberCache.set(digits, { valid: row.exists, ts: Date.now() });
+    return row.exists;
+  } catch (e) {
+    console.warn(`[whatsapp precheck] threw for ${digits}:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
 export type SendWaOpts = {
   /** Etiqueta de propósito. Si el kill switch está on y este kind NO
    *  está en `ALLOWED_WA_KINDS`, el envío se silencia. */
@@ -416,6 +468,28 @@ export async function sendWhatsappText(
 
   // Formato Evolution v1.8: number (dígitos), options, textMessage.text
   const digits = phoneE164.replace(/^\+/, "").replace(/\D/g, "");
+
+  // Pre-check de número en WhatsApp (Gelfis 2026-10-13 tras 2do ban v5):
+  // llamada previa a /chat/whatsappNumbers para no gastar un intento
+  // de envío si el número no está registrado en WA. Cada exists:false
+  // real suma al "fallback scoring" del algoritmo de WhatsApp — con
+  // pre-check 0 llegadas negativas por este motivo.
+  // Cache 24h en memoria (del worker) + skip si opts.bypassKillSwitch.
+  if (!opts.bypassKillSwitch) {
+    const inWa = await checkWhatsappNumberExists(evoUrl, evoKey, instance, digits);
+    if (inWa === false) {
+      // Sintetizamos el mismo payload que devolvería Evolution para que
+      // el helper handleWaPermanentFail del caller (si existe) detecte
+      // el patrón exists:false y desactive el número del lead.
+      return {
+        ok: false,
+        reason: `http_400:{"status":400,"error":"Bad Request","response":{"message":[{"exists":false,"jid":"${digits}@s.whatsapp.net","number":"${digits}","source":"precheck"}]}}`,
+      };
+    }
+    // inWa === true  → seguir enviando normal
+    // inWa === null  → no se pudo chequear (timeout, error), seguir normal
+  }
+
   const payload = {
     number: digits,
     options: { delay: 1200, presence: "composing", linkPreview: false },
