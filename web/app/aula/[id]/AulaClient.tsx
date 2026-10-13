@@ -26,8 +26,8 @@ import {
 import type { LocalUserChoices } from "@livekit/components-core";
 import { RoomEvent, Track, ParticipantEvent, DisconnectReason, type Participant } from "livekit-client";
 import { VirtualBackgroundButton, BRAND_IMAGES, BG_LABELS, type BgMode } from "./VirtualBackgroundButton";
-// Pizarra retirada del aula (Gelfis 2026-10-12) — ./WhiteboardPanel queda
-// en el repo por si se reactiva.
+// Pizarra eliminada del aula y del repo (Gelfis 2026-10-14) — sustituida
+// por el botón "Documentos de Apuntes" (ApuntesDocButton).
 import { AulaSidePanel } from "./AulaSidePanel";
 
 type Props = {
@@ -371,8 +371,6 @@ export function AulaClient(p: Props) {
           <div className="flex-1 min-w-0 h-full">
             <VideoArea classId={p.classId} isHost={p.isHost} />
           </div>
-          {/* Pizarra RETIRADA del aula (Gelfis 2026-10-12). El componente
-              WhiteboardPanel sigue en el repo por si se reactiva. */}
           {panelOpen && (
             <ParticipantsPanel onClose={() => setPanelOpen(false)} />
           )}
@@ -406,6 +404,7 @@ export function AulaClient(p: Props) {
                   }}
                 />
                 {p.audience !== "lead" && <SafeScreenShareButton />}
+                {p.isHost && <ApuntesDocButton classId={p.classId} />}
                 <VirtualBackgroundButton
                   canCamera={userChoices?.videoEnabled ?? false}
                   brandEnabled={p.brandBackground}
@@ -856,6 +855,72 @@ function TopBar({
  * without recording and the teacher sees a small amber pill in the top
  * bar explaining why (useful while Gelfis still hasn't set up S3).
  */
+/**
+ * Botón "Documentos de Apuntes" del profe (Gelfis 2026-10-14, sustituye a
+ * la Pizarra). Pide a /api/aula/{id}/apuntes los Google Docs de apuntes:
+ * el de cada estudiante en clases regulares (creándolos al vuelo si
+ * faltan) o uno desechable en trials. El resultado se muestra siempre
+ * como lista de enlaces (<a target=_blank>) en un mini-popover — abrir
+ * con window.open tras el fetch dispararía el bloqueador de popups.
+ */
+function ApuntesDocButton({ classId }: { classId: string }) {
+  const [open, setOpen]     = useState(false);
+  const [loading, setLoad]  = useState(false);
+  const [docs, setDocs]     = useState<Array<{ name: string; url: string }> | null>(null);
+  const [error, setError]   = useState<string | null>(null);
+
+  async function toggle() {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (docs || loading) return;
+    setLoad(true);
+    setError(null);
+    try {
+      const res  = await fetch(`/api/aula/${classId}/apuntes`);
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.docs)) setDocs(data.docs);
+      else setError(data.message ?? (data.error === "doc_creation_failed"
+        ? "No se pudo crear el documento (Drive)."
+        : "No hay documentos para esta clase."));
+    } catch {
+      setError("Error de red — inténtalo de nuevo.");
+    } finally {
+      setLoad(false);
+    }
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={toggle}
+        className="rounded-lg px-3 py-2 text-sm font-medium bg-slate-700 text-slate-100 hover:bg-slate-600 inline-flex items-center gap-1.5"
+        title="Abrir el documento de apuntes de cada estudiante"
+      >
+        📝 Documentos de Apuntes
+      </button>
+      {open && (
+        <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-30 w-64 rounded-xl border border-slate-700 bg-slate-800 shadow-xl p-2">
+          {loading && <p className="text-xs text-slate-300 px-2 py-1.5">Preparando documentos…</p>}
+          {error   && <p className="text-xs text-amber-300 px-2 py-1.5">{error}</p>}
+          {docs?.map(d => (
+            <a
+              key={d.url}
+              href={d.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block rounded-lg px-2 py-1.5 text-sm text-slate-100 hover:bg-slate-700 truncate"
+              title={d.name}
+            >
+              📄 {d.name}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecordingAutoStart({ classId }: { classId: string }) {
   const [state, setState] = useState<
     | { kind: "idle" }
