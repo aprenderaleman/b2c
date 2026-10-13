@@ -583,7 +583,7 @@ export async function advanceChain(chain: ChainRow): Promise<{
     // avanzar step — reintentar más tarde. Antes el motor daba el step
     // por procesado y el mensaje se perdía para siempre.
     const RETRIABLE_REASONS = new Set([
-      "night_gate", "daily_cap_reached", "whatsapp_globally_disabled",
+      "night_gate", "daily_cap_reached", "hourly_cap_reached", "whatsapp_globally_disabled",
     ]);
     if (!res.ok && RETRIABLE_REASONS.has(res.reason ?? "")) {
       // Reprogramar next_fire: si night_gate → próximas 08:00 Berlin;

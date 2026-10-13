@@ -187,11 +187,17 @@ async function isNightGateEnabled(): Promise<boolean> {
   } catch { return true; }
 }
 function isBerlinNight(): boolean {
+  // Gate 21:00-09:00 Berlin (Gelfis 2026-10-13 tras 2do ban v5).
+  // Antes: 22-08. Ampliado 1h en cada extremo para:
+  //  - Terminar actividad 1h antes de la hora típica de caída de
+  //    sesión Baileys (~22:00-23:00 observado en v4 y v5)
+  //  - Arrancar 1h después, dando tiempo a que la instancia esté
+  //    plenamente estable tras la noche
   const hourStr = new Intl.DateTimeFormat("en-US", {
     timeZone: "Europe/Berlin", hour: "numeric", hour12: false,
   }).format(new Date());
   const h = parseInt(hourStr, 10);
-  return h >= 22 || h < 8;
+  return h >= 21 || h < 9;
 }
 
 /**
@@ -200,6 +206,53 @@ function isBerlinNight(): boolean {
  * medianoche Europe/Berlin. Config: `system_config.wa_daily_send_cap`.
  * Durante warm-up post-ban, el cap efectivo es min(cap, warmup_cap_del_dia).
  */
+/**
+ * Anti-ban #3 (Gelfis 2026-10-13 tras 2do ban v5): cap por hora para
+ * distribuir carga. Antes el único límite era diario (300/día) y en el
+ * ban del 12-10 observamos pico de 28 msgs en 4h tarde-noche justo antes
+ * de la caída. Un cap horario fuerza distribución natural y reduce la
+ * densidad justo antes del gate nocturno.
+ *
+ * Default: 25 msgs/hora. Configurable via system_config.wa_hourly_send_cap.
+ * Durante warm-up el cap efectivo es min(hora_normal, día_warmup / 10).
+ */
+let _hourlyCapCache: { limit: number; sent: number; ts: number } | null = null;
+async function getHourlySendState(): Promise<{ limit: number; sent: number }> {
+  const now = Date.now();
+  if (_hourlyCapCache && now - _hourlyCapCache.ts < 30_000) {
+    return { limit: _hourlyCapCache.limit, sent: _hourlyCapCache.sent };
+  }
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const sb = supabaseAdmin();
+    const { data: rows } = await sb
+      .from("system_config").select("key,value")
+      .in("key", ["wa_hourly_send_cap", "wa_warmup_day"]);
+    const cfg = new Map((rows ?? []).map(r => [r.key as string, r.value as string]));
+    const baseHourly = parseInt(cfg.get("wa_hourly_send_cap") ?? "25", 10) || 25;
+    const warmupDay = parseInt(cfg.get("wa_warmup_day") ?? "", 10);
+    // Durante warm-up: diario / ~10 horas de ventana = cap/hora derivado.
+    let effectiveHourly = baseHourly;
+    if (Number.isFinite(warmupDay) && warmupDay >= 1 && warmupDay <= 7) {
+      const scaleHourly: Record<number, number> = { 1: 6, 2: 10, 3: 15, 4: 20, 5: 25, 6: 25, 7: 25 };
+      effectiveHourly = Math.min(effectiveHourly, scaleHourly[warmupDay]);
+    }
+    // Contar envíos última hora (sliding window).
+    const oneHourAgo = new Date(now - 3600_000).toISOString();
+    const { count } = await sb
+      .from("lead_timeline")
+      .select("id", { count: "exact", head: true })
+      .eq("type", "system_message_sent")
+      .filter("metadata->>channel", "eq", "whatsapp")
+      .gte("timestamp", oneHourAgo);
+    const sent = count ?? 0;
+    _hourlyCapCache = { limit: effectiveHourly, sent, ts: now };
+    return { limit: effectiveHourly, sent };
+  } catch {
+    return { limit: 25, sent: 0 };
+  }
+}
+
 let _dailyCapCache: { limit: number; sent: number; ts: number } | null = null;
 async function getDailySendState(): Promise<{ limit: number; sent: number }> {
   const now = Date.now();
@@ -298,6 +351,16 @@ export async function sendWhatsappText(
     const gateOn = await isNightGateEnabled();
     if (gateOn && !NIGHT_EXEMPT_KINDS.has(opts.kind ?? "")) {
       return { ok: false, reason: "night_gate" };
+    }
+  }
+  // Anti-ban cap POR HORA (Gelfis 2026-10-13): distribuye carga, evita
+  // picos de 20+ msgs/hora que anteceden la caída nocturna de sesión.
+  // Default 25/hora. Transaccionales de ALLOWED_WA_KINDS pasan igual.
+  if (!opts.bypassKillSwitch) {
+    const { limit: hourlyLimit, sent: hourlySent } = await getHourlySendState();
+    if (hourlySent >= hourlyLimit && !ALLOWED_WA_KINDS.has(opts.kind ?? "")) {
+      console.warn(`[whatsapp] hourly cap ${hourlyLimit} alcanzado (${hourlySent}), silenciando kind=${opts.kind}`);
+      return { ok: false, reason: "hourly_cap_reached" };
     }
   }
   // Anti-ban cap diario: superado, solo kinds transaccionales del whitelist.
