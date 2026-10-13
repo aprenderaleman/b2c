@@ -194,6 +194,35 @@ async function run(req: Request) {
     // (fue el 2do ban en 14 días: v4 el 29-09, v5 el 12-10).
     await sb.from("system_config").upsert({ key: CIRCUIT_KEY, value: "true" });
 
+    // LOGOUT explícito en Evolution para parar el reconnect loop
+    // interno de Baileys (Gelfis 2026-10-13 fix final). Sin esto,
+    // aunque YO deje de sondear, el servidor Evolution sigue intentando
+    // reconectar la sesión expirada cada N segundos y WhatsApp los
+    // cuenta como login attempts repetidos. Logout cierra limpiamente.
+    // Después, Gelfis debe escanear QR nuevo al reconectar manualmente.
+    let logoutResult = "skipped";
+    try {
+      const logoutRes = await fetch(`${evoUrl}/instance/logout/${instance}`, {
+        method: "DELETE",   // Evolution v1.8: DELETE para logout
+        headers: { apikey: evoKey },
+        signal: AbortSignal.timeout(10_000),
+      });
+      logoutResult = logoutRes.ok ? "ok" : `http_${logoutRes.status}`;
+      // Algunos builds de Evolution usan POST — fallback si DELETE no está soportado.
+      if (!logoutRes.ok && logoutRes.status === 405) {
+        const alt = await fetch(`${evoUrl}/instance/logout/${instance}`, {
+          method: "POST",
+          headers: { apikey: evoKey },
+          signal: AbortSignal.timeout(10_000),
+        });
+        logoutResult = alt.ok ? "ok_post" : `http_${alt.status}_post`;
+      }
+    } catch (e) {
+      logoutResult = `err:${e instanceof Error ? e.message : "unknown"}`;
+      console.error("[health-monitor] logout fetch failed:", e);
+    }
+    console.log(`[health-monitor] Evolution logout → ${logoutResult}`);
+
     // Notificación in-app — el bell del header parpadea + dropdown
     // muestra la alerta con link a /admin/system. dedup: 6h.
     await createAdminNotification({
@@ -222,6 +251,7 @@ Pasos para reactivar:
       reason,
       paused_for_hours: PAUSE_HOURS,
       circuit_broken: true,
+      logout: logoutResult,
     });
   }
 
