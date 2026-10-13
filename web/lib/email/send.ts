@@ -176,6 +176,39 @@ async function isRecipientBounced(to: string): Promise<boolean> {
   }
 }
 
+/**
+ * Compuerta global de opt-out (Gelfis 2026-10-13, caso Simon): si el
+ * destinatario es un usuario de la plataforma con
+ * users.notifications_opt_out=TRUE, se suprime el email. Hasta ahora el
+ * flag solo gateaba los avisos in-app y dos crons de recordatorios —
+ * los demás correos (trials asignados/reagendados, resúmenes, lifecycle)
+ * se colaban. Los correos críticos de cuenta (password reset,
+ * bienvenidas con enlace de acceso, factura pagada) pasan `critical:
+ * true` y NO se suprimen. Cache 60s, misma mecánica que isRecipientBounced.
+ */
+const _optOutCache = new Map<string, { v: boolean; ts: number }>();
+
+async function isRecipientOptedOut(to: string): Promise<boolean> {
+  const email = to.toLowerCase().trim();
+  if (!email) return false;
+  const cached = _optOutCache.get(email);
+  if (cached && Date.now() - cached.ts < BOUNCED_TTL_MS) return cached.v;
+  try {
+    const { supabaseAdmin } = await import("../supabase");
+    const sb = supabaseAdmin();
+    const { data } = await sb
+      .from("users")
+      .select("notifications_opt_out")
+      .ilike("email", email)
+      .maybeSingle();
+    const v = Boolean((data as { notifications_opt_out?: boolean } | null)?.notifications_opt_out);
+    _optOutCache.set(email, { v, ts: Date.now() });
+    return v;
+  } catch {
+    return false;
+  }
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
 }
@@ -288,11 +321,20 @@ export async function sendRaw(
   html: string,
   text: string,
   attachments?: EmailAttachment[],
+  opts?: { critical?: boolean },
 ): Promise<SendResult> {
   // Skip si el destinatario está marcado como bounced/complained
   // por el webhook Resend — protege la reputación del dominio.
   if (await isRecipientBounced(to)) {
     return { ok: false, error: "recipient_email_bounced" };
+  }
+
+  // Skip si el usuario tiene notifications_opt_out (salvo críticos).
+  // Devolvemos ok para que los crons/flows lo den por enviado y no
+  // reintenten mañana — la supresión es deliberada, no un fallo.
+  if (!opts?.critical && (await isRecipientOptedOut(to))) {
+    console.log(`[email] suprimido por notifications_opt_out: to=${to} subject="${subject}"`);
+    return { ok: true, id: null };
   }
 
   const hasResend = !!getResend();
@@ -343,7 +385,7 @@ export async function sendWelcomeStudentEmail(
   attachments?: EmailAttachment[],
 ): Promise<SendResult> {
   const { subject, html, text } = renderWelcomeStudent(vars);
-  return sendRaw(to, subject, html, text, attachments);
+  return sendRaw(to, subject, html, text, attachments, { critical: true });
 }
 
 /**
@@ -393,7 +435,7 @@ export async function sendWelcomeStaffEmail(
   vars: WelcomeStaffVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderWelcomeStaff(vars);
-  return sendRaw(to, subject, html, text);
+  return sendRaw(to, subject, html, text, undefined, { critical: true });
 }
 
 /**
@@ -416,7 +458,7 @@ export async function sendTeacherWelcomeSetPasswordEmail(
   vars: TeacherWelcomeSetPasswordVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderTeacherWelcomeSetPassword(vars);
-  return sendRaw(to, subject, html, text);
+  return sendRaw(to, subject, html, text, undefined, { critical: true });
 }
 
 /** Acceso + primeros pasos para un profe que entra en la campaña /clase-profe. */
@@ -436,7 +478,7 @@ export async function sendPasswordResetEmail(
   vars: PasswordResetVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderPasswordReset(vars);
-  return sendRaw(to, subject, html, text);
+  return sendRaw(to, subject, html, text, undefined, { critical: true });
 }
 
 /**
@@ -666,7 +708,7 @@ export async function sendTeacherInvoicePaidEmail(
   const { subject, html, text } = renderTeacherInvoicePaid(vars);
   return sendRaw(to, subject, html, text, [
     { filename: pdf.filename, content: pdf.content, contentType: "application/pdf" },
-  ]);
+  ], { critical: true });
 }
 
 
@@ -681,7 +723,7 @@ export async function sendWelcomePlatformEmail(
   vars: WelcomePlatformVars,
 ): Promise<SendResult> {
   const { subject, html, text } = renderWelcomePlatform(vars);
-  return sendRaw(to, subject, html, text);
+  return sendRaw(to, subject, html, text, undefined, { critical: true });
 }
 
 /**
