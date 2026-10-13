@@ -49,12 +49,16 @@ export async function POST(req: Request) {
   const now = new Date();
   const nowIso = now.toISOString();
 
-  // 1-3. Config
+  // 1-3. Config + reset del circuit breaker del evolution-health monitor
+  // (Gelfis 2026-10-13: tras 2do ban preventivo, el monitor se auto-arma
+  // al detectar caída para dejar de sondear. Aquí lo re-armamos como OK).
   const updates = [
-    { key: "whatsapp_disabled",     value: "off"                 },
-    { key: "wa_warmup_day",         value: "1"                   },
-    { key: "wa_warmup_started_at",  value: nowIso                },
-    { key: "wa_burst_cap_per_tick", value: "5"                   },
+    { key: "whatsapp_disabled",         value: "off"                 },
+    { key: "wa_warmup_day",             value: "1"                   },
+    { key: "wa_warmup_started_at",      value: nowIso                },
+    { key: "wa_burst_cap_per_tick",     value: "5"                   },
+    { key: "evolution_circuit_broken",  value: "false"               },
+    { key: "evolution_health_fail_count", value: "0"                 },
   ];
   for (const u of updates) {
     await sb.from("system_config")

@@ -26,8 +26,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const HEALTH_FAIL_KEY = "evolution_health_fail_count";
+const CIRCUIT_KEY     = "evolution_circuit_broken";
 const FAIL_THRESHOLD  = 3;     // 3 ticks * 5 min = 15 min sin OK → pausa
-const PAUSE_HOURS     = 6;
+const PAUSE_HOURS     = 24;    // Gelfis 2026-10-13: subido de 6h → 24h tras 2do ban preventivo en 14d
 
 function authorised(req: Request): boolean {
   const expected = process.env.CRON_SECRET;
@@ -62,6 +63,26 @@ async function run(req: Request) {
     const raw = (killRow as { value?: unknown } | null)?.value;
     if (raw === true || raw === "true" || raw === "1") {
       return NextResponse.json({ ok: true, skipped: "monitor_disabled" });
+    }
+  }
+
+  // Circuit breaker: tras 2do ban preventivo en 14 días (29-09 v4 →
+  // 12-10 v5), hipótesis que el poll cada 5 min contribuye a que
+  // WhatsApp vea múltiples intentos de conexión y escale a ban. Una
+  // vez que detectamos caída, DEJAMOS DE SONDEAR hasta que Gelfis
+  // reconecte manualmente y resetee el flag desde `/admin/wa-reactivate`.
+  // Mientras el flag esté activo, el cron hace NO-OP (ni siquiera
+  // consulta Evolution ni modifica contadores).
+  {
+    const { data: cbRow } = await sb
+      .from("system_config").select("value").eq("key", CIRCUIT_KEY).maybeSingle();
+    const raw = (cbRow as { value?: unknown } | null)?.value;
+    if (raw === true || raw === "true" || raw === "1") {
+      return NextResponse.json({
+        ok: true,
+        skipped: "circuit_broken",
+        message: "Evolution caída detectada previamente. Monitor en silencio hasta reconexión manual via /api/admin/wa-reactivate.",
+      });
     }
   }
 
@@ -156,7 +177,7 @@ async function run(req: Request) {
     });
   }
 
-  // Umbral alcanzado → activar pausa global y notificar.
+  // Umbral alcanzado → activar pausa global, ARMAR CIRCUIT BREAKER y notificar.
   if (newCount >= FAIL_THRESHOLD) {
     await pauseSystem(
       PAUSE_HOURS,
@@ -165,27 +186,42 @@ async function run(req: Request) {
     // Reset contador después de activar pausa.
     await sb.from("system_config").upsert({ key: HEALTH_FAIL_KEY, value: "0" });
 
+    // Armar circuit breaker: a partir de este momento, el monitor
+    // deja de sondear Evolution hasta que Gelfis reconecte manualmente
+    // y llame /api/admin/wa-reactivate. Hipótesis Gelfis 2026-10-13:
+    // los sondeos cada 5 min durante la caída contribuyen al ban
+    // preventivo porque WhatsApp los interpreta como login attempts
+    // (fue el 2do ban en 14 días: v4 el 29-09, v5 el 12-10).
+    await sb.from("system_config").upsert({ key: CIRCUIT_KEY, value: "true" });
+
     // Notificación in-app — el bell del header parpadea + dropdown
-    // muestra la alerta con link a /admin/system. dedup: 6h (evitar
-    // re-disparar si el monitor sigue detectando el mismo problema).
+    // muestra la alerta con link a /admin/system. dedup: 6h.
     await createAdminNotification({
       type: "system_paused_auto",
       severity: "critical",
-      title: `🚨 Evolution caído — pausa automática ${PAUSE_HOURS}h activada`,
-      body: `El monitor detectó Evolution state='${state}' durante ${newCount} chequeos seguidos (~${newCount * 5} min). ${reason ?? ""}`.trim(),
+      title: `🚨 Evolution caído — pausa ${PAUSE_HOURS}h + circuit breaker ARMADO`,
+      body: `El monitor detectó Evolution state='${state}' durante ${newCount} chequeos seguidos (~${newCount * 5} min). ${reason ?? ""}
+
+Para evitar un tercer ban preventivo, el monitor ha PARADO los sondeos automáticos.
+Pasos para reactivar:
+  1. Verifica si WhatsApp te deja re-vincular (web.whatsapp.com → QR).
+  2. Si sí → reconecta en Evolution manager.
+  3. Llama POST /api/admin/wa-reactivate — levanta pausa, resetea circuit breaker,
+     warm-up día 1.`.trim(),
       action_url: "/admin/system",
-      metadata: { state, fail_count: newCount, reason, paused_for_hours: PAUSE_HOURS },
+      metadata: { state, fail_count: newCount, reason, paused_for_hours: PAUSE_HOURS, circuit_broken: true },
       dedupeHours: 6,
     });
-    console.error(`[health-monitor] PAUSA AUTOMATICA — Evolution state=${state} x${newCount}, paused ${PAUSE_HOURS}h`);
+    console.error(`[health-monitor] PAUSA AUTOMATICA + CIRCUIT BREAKER — Evolution state=${state} x${newCount}, paused ${PAUSE_HOURS}h`);
 
     return NextResponse.json({
       ok: true,
       state,
       fail_count: newCount,
-      action: "AUTO_PAUSED",
+      action: "AUTO_PAUSED_CIRCUIT_BROKEN",
       reason,
       paused_for_hours: PAUSE_HOURS,
+      circuit_broken: true,
     });
   }
 
