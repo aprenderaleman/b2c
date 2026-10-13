@@ -55,6 +55,8 @@ type Props = {
   showNotesTab?: boolean;
   /** user id del viewer logueado — para alinear burbujas del chat. */
   currentUserId?: string | null;
+  /** Botón "Documentos de Apuntes" (host de la clase o admin observador). */
+  canApuntes?: boolean;
 };
 
 /**
@@ -404,7 +406,7 @@ export function AulaClient(p: Props) {
                   }}
                 />
                 {p.audience !== "lead" && <SafeScreenShareButton />}
-                {p.isHost && <ApuntesDocButton classId={p.classId} />}
+                {p.canApuntes && <ApuntesDocButton classId={p.classId} />}
                 <VirtualBackgroundButton
                   canCamera={userChoices?.videoEnabled ?? false}
                   brandEnabled={p.brandBackground}

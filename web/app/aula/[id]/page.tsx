@@ -170,6 +170,11 @@ export default async function AulaPage({
   }
   const showNotesTab = access.role === "host" && !!viewerUserId && !isTrial && !isSesionPlan;
 
+  // Botón "Documentos de Apuntes": el host (profe de la clase) y los
+  // admins observadores (el endpoint /apuntes también les deja).
+  const canApuntes =
+    access.role === "host" || sessionRole === "admin" || sessionRole === "superadmin";
+
   return (
     <AulaClient
       classId={cls.id}
@@ -185,6 +190,7 @@ export default async function AulaPage({
       persistentChatId={persistentChatId}
       showNotesTab={showNotesTab}
       currentUserId={viewerUserId}
+      canApuntes={canApuntes}
     />
   );
 }
