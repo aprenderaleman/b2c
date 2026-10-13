@@ -6,8 +6,8 @@ import { usePathname } from "next/navigation";
 /** Hrefs del chat de plataforma por rol — los ítems que se pintan de
  *  amarillo cuando hay mensajes sin leer (Gelfis 2026-10-10). */
 export const CHAT_HREFS = new Set([
-  "/profesor/mensajes",
-  "/estudiante/mensajes",
+  "/profesor/chats",
+  "/estudiante/chats",
   "/admin/chats",
 ]);
 

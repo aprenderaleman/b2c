@@ -48,7 +48,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Clases de prueba", href: "/profesor/clasedeprueba",   icon: "userCheck",      priority: 2.5 },
     // "Mis leads" oculto (Gelfis 2026-10-07, simplificación del panel).
     { label: "Estudiantes",      href: "/profesor/estudiantes",     icon: "graduationCap",  priority: 3 },
-    { label: "Mensajes",         href: "/profesor/mensajes",        icon: "messageCircle",  priority: 3.5 },
+    { label: "Chats",            href: "/profesor/chats",        icon: "messageCircle",  priority: 3.5 },
     { label: "Ganancias",        href: "/profesor/ganancias",       icon: "wallet",         priority: 4 },
     // "Disponibilidad" oculta del menú (Gelfis 2026-10-07) — se edita
     // igual desde Calendario, que incluye el mismo editor + bloqueos.
@@ -63,7 +63,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
     { label: "Mis clases",   href: "/estudiante/clases",        icon: "calendarDays",   priority: 2 },
     { label: "Apuntes",     href: "/estudiante/apuntes",       icon: "fileText",       priority: 2.3 },
-    { label: "Mensajes",    href: "/estudiante/mensajes",      icon: "messageCircle",  priority: 2.5 },
+    { label: "Chats",       href: "/estudiante/chats",      icon: "messageCircle",  priority: 2.5 },
     // "Material" oculto del menú (Gelfis 2026-10-01) — ruta viva; el
     // contenido canónico son los Cursos (SCHULE).
     { label: "Grabaciones",  href: "/estudiante/grabaciones",   icon: "video",          priority: 3.5 },

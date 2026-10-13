@@ -30,8 +30,8 @@ type Props = {
   currentUserId:   string;
   currentUserName: string;
   /**
-   * true cuando se renderiza dentro de un panel de rol (/profesor/mensajes,
-   * /estudiante/mensajes): altura contenida + borde redondeado en vez de
+   * true cuando se renderiza dentro de un panel de rol (/profesor/chats,
+   * /estudiante/chats): altura contenida + borde redondeado en vez de
    * ocupar el viewport completo.
    */
   embedded?: boolean;

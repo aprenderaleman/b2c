@@ -632,7 +632,7 @@ function EventModal({
               {role === "teacher" && !ev.is_trial && (
                 <>
                   <a href={`/profesor/clases/${ev.id}`} className="btn-secondary text-xs">Ver detalle</a>
-                  <a href="/profesor/mensajes" className="btn-secondary text-xs">💬 Mensajes</a>
+                  <a href="/profesor/chats" className="btn-secondary text-xs">💬 Mensajes</a>
                 </>
               )}
               {canEdit && (
