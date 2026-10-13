@@ -413,13 +413,17 @@ function MessageBubble({ message, mine, showAuthor }: {
   }
   return (
     <div className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-[80%] ${mine ? "text-right" : ""}`}>
+      {/* La burbuja se alinea a la derecha, pero el TEXTO siempre va a la
+          izquierda: con text-right las líneas largas se apilaban contra el
+          borde y costaba leerlas (Gelfis 2026-10-13). Solo la hora queda a
+          la derecha. */}
+      <div className={`max-w-[80%] ${mine ? "flex flex-col items-end" : ""}`}>
         {showAuthor && !mine && (
           <div className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-0.5 px-3">
             {message.author_name ?? message.author_email}
           </div>
         )}
-        <div className={`inline-block px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words
+        <div className={`inline-block px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words text-left
           ${mine
             ? "bg-brand-500 text-white"
             : "bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-200 dark:border-slate-700"}`}
