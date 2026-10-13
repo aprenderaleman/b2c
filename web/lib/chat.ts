@@ -192,6 +192,10 @@ export async function allowedChatCounterparts(userId: string): Promise<Set<strin
     const t = first(g?.teachers as { user_id: string } | { user_id: string }[]);
     if (t?.user_id) allowed.add(t.user_id);
   }
+  // La academia (admins) siempre puede hablar con el alumno (Gelfis
+  // 2026-10-13: contactos en /admin/chats).
+  const { data: admins } = await sb.from("users").select("id").in("role", ["admin", "superadmin"]).eq("active", true);
+  for (const a of (admins ?? []) as Array<{ id: string }>) allowed.add(a.id);
   return allowed;
 }
 

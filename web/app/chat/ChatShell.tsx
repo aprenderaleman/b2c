@@ -1,7 +1,9 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 
 type ChatListItem = {
   id:                   string;
@@ -42,24 +44,37 @@ type Props = {
  * once we expose the anon key to the browser — for now polling is simpler
  * and avoids a bigger security review).
  */
+/** Lee ?chat=<id> de la URL y lo selecciona (abrir conversación desde contactos). */
+function UrlChatSelector({ onSelect }: { onSelect: (id: string) => void }) {
+  const sp = useSearchParams();
+  const wanted = sp?.get("chat") ?? null;
+  useEffect(() => { if (wanted) onSelect(wanted); }, [wanted, onSelect]);
+  return null;
+}
+
 export function ChatShell({ currentUserId, currentUserName: _currentUserName, embedded = false }: Props) {
   const [chats,    setChats]    = useState<ChatListItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading,  setLoading]  = useState(true);
 
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/chat");
+      const data = await res.json();
+      setChats(data.chats ?? []);
+    } catch { /* offline */ }
+    finally { setLoading(false); }
+  }, []);
+
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch("/api/chat");
-        const data = await res.json();
-        setChats(data.chats ?? []);
-      } catch { /* offline */ }
-      finally { setLoading(false); }
-    };
     load();
     const t = setInterval(load, 15_000);
     return () => clearInterval(t);
-  }, []);
+  }, [load]);
+
+  // Selección desde la URL (?chat=): recarga la lista para que el chat
+  // recién creado aparezca aunque el polling aún no haya pasado.
+  const selectFromUrl = useCallback((id: string) => { setActiveId(id); void load(); }, [load]);
 
   const active = chats.find(c => c.id === activeId) ?? null;
 
@@ -72,6 +87,7 @@ export function ChatShell({ currentUserId, currentUserName: _currentUserName, em
       ${embedded
         ? "h-[calc(100vh-10rem)] min-h-[420px] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
         : "h-[calc(100vh-3.5rem)]"}`}>
+      <Suspense fallback={null}><UrlChatSelector onSelect={selectFromUrl} /></Suspense>
       {/* Conversations list */}
       <aside className={`border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-y-auto min-h-0
         ${activeId ? "hidden md:block" : ""}`}>

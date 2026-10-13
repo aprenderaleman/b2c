@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
 import { ChatShell } from "@/app/chat/ChatShell";
+import { AdminChatContacts } from "@/components/admin/AdminChatContacts";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Chats · Admin" };
@@ -27,6 +28,8 @@ export default async function AdminChatsPage() {
           Tus conversaciones directas en la plataforma (profes y estudiantes).
         </p>
       </header>
+
+      <AdminChatContacts />
 
       <ChatShell
         currentUserId={session.user.id}
