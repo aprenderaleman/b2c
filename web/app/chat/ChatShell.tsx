@@ -302,6 +302,47 @@ function Composer({ chatId, onSent }: { chatId: string; onSent: () => void }) {
     url: string; name: string; size: number; content_type: string;
   }>>([]);
 
+  // ── Cuadro de texto que crece con el contenido (hasta ~10 líneas) ──
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 240) + "px";
+  }, [text]);
+
+  // ── Corrector gramatical es/de automático (LanguageTool vía /api/chat/grammar) ──
+  type GMatch = { offset: number; length: number; message: string; short: string; replacement: string | null; rule: string; category: string };
+  const [gram, setGram] = useState<{ language: string | null; matches: GMatch[]; checkedText: string } | null>(null);
+  const [checking, setChecking] = useState(false);
+  useEffect(() => {
+    const t = text.trim();
+    if (t.length < 3) { setGram(null); return; }
+    const h = setTimeout(async () => {
+      setChecking(true);
+      try {
+        const res = await fetch("/api/chat/grammar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+        const data = await res.json() as { language: string | null; matches: GMatch[] };
+        setGram({ language: data.language, matches: data.matches ?? [], checkedText: text });
+      } catch { /* sin corrector: no bloquea el envío */ }
+      finally { setChecking(false); }
+    }, 1200);
+    return () => clearTimeout(h);
+  }, [text]);
+
+  const applyMatches = (which: GMatch[]) => {
+    if (!gram || gram.checkedText !== text) return;
+    // Aplicar de atrás hacia delante para que los offsets sigan válidos.
+    let out = text;
+    for (const m of [...which].filter(m => m.replacement != null).sort((a, b) => b.offset - a.offset)) {
+      out = out.slice(0, m.offset) + m.replacement + out.slice(m.offset + m.length);
+    }
+    setText(out);
+    setGram(null);
+  };
+  const fixable = (gram?.matches ?? []).filter(m => m.replacement != null);
+  const gramVisible = gram && gram.checkedText === text && gram.matches.length > 0;
+
   const uploadFiles = async (files: FileList) => {
     setAttaching(true);
     try {
@@ -374,6 +415,7 @@ function Composer({ chatId, onSent }: { chatId: string; onSent: () => void }) {
           />
         </label>
         <textarea
+          ref={taRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -382,9 +424,11 @@ function Composer({ chatId, onSent }: { chatId: string; onSent: () => void }) {
               void send();
             }
           }}
-          placeholder={attaching ? "Subiendo…" : "Escribe un mensaje…"}
+          placeholder={attaching ? "Subiendo…" : "Escribe un mensaje… (Shift+Enter: salto de línea)"}
           rows={1}
-          className="flex-1 resize-none rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 max-h-32"
+          spellCheck
+          lang={gram?.language?.startsWith("de") ? "de" : "es"}
+          className="flex-1 resize-none rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm leading-relaxed text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 max-h-60 overflow-y-auto"
         />
         <button
           type="button"
@@ -395,6 +439,39 @@ function Composer({ chatId, onSent }: { chatId: string; onSent: () => void }) {
           {sending ? "…" : "Enviar"}
         </button>
       </div>
+      {(gramVisible || checking) && (
+        <div className="mt-2 text-xs">
+          {checking && !gramVisible && <span className="text-slate-400">Revisando ortografía y gramática…</span>}
+          {gramVisible && (
+            <div className="rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-medium text-amber-800 dark:text-amber-300">
+                  {gram!.matches.length} sugerencia{gram!.matches.length === 1 ? "" : "s"} ({gram!.language?.startsWith("de") ? "alemán" : "español"})
+                </span>
+                {fixable.length > 0 && (
+                  <button type="button" onClick={() => applyMatches(fixable)} className="rounded-md bg-amber-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-amber-700">
+                    Corregir todo ({fixable.length})
+                  </button>
+                )}
+              </div>
+              <ul className="mt-1 space-y-0.5 max-h-24 overflow-y-auto">
+                {gram!.matches.slice(0, 8).map((m, i) => (
+                  <li key={i} className="flex items-center justify-between gap-2 text-amber-900/90 dark:text-amber-200/90">
+                    <span className="truncate">
+                      <span className="line-through opacity-70">{text.slice(m.offset, m.offset + m.length)}</span>
+                      {m.replacement != null && <> → <strong>{m.replacement}</strong></>}
+                      <span className="opacity-70"> · {m.short || m.message}</span>
+                    </span>
+                    {m.replacement != null && (
+                      <button type="button" onClick={() => applyMatches([m])} className="shrink-0 text-[11px] underline hover:no-underline">Aplicar</button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
