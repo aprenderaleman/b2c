@@ -343,21 +343,52 @@ function Composer({ chatId, onSent }: { chatId: string; onSent: () => void }) {
   const fixable = (gram?.matches ?? []).filter(m => m.replacement != null);
   const gramVisible = gram && gram.checkedText === text && gram.matches.length > 0;
 
+  const [uploadInfo, setUploadInfo] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // Subida directa del navegador a Storage (sin pasar por Vercel, que
+  // corta a 4,5 MB): URL firmada → PUT con progreso → registro.
+  const putWithProgress = (url: string, file: File, onProgress: (pct: number) => void) =>
+    new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", url);
+      xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
+      xhr.setRequestHeader("x-upsert", "false");
+      xhr.upload.onprogress = (ev) => { if (ev.lengthComputable) onProgress(Math.round((ev.loaded / ev.total) * 100)); };
+      xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`storage ${xhr.status}: ${xhr.responseText.slice(0, 120)}`));
+      xhr.onerror = () => reject(new Error("red: no se pudo conectar con el almacenamiento"));
+      xhr.send(file);
+    });
+
   const uploadFiles = async (files: FileList) => {
     setAttaching(true);
+    setUploadError(null);
     try {
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
-        const form = new FormData();
-        form.append("file", f);
-        const res = await fetch("/api/chat/upload", { method: "POST", body: form });
-        if (!res.ok) continue;
-        const data = await res.json();
-        setPending(prev => [...prev, {
-          url: data.url, name: data.name, size: data.size, content_type: data.content_type,
-        }]);
+        const label = files.length > 1 ? `${f.name} (${i + 1}/${files.length})` : f.name;
+        setUploadInfo(`Preparando ${label}…`);
+        const start = await fetch("/api/chat/upload-url", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: f.name, type: f.type || "application/octet-stream", size: f.size }),
+        });
+        const sd = await start.json().catch(() => ({}));
+        if (!start.ok || !sd.signedUrl) { setUploadError(sd.message ?? `No se pudo preparar la subida de ${f.name}.`); continue; }
+        try {
+          await putWithProgress(sd.signedUrl, f, (pct) => setUploadInfo(`Subiendo ${label}… ${pct}%`));
+        } catch (e) {
+          setUploadError(`Error subiendo ${f.name}: ${e instanceof Error ? e.message : "desconocido"}`);
+          continue;
+        }
+        const done = await fetch("/api/chat/upload-url", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ done: sd.path, name: sd.name, type: f.type || "application/octet-stream", size: f.size }),
+        });
+        const dd = await done.json().catch(() => ({}));
+        if (!done.ok || !dd.url) { setUploadError(`Subido pero no se pudo registrar ${f.name}.`); continue; }
+        setPending(prev => [...prev, { url: dd.url, name: dd.name, size: dd.size, content_type: dd.content_type }]);
       }
-    } finally { setAttaching(false); }
+    } finally { setAttaching(false); setUploadInfo(null); }
   };
 
   const send = async () => {
@@ -424,7 +455,7 @@ function Composer({ chatId, onSent }: { chatId: string; onSent: () => void }) {
               void send();
             }
           }}
-          placeholder={attaching ? "Subiendo…" : "Escribe un mensaje… (Shift+Enter: salto de línea)"}
+          placeholder={attaching ? (uploadInfo ?? "Subiendo…") : "Escribe un mensaje… (Shift+Enter: salto de línea)"}
           rows={1}
           spellCheck
           lang={gram?.language?.startsWith("de") ? "de" : "es"}
@@ -439,6 +470,12 @@ function Composer({ chatId, onSent }: { chatId: string; onSent: () => void }) {
           {sending ? "…" : "Enviar"}
         </button>
       </div>
+      {uploadError && (
+        <div className="mt-2 flex items-start justify-between gap-2 rounded-xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-300">
+          <span>{uploadError}</span>
+          <button type="button" onClick={() => setUploadError(null)} className="shrink-0 underline">cerrar</button>
+        </div>
+      )}
       {(gramVisible || checking) && (
         <div className="mt-2 text-xs">
           {checking && !gramVisible && <span className="text-slate-400">Revisando ortografía y gramática…</span>}
@@ -508,6 +545,11 @@ function MessageBubble({ message, mine, showAuthor }: {
           <Linkify text={message.content} mine={mine} />
           {message.attachments.length > 0 && (
             <div className={`mt-2 space-y-1 text-xs ${mine ? "text-white/90" : "text-slate-600 dark:text-slate-300"}`}>
+              {message.attachments.filter(a => /^(video|image)\//.test(a.content_type ?? "")).map((a, i) => (
+                (a.content_type ?? "").startsWith("video/")
+                  ? <video key={`m${i}`} src={a.url} controls preload="metadata" className="mt-1 max-h-72 w-full max-w-sm rounded-lg bg-black" />
+                  : <a key={`m${i}`} href={a.url} target="_blank" rel="noopener noreferrer"><img src={a.url} alt={a.name} className="mt-1 max-h-72 max-w-sm rounded-lg object-contain" /></a>
+              ))}
               {message.attachments.map((a, i) => (
                 <a
                   key={i}

@@ -19,7 +19,7 @@ export async function POST(req: Request) {
 
   const file = form.get("file") as File | null;
   if (!file) return NextResponse.json({ error: "no_file" }, { status: 400 });
-  if (file.size > 10 * 1024 * 1024) {
+  if (file.size > 50 * 1024 * 1024) {
     return NextResponse.json({ error: "file_too_large" }, { status: 413 });
   }
 
