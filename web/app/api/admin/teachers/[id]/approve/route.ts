@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTeacherWelcomeSetPasswordEmail } from "@/lib/email/send";
+import { TEACHER_ONBOARDING_DOC_URL } from "@/lib/teacher-onboarding";
 
 /**
  * POST /api/admin/teachers/[id]/approve
@@ -129,6 +130,7 @@ export async function POST(
     setPasswordUrl,
     validDays:      SETPW_TOKEN_DAYS,
     language:       u.language_preference ?? "es",
+    onboardingDocUrl: TEACHER_ONBOARDING_DOC_URL,
   });
 
   return NextResponse.json({

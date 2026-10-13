@@ -8,6 +8,8 @@ export type TeacherWelcomeSetPasswordVars = {
   /** Días de validez del enlace, para el copy. */
   validDays:   number;
   language:    "es" | "de";
+  /** Guía de primeros pasos en la academia (Google Doc). */
+  onboardingDocUrl: string;
 };
 
 /**
@@ -34,6 +36,12 @@ function renderES(v: TeacherWelcomeSetPasswordVars): RenderedEmail {
     ])}
     ${p(`<em style="color:#64748b;">El enlace es personal y válido ${v.validDays} días. Si caduca, usa "¿Olvidaste tu contraseña?" en la pantalla de login.</em>`)}
     ${p(`Dentro encontrarás tu agenda, tus clases y tu panel de ganancias con tus condiciones ya configuradas.`)}
+    ${h2(`Tus primeros pasos en la academia`)}
+    ${p(`Antes de tu primera clase, lee la guía de bienvenida: cómo funciona la plataforma, cómo damos las clases de prueba, cómo se agendan y cierran las clases, el chat con los alumnos y cómo se calcula tu pago.`)}
+    <div style="text-align:center;margin:18px 0 20px 0;">
+      ${button(v.onboardingDocUrl, "Abrir la guía de primeros pasos →")}
+    </div>
+    ${p(`<em style="color:#64748b;">Guárdala: la iremos actualizando y siempre estará en este mismo enlace.</em>`)}
     ${p(`<em style="color:#64748b;">El equipo de Aprender-Aleman.de</em>`)}
   `;
   const footerNote = "Recibes este correo porque tu cuenta de profesor en Aprender-Aleman.de fue aprobada.";
@@ -49,6 +57,10 @@ function renderES(v: TeacherWelcomeSetPasswordVars): RenderedEmail {
     `Tu usuario: ${v.email}`,
     ``,
     `Si el enlace caduca, usa "¿Olvidaste tu contraseña?" en el login.`,
+    ``,
+    `TUS PRIMEROS PASOS EN LA ACADEMIA`,
+    `Antes de tu primera clase, lee la guía de bienvenida (plataforma, clases de prueba, agenda, chat y pagos):`,
+    v.onboardingDocUrl,
     ``,
     `El equipo de Aprender-Aleman.de`,
   ].join("\n");
@@ -70,6 +82,11 @@ function renderDE(v: TeacherWelcomeSetPasswordVars): RenderedEmail {
       ["Dein Benutzer", escapeHtml(v.email)],
     ])}
     ${p(`<em style="color:#64748b;">Der Link ist persönlich und ${v.validDays} Tage gültig. Falls er abläuft, nutze "Passwort vergessen?" auf der Login-Seite.</em>`)}
+    ${h2(`Deine ersten Schritte in der Akademie`)}
+    ${p(`Lies vor deiner ersten Stunde den Willkommensleitfaden: Plattform, Probestunden, Terminplanung, Chat mit den Lernenden und Abrechnung.`)}
+    <div style="text-align:center;margin:18px 0 20px 0;">
+      ${button(v.onboardingDocUrl, "Leitfaden öffnen →")}
+    </div>
     ${p(`<em style="color:#64748b;">Das Team von Aprender-Aleman.de</em>`)}
   `;
   const footerNote = "Du erhältst diese E-Mail, weil dein Lehrerkonto bei Aprender-Aleman.de bestätigt wurde.";
@@ -83,6 +100,8 @@ function renderDE(v: TeacherWelcomeSetPasswordVars): RenderedEmail {
     v.setPasswordUrl,
     ``,
     `Dein Benutzer: ${v.email}`,
+    ``,
+    `DEINE ERSTEN SCHRITTE: ${v.onboardingDocUrl}`,
     ``,
     `Das Team von Aprender-Aleman.de`,
   ].join("\n");
