@@ -178,6 +178,17 @@ def _record(kind: NotificationKind, lead_id: str | None, body: str, success: boo
         )
 
 
+#: Tipos de notificación desactivados por decisión de ruido
+#: (Gelfis 2026-10-14). Para reactivar, quitar el kind de este set.
+_DISABLED_KINDS: frozenset[str] = frozenset({
+    "trial_30min",              # W4 — recordatorios ya cubiertos por crons web
+    "reviewer_rejected_twice",  # W5 — raro y recuperable
+    "daily_summary",            # W7 — dashboard /admin ya muestra el resumen
+    "unmatched_lid",            # W9 — ruido operativo
+    "trial_attended_pending",   # W11 — ya tenemos cron trial-auto-absent
+})
+
+
 def _send(
     kind: NotificationKind,
     body: str,
@@ -185,6 +196,11 @@ def _send(
     lead_id: str | None = None,
 ) -> bool:
     _ensure_table()
+
+    # Kind desactivado por configuración de ruido (Gelfis 2026-10-14).
+    if str(kind) in _DISABLED_KINDS:
+        log.info("Notification kind %s disabled by config, skipping", kind)
+        return False
 
     # Killswitch global desde system_config — flippable sin redeploy.
     if _killswitch_active():

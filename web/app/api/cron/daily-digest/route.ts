@@ -37,7 +37,12 @@ async function runDigest(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const recipient = process.env.DIGEST_RECIPIENT ?? process.env.ADMIN_EMAIL;
+  // Gelfis 2026-10-14: daily digest desactivado por decisión de ruido.
+  // El dashboard /admin ya muestra las mismas métricas en tiempo real.
+  // Para reactivar: borrar esta guard.
+  return NextResponse.json({ ok: true, skipped: "disabled_by_config" });
+
+  const recipient = (process.env.DIGEST_RECIPIENT ?? process.env.ADMIN_EMAIL ?? "") as string;
   if (!recipient) {
     return NextResponse.json({ error: "no_recipient_configured" }, { status: 503 });
   }
