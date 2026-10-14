@@ -196,8 +196,12 @@ export async function allowedChatCounterparts(userId: string): Promise<Set<strin
     // sus grupos activos, con usuario activo y suscripción activa o en
     // pausa. Así un profe no ve chats ni grupos de alumnos reasignados,
     // dados de baja o de pruebas.
+    // Solo usuarios con rol "teacher": los admins también tienen perfil
+    // de profesor (dan clases de prueba) y deben ver todo.
+    const { data: me } = await sb.from("users").select("role").eq("id", userId).maybeSingle();
+    if ((me as { role?: string } | null)?.role !== "teacher") return null;   // admins/closers: sin restricción
     const { data: teacher } = await sb.from("teachers").select("id").eq("user_id", userId).maybeSingle();
-    if (!teacher) return null;                                   // admins/closers: sin restricción
+    if (!teacher) return null;
     const { data } = await sb
       .from("student_group_members")
       .select("student_groups!inner(teacher_id, active), students!inner(subscription_status, users!inner(id, active))")
