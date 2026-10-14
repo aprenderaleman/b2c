@@ -58,6 +58,7 @@ export function CreateClassModal({ open, onClose, mode = "admin", initialDate, i
   // own students; teacherId is forced server-side so the picker is hidden.
   useEffect(() => {
     if (!open) return;
+    setTitleTouched(false);
     // Prellenar fecha/hora si venimos de un click en el grid y el form
     // está virgen (no pisamos lo que el profe ya haya tecleado).
     if (initialDate) setDateStr(cur => cur || initialDate);
@@ -74,9 +75,12 @@ export function CreateClassModal({ open, onClose, mode = "admin", initialDate, i
       .finally(() => setLoadingOpts(false));
   }, [open, mode]);
 
-  // Auto-default title as the form fills.
+  // Auto-default title as the form fills. Se recalcula al cambiar de
+  // alumno salvo que el usuario haya escrito un título propio (2026-10-14:
+  // clases de María quedaron tituladas "Javier …" por no actualizarse).
+  const [titleTouched, setTitleTouched] = useState(false);
   useEffect(() => {
-    if (title) return;                                // user customised it
+    if (titleTouched) return;                         // user customised it
     if (selectedStudents.length === 0) return;
     if (mode === "admin" && !teacherId) return;       // admin needs a teacher first
     const t = mode === "admin" ? teachers.find(x => x.id === teacherId) : null;
@@ -283,7 +287,7 @@ export function CreateClassModal({ open, onClose, mode = "admin", initialDate, i
 
           {/* Title + topic */}
           <Field label="Título">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} className="input-text"
+            <input value={title} onChange={(e) => { setTitleTouched(true); setTitle(e.target.value); }} className="input-text"
               placeholder="p. ej. 'Juan — Clase Individual B1'" maxLength={200} />
           </Field>
           <Field label="Tema (opcional)">

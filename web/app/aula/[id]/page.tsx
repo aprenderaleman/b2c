@@ -249,17 +249,29 @@ async function findLiveClassRedirect(
   const role = user.role ?? "student";
 
   if (role === "teacher" || role === "admin" || role === "superadmin") {
-    // Teacher/admin: find any live class by this teacher that isn't the
-    // current one. If exactly one, redirect there.
+    // Profe/admin: solo redirigimos a una clase en vivo de este profe que
+    // tenga EXACTAMENTE los mismos alumnos que la clase que intenta abrir.
+    // Antes bastaba "cualquier clase live del profe" y una sala fantasma
+    // (clase instantánea vacía que quedó abierta toda la noche) mandaba a
+    // Sabine a esa sala al intentar entrar con Javier o Jeaneth (2026-10-14).
+    const { data: curParts } = await sb
+      .from("class_participants").select("student_id").eq("class_id", currentClassId);
+    const want = ((curParts ?? []) as { student_id: string }[]).map(p => p.student_id).sort();
+    if (want.length === 0) return null;
+
     const { data } = await sb
       .from("classes")
-      .select("id")
+      .select("id, class_participants(student_id)")
       .eq("teacher_id", teacherId)
       .eq("status", "live")
       .neq("id", currentClassId)
-      .limit(2);
-    const rows = (data ?? []) as { id: string }[];
-    return rows.length === 1 ? rows[0].id : null;
+      .limit(10);
+    type Row = { id: string; class_participants: Array<{ student_id: string }> };
+    const matches = ((data ?? []) as Row[]).filter(r => {
+      const have = (r.class_participants ?? []).map(p => p.student_id).sort();
+      return have.length === want.length && have.every((v, i) => v === want[i]);
+    });
+    return matches.length === 1 ? matches[0].id : null;
   }
 
   if (role === "student") {

@@ -47,11 +47,13 @@ export async function GET() {
       group:student_groups!inner(teacher_id, active),
       students!inner(
         id, current_level, subscription_status,
-        users!inner(email, full_name)
+        users!inner(email, full_name, active)
       )
     `)
     .eq("group.teacher_id", me.id)
-    .eq("group.active", true);
+    .eq("group.active", true)
+    .eq("students.users.active", true)
+    .in("students.subscription_status", ["active", "paused"]);
 
   type StudentRow = {
     id: string; current_level: string; subscription_status: string;

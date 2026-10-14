@@ -153,11 +153,11 @@ export async function POST(req: Request) {
       .gte("ended_at", recentCutoff)
       .order("ended_at", { ascending: false })
       .limit(1);
-    type RecentRow = ExistingRow & { class_participants: Array<{ attended: boolean | null }> };
-    const r = (recent ?? [])[0] as RecentRow | undefined;
-    if (r && r.class_participants.every(p => p.attended === null)) {
-      reuse = { id: r.id, livekit_room_id: r.livekit_room_id };
-    }
+    // 2026-10-14 (caso Sabine/María): reabrimos aunque "Terminar" ya haya
+    // marcado asistencia — antes eso creaba una segunda sala y el trigger
+    // de solapamiento impedía añadir al alumno (sala vacía).
+    const r = (recent ?? [])[0] as ExistingRow | undefined;
+    if (r) reuse = { id: r.id, livekit_room_id: r.livekit_room_id };
   }
 
   let classId: string;
@@ -202,12 +202,26 @@ export async function POST(req: Request) {
 
     // Attach the student (only for new classes — existing ones already
     // have the participant row from when they were scheduled).
-    await sb.from("class_participants").insert({
+    const { error: cpErr } = await sb.from("class_participants").insert({
       class_id:           classId,
       student_id:         studentId,
       attended:           null,
       counts_as_session:  true,
     });
+    if (cpErr) {
+      // Sin alumno la sala es inútil (el alumno no puede entrar y el profe
+      // se queda solo). Borramos la clase y avisamos — nunca dejar una
+      // clase "live" vacía (2026-10-13: redirigía a Sabine a esa sala
+      // durante todo el día siguiente).
+      await sb.from("classes").delete().eq("id", classId);
+      const overlap = /solapada/i.test(cpErr.message);
+      return NextResponse.json({
+        error:   overlap ? "student_overlap" : "participant_failed",
+        message: overlap
+          ? "El alumno ya tiene una clase contigo a esta hora (±30 min). Entra en esa clase desde tu lista de clases en vez de crear una nueva."
+          : `No se pudo añadir al alumno a la clase: ${cpErr.message}`,
+      }, { status: 409 });
+    }
   }
 
   // In-app notification — Gelfis explicitly did NOT want WhatsApp here.

@@ -170,30 +170,50 @@ export async function wireChatsForClass(args: {
 
 /**
  * Con quién puede hablar un usuario. Estudiantes: SOLO los profesores de
- * sus grupos activos (Gelfis 2026-09-21). Cualquier otro rol → null (sin
- * restricción). Así un alumno no ve ni escribe a un profe antiguo tras un
+ * sus grupos activos (Gelfis 2026-09-21). Profesores: SOLO sus alumnos
+ * activos (Gelfis 2026-10-14). Admins/closers → null (sin restricción). Así un alumno no ve ni escribe a un profe antiguo tras un
  * cambio de profesor, ni a nadie que no le dé clase.
  */
 export async function allowedChatCounterparts(userId: string): Promise<Set<string> | null> {
   const sb = supabaseAdmin();
-  const { data: student } = await sb.from("students").select("id").eq("user_id", userId).maybeSingle();
-  if (!student) return null;
-
-  const { data } = await sb
-    .from("student_group_members")
-    .select("student_groups!inner(active, teachers!inner(user_id))")
-    .eq("student_id", (student as { id: string }).id)
-    .eq("student_groups.active", true);
-
   const first = <T,>(v: T | T[] | null | undefined): T | undefined => (Array.isArray(v) ? v[0] : v ?? undefined);
   const allowed = new Set<string>();
-  for (const r of (data ?? []) as Array<{ student_groups: unknown }>) {
-    const g = first(r.student_groups as { teachers: unknown } | { teachers: unknown }[]);
-    const t = first(g?.teachers as { user_id: string } | { user_id: string }[]);
-    if (t?.user_id) allowed.add(t.user_id);
+
+  const { data: student } = await sb.from("students").select("id").eq("user_id", userId).maybeSingle();
+  if (student) {
+    const { data } = await sb
+      .from("student_group_members")
+      .select("student_groups!inner(active, teachers!inner(user_id))")
+      .eq("student_id", (student as { id: string }).id)
+      .eq("student_groups.active", true);
+    for (const r of (data ?? []) as Array<{ student_groups: unknown }>) {
+      const g = first(r.student_groups as { teachers: unknown } | { teachers: unknown }[]);
+      const t = first(g?.teachers as { user_id: string } | { user_id: string }[]);
+      if (t?.user_id) allowed.add(t.user_id);
+    }
+  } else {
+    // Profesores (Gelfis 2026-10-14): SOLO sus alumnos activos — los de
+    // sus grupos activos, con usuario activo y suscripción activa o en
+    // pausa. Así un profe no ve chats ni grupos de alumnos reasignados,
+    // dados de baja o de pruebas.
+    const { data: teacher } = await sb.from("teachers").select("id").eq("user_id", userId).maybeSingle();
+    if (!teacher) return null;                                   // admins/closers: sin restricción
+    const { data } = await sb
+      .from("student_group_members")
+      .select("student_groups!inner(teacher_id, active), students!inner(subscription_status, users!inner(id, active))")
+      .eq("student_groups.teacher_id", (teacher as { id: string }).id)
+      .eq("student_groups.active", true)
+      .eq("students.users.active", true)
+      .in("students.subscription_status", ["active", "paused"]);
+    for (const r of (data ?? []) as Array<{ students: unknown }>) {
+      const st = first(r.students as { users: unknown } | { users: unknown }[]);
+      const u  = first(st?.users as { id: string } | { id: string }[]);
+      if (u?.id) allowed.add(u.id);
+    }
   }
-  // La academia (admins) siempre puede hablar con el alumno (Gelfis
-  // 2026-10-13: contactos en /admin/chats).
+
+  // La academia (admins) siempre puede hablar con alumnos y profes
+  // (Gelfis 2026-10-13: contactos en /admin/chats).
   const { data: admins } = await sb.from("users").select("id").in("role", ["admin", "superadmin"]).eq("active", true);
   for (const a of (admins ?? []) as Array<{ id: string }>) allowed.add(a.id);
   return allowed;
