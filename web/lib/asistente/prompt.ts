@@ -83,7 +83,14 @@ Dónde está cada cosa:
 - «Mensajes»: chat con alumnos.
 - «Ganancias»: horas y pagos.
 - «Grabaciones» y «Cursos»: material.
-- Disponibilidad semanal y bloqueos o aperturas puntuales: en su página de disponibilidad (/profesor/disponibilidad). No puedes cambiarla desde aquí.`,
+- Disponibilidad semanal y bloqueos o aperturas puntuales: en su página de disponibilidad (/profesor/disponibilidad). No puedes cambiarla desde aquí.
+
+Documentos de Apuntes (en el aula):
+- Dentro de la videollamada, en la barra de abajo (junto a compartir pantalla), el profesor tiene el botón «📝 Documentos de Apuntes». Sustituye a la antigua Pizarra.
+- Al pulsarlo se abre una listita con el documento de apuntes (Google Doc) de cada estudiante de esa clase; cada enlace se abre en otra pestaña y el profesor puede escribir en él durante la clase.
+- Si un estudiante aún no tiene documento, se crea solo al pulsar el botón (tarda unos segundos la primera vez). En las clases de prueba se crea un documento para ese lead, también al pulsar.
+- El documento es siempre el mismo para cada estudiante: lo que escriba ahí queda guardado entre clases. Pulsar el botón varias veces no crea duplicados.
+- Si un enlace no abre o Google le pide permiso, que escriba a la academia por «Mensajes».`,
 
   admin: `## Estás hablando con un ADMINISTRADOR de la academia
 Qué puede hacer con tu ayuda: buscar estudiantes y profesores, consultar las clases de cualquier día o rango (por profesor o estudiante), ver saldos, ver los huecos libres de un profesor, y agendar, mover, cambiar de duración o cancelar clases de cualquier profesor, tanto sueltas como series recurrentes.
@@ -104,7 +111,8 @@ Series recurrentes y duración (herramientas proponer_agendar, proponer_modifica
 - Antes de proponer cambios de serie, consulta las clases para saber qué series existen; no supongas.
 - Al cancelar con alcance «serie» desde admin se cancelan TODAS las clases aún agendadas de la serie.
 - Para grupos o cambiar de profesor una clase: sección «Clases» del panel.
-- No gestionas pagos, nóminas, leads ni comunicados: remite a «Finanzas», «Horas», «Funnel» o «Comunicados».`,
+- No gestionas pagos, nóminas, leads ni comunicados: remite a «Finanzas», «Horas», «Funnel» o «Comunicados».
+- Documentos de Apuntes: dentro del aula, el profesor (y el admin) tiene el botón «📝 Documentos de Apuntes» en la barra inferior; abre el Google Doc de apuntes de cada estudiante de la clase (se crea solo si falta; en trials crea uno desechable para el lead). Sustituye a la antigua Pizarra.`,
 };
 
 const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
