@@ -171,26 +171,23 @@ async function loadClase(id: string): Promise<ClaseLite | null> {
   };
 }
 
-/** Estudiantes del profe: con clase suya o en un grupo activo suyo (misma regla que POST /api/teacher/classes). */
+/** Estudiantes ACTIVOS del profe: en un grupo activo suyo, con usuario activo y
+ *  suscripción activa/pausa (Gelfis 2026-10-14: el profe solo ve a sus alumnos
+ *  actuales en todas partes; antes bastaba con haber tenido una clase). */
 async function teacherStudents(teacherId: string): Promise<Array<{ id: string; name: string }>> {
   const sb = supabaseAdmin();
-  const [mine, groups] = await Promise.all([
-    sb.from("classes").select("class_participants!inner(student_id)").eq("teacher_id", teacherId),
-    sb.from("student_group_members")
-      .select("student_id, group:student_groups!inner(teacher_id, active)")
-      .eq("group.teacher_id", teacherId)
-      .eq("group.active", true),
-  ]);
+  const { data: groups } = await sb.from("student_group_members")
+    .select("student_id, group:student_groups!inner(teacher_id, active)")
+    .eq("group.teacher_id", teacherId)
+    .eq("group.active", true);
   const ids = new Set<string>();
-  for (const r of (mine.data ?? []) as Array<{ class_participants: Array<{ student_id: string }> }>) {
-    for (const cp of r.class_participants) ids.add(cp.student_id);
-  }
-  for (const r of (groups.data ?? []) as Array<{ student_id: string }>) ids.add(r.student_id);
+  for (const r of (groups ?? []) as Array<{ student_id: string }>) ids.add(r.student_id);
   if (ids.size === 0) return [];
   const { data } = await sb
     .from("students")
     .select("id, users!inner(full_name, email, active)")
     .in("id", [...ids])
+    .in("subscription_status", ["active", "paused"])
     .eq("users.active", true);
   return ((data ?? []) as Array<{ id: string; users: unknown }>).map(s => {
     const u = (Array.isArray(s.users) ? s.users[0] : s.users) as { full_name: string | null; email: string } | undefined;

@@ -39,13 +39,15 @@ export default async function TeacherGroupsPage() {
       document_url, meet_link,
       student_group_members(
         student:students!inner(
-          id, current_level,
-          users!inner(full_name, email)
+          id, current_level, subscription_status,
+          users!inner(full_name, email, active)
         )
       )
     `)
     .eq("teacher_id", me.id)
     .eq("active", true)
+    .eq("student_group_members.student.users.active", true)
+    .in("student_group_members.student.subscription_status", ["active", "paused"])
     .order("name", { ascending: true });
 
   type Row = {
