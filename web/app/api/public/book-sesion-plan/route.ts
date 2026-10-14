@@ -495,15 +495,9 @@ export async function POST(req: Request) {
         },
       });
 
-      await createAdminNotification({
-        type: "sesion_plan_booked",
-        severity: "info",
-        title: rescheduled ? "Sesión de Plan-Alemán reagendada" : "Nueva Sesión de Plan-Alemán",
-        body: `${b.name} agendó Sesión de Plan-Alemán para ${startDate} (Berlín).`,
-        lead_id: leadId,
-        action_url: `/admin/leads/${leadId}`,
-        dedupeHours: false,
-      });
+      // Notif in-app "Sesión Plan agendada" desactivada (Gelfis 2026-10-14,
+      // ruido). El dashboard /admin + el panel del closer muestran ya las
+      // sesiones agendadas en tiempo real. Timeline del lead la registra igual.
 
       // Notificación WA al closer con nombre, meta y hora (Gelfis 2026-08-14).
       // Espejo de la notificación al profe en trials. Solo en booking nuevo;

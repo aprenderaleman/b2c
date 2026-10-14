@@ -927,7 +927,10 @@ export async function POST(req: Request) {
     }).catch(e => console.error("[book-trial] teacher gcal event failed:", e));
 
     // ── Email notification to admin for EVERY new trial ──
-    const trialAlertEmail = (process.env.NEW_LEAD_ALERT_EMAIL ?? "").trim();
+    // Gelfis 2026-10-14: desactivado. Era ruido — el dashboard /admin
+    // ya muestra trials nuevos en tiempo real. Para reactivar, cambiar
+    // el guard a tolerar NEW_LEAD_ALERT_EMAIL set O el flag TRIAL_ALERT_ENABLED.
+    const trialAlertEmail = "";
     if (trialAlertEmail) {
       const trialDate = new Date(b.slot_iso).toLocaleString("es-ES", {
         timeZone: "Europe/Berlin",

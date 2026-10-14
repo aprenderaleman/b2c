@@ -170,18 +170,10 @@ export async function POST(
       content: `📵 Stiv pausado 12h tras corrección de WhatsApp — toma tú el control manual`,
       metadata: { kind: "ai_auto_paused_on_phone_edit", paused_until: pauseUntil },
     });
-    const { createAdminNotification } = await import("@/lib/admin-notifications");
-    const leadName = (cur as { name?: string }).name ?? "(sin nombre)";
-    await createAdminNotification({
-      type: "ai_paused_phone_edit",
-      severity: "info",
-      title: `📵 Stiv pausado 12h en lead ${leadName}`,
-      body: `Cambiaste el WhatsApp del lead — Stiv calla 12h para no competir con tu takeover manual. Reactívalo cuando termines.`,
-      lead_id: id,
-      action_url: `/admin/leads/${id}`,
-      metadata: { paused_until: pauseUntil, diff: diff.whatsapp_normalized },
-      dedupeHours: false,
-    });
+    // Notif in-app "Stiv pausado 12h" desactivada (Gelfis 2026-10-14,
+    // clasificada como ruido en el audit de notificaciones). La pausa
+    // sí se aplica — pero no genera notif. El timeline del lead la
+    // registra igual.
   }
 
   // ── Auto-reenvío de confirmación si cambió el WhatsApp ──

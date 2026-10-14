@@ -53,7 +53,11 @@ type LeadForAlert = {
 };
 
 export function leadAlertsEnabled(): boolean {
-  return (process.env.NEW_LEAD_ALERT_ENABLED ?? "false") === "true";
+  // Gelfis 2026-10-14: hardcode OFF. Las alertas de "nuevo lead" al
+  // admin (E1 email + W1 WhatsApp + N1 in-app) se consideraron ruido.
+  // El dashboard /admin ya muestra leads nuevos en tiempo real. Para
+  // reactivar, cambiar este return a true o añadir toggle en /admin/system.
+  return false;
 }
 
 /**

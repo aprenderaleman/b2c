@@ -70,17 +70,10 @@ export async function GET(req: Request) {
     .limit(50);
 
   if (staleLeads && staleLeads.length > 0) {
-    for (const lead of staleLeads) {
-      await createAdminNotification({
-        type: "lead_sin_actividad",
-        severity: "info",
-        title: "Lead sin actividad > 3 dias",
-        body: `${lead.full_name ?? "Lead"} lleva >3 dias sin actividad del closer.`,
-        lead_id: lead.id,
-        action_url: `/admin/leads/${lead.id}`,
-      });
-      alertCount++;
-    }
+    // Notif "lead sin actividad" desactivada (Gelfis 2026-10-14, ruido).
+    // El panel de closer ya muestra leads inactivos ordenados por última
+    // actividad — notificar en el bell es redundante y spamea.
+    void staleLeads;   // silence lint
   }
 
   return NextResponse.json({ ok: true, overdue: overdueTasks?.length ?? 0, stale: staleLeads?.length ?? 0, alertCount });
