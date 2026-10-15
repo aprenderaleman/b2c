@@ -128,6 +128,37 @@ export async function createClass(input: CreateClassInput): Promise<{
     input.recurrenceEndDate,
   );
 
+  // Etiquetar la clase con el grupo del alumno (Gelfis 2026-10-15, caso
+  // Zulma): el contador "X de Y dadas" cuenta por classes.group_id, pero
+  // esta función — la vía de agendado del admin, el profe, el alumno y
+  // el asistente — nunca lo rellenaba, así que casi ningún estudiante
+  // sumaba clases dadas. Regla: si TODOS los estudiantes de la clase
+  // pertenecen al mismo grupo activo de ESTE profe, la clase es de ese
+  // grupo. (Hoy ningún alumno tiene dos grupos activos con el mismo
+  // profe, así que no hay ambigüedad; si la hubiera, se queda null.)
+  let groupId: string | null = null;
+  if (!input.isTrial) {
+    const { data: memb } = await sb
+      .from("student_group_members")
+      .select("group_id, student_id, student_groups!inner(teacher_id, active)")
+      .in("student_id", input.studentIds);
+    type MembRow = {
+      group_id: string; student_id: string;
+      student_groups: { teacher_id: string | null; active: boolean } | Array<{ teacher_id: string | null; active: boolean }>;
+    };
+    const covered = new Set<string>();
+    const groups  = new Set<string>();
+    for (const m of ((memb ?? []) as unknown as MembRow[])) {
+      const g = Array.isArray(m.student_groups) ? m.student_groups[0] : m.student_groups;
+      if (!g?.active || g.teacher_id !== input.teacherId) continue;
+      covered.add(m.student_id);
+      groups.add(m.group_id);
+    }
+    if (groups.size === 1 && covered.size === input.studentIds.length) {
+      groupId = [...groups][0];
+    }
+  }
+
   // Insert the first class (the parent). We need its ID to backfill as
   // parent_class_id on the rest.
   const firstRow = {
@@ -145,6 +176,7 @@ export async function createClass(input: CreateClassInput): Promise<{
     notes_admin:         input.notesAdmin,
     created_by:          input.createdByUserId,
     status:              "scheduled" as ClassStatus,
+    group_id:            groupId,
   };
 
   const { data: parent, error: parentErr } = await sb
