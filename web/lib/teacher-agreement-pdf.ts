@@ -19,6 +19,8 @@ export type AgreementVars = {
   startDate: Date;             // fecha de inicio de la colaboración (aprobación)
   rateEur:   number | null;    // tarifa por clase de 50 min
   rango:     string | null;    // starter | pro | elite | master
+  /** Firma de la academia (PNG) y fecha: si viene, el PDF sale firmado por Gelfis. */
+  adminSignature?: { png: Buffer; date: Date } | null;
 };
 
 const COUNTRY_ES: Record<string, string> = {
@@ -181,12 +183,25 @@ export async function buildTeacherAgreementPdf(v: AgreementVars): Promise<Buffer
 
   // Firmas
   doc.moveDown(1.5);
-  if (doc.y > doc.page.height - 200) doc.addPage();
+  if (doc.y > doc.page.height - 230) doc.addPage();
   doc.font("Helvetica-Bold").fontSize(10.5).fillColor("#0f172a").text("Firmado en conformidad:");
   doc.moveDown(1);
   doc.font("Helvetica").fontSize(9.5).fillColor("#334155");
-  doc.text("Por Aprender-Aleman.de (Linguify Global LLC): _______________________________");
-  doc.text("Gelfis Horn, Managing Member · Fecha: _______________________");
+  if (v.adminSignature) {
+    // Firma estampada: imagen sobre la línea + fecha rellena.
+    const sigH = 46;
+    const sigY = doc.y;
+    doc.image(v.adminSignature.png, doc.page.margins.left + 250, sigY - 6, { fit: [170, sigH] });
+    doc.y = sigY + sigH - 4;
+    doc.font("Helvetica").fontSize(9.5).fillColor("#334155");
+    doc.text("Por Aprender-Aleman.de (Linguify Global LLC): _______________________________");
+    doc.text(`Gelfis Horn, Managing Member · Fecha: ${fmtDate(v.adminSignature.date)}`);
+    doc.font("Helvetica-Oblique").fontSize(7.5).fillColor("#94a3b8").text(`Firmado digitalmente desde la plataforma el ${v.adminSignature.date.toISOString().slice(0, 16).replace("T", " ")} UTC`);
+    doc.font("Helvetica").fontSize(9.5).fillColor("#334155");
+  } else {
+    doc.text("Por Aprender-Aleman.de (Linguify Global LLC): _______________________________");
+    doc.text("Gelfis Horn, Managing Member · Fecha: _______________________");
+  }
   doc.moveDown(1.2);
   doc.text(`El profesor colaborador: ${v.name}`);
   doc.text("Firma: _______________________________ · Fecha: _______________________");

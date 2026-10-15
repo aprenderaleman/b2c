@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SignAgreementButton } from "./SignAgreementModal";
 
 /** Ver / (re)enviar el Acuerdo de Colaboración del profe (admin). */
-export function AgreementActions({ teacherId, sent }: { teacherId: string; sent: boolean }) {
+export function AgreementActions({ teacherId, sent, signedAt }: { teacherId: string; sent: boolean; signedAt?: string | null }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg]   = useState<string | null>(null);
@@ -26,6 +27,7 @@ export function AgreementActions({ teacherId, sent }: { teacherId: string; sent:
          className="rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 font-medium hover:bg-slate-50 dark:hover:bg-slate-800">
         Ver PDF
       </a>
+      <SignAgreementButton teacherId={teacherId} signed={!!signedAt} small />
       <button type="button" onClick={send} disabled={busy}
               className="rounded-lg bg-brand-500 px-3 py-1.5 font-semibold text-white hover:bg-brand-600 disabled:opacity-60">
         {busy ? "Enviando…" : sent ? "Reenviar por email" : "Enviar por email"}

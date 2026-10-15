@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SignAgreementButton } from "./SignAgreementModal";
 
 type Teacher = {
   id:                      string;
@@ -30,7 +31,7 @@ type Teacher = {
  * hay que ajustarla en el último momento. Al aprobar, el profe recibe
  * un email con enlace de creación de contraseña (no password temporal).
  */
-export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
+export function PendingApprovalCard({ teacher, agreementSignedAt }: { teacher: Teacher; agreementSignedAt?: string | null }) {
   const router = useRouter();
   const [busy, setBusy] = useState<null | "approve" | "reject">(null);
   const [err,  setErr]  = useState<string | null>(null);
@@ -44,7 +45,9 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
     if (!confirm(
       `Aprobar a ${teacher.full_name ?? teacher.email}?\n\n` +
       `Tarifa individual: ${ri} €/h\n\n` +
-      `Se le enviará un email de bienvenida con el enlace para crear su contraseña.`,
+      (agreementSignedAt
+        ? `Se le enviará el email de bienvenida con el enlace para crear su contraseña y su Acuerdo de Colaboración firmado por la academia.`
+        : `ATENCIÓN: el Acuerdo de Colaboración aún NO está firmado por la academia. Se enviará sin firma.\n\nSe le enviará el email de bienvenida con el enlace para crear su contraseña.`),
     )) return;
     setBusy("approve"); setErr(null);
     try {
@@ -158,6 +161,20 @@ export function PendingApprovalCard({ teacher }: { teacher: Teacher }) {
           {err}
         </div>
       )}
+
+      <div className="mt-5 rounded-xl bg-white/60 dark:bg-slate-900/50 border border-amber-300 dark:border-amber-500/30 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-200">
+          Acuerdo de Colaboración
+        </p>
+        <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">
+          {agreementSignedAt
+            ? `Firmado por la academia el ${new Date(agreementSignedAt).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}. Irá adjunto al email de bienvenida.`
+            : "Revísalo y fírmalo antes de aprobar: el profe lo recibirá firmado junto con su bienvenida."}
+        </p>
+        <div className="mt-3">
+          <SignAgreementButton teacherId={teacher.id} rateIndividual={Number(rateInd) || null} signed={!!agreementSignedAt} />
+        </div>
+      </div>
 
       <div className="mt-5 flex gap-2 flex-wrap">
         <button

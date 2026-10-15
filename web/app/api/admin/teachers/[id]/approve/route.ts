@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { sendTeacherWelcomeSetPasswordEmail } from "@/lib/email/send";
 import { TEACHER_ONBOARDING_DOC_URL } from "@/lib/teacher-onboarding";
 import { buildTeacherAgreementPdf, AGREEMENT_VERSION } from "@/lib/teacher-agreement-pdf";
-import { uploadTeacherAgreement } from "@/lib/teacher-agreement";
+import { uploadTeacherAgreement, getSignedTeacherAgreement, signedAgreementPath } from "@/lib/teacher-agreement";
 
 /**
  * POST /api/admin/teachers/[id]/approve
@@ -134,12 +134,20 @@ export async function POST(
   let agreementPdf: Buffer | null = null;
   let agreementPath: string | null = null;
   try {
-    agreementPdf = await buildTeacherAgreementPdf({
-      name: u.full_name ?? u.email, email: u.email, phone: u.phone ?? null,
-      country: t.country ?? null, address: t.address ?? null, startDate: new Date(), rateEur,
-      rango: u.rango ?? null,
-    });
-    agreementPath = await uploadTeacherAgreement(t.id, agreementPdf);
+    // Si Gelfis ya lo firmó desde la ficha (botón "Firmar acuerdo"), va
+    // esa versión. Si no, se genera sin firmar.
+    const signed = await getSignedTeacherAgreement(t.id);
+    if (signed) {
+      agreementPdf  = signed;
+      agreementPath = signedAgreementPath(t.id);
+    } else {
+      agreementPdf = await buildTeacherAgreementPdf({
+        name: u.full_name ?? u.email, email: u.email, phone: u.phone ?? null,
+        country: t.country ?? null, address: t.address ?? null, startDate: new Date(), rateEur,
+        rango: u.rango ?? null,
+      });
+      agreementPath = await uploadTeacherAgreement(t.id, agreementPdf);
+    }
   } catch (e) {
     console.error("[approve] agreement pdf failed:", e);
     agreementPdf = null;
