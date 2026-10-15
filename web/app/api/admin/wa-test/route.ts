@@ -33,7 +33,13 @@ export async function POST(req: Request) {
   if (!body.phone || !body.text) {
     return NextResponse.json({ error: "missing_fields", required: ["phone","text"] }, { status: 400 });
   }
-  const r = await sendWhatsappText(body.phone, body.text, { kind: "admin_manual" });
+  // Gelfis 2026-10-15: admin test siempre bypasea pausa global + night gate.
+  // Sentido: validar copy/entrega sin levantar whatsapp_disabled.
+  const r = await sendWhatsappText(body.phone, body.text, {
+    kind: "admin_manual",
+    bypassKillSwitch: true,
+    bypassNightGate: true,
+  });
   if (!r.ok) return NextResponse.json({ ok: false, reason: r.reason }, { status: 502 });
   return NextResponse.json({ ok: true, messageId: r.messageId });
 }
