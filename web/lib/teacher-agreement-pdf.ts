@@ -38,6 +38,19 @@ export async function buildTeacherAgreementPdf(v: AgreementVars): Promise<Buffer
   });
 
   const W = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+
+  // Cabecera y número de página en cada hoja (como en los PDF manuales de Gelfis).
+  let pageNo = 0;
+  const stampPage = () => {
+    pageNo += 1;
+    const y0 = doc.y;
+    doc.font("Helvetica").fontSize(7.5).fillColor("#94a3b8")
+      .text(`Aprender-Aleman.de · Acuerdo de Colaboración v2 · ${v.name}`, doc.page.margins.left, 28, { width: W, align: "left", lineBreak: false })
+      .text(`Página ${pageNo}`, doc.page.margins.left, 28, { width: W, align: "right", lineBreak: false });
+    doc.y = y0;
+  };
+  stampPage();
+  doc.on("pageAdded", stampPage);
   const H1 = (t: string) => { doc.moveDown(0.8); doc.font("Helvetica-Bold").fontSize(12.5).fillColor("#0f172a").text(t, { width: W }); doc.moveDown(0.3); };
   const H2 = (t: string) => { doc.moveDown(0.4); doc.font("Helvetica-Bold").fontSize(10.5).fillColor("#1e293b").text(t, { width: W }); doc.moveDown(0.15); };
   const P  = (t: string) => { doc.font("Helvetica").fontSize(9.5).fillColor("#334155").text(t, { width: W, align: "justify", lineGap: 1.5 }); doc.moveDown(0.25); };
@@ -134,6 +147,7 @@ export async function buildTeacherAgreementPdf(v: AgreementVars): Promise<Buffer
   doc.rect(doc.page.margins.left, doc.y, W, 2).fill("#e2e8f0");
   doc.moveDown(0.5);
   doc.font("Helvetica-Bold").fontSize(9).fillColor("#0f172a").text("APRENDER-ALEMAN.DE — GARANTÍA DE NIVEL POR ESCRITO", { width: W, align: "center" });
+  doc.font("Helvetica").fontSize(8).fillColor("#64748b").text("Certificado emitido para {Nombre del estudiante} · PROGRAMA: {Nivel objetivo} · {Ritmo} · FECHA DE INICIO: {fecha} · LLEGADA ESTIMADA: {mes y año} · Nº de certificado: GN-2026-xxxxx", { width: W, align: "center" });
   doc.moveDown(0.3);
   doc.font("Helvetica").fontSize(8.5).fillColor("#334155").text("NUESTRO COMPROMISO CONTIGO. En Aprender-Aleman.de no vendemos clases: nos comprometemos con tu resultado. Por eso te garantizamos por escrito: si al completar tu programa no alcanzas tu nivel objetivo, continuaremos tus clases COMPLETAMENTE GRATIS hasta que lo consigas. Sin límite de clases adicionales. Sin coste extra. Hasta que llegues.", { width: W, align: "justify" });
   doc.moveDown(0.3);
