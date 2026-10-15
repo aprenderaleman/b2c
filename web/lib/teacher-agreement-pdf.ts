@@ -14,10 +14,30 @@ export type AgreementVars = {
   name:      string;
   email:     string;
   phone:     string | null;
-  country:   string | null;
+  country:   string | null;    // código ISO (ES, CO, MX…) o null/"XX" si no consta
+  address:   string | null;    // dirección libre del registro (ciudad incluida)
   startDate: Date;             // fecha de inicio de la colaboración (aprobación)
   rateEur:   number | null;    // tarifa por clase de 50 min
+  rango:     string | null;    // starter | pro | elite | master
 };
+
+const COUNTRY_ES: Record<string, string> = {
+  ES: "España", DE: "Alemania", AT: "Austria", CH: "Suiza", CO: "Colombia", MX: "México", AR: "Argentina",
+  CL: "Chile", PE: "Perú", VE: "Venezuela", EC: "Ecuador", BO: "Bolivia", PY: "Paraguay", UY: "Uruguay",
+  CR: "Costa Rica", PA: "Panamá", DO: "República Dominicana", CU: "Cuba", GT: "Guatemala", HN: "Honduras",
+  SV: "El Salvador", NI: "Nicaragua", PT: "Portugal", IT: "Italia", FR: "Francia", GB: "Reino Unido", US: "Estados Unidos",
+};
+const RANGO_ES: Record<string, string> = { starter: "Starter (5 %)", pro: "Pro (8 %)", elite: "Elite (12 %)", master: "Master (15 %)" };
+
+/** "País / Ciudad" legible: dirección del registro + país; nunca un código suelto tipo "XX". */
+export function agreementLocation(country: string | null, address: string | null): string | null {
+  const code = (country ?? "").trim().toUpperCase();
+  const countryName = code && code !== "XX" ? (COUNTRY_ES[code] ?? code) : null;
+  const addr = (address ?? "").trim();
+  if (addr && countryName && !addr.toLowerCase().includes(countryName.toLowerCase())) return `${addr}, ${countryName}`;
+  if (addr) return addr;
+  return countryName;
+}
 
 const BONOS = "Viajero: 25 €  ·  Estándar: 35 €  ·  Intensivo: 50 €  ·  VIP Express: 75 €  ·  Pago único: 150 €";
 
@@ -70,8 +90,10 @@ export async function buildTeacherAgreementPdf(v: AgreementVars): Promise<Buffer
   KV("Nombre", v.name);
   KV("Email", v.email);
   KV("WhatsApp", v.phone ?? "________________________");
-  KV("País / Ciudad", v.country ?? "________________________");
+  KV("País / Ciudad", agreementLocation(v.country, v.address) ?? "________________________");
   KV("Fecha de inicio de la colaboración", fmtDate(v.startDate));
+  KV("Tarifa por clase (50 minutos)", v.rateEur != null ? `${v.rateEur.toLocaleString("es-ES")} €` : "según su ficha en la plataforma");
+  KV("Rango de comisión inicial", v.rango ? (RANGO_ES[v.rango.toLowerCase()] ?? v.rango) : "Starter (5 %)");
 
   H1("2. Naturaleza de la colaboración");
   B("El profesor colabora como profesional independiente (autónomo/freelance), no como empleado. Emite sus propias facturas a Linguify Global LLC y es responsable de sus obligaciones fiscales en su país de residencia.");
@@ -93,7 +115,7 @@ export async function buildTeacherAgreementPdf(v: AgreementVars): Promise<Buffer
   H2("4.2 Inasistencia del alumno");
   B("Si el alumno no asiste a una clase programada, o la cancela con menos de 24 horas de antelación, la clase se considera impartida: se descuenta del plan del alumno y se paga al profesor a tarifa completa, siempre que el profesor haya estado presente y lo registre en el sistema.");
   H2("4.3 Comisiones por ventas");
-  B("Cierre propio (E1): si el profesor cierra la inscripción de un lead de su clase de prueba, recibe un bono de cierre según el ritmo contratado por el alumno, más la comisión porcentual según su rango vigente en el sistema de comisiones:");
+  B(`Cierre propio (E1): si el profesor cierra la inscripción de un lead de su clase de prueba, recibe un bono de cierre según el ritmo contratado por el alumno, más la comisión porcentual según su rango vigente en el sistema de comisiones (rango inicial: ${v.rango ? (RANGO_ES[v.rango.toLowerCase()] ?? v.rango) : "Starter (5 %)"}; sube por resultados):`);
   doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#0f172a").text(BONOS, { width: W, align: "center" }); doc.moveDown(0.3);
   B("Cierre por closer (E2): si la clase de prueba fue del profesor pero la venta la cierra un closer, el profesor recibe el 50% del bono correspondiente al ritmo contratado.");
   B("Renovación: si el profesor cierra la continuidad de un alumno propio al siguiente nivel, recibe el bono completo según el ritmo de la renovación, igual que un cierre E1.");

@@ -19,15 +19,15 @@ export const dynamic = "force-dynamic";
 async function loadTeacher(id: string) {
   const sb = supabaseAdmin();
   const { data } = await sb.from("teachers")
-    .select("id, hourly_rate_individual, country, approved_at, created_at, users!inner(email, full_name, phone, language_preference)")
+    .select("id, hourly_rate_individual, country, address, approved_at, created_at, users!inner(email, full_name, phone, language_preference, rango)")
     .eq("id", id).maybeSingle();
   if (!data) return null;
-  const t = data as { id: string; hourly_rate_individual: number | string | null; country: string | null; approved_at: string | null; created_at: string; users: unknown };
-  const u = (Array.isArray(t.users) ? t.users[0] : t.users) as { email: string; full_name: string | null; phone: string | null; language_preference: "es" | "de" | null };
+  const t = data as { id: string; hourly_rate_individual: number | string | null; country: string | null; address: string | null; approved_at: string | null; created_at: string; users: unknown };
+  const u = (Array.isArray(t.users) ? t.users[0] : t.users) as { email: string; full_name: string | null; phone: string | null; language_preference: "es" | "de" | null; rango: string | null };
   const rate = t.hourly_rate_individual != null && Number(t.hourly_rate_individual) > 0 ? Number(t.hourly_rate_individual) : null;
   const pdf = await buildTeacherAgreementPdf({
-    name: u.full_name ?? u.email, email: u.email, phone: u.phone ?? null, country: t.country ?? null,
-    startDate: new Date(t.approved_at ?? t.created_at), rateEur: rate,
+    name: u.full_name ?? u.email, email: u.email, phone: u.phone ?? null, country: t.country ?? null, address: t.address ?? null,
+    startDate: new Date(t.approved_at ?? t.created_at), rateEur: rate, rango: u.rango ?? null,
   });
   return { t, u, pdf };
 }

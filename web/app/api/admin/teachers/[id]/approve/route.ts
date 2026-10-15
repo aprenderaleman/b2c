@@ -52,8 +52,8 @@ export async function POST(
   const { data: teacher } = await sb
     .from("teachers")
     .select(`
-      id, user_id, registered_self, approved_at, hourly_rate_individual, country,
-      users!inner(id, email, full_name, language_preference, active, phone)
+      id, user_id, registered_self, approved_at, hourly_rate_individual, country, address,
+      users!inner(id, email, full_name, language_preference, active, phone, rango)
     `)
     .eq("id", teacherId)
     .maybeSingle();
@@ -62,11 +62,11 @@ export async function POST(
   }
   const t = teacher as {
     id: string; user_id: string; registered_self: boolean; approved_at: string | null;
-    hourly_rate_individual: number | string | null; country: string | null;
+    hourly_rate_individual: number | string | null; country: string | null; address: string | null;
     users: { id: string; email: string; full_name: string | null;
-             language_preference: "es" | "de" | null; active: boolean; phone: string | null } |
+             language_preference: "es" | "de" | null; active: boolean; phone: string | null; rango: string | null } |
            Array<{ id: string; email: string; full_name: string | null;
-                   language_preference: "es" | "de" | null; active: boolean; phone: string | null }>;
+                   language_preference: "es" | "de" | null; active: boolean; phone: string | null; rango: string | null }>;
   };
   const u = Array.isArray(t.users) ? t.users[0] : t.users;
   if (!t.registered_self || t.approved_at) {
@@ -136,7 +136,8 @@ export async function POST(
   try {
     agreementPdf = await buildTeacherAgreementPdf({
       name: u.full_name ?? u.email, email: u.email, phone: u.phone ?? null,
-      country: t.country ?? null, startDate: new Date(), rateEur,
+      country: t.country ?? null, address: t.address ?? null, startDate: new Date(), rateEur,
+      rango: u.rango ?? null,
     });
     agreementPath = await uploadTeacherAgreement(t.id, agreementPdf);
   } catch (e) {
