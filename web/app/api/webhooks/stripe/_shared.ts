@@ -6,6 +6,7 @@ import { cancelActiveChain } from "@/lib/chain-engine";
 import { sendRaw } from "@/lib/email/send";
 import { handleFirstPayment } from "@/lib/auto-conversion";
 import { registerCommission, isInCommissionWindow } from "@/lib/commission-engine";
+import { findPendingOfertaByEmail, convertLeadFromStripePayment } from "@/lib/lead-payment-match";
 
 export async function processStripeEvent(
   event: Stripe.Event,
@@ -154,6 +155,37 @@ async function handleCheckoutCompleted(
   const stripeCustomerId = typeof session.customer === "string"
     ? session.customer
     : (session.customer as { id: string } | null)?.id ?? null;
+
+  // Payment Link sin metadata (flujo post-clase con buy.stripe.com):
+  // si el email pertenece a un LEAD con oferta pendiente, es su primera
+  // compra → conversión completa (casos Zulma / Jean 2026-10-15). Solo
+  // si no existe ya un student con ese customer/email.
+  if (customerEmail && stripeCustomerId) {
+    const { data: known } = await sb.from("students").select("id, users!inner(email)").eq("users.email", customerEmail).maybeSingle();
+    const { data: knownByCus } = await sb.from("students").select("id").eq("stripe_customer_id", stripeCustomerId).maybeSingle();
+    if (!known && !knownByCus) {
+      const match = await findPendingOfertaByEmail(customerEmail);
+      if (match) {
+        const subId = typeof session.subscription === "string"
+          ? session.subscription
+          : (session.subscription as { id: string } | null)?.id ?? null;
+        const invId = typeof session.invoice === "string"
+          ? session.invoice
+          : (session.invoice as { id: string } | null)?.id ?? null;
+        try {
+          await convertLeadFromStripePayment({
+            match, stripeCustomerId, stripeSubscriptionId: subId,
+            stripePiId: paymentIntentId ?? session.id, stripeInvoiceId: invId,
+            amountCents: amountTotal, currency, account,
+            source: `checkout.session.completed ${session.id}`,
+          });
+          return;
+        } catch (err) {
+          console.error("[stripe-webhook] lead payment match → handleFirstPayment failed:", err);
+        }
+      }
+    }
+  }
 
   const student = await resolveStudent(sb, {
     stripeCustomerId,
