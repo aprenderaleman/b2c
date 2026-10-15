@@ -28,6 +28,8 @@ const COUNTRY_ES: Record<string, string> = {
   CL: "Chile", PE: "Perú", VE: "Venezuela", EC: "Ecuador", BO: "Bolivia", PY: "Paraguay", UY: "Uruguay",
   CR: "Costa Rica", PA: "Panamá", DO: "República Dominicana", CU: "Cuba", GT: "Guatemala", HN: "Honduras",
   SV: "El Salvador", NI: "Nicaragua", PT: "Portugal", IT: "Italia", FR: "Francia", GB: "Reino Unido", US: "Estados Unidos",
+  BR: "Brasil", HR: "Croacia", NL: "Países Bajos", BE: "Bélgica", PL: "Polonia", CZ: "Chequia", RO: "Rumanía", HU: "Hungría",
+  GR: "Grecia", TR: "Turquía", IE: "Irlanda", SE: "Suecia", DK: "Dinamarca", NO: "Noruega", CA: "Canadá",
 };
 const RANGO_ES: Record<string, string> = { starter: "Starter (5 %)", pro: "Pro (8 %)", elite: "Elite (12 %)", master: "Master (15 %)" };
 
