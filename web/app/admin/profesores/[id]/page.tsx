@@ -10,6 +10,7 @@ import { NotesCard } from "@/components/admin/NotesCard";
 import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOutToggle";
 import { supabaseAdmin } from "@/lib/supabase";
 import { PendingApprovalCard } from "./PendingApprovalCard";
+import { AgreementActions } from "./AgreementActions";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +112,9 @@ export default async function TeacherDetailPage({
   const waDigits = teacher.phone?.replace(/\D/g, "") ?? "";
 
   const isPending = teacher.registered_self === true && !teacher.approved_at;
+  const agreementRes = await supabaseAdmin().from("teachers")
+    .select("agreement_sent_at, agreement_version").eq("id", id).maybeSingle();
+  const agreement = agreementRes.data as { agreement_sent_at: string | null; agreement_version: string | null } | null;
 
   return (
     <main className="space-y-5">
@@ -208,6 +212,12 @@ export default async function TeacherDetailPage({
           <Kv k="Tarifa por hora" v={teacher.hourly_rate ? `${Number(teacher.hourly_rate).toFixed(2)} ${teacher.currency}` : "—"} />
           <Kv k="Método de pago"  v={teacher.payment_method ?? "—"} />
           <Kv k="Notas"           v={teacher.notes ?? "—"} />
+          <Kv k="Acuerdo de colaboración" v={agreement?.agreement_sent_at
+            ? `Enviado el ${new Date(agreement.agreement_sent_at).toLocaleDateString("es-ES", { timeZone: "Europe/Berlin" })} · ${agreement.agreement_version ?? ""}`
+            : "No enviado"} />
+          <div className="pt-2">
+            <AgreementActions teacherId={teacher.id} sent={!!agreement?.agreement_sent_at} />
+          </div>
         </Panel>
       </div>
 

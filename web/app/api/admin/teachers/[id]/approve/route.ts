@@ -4,6 +4,8 @@ import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTeacherWelcomeSetPasswordEmail } from "@/lib/email/send";
 import { TEACHER_ONBOARDING_DOC_URL } from "@/lib/teacher-onboarding";
+import { buildTeacherAgreementPdf, AGREEMENT_VERSION } from "@/lib/teacher-agreement-pdf";
+import { uploadTeacherAgreement } from "@/lib/teacher-agreement";
 
 /**
  * POST /api/admin/teachers/[id]/approve
@@ -50,8 +52,8 @@ export async function POST(
   const { data: teacher } = await sb
     .from("teachers")
     .select(`
-      id, user_id, registered_self, approved_at,
-      users!inner(id, email, full_name, language_preference, active)
+      id, user_id, registered_self, approved_at, hourly_rate_individual, country,
+      users!inner(id, email, full_name, language_preference, active, phone)
     `)
     .eq("id", teacherId)
     .maybeSingle();
@@ -60,10 +62,11 @@ export async function POST(
   }
   const t = teacher as {
     id: string; user_id: string; registered_self: boolean; approved_at: string | null;
+    hourly_rate_individual: number | string | null; country: string | null;
     users: { id: string; email: string; full_name: string | null;
-             language_preference: "es" | "de" | null; active: boolean } |
+             language_preference: "es" | "de" | null; active: boolean; phone: string | null } |
            Array<{ id: string; email: string; full_name: string | null;
-                   language_preference: "es" | "de" | null; active: boolean }>;
+                   language_preference: "es" | "de" | null; active: boolean; phone: string | null }>;
   };
   const u = Array.isArray(t.users) ? t.users[0] : t.users;
   if (!t.registered_self || t.approved_at) {
@@ -123,6 +126,24 @@ export async function POST(
   }
   const setPasswordUrl = `${PLATFORM_URL}/reset-password?token=${rawToken}`;
 
+  // Acuerdo de Colaboración personalizado (Gelfis 2026-10-15): PDF con
+  // nombre, email, WhatsApp, país, fecha de inicio (hoy) y tarifa; va
+  // adjunto al email de bienvenida y se guarda copia en Storage.
+  const rateRaw = (rateOverride.rate_individual as number | undefined) ?? t.hourly_rate_individual;
+  const rateEur = rateRaw != null && Number.isFinite(Number(rateRaw)) && Number(rateRaw) > 0 ? Number(rateRaw) : null;
+  let agreementPdf: Buffer | null = null;
+  let agreementPath: string | null = null;
+  try {
+    agreementPdf = await buildTeacherAgreementPdf({
+      name: u.full_name ?? u.email, email: u.email, phone: u.phone ?? null,
+      country: t.country ?? null, startDate: new Date(), rateEur,
+    });
+    agreementPath = await uploadTeacherAgreement(t.id, agreementPdf);
+  } catch (e) {
+    console.error("[approve] agreement pdf failed:", e);
+    agreementPdf = null;
+  }
+
   const firstName = (u.full_name ?? "").trim().split(/\s+/)[0] || (u.full_name ?? "");
   const emailRes = await sendTeacherWelcomeSetPasswordEmail(u.email, {
     name:           firstName,
@@ -131,7 +152,16 @@ export async function POST(
     validDays:      SETPW_TOKEN_DAYS,
     language:       u.language_preference ?? "es",
     onboardingDocUrl: TEACHER_ONBOARDING_DOC_URL,
-  });
+    agreementAttached: !!agreementPdf,
+  }, agreementPdf ? [{ filename: "Acuerdo_Colaboracion_Aprender-Aleman.pdf", content: agreementPdf, contentType: "application/pdf" }] : undefined);
+
+  if (agreementPdf && emailRes.ok) {
+    await sb.from("teachers").update({
+      agreement_sent_at: new Date().toISOString(),
+      agreement_version: AGREEMENT_VERSION,
+      agreement_path:    agreementPath,
+    }).eq("id", t.id);
+  }
 
   return NextResponse.json({
     ok:           true,

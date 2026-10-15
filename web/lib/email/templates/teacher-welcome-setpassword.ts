@@ -10,6 +10,8 @@ export type TeacherWelcomeSetPasswordVars = {
   language:    "es" | "de";
   /** Guía de primeros pasos en la academia (Google Doc). */
   onboardingDocUrl: string;
+  /** true si el Acuerdo de Colaboración (PDF) va adjunto en este correo. */
+  agreementAttached?: boolean;
 };
 
 /**
@@ -42,6 +44,10 @@ function renderES(v: TeacherWelcomeSetPasswordVars): RenderedEmail {
       ${button(v.onboardingDocUrl, "Abrir la guía de primeros pasos →")}
     </div>
     ${p(`<em style="color:#64748b;">Guárdala: la iremos actualizando y siempre estará en este mismo enlace.</em>`)}
+    ${v.agreementAttached ? `
+    ${h2(`Tu Acuerdo de Colaboración`)}
+    ${p(`Adjunto a este correo tienes tu <strong>Acuerdo de Colaboración</strong> en PDF, ya con tus datos y tu tarifa. Léelo con calma: recoge cómo trabajamos, cómo y cuándo cobras, las cancelaciones y la Garantía de Nivel. Si estás de acuerdo, respóndenos a este correo con el PDF firmado (vale una firma digital o una foto del documento firmado). Si tienes cualquier duda, escríbenos antes de firmar.`)}
+    ` : ``}
     ${p(`<em style="color:#64748b;">El equipo de Aprender-Aleman.de</em>`)}
   `;
   const footerNote = "Recibes este correo porque tu cuenta de profesor en Aprender-Aleman.de fue aprobada.";
@@ -62,6 +68,11 @@ function renderES(v: TeacherWelcomeSetPasswordVars): RenderedEmail {
     `Antes de tu primera clase, lee la guía de bienvenida (plataforma, clases de prueba, agenda, chat y pagos):`,
     v.onboardingDocUrl,
     ``,
+    ...(v.agreementAttached ? [
+      `TU ACUERDO DE COLABORACIÓN`,
+      `Adjunto va tu Acuerdo de Colaboración en PDF con tus datos y tu tarifa. Léelo y, si estás de acuerdo, respóndenos con el PDF firmado.`,
+      ``,
+    ] : []),
     `El equipo de Aprender-Aleman.de`,
   ].join("\n");
 
@@ -87,6 +98,10 @@ function renderDE(v: TeacherWelcomeSetPasswordVars): RenderedEmail {
     <div style="text-align:center;margin:18px 0 20px 0;">
       ${button(v.onboardingDocUrl, "Leitfaden öffnen →")}
     </div>
+    ${v.agreementAttached ? `
+    ${h2(`Deine Kooperationsvereinbarung`)}
+    ${p(`Im Anhang findest du deine <strong>Kooperationsvereinbarung</strong> als PDF, bereits mit deinen Daten und deinem Honorar. Lies sie in Ruhe: Sie beschreibt die Zusammenarbeit, die Abrechnung, Absagen und die Niveau-Garantie. Wenn du einverstanden bist, antworte auf diese E-Mail mit dem unterschriebenen PDF (digitale Unterschrift oder Foto genügt). Bei Fragen melde dich gern vor der Unterschrift.`)}
+    ` : ``}
     ${p(`<em style="color:#64748b;">Das Team von Aprender-Aleman.de</em>`)}
   `;
   const footerNote = "Du erhältst diese E-Mail, weil dein Lehrerkonto bei Aprender-Aleman.de bestätigt wurde.";
@@ -103,6 +118,7 @@ function renderDE(v: TeacherWelcomeSetPasswordVars): RenderedEmail {
     ``,
     `DEINE ERSTEN SCHRITTE: ${v.onboardingDocUrl}`,
     ``,
+    ...(v.agreementAttached ? [`DEINE KOOPERATIONSVEREINBARUNG: im Anhang als PDF. Bitte unterschrieben per Antwort zurücksenden.`, ``] : []),
     `Das Team von Aprender-Aleman.de`,
   ].join("\n");
 

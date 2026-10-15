@@ -456,9 +456,10 @@ export async function sendTeacherInvitationEmail(
 export async function sendTeacherWelcomeSetPasswordEmail(
   to: string,
   vars: TeacherWelcomeSetPasswordVars,
+  attachments?: EmailAttachment[],
 ): Promise<SendResult> {
   const { subject, html, text } = renderTeacherWelcomeSetPassword(vars);
-  return sendRaw(to, subject, html, text, undefined, { critical: true });
+  return sendRaw(to, subject, html, text, attachments, { critical: true });
 }
 
 /** Acceso + primeros pasos para un profe que entra en la campaña /clase-profe. */
