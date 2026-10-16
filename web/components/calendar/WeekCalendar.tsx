@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { CreateClassModal } from "@/components/admin/CreateClassModal";
+import { berlinWallClockToIso } from "@/lib/schedule";
 
 /**
  * Calendario semanal compartido teacher/closer (spec Gelfis 2026-08:
@@ -40,8 +41,8 @@ type CalException = {
   reason:     string | null;
 };
 
-const HOUR_START = 7;
-const HOUR_END   = 22;               // exclusive: grid muestra 07:00–22:00
+const HOUR_START = 6;
+const HOUR_END   = 24;               // exclusive: grid muestra 06:00–24:00 (profes en América dan clase hasta las 23:50 Berlín)
 const HOUR_PX    = 48;
 const DAY_SHORT  = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
@@ -558,7 +559,9 @@ function EventModal({
     if (!dateStr || !timeStr) { setError("Indica fecha y hora."); return; }
     // Berlin local → UTC ISO (navegador de profes/Gelfis en Berlín,
     // mismo criterio que ClassActions).
-    const iso = new Date(`${dateStr}T${timeStr}:00`).toISOString();
+    // Hora en pared de Berlín → ISO (2026-10-16: Alexander, en Paraguay,
+    // reagendaba y la clase se movía +5 h porque se usaba la zona del navegador).
+    const iso = berlinWallClockToIso(dateStr, timeStr);
     start(async () => {
       const res = await fetch(`/api/teacher/classes/${ev.id}`, {
         method:  "PATCH",
