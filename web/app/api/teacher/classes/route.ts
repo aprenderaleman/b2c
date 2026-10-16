@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { resolveEffectiveUser } from "@/lib/impersonation";
-import { createClass } from "@/lib/classes";
+import { createClass, friendlyClassError } from "@/lib/classes";
 import { supabaseAdmin } from "@/lib/supabase";
 import { wireChatsForClass } from "@/lib/chat";
 import { createNotification } from "@/lib/notifications";
@@ -132,10 +132,10 @@ export async function POST(req: Request) {
       createdByUserId:   (session.user as { id?: string }).id ?? null,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: "create_failed", message: e instanceof Error ? e.message : "unknown" },
-      { status: 500 },
-    );
+    const raw = e instanceof Error ? e.message : "unknown";
+    const f = friendlyClassError(raw, { whenIso: body.scheduledAt });
+    console.error("[teacher/classes] createClass failed:", raw);
+    return NextResponse.json({ error: f.code, message: f.message, detail: raw }, { status: f.status });
   }
 
   // Chats + notifications — same helpers the admin path uses.

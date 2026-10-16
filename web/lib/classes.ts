@@ -640,3 +640,32 @@ export function classStatusEs(status: ClassStatus): string {
     case "absent":    return "No asistió";
   }
 }
+
+/**
+ * Traduce el error técnico de createClass a un mensaje accionable para el
+ * profe (Gelfis 2026-10-16, tras el "duplicate key" de Jonathan/María Elena).
+ * Devuelve { code, message, status }.
+ */
+export function friendlyClassError(raw: string, opts?: { whenIso?: string }): { code: string; message: string; status: number } {
+  const when = opts?.whenIso
+    ? new Date(opts.whenIso).toLocaleString("es-ES", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin" })
+    : null;
+  if (/classes_no_double_booking_uidx/.test(raw)) {
+    return { code: "double_booking", status: 409,
+      message: `Ya tienes otra clase agendada${when ? ` el ${when} (hora de Berlín)` : " a esa hora"}. Elige otra hora o cancela primero la clase existente.` };
+  }
+  if (/solapada|±30/i.test(raw)) {
+    return { code: "student_overlap", status: 409,
+      message: `Este alumno ya tiene una clase contigo a menos de 30 minutos de esa hora. Revisa su agenda en tu lista de clases; si la clase existente está mal, cancélala y vuelve a agendar.` };
+  }
+  if (/duplicate key|class_participants_pkey/i.test(raw)) {
+    return { code: "already_enrolled", status: 409,
+      message: `El alumno ya estaba inscrito en esa clase, así que es probable que la clase ya exista. Recarga tu lista de clases antes de volver a intentarlo; si no aparece, avisa a la academia por el chat indicando alumno, fecha y hora.` };
+  }
+  if (/first class insert failed/i.test(raw)) {
+    return { code: "create_failed", status: 500,
+      message: `No se pudo crear la clase. Vuelve a intentarlo en un minuto; si sigue fallando, avisa a la academia por el chat con el alumno, la fecha y la hora.` };
+  }
+  return { code: "create_failed", status: 500,
+    message: `No se pudo agendar la clase (${raw.slice(0, 120)}). Vuelve a intentarlo; si sigue fallando, avisa a la academia por el chat con el alumno, la fecha y la hora.` };
+}

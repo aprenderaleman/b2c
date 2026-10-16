@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { getTeacherByUserId } from "@/lib/academy";
 import { resolveEffectiveUser } from "@/lib/impersonation";
-import { createClass } from "@/lib/classes";
+import { createClass, friendlyClassError } from "@/lib/classes";
 import { supabaseAdmin } from "@/lib/supabase";
 import { wireChatsForClass } from "@/lib/chat";
 import { createNotification } from "@/lib/notifications";
@@ -157,23 +157,11 @@ export async function POST(req: Request) {
       });
     } catch (e) {
       const raw = e instanceof Error ? e.message : "unknown";
-      // Índice único (teacher_id, scheduled_at): ya hay una clase del profe
-      // a esa misma hora. Mensaje legible en vez del error de Postgres.
-      if (/classes_no_double_booking_uidx/.test(raw)) {
-        const when = new Date(s.scheduledAt).toLocaleString("es-ES", {
-          weekday: "long", day: "numeric", month: "long",
-          hour: "2-digit", minute: "2-digit", timeZone: "Europe/Berlin",
-        });
-        return NextResponse.json(
-          { error: "double_booking", failed_slot: s, created_so_far: results.length,
-            message: `Ya tienes otra clase agendada el ${when} (hora de Berlín). Elige otra hora o cancela primero la clase existente.` },
-          { status: 409 },
-        );
-      }
+      const f = friendlyClassError(raw, { whenIso: s.scheduledAt });
+      console.error("[teacher/classes/bulk] createClass failed:", raw);
       return NextResponse.json(
-        { error: "create_failed", failed_slot: s, message: raw,
-          created_so_far: results.length },
-        { status: 500 },
+        { error: f.code, failed_slot: s, created_so_far: results.length, message: f.message, detail: raw },
+        { status: f.status },
       );
     }
   }
