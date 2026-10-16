@@ -219,7 +219,13 @@ export async function createClass(input: CreateClassInput): Promise<{
       student_id: sid,
     })),
   );
-  const { error: partErr } = await sb.from("class_participants").insert(participantRows);
+  // upsert + ignoreDuplicates (2026-10-16, caso Jonathan/María Elena): el
+  // trigger trg_enroll_group_members_on_class ya inscribe a los miembros
+  // del grupo al crear la clase con group_id; un insert simple chocaba con
+  // la PK (class_id, student_id) → "participants insert failed: duplicate key".
+  const { error: partErr } = await sb
+    .from("class_participants")
+    .upsert(participantRows, { onConflict: "class_id,student_id", ignoreDuplicates: true });
   if (partErr) {
     // Best-effort rollback: delete all created classes.
     await sb.from("classes").delete().in("id", ids);
