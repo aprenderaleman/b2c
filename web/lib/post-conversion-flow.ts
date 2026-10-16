@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { sendAcademyWelcomeChat } from "./welcome-chat";
 import { getTeacherById } from "./academy";
 import { createNotification } from "./notifications";
 import { sendWhatsappText } from "./whatsapp";
@@ -65,6 +66,15 @@ export async function runPostConversionFlow(opts: PostConversionOpts): Promise<v
     case "E3":
       await assignBestTeacherToStudent(sb, opts.studentId, opts.leadName, opts.packLabel);
       break;
+  }
+
+  // Bienvenida por el chat de la plataforma de parte de Gelfis (2026-10-16),
+  // ya con el profesor asignado. Nunca bloquea la conversión.
+  try {
+    const r = await sendAcademyWelcomeChat(opts.studentId);
+    if (!r.ok) console.warn("[post-conversion] welcome chat not sent:", r.reason);
+  } catch (e) {
+    console.error("[post-conversion] welcome chat failed:", e);
   }
 }
 
