@@ -43,6 +43,7 @@ export default function HomePage() {
         ]}
         presetMotivo="particulares"
         landingIntent="socialmedia"
+        showLogin
       />
       {/* Footer SEO con links a las 6 landings dedicadas — se mantiene
           solo en la home (las landings dedicadas no lo renderizan para

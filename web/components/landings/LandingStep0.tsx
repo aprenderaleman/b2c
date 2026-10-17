@@ -55,6 +55,10 @@ export type LandingStep0Props = {
   belowCtaNote?: ReactNode;
   /** Píldora opcional sobre el H1 (e.g. "Clase de prueba · Agenda Prioritaria 10€"). */
   tagline?: string;
+  /** Botón "Iniciar sesión" → /login en el header (Gelfis 2026-10-17).
+   *  Solo la home lo activa — las landings paid se quedan sin
+   *  distracciones para no bajar conversión. */
+  showLogin?: boolean;
 };
 
 function isBullet(b: unknown): b is LandingBullet {
@@ -70,6 +74,7 @@ export function LandingStep0({
   microcopy = "Sin tarjeta — Agenda tu Clase gratis",
   belowCtaNote = null,
   tagline,
+  showLogin = false,
 }: LandingStep0Props) {
   // El CTA verde dirige a /agendar/cuando?landing={slug}&motivo={x}
   // para preservar atribución (Gelfis 2026-06-15). /agendar/cuando
@@ -118,8 +123,19 @@ export function LandingStep0({
         className="sticky top-0 z-40 backdrop-blur bg-white/95 border-b border-slate-100 w-full"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <div className="flex items-center justify-center h-14 md:h-16 px-4">
+        <div className="relative flex items-center justify-center h-14 md:h-16 px-4">
           <BrandLogo size="md" />
+          {showLogin && (
+            <a
+              href="/login"
+              className="absolute right-3 md:right-6 top-1/2 -translate-y-1/2
+                         rounded-full border border-slate-200 bg-white px-3.5 py-1.5
+                         text-sm font-semibold text-slate-700 hover:bg-slate-50
+                         hover:border-slate-300 transition-colors whitespace-nowrap"
+            >
+              Iniciar sesión
+            </a>
+          )}
         </div>
         {/* Barra de progreso — 0% al inicio para reforzar "estás empezando". */}
         <div className="h-1 w-full bg-slate-100">
