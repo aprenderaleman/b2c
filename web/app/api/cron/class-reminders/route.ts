@@ -185,7 +185,7 @@ async function runCron(req: Request) {
         user_id:  s.userId,
         type:     REMINDER_TYPE,
         title:    "Tu clase empieza en 30 minutos",
-        body:     `${classTitle} · ${startTime}`,
+        body:     `${classTitle} · ${startTime} · Pulsa aquí para entrar al aula (se abre 15 min antes)`,
         link:     `/aula/${c.id}`,
         class_id: c.id as string,
       });

@@ -128,12 +128,21 @@ export function NextClassCard(p: Props) {
             <span className="text-xs text-slate-400">Clase finalizada</span>
           )}
           {!roomOpen && !hasEnded && (
-            <Link
-              href={p.detailHref}
-              className="btn-secondary text-xs"
-            >
-              Ver detalle
-            </Link>
+            <>
+              <Link
+                href={p.detailHref}
+                className="btn-secondary text-xs"
+              >
+                Ver detalle
+              </Link>
+              {p.audience === "student" && (
+                // Caso Paola 2026-10-14: no encontró por dónde entrar. Le
+                // decimos exactamente dónde aparecerá el botón y cuándo.
+                <p className="max-w-[16rem] text-right text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                  El botón <strong>«Entrar al aula»</strong> aparecerá aquí mismo 15 minutos antes de la clase ({formatTime(new Date(opensAt).toISOString())} Berlín). No necesitas ningún enlace: entra en esta página y púlsalo.
+                </p>
+              )}
+            </>
           )}
         </div>
       </div>
