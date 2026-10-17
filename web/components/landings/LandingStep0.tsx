@@ -123,13 +123,17 @@ export function LandingStep0({
         className="sticky top-0 z-40 backdrop-blur bg-white/95 border-b border-slate-100 w-full"
         style={{ paddingTop: "env(safe-area-inset-top)" }}
       >
-        <div className="relative flex items-center justify-center h-14 md:h-16 px-4">
+        {/* Con showLogin, en mobile el logo va a la izquierda y el botón a
+            la derecha (centrados se pisaban); en desktop el logo sigue
+            centrado y el botón anclado a la derecha. Sin showLogin, el
+            header queda EXACTAMENTE como siempre (logo centrado). */}
+        <div className={`relative flex items-center h-14 md:h-16 px-4 ${showLogin ? "justify-between md:justify-center" : "justify-center"}`}>
           <BrandLogo size="md" />
           {showLogin && (
             <a
               href="/login"
-              className="absolute right-3 md:right-6 top-1/2 -translate-y-1/2
-                         rounded-full border border-slate-200 bg-white px-3.5 py-1.5
+              className="md:absolute md:right-6 md:top-1/2 md:-translate-y-1/2
+                         shrink-0 rounded-full border border-slate-200 bg-white px-3.5 py-1.5
                          text-sm font-semibold text-slate-700 hover:bg-slate-50
                          hover:border-slate-300 transition-colors whitespace-nowrap"
             >
