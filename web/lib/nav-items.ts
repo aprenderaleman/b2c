@@ -66,7 +66,8 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Chats",       href: "/estudiante/chats",      icon: "messageCircle",  priority: 2.5 },
     // "Material" oculto del menú (Gelfis 2026-10-01) — ruta viva; el
     // contenido canónico son los Cursos (SCHULE).
-    { label: "Grabaciones",  href: "/estudiante/grabaciones",   icon: "video",          priority: 3.5 },
+    // "Grabaciones" oculto del menú (Gelfis 2026-10-20) — la ruta
+    // /estudiante/grabaciones sigue viva por enlace directo.
     // Cursos destacado: justo debajo de "Hoy" (Gelfis 2026-10-01).
     { label: "Cursos",       href: "/estudiante/cursos",        icon: "graduationCap",  priority: 1.1 },
     { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
