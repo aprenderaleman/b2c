@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { GroupEditModal, type GroupMember } from "@/components/admin/GroupEditModal";
+import { CreateClassModal } from "@/components/admin/CreateClassModal";
 
 type Level = "A0" | "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 
@@ -20,6 +21,7 @@ export type TeacherGroup = {
 
 export function TeacherGroupsList({ groups }: { groups: TeacherGroup[] }) {
   const [editing, setEditing] = useState<TeacherGroup | null>(null);
+  const [scheduling, setScheduling] = useState<TeacherGroup | null>(null);
 
   if (groups.length === 0) {
     return (
@@ -49,13 +51,24 @@ export function TeacherGroupsList({ groups }: { groups: TeacherGroup[] }) {
                   <span>{g.members.length}{g.capacity ? `/${g.capacity}` : ""} alumno{g.members.length === 1 ? "" : "s"}</span>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setEditing(g)}
-                className="shrink-0 text-xs rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1 text-slate-600 dark:text-slate-300 hover:border-brand-400 hover:text-brand-600"
-              >
-                Editar
-              </button>
+              <div className="flex shrink-0 items-center gap-2">
+                {g.members.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setScheduling(g)}
+                    className="text-xs rounded-full bg-brand-500 hover:bg-brand-600 px-3 py-1 font-semibold text-white"
+                  >
+                    📅 Agendar clase
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setEditing(g)}
+                  className="text-xs rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-1 text-slate-600 dark:text-slate-300 hover:border-brand-400 hover:text-brand-600"
+                >
+                  Editar
+                </button>
+              </div>
             </header>
 
             {g.members.length > 0 && (
@@ -74,6 +87,18 @@ export function TeacherGroupsList({ groups }: { groups: TeacherGroup[] }) {
           </article>
         ))}
       </div>
+
+      {scheduling && (
+        <CreateClassModal
+          open={true}
+          mode="teacher"
+          onClose={() => setScheduling(null)}
+          initialType={scheduling.members.length > 1 ? "group" : "individual"}
+          initialStudentIds={scheduling.members.map(m => m.student_id)}
+          initialDuration={scheduling.members.length > 1 ? 90 : 50}
+          initialTitle={scheduling.members.length > 1 ? `${scheduling.name} — Clase de grupo` : undefined}
+        />
+      )}
 
       {editing && (
         <GroupEditModal

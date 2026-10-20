@@ -31,9 +31,15 @@ type Props = {
   /** Prellenado al abrir desde un hueco del calendario (Gelfis 2026-10-11). */
   initialDate?: string;   // yyyy-mm-dd (Berlín)
   initialTime?: string;   // HH:mm (Berlín)
+  /** Prellenado al abrir desde la tarjeta de un grupo (dúo/trío): tipo,
+   *  alumnos y duración ya puestos (Simon 2026-10-20). */
+  initialType?: "individual" | "group";
+  initialStudentIds?: string[];
+  initialDuration?: number;
+  initialTitle?: string;
 };
 
-export function CreateClassModal({ open, onClose, mode = "admin", initialDate, initialTime }: Props) {
+export function CreateClassModal({ open, onClose, mode = "admin", initialDate, initialTime, initialType, initialStudentIds, initialDuration, initialTitle }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -63,6 +69,10 @@ export function CreateClassModal({ open, onClose, mode = "admin", initialDate, i
     // está virgen (no pisamos lo que el profe ya haya tecleado).
     if (initialDate) setDateStr(cur => cur || initialDate);
     if (initialTime) setTimeStr(cur => cur || initialTime);
+    if (initialType) setType(initialType);
+    if (initialStudentIds && initialStudentIds.length > 0) setSelectedStudents(initialStudentIds);
+    if (initialDuration) setDurationMinutes(initialDuration);
+    if (initialTitle) { setTitle(initialTitle); setTitleTouched(true); }
     setLoadingOpts(true);
     const url = mode === "teacher" ? "/api/teacher/picker" : "/api/admin/picker";
     fetch(url)
