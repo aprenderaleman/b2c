@@ -615,11 +615,17 @@ function SafeScreenShareButton() {
       // SIEMPRE contra el estado real de LiveKit — el estado React
       // puede estar desfasado y es exactamente lo que causaba el bug.
       const enable = !localParticipant.isScreenShareEnabled;
+      // audio:true publica también el audio de lo compartido (petición
+      // Verónica 2026-10-21: presentaciones con sonido). En Chrome el
+      // audio solo viaja si en el picker se comparte una PESTAÑA con la
+      // casilla "Compartir audio de la pestaña" marcada (o pantalla
+      // completa con audio del sistema en Windows). RoomAudioRenderer
+      // ya reproduce el track screen_share_audio en los demás.
       await localParticipant.setScreenShareEnabled(enable, {
-        audio: false,
+        audio: true,
         selfBrowserSurface: "exclude",
         surfaceSwitching: "include",
-        systemAudio: "exclude",
+        systemAudio: "include",
       });
     } catch (e) {
       // NotAllowedError = el usuario cerró el picker — silencio.
