@@ -91,5 +91,54 @@ export async function POST(
     }
   }
 
+  // Clases "dobles" agendadas como dos clases seguidas (caso Francisco/Simon
+  // 2026-10-22): profe y alumno se quedaron en la primera sala y la segunda
+  // quedó "agendada" sin facturar. Si la sala estuvo abierta hasta pasado el
+  // inicio de la siguiente clase del mismo profe con los mismos alumnos, la
+  // damos por dada también (misma asistencia, facturación normal).
+  try {
+    await completeConsecutiveClasses(sb, id, (cls as { teacher_id: string }).teacher_id, now);
+  } catch (e) {
+    console.error("completeConsecutiveClasses failed:", e);
+  }
+
   return NextResponse.json({ ok: true });
+}
+
+async function completeConsecutiveClasses(
+  sb: ReturnType<typeof supabaseAdmin>,
+  classId: string,
+  teacherId: string,
+  endedAt: Date,
+): Promise<void> {
+  const { data: me } = await sb.from("classes").select("scheduled_at, is_trial").eq("id", classId).maybeSingle();
+  if (!me || (me as { is_trial: boolean | null }).is_trial) return;
+  const { data: myParts } = await sb.from("class_participants").select("student_id, attended").eq("class_id", classId);
+  const mine = ((myParts ?? []) as Array<{ student_id: string; attended: boolean | null }>);
+  const myIds = mine.map(p => p.student_id).sort();
+  if (myIds.length === 0) return;
+
+  // Candidatas: mismas participantes, mismo profe, empiezan después de esta
+  // y al menos 15 min antes de que se cerrara la sala.
+  const start = (me as { scheduled_at: string }).scheduled_at;
+  const cutoff = new Date(endedAt.getTime() - 15 * 60_000).toISOString();
+  const { data: next } = await sb.from("classes")
+    .select("id, scheduled_at, class_participants(student_id)")
+    .eq("teacher_id", teacherId).eq("status", "scheduled").eq("is_trial", false)
+    .gt("scheduled_at", start).lte("scheduled_at", cutoff)
+    .order("scheduled_at").limit(3);
+  for (const n of (next ?? []) as Array<{ id: string; scheduled_at: string; class_participants: Array<{ student_id: string }> }>) {
+    const ids = (n.class_participants ?? []).map(p => p.student_id).sort();
+    if (ids.length !== myIds.length || !ids.every((v, i) => v === myIds[i])) continue;
+    const minutes = Math.max(15, Math.min(240, Math.round((endedAt.getTime() - new Date(n.scheduled_at).getTime()) / 60_000)));
+    for (const p of mine) {
+      await sb.from("class_participants").update({ attended: p.attended }).eq("class_id", n.id).eq("student_id", p.student_id);
+    }
+    await sb.from("classes").update({
+      status: "completed", started_at: n.scheduled_at, ended_at: endedAt.toISOString(), actual_duration_minutes: minutes,
+      notes_admin: `Dada en la misma sala que la clase anterior (auto-cierre de clase consecutiva, ${new Date().toISOString().slice(0, 10)})`,
+    }).eq("id", n.id).eq("status", "scheduled");
+    try { await logClassHoursAndRollup({ classId: n.id, teacherId, durationMinutes: minutes }); }
+    catch (e) { console.error("logClassHoursAndRollup (consecutiva) failed:", e); }
+  }
 }
