@@ -12,6 +12,13 @@ type ChatListItem = {
   last_message_at:      string | null;
   last_message_preview: string | null;
   unread_count:         number;
+  other_user_ids?:      string[];
+};
+
+type Colleague = {
+  user_id: string;
+  name:    string;
+  chat_id: string | null;
 };
 
 type Message = {
@@ -53,15 +60,18 @@ function UrlChatSelector({ onSelect }: { onSelect: (id: string) => void }) {
 }
 
 export function ChatShell({ currentUserId, currentUserName: _currentUserName, embedded = false }: Props) {
-  const [chats,    setChats]    = useState<ChatListItem[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [loading,  setLoading]  = useState(true);
+  const [chats,       setChats]       = useState<ChatListItem[]>([]);
+  const [colleagues,  setColleagues]  = useState<Colleague[]>([]);
+  const [activeId,    setActiveId]    = useState<string | null>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [tab,         setTab]         = useState<"students" | "colleagues">("students");
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/chat");
       const data = await res.json();
       setChats(data.chats ?? []);
+      if (data.colleagues?.length) setColleagues(data.colleagues);
     } catch { /* offline */ }
     finally { setLoading(false); }
   }, []);
@@ -72,11 +82,36 @@ export function ChatShell({ currentUserId, currentUserName: _currentUserName, em
     return () => clearInterval(t);
   }, [load]);
 
-  // Selección desde la URL (?chat=): recarga la lista para que el chat
-  // recién creado aparezca aunque el polling aún no haya pasado.
   const selectFromUrl = useCallback((id: string) => { setActiveId(id); void load(); }, [load]);
 
+  const hasColleagues = colleagues.length > 0;
+  const colleagueUserIds = new Set(colleagues.map(c => c.user_id));
+
+  const studentChats = hasColleagues
+    ? chats.filter(c => !(c.other_user_ids ?? []).some(uid => colleagueUserIds.has(uid)))
+    : chats;
+  const colleagueChats = hasColleagues
+    ? chats.filter(c => (c.other_user_ids ?? []).some(uid => colleagueUserIds.has(uid)))
+    : [];
+
+  const visibleChats = tab === "colleagues" ? colleagueChats : studentChats;
   const active = chats.find(c => c.id === activeId) ?? null;
+
+  const startColleagueChat = async (colleagueUserId: string) => {
+    try {
+      const res = await fetch("/api/chat/start-colleague", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ colleague_user_id: colleagueUserId }),
+      });
+      const data = await res.json();
+      if (data.chat_id) {
+        setTab("colleagues");
+        setActiveId(data.chat_id);
+        void load();
+      }
+    } catch { /* ignore */ }
+  };
 
   return (
     // Móvil: UN panel a la vez (lista O conversación, con botón ← volver).
@@ -92,52 +127,130 @@ export function ChatShell({ currentUserId, currentUserName: _currentUserName, em
       <aside className={`border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-y-auto min-h-0
         ${activeId ? "hidden md:block" : ""}`}>
         <header className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 z-10">
-          <h1 className="text-lg font-bold text-slate-900 dark:text-slate-50">Conversaciones</h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {chats.length} {chats.length === 1 ? "conversación" : "conversaciones"}
-          </p>
-        </header>
-        <ul>
-          {loading && <li className="p-4 text-sm text-slate-500">Cargando…</li>}
-          {!loading && chats.length === 0 && (
-            <li className="p-6 text-sm text-slate-500 dark:text-slate-400">
-              Cuando te asignen una clase, se abrirá automáticamente un chat con tu profesor o grupo.
-            </li>
-          )}
-          {chats.map(c => (
-            <li key={c.id}>
+          {hasColleagues ? (
+            <div className="flex gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5">
               <button
                 type="button"
-                onClick={() => setActiveId(c.id)}
-                className={`block w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors
-                  ${activeId === c.id
-                    ? "bg-brand-50 dark:bg-brand-500/10"
-                    : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`}
+                onClick={() => setTab("students")}
+                className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors
+                  ${tab === "students"
+                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-50 shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"}`}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                Estudiantes
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("colleagues")}
+                className={`flex-1 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors
+                  ${tab === "colleagues"
+                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-50 shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"}`}
+              >
+                Colegas
+              </button>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-lg font-bold text-slate-900 dark:text-slate-50">Conversaciones</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {chats.length} {chats.length === 1 ? "conversación" : "conversaciones"}
+              </p>
+            </>
+          )}
+        </header>
+
+        {tab === "colleagues" && hasColleagues && (
+          <ul>
+            {colleagues.map(col => {
+              const existingChat = colleagueChats.find(c =>
+                (c.other_user_ids ?? []).includes(col.user_id)
+              );
+              return (
+                <li key={col.user_id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (existingChat) {
+                        setActiveId(existingChat.id);
+                      } else {
+                        void startColleagueChat(col.user_id);
+                      }
+                    }}
+                    className={`block w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors
+                      ${activeId && existingChat?.id === activeId
+                        ? "bg-brand-50 dark:bg-brand-500/10"
+                        : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">
-                        {c.title}
+                        {col.name}
                       </span>
-                      {c.type === "group" && (
-                        <span className="text-[10px] uppercase tracking-wider text-brand-600 dark:text-brand-400">Grupo</span>
+                      {existingChat ? (
+                        existingChat.unread_count > 0 && (
+                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white">
+                            {existingChat.unread_count}
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-[10px] uppercase tracking-wider text-brand-600 dark:text-brand-400">Nuevo</span>
                       )}
                     </div>
-                    <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate">
-                      {c.last_message_preview ?? <em className="italic">Sin mensajes aún</em>}
+                    {existingChat?.last_message_preview && (
+                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate">
+                        {existingChat.last_message_preview}
+                      </div>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {tab === "students" && (
+          <ul>
+            {loading && <li className="p-4 text-sm text-slate-500">Cargando…</li>}
+            {!loading && visibleChats.length === 0 && (
+              <li className="p-6 text-sm text-slate-500 dark:text-slate-400">
+                Cuando te asignen una clase, se abrirá automáticamente un chat con tu profesor o grupo.
+              </li>
+            )}
+            {visibleChats.map(c => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  onClick={() => setActiveId(c.id)}
+                  className={`block w-full text-left px-4 py-3 border-b border-slate-100 dark:border-slate-800 transition-colors
+                    ${activeId === c.id
+                      ? "bg-brand-50 dark:bg-brand-500/10"
+                      : "hover:bg-slate-50 dark:hover:bg-slate-800/60"}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-50 truncate">
+                          {c.title}
+                        </span>
+                        {c.type === "group" && (
+                          <span className="text-[10px] uppercase tracking-wider text-brand-600 dark:text-brand-400">Grupo</span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 truncate">
+                        {c.last_message_preview ?? <em className="italic">Sin mensajes aún</em>}
+                      </div>
                     </div>
+                    {c.unread_count > 0 && (
+                      <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white">
+                        {c.unread_count}
+                      </span>
+                    )}
                   </div>
-                  {c.unread_count > 0 && (
-                    <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-500 px-1.5 text-[11px] font-bold text-white">
-                      {c.unread_count}
-                    </span>
-                  )}
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </aside>
 
       {/* Active conversation */}

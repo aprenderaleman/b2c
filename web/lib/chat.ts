@@ -358,6 +358,64 @@ export async function listChatsForUser(userId: string): Promise<ChatListItem[]> 
   });
 }
 
+export type ColleagueContact = {
+  user_id:   string;
+  name:      string;
+  chat_id:   string | null;
+};
+
+export async function getColleagueContacts(userId: string): Promise<ColleagueContact[]> {
+  const sb = supabaseAdmin();
+  const { data: teacher } = await sb
+    .from("teachers")
+    .select("id, is_lead")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!teacher || !(teacher as { is_lead?: boolean }).is_lead) return [];
+
+  const { data: others } = await sb
+    .from("teachers")
+    .select("user_id, users!inner(full_name, active)")
+    .neq("id", (teacher as { id: string }).id)
+    .eq("active", true)
+    .eq("users.active", true);
+
+  const colleagues = ((others ?? []) as Array<{
+    user_id: string; users: { full_name: string | null; active: boolean } | Array<{ full_name: string | null; active: boolean }>;
+  }>).filter(t => {
+    const u = Array.isArray(t.users) ? t.users[0] : t.users;
+    return u && u.active;
+  });
+
+  const { data: parts } = await sb
+    .from("chat_participants")
+    .select("chat_id, user_id")
+    .eq("user_id", userId);
+  const myChatIds = ((parts ?? []) as Array<{ chat_id: string }>).map(p => p.chat_id);
+
+  const chatByColleague = new Map<string, string>();
+  if (myChatIds.length > 0) {
+    const { data: otherParts } = await sb
+      .from("chat_participants")
+      .select("chat_id, user_id, chats!inner(type)")
+      .in("chat_id", myChatIds)
+      .in("user_id", colleagues.map(c => c.user_id));
+    for (const p of (otherParts ?? []) as Array<{ chat_id: string; user_id: string; chats: { type: string } | Array<{ type: string }> }>) {
+      const ch = Array.isArray(p.chats) ? p.chats[0] : p.chats;
+      if (ch?.type === "direct") chatByColleague.set(p.user_id, p.chat_id);
+    }
+  }
+
+  return colleagues.map(c => {
+    const u = Array.isArray(c.users) ? c.users[0] : c.users;
+    return {
+      user_id: c.user_id,
+      name:    u?.full_name ?? "Profesor",
+      chat_id: chatByColleague.get(c.user_id) ?? null,
+    };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export async function isChatParticipant(chatId: string, userId: string): Promise<boolean> {
   const sb = supabaseAdmin();
   const { data } = await sb.from("chat_participants").select("chat_id").eq("chat_id", chatId).eq("user_id", userId).maybeSingle();

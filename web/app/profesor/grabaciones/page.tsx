@@ -58,6 +58,11 @@ export default async function TeacherRecordingsPage() {
         </div>
       )}
 
+      {/* Lead teacher: trial recordings from other teachers (last 2 weeks) */}
+      {colleagueRecs.length > 0 && (
+        <ColleagueRecordingGroup recs={colleagueRecs} />
+      )}
+
       {/* Trial recordings — only the assigned teacher (and superadmin) see these. */}
       {trialRecs.length > 0 && (
         <RecordingGroup
@@ -75,11 +80,6 @@ export default async function TeacherRecordingsPage() {
           recs={regularRecs}
           tone="regular"
         />
-      )}
-
-      {/* Lead teacher: recordings from other teachers */}
-      {colleagueRecs.length > 0 && (
-        <ColleagueRecordingGroup recs={colleagueRecs} />
       )}
     </main>
   );
