@@ -17,6 +17,7 @@ type StudentCore = {
   monthly_price_cents: number | null;
   classes_remaining: number | null;
   clases_totales: number | null;
+  classes_adjustment: number | null;
   oferta_id: string | null;
   users: { full_name: string | null; email: string } | Array<{ full_name: string | null; email: string }>;
 };
@@ -28,6 +29,7 @@ type Item = {
   classes_per_month: number | null; monthly_price_cents: number | null;
   total: number | null; remaining: number | null;
   hasOferta: boolean; disponibles: number | null; agendaHasta?: string | null; llenaPorAgenda?: boolean;
+  adjustment: number; consumidas?: number;
 };
 
 export default async function TeacherStudentsPage() {
@@ -54,7 +56,7 @@ export default async function TeacherStudentsPage() {
       student_id,
       students!inner(
         current_level, goal, subscription_type, subscription_status,
-        classes_per_month, monthly_price_cents, classes_remaining, clases_totales, oferta_id,
+        classes_per_month, monthly_price_cents, classes_remaining, clases_totales, classes_adjustment, oferta_id,
         users!inner(full_name, email, active)
       ),
       group:student_groups!inner(teacher_id, active)
@@ -84,6 +86,7 @@ export default async function TeacherStudentsPage() {
       monthly_price_cents: s.monthly_price_cents,
       total: s.clases_totales,
       remaining: s.classes_remaining,
+      adjustment: s.classes_adjustment ?? 0,
       hasOferta: !!s.oferta_id || s.clases_totales != null,
       disponibles: null,
     });
@@ -96,7 +99,7 @@ export default async function TeacherStudentsPage() {
       .filter(s => s.hasOferta)
       .map(async (s) => {
         const b = await getClassBalance(s.id).catch(() => null);
-        if (b) { s.disponibles = b.disponibles; s.agendaHasta = b.agendaHasta; s.llenaPorAgenda = b.llenaPorAgenda; }
+        if (b) { s.disponibles = b.disponibles; s.agendaHasta = b.agendaHasta; s.llenaPorAgenda = b.llenaPorAgenda; s.consumidas = b.consumidas; }
       }),
   );
 
@@ -131,9 +134,12 @@ export default async function TeacherStudentsPage() {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
               {list.map(s => {
-                const total = s.total ?? 0;
+                // "Dadas" = clases realmente consumidas (Jonathan 2026-10-22:
+                // total − restantes ocultaba las clases extra de referido/bono,
+                // mostrando 5 cuando eran 6). El total incluye esas extras.
+                const total = (s.total ?? 0) + Math.max(0, s.adjustment);
                 const remaining = s.remaining ?? 0;
-                const done = Math.max(0, total - remaining);
+                const done = s.consumidas ?? Math.max(0, total - remaining);
                 const pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
                 return (
                   <tr key={s.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
