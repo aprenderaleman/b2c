@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
-import { getTeacherRecordings, getLeadTeacherRecordings, formatDurationHms } from "@/lib/recordings";
+import { getTeacherRecordings, getLeadTeacherRecordings, formatDurationHms, type LeadTeacherResult } from "@/lib/recordings";
 import { formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +34,9 @@ export default async function TeacherRecordingsPage() {
 
   // Lead teacher sees recordings from other teachers
   const isLead = Boolean((teacher as { is_lead?: boolean }).is_lead);
-  const colleagueRecs = isLead ? await getLeadTeacherRecordings(teacher.id) : [];
+  const colleagueResult: LeadTeacherResult = isLead
+    ? await getLeadTeacherRecordings(teacher.id)
+    : { recordings: [], teacherNames: [] };
 
   return (
     <main className="mx-auto max-w-4xl p-4 sm:p-6 space-y-8">
@@ -49,7 +51,7 @@ export default async function TeacherRecordingsPage() {
         </p>
       </header>
 
-      {recs.length === 0 && colleagueRecs.length === 0 && (
+      {recs.length === 0 && colleagueResult.recordings.length === 0 && colleagueResult.teacherNames.length === 0 && (
         <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center">
           <div className="text-4xl">🎬</div>
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
@@ -59,8 +61,8 @@ export default async function TeacherRecordingsPage() {
       )}
 
       {/* Lead teacher: trial recordings from other teachers (last 2 weeks) */}
-      {colleagueRecs.length > 0 && (
-        <ColleagueRecordingGroup recs={colleagueRecs} />
+      {colleagueResult.teacherNames.length > 0 && (
+        <ColleagueRecordingGroup recs={colleagueResult.recordings} teacherNames={colleagueResult.teacherNames} />
       )}
 
       {/* Trial recordings — only the assigned teacher (and superadmin) see these. */}
@@ -195,8 +197,9 @@ function labelForMonth(key: string): string {
 type ColleagueRec = Awaited<ReturnType<typeof getLeadTeacherRecordings>>[number];
 type TeacherGroup = { name: string; recs: ColleagueRec[] };
 
-function ColleagueRecordingGroup({ recs }: { recs: ColleagueRec[] }) {
+function ColleagueRecordingGroup({ recs, teacherNames }: { recs: ColleagueRec[]; teacherNames: string[] }) {
   const byTeacher = new Map<string, ColleagueRec[]>();
+  for (const name of teacherNames) byTeacher.set(name, []);
   for (const r of recs) {
     const arr = byTeacher.get(r.teacher_name) ?? [];
     arr.push(r);
@@ -231,7 +234,11 @@ function ColleagueRecordingGroup({ recs }: { recs: ColleagueRec[] }) {
               </div>
               <span className="text-indigo-400 dark:text-indigo-500 text-xs group-open:rotate-90 transition-transform">&#9654;</span>
             </summary>
-            <ul className="space-y-2 px-3 pb-3">
+            <div className="px-3 pb-3">
+            {g.recs.length === 0 ? (
+              <p className="text-xs text-slate-400 dark:text-slate-500 italic py-2">Sin grabaciones en las últimas 2 semanas.</p>
+            ) : (
+            <ul className="space-y-2">
               {g.recs.map(r => (
                 <li key={r.id} className="rounded-xl bg-white/60 dark:bg-slate-900/40 border border-indigo-100 dark:border-indigo-500/20 p-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
@@ -260,6 +267,8 @@ function ColleagueRecordingGroup({ recs }: { recs: ColleagueRec[] }) {
                 </li>
               ))}
             </ul>
+            )}
+            </div>
           </details>
         ))}
       </div>

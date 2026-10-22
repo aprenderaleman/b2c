@@ -152,9 +152,12 @@ export async function getTeacherRecordings(teacherId: string): Promise<
  * — for the lead teacher to review onboarding quality.
  * Excludes coaching sessions (superadmin-only).
  */
-export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
-  Array<RecordingRow & { class_title: string; scheduled_at: string; is_trial: boolean; teacher_name: string }>
-> {
+export type LeadTeacherResult = {
+  recordings: Array<RecordingRow & { class_title: string; scheduled_at: string; is_trial: boolean; teacher_name: string }>;
+  teacherNames: string[];
+};
+
+export async function getLeadTeacherRecordings(myTeacherId: string): Promise<LeadTeacherResult> {
   const sb = supabaseAdmin();
 
   const { data: teachers } = await sb
@@ -179,7 +182,8 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
     teacherNameMap.set(t.id, u?.full_name ?? "Profesor");
   }
 
-  if (otherTeacherIds.length === 0) return [];
+  const allTeacherNames = [...teacherNameMap.values()].sort();
+  if (otherTeacherIds.length === 0) return { recordings: [], teacherNames: allTeacherNames };
 
   const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -195,7 +199,7 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
     .eq("is_trial", true)
     .gte("scheduled_at", twoWeeksAgo)
     .or("is_coaching.eq.false,is_coaching.is.null");
-  if (error) return [];
+  if (error) return { recordings: [], teacherNames: allTeacherNames };
 
   type Raw = {
     id: string; title: string; scheduled_at: string; is_trial: boolean; teacher_id: string;
@@ -228,7 +232,7 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
     }
   }
   out.sort((a, b) => b.created_at.localeCompare(a.created_at));
-  return out;
+  return { recordings: out, teacherNames: allTeacherNames };
 }
 
 export async function getCloserRecordings(closerUserId: string): Promise<
