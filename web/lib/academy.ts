@@ -579,7 +579,7 @@ export async function getTeacherStudents(): Promise<Record<string, TeacherStuden
 export function ritmoLabelEs(s: Pick<StudentRow, "subscription_type" | "classes_per_month" | "monthly_price_cents">): string {
   if (s.subscription_type === "monthly_subscription") {
     const byClasses: Record<number, string> = { 6: "Viajero", 8: "Estándar", 12: "Intensivo", 16: "VIP Express" };
-    const byPrice:   Record<number, string> = { 240: "Viajero", 320: "Estándar", 450: "Intensivo", 690: "VIP Express" };
+    const byPrice:   Record<number, string> = { 290: "Viajero", 390: "Estándar", 560: "Intensivo", 860: "VIP Express", 240: "Viajero", 320: "Estándar", 450: "Intensivo", 690: "VIP Express" };
     return (s.classes_per_month && byClasses[s.classes_per_month])
       || (s.monthly_price_cents && byPrice[s.monthly_price_cents / 100])
       || "Suscripción";

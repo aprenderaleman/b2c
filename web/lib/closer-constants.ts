@@ -136,10 +136,10 @@ export type RitmoOption = {
 };
 
 export const RITMOS: RitmoOption[] = [
-  { id: "viajero", name: "Viajero", emoji: "\u{1f30d}", pricePerMonth: 240 },
-  { id: "estandar", name: "Estandar", emoji: "⭐", pricePerMonth: 320 },
-  { id: "intensivo", name: "Intensivo", emoji: "\u{1f525}", pricePerMonth: 450 },
-  { id: "vip_express", name: "VIP Express", emoji: "\u{1f680}", pricePerMonth: 690 },
+  { id: "viajero", name: "Viajero", emoji: "\u{1f30d}", pricePerMonth: 290 },
+  { id: "estandar", name: "Estandar", emoji: "⭐", pricePerMonth: 390 },
+  { id: "intensivo", name: "Intensivo", emoji: "\u{1f525}", pricePerMonth: 560 },
+  { id: "vip_express", name: "VIP Express", emoji: "\u{1f680}", pricePerMonth: 860 },
 ];
 
 export type ActionButton = {
