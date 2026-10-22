@@ -201,8 +201,12 @@ export default async function TeacherStudentDetail({
           </p>
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
             <div className="rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 p-3">
-              <div className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{balance.disponibles}</div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80 dark:text-emerald-300/80">Agendables ahora</div>
+              <div className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">{balance.llenaPorAgenda ? "📅" : balance.disponibles}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700/80 dark:text-emerald-300/80">
+                {balance.llenaPorAgenda
+                  ? `Agenda completa${balance.agendaHasta ? ` hasta ${new Date(balance.agendaHasta).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Berlin" })}` : ""}`
+                  : "Agendables ahora"}
+              </div>
             </div>
             <div className="rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3">
               <div className="text-2xl font-bold tabular-nums text-slate-700 dark:text-slate-200">{balance.agendadas}</div>

@@ -7,6 +7,11 @@ export type ClassBalance = {
   agendadas: number;
   disponibles: number;
   classesPerMonth: number | null;
+  /** Fecha (ISO) de la última clase futura agendada, o null. */
+  agendaHasta: string | null;
+  /** true cuando disponibles=0 solo porque ya hay clases agendadas a futuro
+   *  que cubren el saldo (no porque el alumno no tenga saldo). */
+  llenaPorAgenda: boolean;
 };
 
 export async function getClassBalance(studentId: string): Promise<ClassBalance> {
@@ -23,7 +28,7 @@ export async function getClassBalance(studentId: string): Promise<ClassBalance> 
     classes_per_month: number | null;
     classes_remaining: number | null;
   } | null;
-  if (!s) return { total: null, desbloqueadas: 0, consumidas: 0, agendadas: 0, disponibles: 0, classesPerMonth: null };
+  if (!s) return { total: null, desbloqueadas: 0, consumidas: 0, agendadas: 0, disponibles: 0, classesPerMonth: null, agendaHasta: null, llenaPorAgenda: false };
 
   const { data: consumedRow } = await sb
     .from("classes")
@@ -59,6 +64,14 @@ export async function getClassBalance(studentId: string): Promise<ClassBalance> 
         .eq("status", "scheduled")
         .gte("scheduled_at", new Date().toISOString());
 
+  let agendaHasta: string | null = null;
+  if (ids.length > 0) {
+    const { data: last } = await sb.from("classes").select("scheduled_at").in("id", ids)
+      .eq("status", "scheduled").gte("scheduled_at", new Date().toISOString())
+      .order("scheduled_at", { ascending: false }).limit(1).maybeSingle();
+    agendaHasta = (last as { scheduled_at: string } | null)?.scheduled_at ?? null;
+  }
+
   const desbloqueadas = s.clases_desbloqueadas ?? 0;
   const cpm = s.classes_per_month;
 
@@ -73,6 +86,14 @@ export async function getClassBalance(studentId: string): Promise<ClassBalance> 
     disponibles = Math.min(disponibles, s.classes_remaining);
   }
 
+  // "Agenda llena": el 0 viene de clases ya reservadas, no de falta de saldo
+  // (Simon 2026-10-22: Marina con 82 clases agendadas salía "0 disponibles").
+  const saldoSinAgenda = Math.min(
+    desbloqueadas - consumidas,
+    s.classes_remaining ?? Number.POSITIVE_INFINITY,
+  );
+  const llenaPorAgenda = disponibles <= 0 && (agendadas ?? 0) > 0 && saldoSinAgenda > 0;
+
   return {
     total: s.clases_totales,
     desbloqueadas,
@@ -80,6 +101,8 @@ export async function getClassBalance(studentId: string): Promise<ClassBalance> 
     agendadas: agendadas ?? 0,
     disponibles: Math.max(disponibles, 0),
     classesPerMonth: cpm,
+    agendaHasta,
+    llenaPorAgenda,
   };
 }
 

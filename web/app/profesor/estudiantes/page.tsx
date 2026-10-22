@@ -27,7 +27,7 @@ type Item = {
   subscription_type: string; subscription_status: string;
   classes_per_month: number | null; monthly_price_cents: number | null;
   total: number | null; remaining: number | null;
-  hasOferta: boolean; disponibles: number | null;
+  hasOferta: boolean; disponibles: number | null; agendaHasta?: string | null; llenaPorAgenda?: boolean;
 };
 
 export default async function TeacherStudentsPage() {
@@ -96,7 +96,7 @@ export default async function TeacherStudentsPage() {
       .filter(s => s.hasOferta)
       .map(async (s) => {
         const b = await getClassBalance(s.id).catch(() => null);
-        if (b) s.disponibles = b.disponibles;
+        if (b) { s.disponibles = b.disponibles; s.agendaHasta = b.agendaHasta; s.llenaPorAgenda = b.llenaPorAgenda; }
       }),
   );
 
@@ -170,7 +170,11 @@ export default async function TeacherStudentsPage() {
                       <span className="text-xs text-slate-500 dark:text-slate-400"> por dar</span>
                     </Td>
                     <Td>
-                      {s.hasOferta && s.disponibles != null ? (
+                      {s.hasOferta && s.disponibles != null && s.llenaPorAgenda ? (
+                        <span className="text-xs text-slate-500 dark:text-slate-400" title="Las clases ya agendadas cubren todo el saldo desbloqueado. El contador sube con la siguiente cuota.">
+                          📅 Agenda completa{s.agendaHasta ? ` hasta ${new Date(s.agendaHasta).toLocaleDateString("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Berlin" })}` : ""}
+                        </span>
+                      ) : s.hasOferta && s.disponibles != null ? (
                         <>
                           <span className={`text-sm font-semibold tabular-nums ${
                             s.disponibles <= 1 ? "text-red-600 dark:text-red-400"
