@@ -194,7 +194,7 @@ function labelForMonth(key: string): string {
           .replace(/^\w/, c => c.toUpperCase());
 }
 
-type ColleagueRec = Awaited<ReturnType<typeof getLeadTeacherRecordings>>[number];
+type ColleagueRec = LeadTeacherResult["recordings"][number];
 type TeacherGroup = { name: string; recs: ColleagueRec[] };
 
 function ColleagueRecordingGroup({ recs, teacherNames }: { recs: ColleagueRec[]; teacherNames: string[] }) {
