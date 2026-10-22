@@ -193,6 +193,7 @@ function labelForMonth(key: string): string {
 }
 
 type ColleagueRec = Awaited<ReturnType<typeof getLeadTeacherRecordings>>[number];
+type TeacherGroup = { name: string; recs: ColleagueRec[] };
 
 function ColleagueRecordingGroup({ recs }: { recs: ColleagueRec[] }) {
   const byTeacher = new Map<string, ColleagueRec[]>();
@@ -201,7 +202,9 @@ function ColleagueRecordingGroup({ recs }: { recs: ColleagueRec[] }) {
     arr.push(r);
     byTeacher.set(r.teacher_name, arr);
   }
-  const teacherNames = [...byTeacher.keys()].sort();
+  const groups: TeacherGroup[] = [...byTeacher.entries()]
+    .map(([name, recs]) => ({ name, recs }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <section className="space-y-3">
@@ -214,44 +217,52 @@ function ColleagueRecordingGroup({ recs }: { recs: ColleagueRec[] }) {
         </span>
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Clases de prueba de tus colegas en las últimas 2 semanas.
+        Clases de prueba de tus colegas en las últimas 2 semanas (+30 min).
       </p>
-      {teacherNames.map(name => (
-        <div key={name} className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">
-            {name}
-          </h3>
-          <ul className="space-y-2">
-            {(byTeacher.get(name) ?? []).map(r => (
-              <li key={r.id} className="rounded-2xl bg-indigo-50/40 dark:bg-indigo-500/5 border border-indigo-200 dark:border-indigo-500/30 p-3 sm:p-4 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                  <div className="min-w-0">
-                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
-                      {r.is_trial ? "🎯 " : ""}{r.class_title}
-                    </h4>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 capitalize">
-                      {formatClassDateEs(r.scheduled_at)} · {formatClassTimeEs(r.scheduled_at)}
-                      {r.duration_seconds ? ` · ${formatDurationHms(r.duration_seconds)}` : ""}
-                    </p>
+      <div className="space-y-2">
+        {groups.map(g => (
+          <details key={g.name} className="group rounded-2xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/40 dark:bg-indigo-500/5 overflow-hidden">
+            <summary className="flex items-center justify-between cursor-pointer px-4 py-3 select-none hover:bg-indigo-100/50 dark:hover:bg-indigo-500/10 transition-colors">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{g.name}</span>
+                <span className="rounded-full px-1.5 py-0.5 text-[10px] font-bold bg-indigo-200/60 dark:bg-indigo-500/20 text-indigo-700 dark:text-indigo-300">
+                  {g.recs.length}
+                </span>
+              </div>
+              <span className="text-indigo-400 dark:text-indigo-500 text-xs group-open:rotate-90 transition-transform">&#9654;</span>
+            </summary>
+            <ul className="space-y-2 px-3 pb-3">
+              {g.recs.map(r => (
+                <li key={r.id} className="rounded-xl bg-white/60 dark:bg-slate-900/40 border border-indigo-100 dark:border-indigo-500/20 p-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                        {r.class_title}
+                      </h4>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 capitalize">
+                        {formatClassDateEs(r.scheduled_at)} · {formatClassTimeEs(r.scheduled_at)}
+                        {r.duration_seconds ? ` · ${formatDurationHms(r.duration_seconds)}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <StatusBadge status={r.status} />
+                      {r.status === "ready" && (
+                        <Link
+                          href={`/grabacion/${r.id}`}
+                          prefetch={false}
+                          className="btn-primary text-xs whitespace-nowrap"
+                        >
+                          ▶ Reproducir
+                        </Link>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <StatusBadge status={r.status} />
-                    {r.status === "ready" && (
-                      <Link
-                        href={`/grabacion/${r.id}`}
-                        prefetch={false}
-                        className="btn-primary text-xs whitespace-nowrap"
-                      >
-                        ▶ Reproducir
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ))}
+      </div>
     </section>
   );
 }

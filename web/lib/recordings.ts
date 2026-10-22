@@ -162,12 +162,15 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
     .select("id, users(full_name, role)")
     .neq("id", myTeacherId);
 
+  const ALLOWED_NAMES = ["sabine", "veronica", "ana"];
   const otherTeacherIds = ((teachers ?? []) as Array<{
     id: string; users: { full_name: string; role: string } | Array<{ full_name: string; role: string }> | null;
   }>)
     .filter(t => {
       const u = Array.isArray(t.users) ? t.users[0] : t.users;
-      return u && u.role !== "superadmin";
+      if (!u || u.role === "superadmin") return false;
+      const lower = (u.full_name ?? "").toLowerCase();
+      return ALLOWED_NAMES.some(n => lower.includes(n));
     });
 
   const teacherNameMap = new Map<string, string>();
@@ -198,17 +201,20 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
     id: string; title: string; scheduled_at: string; is_trial: boolean; teacher_id: string;
     recordings: Record<string, unknown>[] | undefined;
   };
+  const MIN_DURATION = 30 * 60; // 30 minutes
   const out: Array<RecordingRow & { class_title: string; scheduled_at: string; is_trial: boolean; teacher_name: string }> = [];
   for (const c of (data ?? []) as Raw[]) {
     const recs = c.recordings ?? [];
     for (const rec of recs) {
       if (rec.status === "deleted") continue;
+      const dur = (rec.duration_seconds as number | null) ?? 0;
+      if (dur < MIN_DURATION) continue;
       out.push({
         id:               rec.id as string,
         class_id:         c.id,
         file_url:         (rec.file_url as string | null) ?? null,
         file_size_bytes:  null,
-        duration_seconds: (rec.duration_seconds as number | null) ?? null,
+        duration_seconds: dur,
         status:           (rec.status as RecordingStatus) ?? "processing",
         error:            (rec.error as string | null) ?? null,
         downloadable:     Boolean(rec.downloadable),
