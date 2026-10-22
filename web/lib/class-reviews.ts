@@ -37,7 +37,7 @@ export async function getPendingReviewForStudent(
       classes!inner(
         id, scheduled_at, status,
         group:student_groups(name),
-        teacher:teachers!inner(users!inner(full_name))
+        teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name))
       )
     `)
     .eq("student_id", studentId)

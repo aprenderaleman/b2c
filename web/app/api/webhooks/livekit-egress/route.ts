@@ -95,7 +95,7 @@ export async function POST(req: Request) {
   // Resolve the class this recording belongs to.
   const { data: cls } = await sb
     .from("classes")
-    .select("id, title, teacher_id, teacher:teachers!inner(user_id), class_participants(students!inner(user_id))")
+    .select("id, title, teacher_id, teacher:teachers!classes_teacher_id_fkey!inner(user_id), class_participants(students!inner(user_id))")
     .eq("livekit_room_id", roomName)
     .maybeSingle();
 

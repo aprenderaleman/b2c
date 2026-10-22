@@ -83,7 +83,7 @@ export async function authorizeAulaAccess(
     .select(`
       id, status, scheduled_at, duration_minutes, livekit_room_id,
       teacher_id, sesion_closer_id,
-      teacher:teachers(user_id)
+      teacher:teachers!classes_teacher_id_fkey(user_id)
     `)
     .eq("id", classId)
     .maybeSingle();
@@ -192,7 +192,7 @@ export async function canViewRecording(
     .from("classes")
     .select(`
       id, is_trial, is_coaching,
-      teacher:teachers(user_id),
+      teacher:teachers!classes_teacher_id_fkey(user_id),
       class_participants(
         students(user_id)
       )

@@ -51,7 +51,7 @@ export async function POST(
     .from("classes")
     .select(`
       id, scheduled_at, duration_minutes, short_code,
-      teacher:teachers!inner(users!inner(full_name, email))
+      teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email))
     `)
     .eq("lead_id", leadId)
     .eq("is_trial", true)

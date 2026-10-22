@@ -310,7 +310,7 @@ async function RecentClassesSection({ studentId }: { studentId: string }) {
       attended,
       class:classes!inner(
         id, scheduled_at, duration_minutes, title, type, status,
-        teacher:teachers(users(full_name, email))
+        teacher:teachers!classes_teacher_id_fkey(users(full_name, email))
       )
     `)
     .eq("student_id", studentId)

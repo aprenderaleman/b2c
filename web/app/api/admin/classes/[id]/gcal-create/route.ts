@@ -76,7 +76,7 @@ export async function POST(
     .select(`
       id, scheduled_at, duration_minutes, google_calendar_event_id, short_code,
       is_trial, lead_id,
-      teacher:teachers(users!inner(full_name, email)),
+      teacher:teachers!classes_teacher_id_fkey(users!inner(full_name, email)),
       lead:leads(id, name, email, whatsapp_normalized, german_level, goal)
     `)
     .eq("id", id)

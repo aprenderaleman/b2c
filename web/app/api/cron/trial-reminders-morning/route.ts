@@ -89,7 +89,7 @@ async function run(req: Request) {
     .from("classes")
     .select(`
       id, scheduled_at, duration_minutes, notes_admin, short_code,
-      teacher:teachers!inner(users!inner(full_name, email)),
+      teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email)),
       lead:leads!inner(id, name, language, email, whatsapp_normalized, ai_paused_until, status, reschedule_state)
     `)
     .eq("is_trial", true)

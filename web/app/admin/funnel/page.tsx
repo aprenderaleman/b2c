@@ -336,7 +336,7 @@ export default async function FunnelControlPage({
     const sb = supabaseAdmin();
     const { data: classRows } = await sb
       .from("classes")
-      .select("lead_id, teacher:teachers!inner(users!inner(full_name, email))")
+      .select("lead_id, teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email))")
       .in("lead_id", leadIdsWithTrial)
       .eq("is_trial", true)
       .order("created_at", { ascending: false });

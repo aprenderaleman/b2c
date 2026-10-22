@@ -88,7 +88,7 @@ export default async function CloserLeadPage({
 
   const { data: trialRows } = await sb
     .from("classes")
-    .select("id, scheduled_at, short_code, status, teacher:teachers!inner(users!inner(full_name, email))")
+    .select("id, scheduled_at, short_code, status, teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email))")
     .eq("lead_id", leadId)
     .eq("is_trial", true)
     .in("status", ["scheduled", "live", "completed"])

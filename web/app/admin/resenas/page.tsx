@@ -61,7 +61,7 @@ export default async function ReviewsAdminPage({
       classes!inner(
         id, scheduled_at,
         group:student_groups(name),
-        teacher:teachers!inner(id, users!inner(full_name))
+        teacher:teachers!classes_teacher_id_fkey!inner(id, users!inner(full_name))
       ),
       students!inner(
         users!inner(full_name, email)

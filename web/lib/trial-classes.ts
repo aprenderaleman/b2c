@@ -58,7 +58,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
     .select(`
       id, scheduled_at, duration_minutes, status, short_code, notes_admin,
       teacher_id,
-      teacher:teachers!inner(users!inner(full_name, email)),
+      teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email)),
       lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at, trial_attended_at, trial_absent_at, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent),
       script:trial_class_scripts(teacher_notes, final_outcome, voice_note_sent_at)
     `)

@@ -69,7 +69,7 @@ async function run(req: Request) {
       id, scheduled_at, duration_minutes, short_code, lead_id, teacher_id,
       title, deposit_paid_at,
       lead:leads!inner(id, name, email, whatsapp_normalized, language, german_level, goal, landing_intent, reserva_prioritaria, qualification_answers),
-      teacher:teachers!inner(users!inner(full_name, email))
+      teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email))
     `)
     .eq("is_trial", true)
     .eq("status", "scheduled")

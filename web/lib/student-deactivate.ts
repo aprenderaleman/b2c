@@ -45,7 +45,7 @@ export async function deactivateStudent(
       class_id,
       classes!inner(
         id, scheduled_at, status, group_id,
-        teacher:teachers!inner(id, user_id, users!inner(full_name, phone))
+        teacher:teachers!classes_teacher_id_fkey!inner(id, user_id, users!inner(full_name, phone))
       )
     `)
     .eq("student_id", studentId)

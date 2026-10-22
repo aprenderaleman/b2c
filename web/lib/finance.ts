@@ -477,7 +477,7 @@ export async function getHoursAuditData(monthDate: Date): Promise<{
     .select(`
       id, teacher_id, title, scheduled_at, duration_minutes,
       actual_duration_minutes, started_at, ended_at, is_trial,
-      teachers!inner(users!inner(full_name, role))
+      teachers!classes_teacher_id_fkey!inner(users!inner(full_name, role))
     `)
     .eq("status", "completed")
     .eq("billed_hours", 0)

@@ -98,7 +98,7 @@ export async function GET(
       .select(`
         class:classes!inner(
           id, title, topic, scheduled_at, duration_minutes, status, livekit_room_id,
-          teacher:teachers(users(full_name, email))
+          teacher:teachers!classes_teacher_id_fkey(users(full_name, email))
         )
       `)
       .eq("student_id", (student as { id: string }).id)

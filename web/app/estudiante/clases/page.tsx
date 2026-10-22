@@ -50,7 +50,7 @@ export default async function StudentClassesPage({
       attended,
       class:classes!inner(
         id, scheduled_at, duration_minutes, title, type, status,
-        teacher:teachers!inner(
+        teacher:teachers!classes_teacher_id_fkey!inner(
           users!inner(email, full_name)
         )
       )

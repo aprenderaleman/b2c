@@ -42,7 +42,7 @@ export default async function ConfirmacionPage({
     .from("classes")
     .select(`
       id, scheduled_at, duration_minutes, lead_id, is_trial, short_code, sesion_closer_id,
-      teacher:teachers(users(full_name, email)),
+      teacher:teachers!classes_teacher_id_fkey(users(full_name, email)),
       closer:users!classes_sesion_closer_id_fkey(full_name, email),
       lead:leads!inner(name, email, whatsapp_normalized, reserva_prioritaria, landing_intent, country)
     `)

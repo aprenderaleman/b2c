@@ -75,7 +75,7 @@ async function run(req: Request) {
     .from("classes")
     .select(`
       id, scheduled_at, duration_minutes, title, teacher_id,
-      teacher:teachers!inner(
+      teacher:teachers!classes_teacher_id_fkey!inner(
         user_id,
         users!inner(email, full_name, language_preference, notifications_opt_out)
       ),

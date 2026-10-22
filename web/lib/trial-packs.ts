@@ -91,33 +91,33 @@ export const RITMOS: Ritmo[] = [
     id: "viajero",
     name: "Viajero",
     emoji: "🌍",
-    pricePerMonth: 240,
+    pricePerMonth: 290,
     classesPerMonth: 6,
-    baseUrl: "https://buy.stripe.com/cNi7sE8Hjd9Wfkr2uP0co0D",
+    baseUrl: "https://buy.stripe.com/6oU4gse1Dd9Wa07glF0co1g",
   }),
   withGoals({
     id: "estandar",
     name: "Estándar",
     emoji: "⭐",
-    pricePerMonth: 320,
+    pricePerMonth: 390,
     classesPerMonth: 8,
-    baseUrl: "https://buy.stripe.com/bJeeV6e1D4Dqc8fd9t0co0v",
+    baseUrl: "https://buy.stripe.com/00wdR20aN3zm2xF0mH0co1h",
   }),
   withGoals({
     id: "intensivo",
     name: "Intensivo",
     emoji: "🚀",
-    pricePerMonth: 450,
+    pricePerMonth: 560,
     classesPerMonth: 12,
-    baseUrl: "https://buy.stripe.com/6oUcMY9Ln5Hu2xFb1l0co0w",
+    baseUrl: "https://buy.stripe.com/4gM5kw6zbfi40pxglF0co1i",
   }),
   withGoals({
     id: "vip_express",
     name: "VIP Express",
     emoji: "👑",
-    pricePerMonth: 690,
+    pricePerMonth: 860,
     classesPerMonth: 16,
-    baseUrl: "https://buy.stripe.com/bJe6oA8Hj5Hu4FN2uP0co0x",
+    baseUrl: "https://buy.stripe.com/bJeaEQ8Hj0naa077P90co1j",
   }),
 ];
 
@@ -132,11 +132,11 @@ export type OneTimePack = {
 };
 
 export const ONE_TIME_PACKS: OneTimePack[] = [
-  { id: "a1_a2",         name: "A2 Arranque Alemania",     classes: GOAL_CLASSES.a1_a2,         priceCents: 118_000, url: "https://buy.stripe.com/aFa00caPrb1Odcj1qL0co0y" },
-  { id: "b1",            name: "B1 Tu B1 Garantizado",     classes: GOAL_CLASSES.b1,            priceCents: 172_000, url: "https://buy.stripe.com/00w28kf5H7PCa078Td0co0z" },
-  { id: "b2",            name: "B2 Nivel Avanzado",        classes: GOAL_CLASSES.b2,            priceCents: 172_000, url: "https://buy.stripe.com/28EdR2g9L5Hua075H10co0A" },
-  { id: "c1",            name: "C1 Nivel Profesional",     classes: GOAL_CLASSES.c1,            priceCents: 210_000, url: "https://buy.stripe.com/6oU8wI6zb8TG4FN6L50co0B" },
-  { id: "fluidez_total", name: "Fluidez Total (A1→B1)",    classes: GOAL_CLASSES.fluidez_total, priceCents: 299_000, url: "https://buy.stripe.com/dRmcMYe1Dd9W8W35H10co0r" },
+  { id: "a1_a2",         name: "A2 Arranque Alemania",     classes: GOAL_CLASSES.a1_a2,         priceCents: 142_000, url: "https://buy.stripe.com/fZu4gsaPr9XKc8f9Xh0co1k" },
+  { id: "b1",            name: "B1 Tu B1 Garantizado",     classes: GOAL_CLASSES.b1,            priceCents: 206_000, url: "https://buy.stripe.com/dRmeV64r32vi0px5H10co1l" },
+  { id: "b2",            name: "B2 Nivel Avanzado",        classes: GOAL_CLASSES.b2,            priceCents: 206_000, url: "https://buy.stripe.com/6oU8wI2iV6Lygov2uP0co1m" },
+  { id: "c1",            name: "C1 Nivel Profesional",     classes: GOAL_CLASSES.c1,            priceCents: 249_000, url: "https://buy.stripe.com/cNieV66zb0nagov4CX0co1n" },
+  { id: "fluidez_total", name: "Fluidez Total (A1→B1)",    classes: GOAL_CLASSES.fluidez_total, priceCents: 359_000, url: "https://buy.stripe.com/bJe6oA8Hj6Ly0pxb1l0co1o" },
 ];
 
 // ── Kids ─────────────────────────────────────────────────────────────

@@ -59,7 +59,7 @@ export async function GET(
     .from("classes")
     .select(`
       id, status, is_trial, lead_id, teacher_id, duration_minutes,
-      teacher:teachers!inner(user_id, users!inner(email))
+      teacher:teachers!classes_teacher_id_fkey!inner(user_id, users!inner(email))
     `)
     .eq("id", classId)
     .maybeSingle();

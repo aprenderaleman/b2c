@@ -139,7 +139,7 @@ async function loadClase(id: string): Promise<ClaseLite | null> {
     .from("classes")
     .select(`
       id, type, status, is_trial, teacher_id, scheduled_at, duration_minutes, title, recurrence_pattern, parent_class_id,
-      teacher:teachers(users(full_name)),
+      teacher:teachers!classes_teacher_id_fkey(users(full_name)),
       class_participants(student_id, student:students(users(full_name)))
     `)
     .eq("id", id)

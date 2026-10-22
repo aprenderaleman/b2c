@@ -688,7 +688,7 @@ export async function getTeacherPayrollBreakdown(from: Date, to: Date): Promise<
       .gte("month", fromDate)
       .lte("month", toDate),
     sb.from("classes")
-      .select("teacher_id, type, teacher:teachers!inner(user_id)")
+      .select("teacher_id, type, teacher:teachers!classes_teacher_id_fkey!inner(user_id)")
       .eq("status", "completed")
       .gte("scheduled_at", from.toISOString())
       .lte("scheduled_at", to.toISOString()),

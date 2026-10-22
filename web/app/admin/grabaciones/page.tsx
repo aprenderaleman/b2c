@@ -19,7 +19,7 @@ export default async function AdminRecordingsPage() {
       id, status, duration_seconds, file_size_bytes, created_at, processed_at,
       class:classes!inner(
         id, title, scheduled_at, is_trial, is_content_recording, sesion_closer_id,
-        teacher:teachers(
+        teacher:teachers!classes_teacher_id_fkey(
           users(full_name, email)
         ),
         sesion_closer:users!classes_sesion_closer_id_fkey(full_name, email),
