@@ -148,15 +148,15 @@ export async function getTeacherRecordings(teacherId: string): Promise<
 }
 
 /**
- * Recordings from OTHER teachers (not superadmin) — for the lead teacher.
- * Excludes coaching sessions (those are superadmin-only).
+ * Trial recordings from OTHER teachers (not superadmin) in the last 2 weeks
+ * — for the lead teacher to review onboarding quality.
+ * Excludes coaching sessions (superadmin-only).
  */
 export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
   Array<RecordingRow & { class_title: string; scheduled_at: string; is_trial: boolean; teacher_name: string }>
 > {
   const sb = supabaseAdmin();
 
-  // Get all teacher IDs except this one and superadmin teachers
   const { data: teachers } = await sb
     .from("teachers")
     .select("id, users(full_name, role)")
@@ -178,6 +178,8 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
 
   if (otherTeacherIds.length === 0) return [];
 
+  const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+
   const { data, error } = await sb
     .from("classes")
     .select(`
@@ -187,6 +189,8 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
       )
     `)
     .in("teacher_id", otherTeacherIds.map(t => t.id))
+    .eq("is_trial", true)
+    .gte("scheduled_at", twoWeeksAgo)
     .or("is_coaching.eq.false,is_coaching.is.null");
   if (error) return [];
 

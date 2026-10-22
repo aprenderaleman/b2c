@@ -207,14 +207,14 @@ function ColleagueRecordingGroup({ recs }: { recs: ColleagueRec[] }) {
     <section className="space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="text-base font-bold tracking-tight text-indigo-700 dark:text-indigo-300">
-          Grabaciones del equipo
+          Trials del equipo
         </h2>
         <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300">
           {recs.length}
         </span>
       </div>
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Como profesor líder puedes revisar las clases de tus colegas para dar feedback.
+        Clases de prueba de tus colegas en las últimas 2 semanas.
       </p>
       {teacherNames.map(name => (
         <div key={name} className="space-y-2">
