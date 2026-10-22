@@ -8,6 +8,7 @@ import {
   RITMOS, ONE_TIME_PACKS, KIDS_PACK, GOAL_CLASSES,
   type RitmoId, type GoalId, type PlanCategory, type PaymentType,
 } from "@/lib/trial-packs";
+import { isCatalogActive, getActiveCatalog, getCatalogRitmos, getCatalogOneTimePacks, getCatalogKidsPack } from "@/lib/catalog";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -71,9 +72,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   let fechaLlegada: string;
   let isOneTime = false;
 
+  // Use catalog prices when active (v2+), otherwise fall back to constants
+  const useCatalog = await isCatalogActive();
+  const catRitmos = useCatalog ? await getCatalogRitmos() : RITMOS;
+  const catOneTime = useCatalog ? await getCatalogOneTimePacks() : ONE_TIME_PACKS;
+  const catKids = useCatalog ? await getCatalogKidsPack() : KIDS_PACK;
+
   if (category === "subscription") {
     if (!ritmoId || !goalId) return NextResponse.json({ error: "missing_ritmo_or_goal" }, { status: 400 });
-    const r = RITMOS.find(x => x.id === ritmoId);
+    const r = catRitmos.find(x => x.id === ritmoId);
     const g = r?.goals.find(x => x.id === goalId);
     if (!r || !g) return NextResponse.json({ error: "invalid_plan" }, { status: 400 });
 
@@ -93,7 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     paymentType = "flexible";
   } else if (category === "one_time") {
     if (!goalId) return NextResponse.json({ error: "missing_goal" }, { status: 400 });
-    const p = ONE_TIME_PACKS.find(x => x.id === goalId);
+    const p = catOneTime.find(x => x.id === goalId);
     if (!p) return NextResponse.json({ error: "invalid_pack" }, { status: 400 });
 
     const classes = ONE_TIME_CLASSES[goalId] ?? 32;
@@ -112,10 +119,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     packId = goalId;
     paymentType = "single";
   } else if (category === "kids") {
+    const kids = catKids ?? KIDS_PACK;
     meta = "kids";
     tipo_pago = "unico";
-    clases_totales = KIDS_PACK.classes;
-    importe_cents = KIDS_PACK.priceCents;
+    clases_totales = kids.classes;
+    importe_cents = kids.priceCents;
     packLabel = "Pack Kids";
     productName = "Pack Kids — Alemán para niños";
     metaLabel = "Pack Kids";

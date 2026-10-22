@@ -147,6 +147,80 @@ export async function getTeacherRecordings(teacherId: string): Promise<
   return out;
 }
 
+/**
+ * Recordings from OTHER teachers (not superadmin) — for the lead teacher.
+ * Excludes coaching sessions (those are superadmin-only).
+ */
+export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
+  Array<RecordingRow & { class_title: string; scheduled_at: string; is_trial: boolean; teacher_name: string }>
+> {
+  const sb = supabaseAdmin();
+
+  // Get all teacher IDs except this one and superadmin teachers
+  const { data: teachers } = await sb
+    .from("teachers")
+    .select("id, users(full_name, role)")
+    .neq("id", myTeacherId);
+
+  const otherTeacherIds = ((teachers ?? []) as Array<{
+    id: string; users: { full_name: string; role: string } | Array<{ full_name: string; role: string }> | null;
+  }>)
+    .filter(t => {
+      const u = Array.isArray(t.users) ? t.users[0] : t.users;
+      return u && u.role !== "superadmin";
+    });
+
+  const teacherNameMap = new Map<string, string>();
+  for (const t of otherTeacherIds) {
+    const u = Array.isArray(t.users) ? t.users[0] : t.users;
+    teacherNameMap.set(t.id, u?.full_name ?? "Profesor");
+  }
+
+  if (otherTeacherIds.length === 0) return [];
+
+  const { data, error } = await sb
+    .from("classes")
+    .select(`
+      id, title, scheduled_at, is_trial, teacher_id,
+      recordings(
+        id, file_url, status, duration_seconds, downloadable, created_at, processed_at, error
+      )
+    `)
+    .in("teacher_id", otherTeacherIds.map(t => t.id))
+    .eq("is_coaching", false);
+  if (error) return [];
+
+  type Raw = {
+    id: string; title: string; scheduled_at: string; is_trial: boolean; teacher_id: string;
+    recordings: Record<string, unknown>[] | undefined;
+  };
+  const out: Array<RecordingRow & { class_title: string; scheduled_at: string; is_trial: boolean; teacher_name: string }> = [];
+  for (const c of (data ?? []) as Raw[]) {
+    const recs = c.recordings ?? [];
+    for (const rec of recs) {
+      if (rec.status === "deleted") continue;
+      out.push({
+        id:               rec.id as string,
+        class_id:         c.id,
+        file_url:         (rec.file_url as string | null) ?? null,
+        file_size_bytes:  null,
+        duration_seconds: (rec.duration_seconds as number | null) ?? null,
+        status:           (rec.status as RecordingStatus) ?? "processing",
+        error:            (rec.error as string | null) ?? null,
+        downloadable:     Boolean(rec.downloadable),
+        created_at:       rec.created_at as string,
+        processed_at:     (rec.processed_at as string | null) ?? null,
+        class_title:      c.title,
+        scheduled_at:     c.scheduled_at,
+        is_trial:         Boolean(c.is_trial),
+        teacher_name:     teacherNameMap.get(c.teacher_id) ?? "Profesor",
+      });
+    }
+  }
+  out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return out;
+}
+
 export async function getCloserRecordings(closerUserId: string): Promise<
   Array<RecordingRow & { class_title: string; scheduled_at: string; lead_name: string | null }>
 > {

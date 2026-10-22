@@ -200,12 +200,13 @@ export async function allowedChatCounterparts(userId: string): Promise<Set<strin
     // de profesor (dan clases de prueba) y deben ver todo.
     const { data: me } = await sb.from("users").select("role").eq("id", userId).maybeSingle();
     if ((me as { role?: string } | null)?.role !== "teacher") return null;   // admins/closers: sin restricción
-    const { data: teacher } = await sb.from("teachers").select("id").eq("user_id", userId).maybeSingle();
+    const { data: teacher } = await sb.from("teachers").select("id, is_lead").eq("user_id", userId).maybeSingle();
     if (!teacher) return null;
+    const teacherRow = teacher as { id: string; is_lead?: boolean };
     const { data } = await sb
       .from("student_group_members")
       .select("student_groups!inner(teacher_id, active), students!inner(subscription_status, users!inner(id, active))")
-      .eq("student_groups.teacher_id", (teacher as { id: string }).id)
+      .eq("student_groups.teacher_id", teacherRow.id)
       .eq("student_groups.active", true)
       .eq("students.users.active", true)
       .in("students.subscription_status", ["active", "paused"]);
@@ -213,6 +214,30 @@ export async function allowedChatCounterparts(userId: string): Promise<Set<strin
       const st = first(r.students as { users: unknown } | { users: unknown }[]);
       const u  = first(st?.users as { id: string } | { id: string }[]);
       if (u?.id) allowed.add(u.id);
+    }
+
+    // Lead teacher can chat with all other active teachers (Colegas)
+    if (teacherRow.is_lead) {
+      const { data: otherTeachers } = await sb
+        .from("teachers")
+        .select("user_id, users!inner(active)")
+        .neq("id", teacherRow.id)
+        .eq("active", true)
+        .eq("users.active", true);
+      for (const t of (otherTeachers ?? []) as Array<{ user_id: string }>) {
+        allowed.add(t.user_id);
+      }
+    }
+
+    // Other teachers can chat with lead teachers (for receiving feedback)
+    const { data: leadTeachers } = await sb
+      .from("teachers")
+      .select("user_id")
+      .eq("is_lead", true)
+      .eq("active", true)
+      .neq("user_id", userId);
+    for (const lt of (leadTeachers ?? []) as Array<{ user_id: string }>) {
+      allowed.add(lt.user_id);
     }
   }
 

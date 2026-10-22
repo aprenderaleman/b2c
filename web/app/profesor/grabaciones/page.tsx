@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
-import { getTeacherRecordings, formatDurationHms } from "@/lib/recordings";
+import { getTeacherRecordings, getLeadTeacherRecordings, formatDurationHms } from "@/lib/recordings";
 import { formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +32,10 @@ export default async function TeacherRecordingsPage() {
   const trialRecs   = recs.filter(r => r.is_trial);
   const regularRecs = recs.filter(r => !r.is_trial);
 
+  // Lead teacher sees recordings from other teachers
+  const isLead = Boolean((teacher as { is_lead?: boolean }).is_lead);
+  const colleagueRecs = isLead ? await getLeadTeacherRecordings(teacher.id) : [];
+
   return (
     <main className="mx-auto max-w-4xl p-4 sm:p-6 space-y-8">
       <header>
@@ -45,7 +49,7 @@ export default async function TeacherRecordingsPage() {
         </p>
       </header>
 
-      {recs.length === 0 && (
+      {recs.length === 0 && colleagueRecs.length === 0 && (
         <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center">
           <div className="text-4xl">🎬</div>
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
@@ -71,6 +75,11 @@ export default async function TeacherRecordingsPage() {
           recs={regularRecs}
           tone="regular"
         />
+      )}
+
+      {/* Lead teacher: recordings from other teachers */}
+      {colleagueRecs.length > 0 && (
+        <ColleagueRecordingGroup recs={colleagueRecs} />
       )}
     </main>
   );
@@ -181,4 +190,68 @@ function labelForMonth(key: string): string {
   const d = new Date(Date.UTC(Y, M - 1, 15));
   return d.toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "Europe/Berlin" })
           .replace(/^\w/, c => c.toUpperCase());
+}
+
+type ColleagueRec = Awaited<ReturnType<typeof getLeadTeacherRecordings>>[number];
+
+function ColleagueRecordingGroup({ recs }: { recs: ColleagueRec[] }) {
+  const byTeacher = new Map<string, ColleagueRec[]>();
+  for (const r of recs) {
+    const arr = byTeacher.get(r.teacher_name) ?? [];
+    arr.push(r);
+    byTeacher.set(r.teacher_name, arr);
+  }
+  const teacherNames = [...byTeacher.keys()].sort();
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h2 className="text-base font-bold tracking-tight text-indigo-700 dark:text-indigo-300">
+          Grabaciones del equipo
+        </h2>
+        <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-indigo-100 text-indigo-800 dark:bg-indigo-500/20 dark:text-indigo-300">
+          {recs.length}
+        </span>
+      </div>
+      <p className="text-xs text-slate-500 dark:text-slate-400">
+        Como profesor líder puedes revisar las clases de tus colegas para dar feedback.
+      </p>
+      {teacherNames.map(name => (
+        <div key={name} className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-indigo-500 dark:text-indigo-400">
+            {name}
+          </h3>
+          <ul className="space-y-2">
+            {(byTeacher.get(name) ?? []).map(r => (
+              <li key={r.id} className="rounded-2xl bg-indigo-50/40 dark:bg-indigo-500/5 border border-indigo-200 dark:border-indigo-500/30 p-3 sm:p-4 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">
+                      {r.is_trial ? "🎯 " : ""}{r.class_title}
+                    </h4>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 capitalize">
+                      {formatClassDateEs(r.scheduled_at)} · {formatClassTimeEs(r.scheduled_at)}
+                      {r.duration_seconds ? ` · ${formatDurationHms(r.duration_seconds)}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <StatusBadge status={r.status} />
+                    {r.status === "ready" && (
+                      <Link
+                        href={`/grabacion/${r.id}`}
+                        prefetch={false}
+                        className="btn-primary text-xs whitespace-nowrap"
+                      >
+                        ▶ Reproducir
+                      </Link>
+                    )}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
+  );
 }

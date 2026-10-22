@@ -191,7 +191,7 @@ export async function canViewRecording(
   const { data: cls } = await sb
     .from("classes")
     .select(`
-      id, is_trial,
+      id, is_trial, is_coaching,
       teacher:teachers(user_id),
       class_participants(
         students(user_id)
@@ -202,8 +202,16 @@ export async function canViewRecording(
   if (!cls) return { ok: false };
 
   const isTrial = Boolean((cls as { is_trial: boolean }).is_trial);
+  const isCoaching = Boolean((cls as { is_coaching?: boolean }).is_coaching);
   const teacher = (cls as { teacher: unknown }).teacher;
   const tFlat = (Array.isArray(teacher) ? teacher[0] : teacher) as { user_id: string } | null;
+
+  // Coaching recordings: superadmin only
+  if (isCoaching) {
+    return role === "superadmin"
+      ? { ok: true, classId: (rec as { class_id: string }).class_id }
+      : { ok: false };
+  }
 
   // Trials: superadmin y el profesor asignado. Con el flag
   // shared_with_teachers (migración 109, formación interna) cualquier
@@ -228,6 +236,29 @@ export async function canViewRecording(
 
   if (role === "teacher" && tFlat?.user_id === userId) {
     return { ok: true, classId: (rec as { class_id: string }).class_id };
+  }
+
+  // Lead teacher can view other teachers' non-coaching recordings
+  // (except superadmin's own classes, i.e. Gelfis's)
+  if (role === "teacher") {
+    const { data: myTeacher } = await sb
+      .from("teachers")
+      .select("is_lead")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if ((myTeacher as { is_lead?: boolean } | null)?.is_lead) {
+      const classTeacherUserId = tFlat?.user_id;
+      if (classTeacherUserId) {
+        const { data: classTeacherUser } = await sb
+          .from("users")
+          .select("role")
+          .eq("id", classTeacherUserId)
+          .maybeSingle();
+        if ((classTeacherUser as { role: string } | null)?.role !== "superadmin") {
+          return { ok: true, classId: (rec as { class_id: string }).class_id };
+        }
+      }
+    }
   }
 
   if (role === "closer") {

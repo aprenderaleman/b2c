@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { isCatalogActive, getActiveCatalog, getBonoCents as catalogBonoCents, getBonusMultiplier } from "./catalog";
 
 type RegisterOpts = {
   teacherId: string;
@@ -104,6 +105,15 @@ export async function resolveBonoCierreCents(
   ritmo: string | null | undefined,
   tipoPago: string | null | undefined,
 ): Promise<{ cents: number; key: string }> {
+  // When catalog is active, read bonos from catalog tables
+  if (await isCatalogActive()) {
+    const cat = await getActiveCatalog();
+    const key = bonoCierreKey(ritmo, tipoPago);
+    const slug = key === "default" ? "estandar" : key;
+    const cents = catalogBonoCents(cat, slug);
+    return { cents: cents || 5000, key };
+  }
+
   const key = bonoCierreKey(ritmo, tipoPago);
   const claves = key === "default" ? ["bono_cierre_cents"] : [`bono_cierre_${key}_cents`, "bono_cierre_cents"];
   const { data } = await sb.from("config_comisiones").select("clave, valor").in("clave", claves);
@@ -133,8 +143,25 @@ export async function registerBonoCierre(opts: {
   if (!teacher) return 0;
   const teacherUserId = (teacher as { user_id: string }).user_id;
 
-  const { cents: bonoCents, key: bonoKey } = await resolveBonoCierreCents(sb, opts.ritmo, opts.tipoPago);
+  let { cents: bonoCents, key: bonoKey } = await resolveBonoCierreCents(sb, opts.ritmo, opts.tipoPago);
   if (bonoCents <= 0) return 0;
+
+  // Bonus ladder: when catalog v2+ is active, multiply bono if threshold met
+  if (await isCatalogActive()) {
+    const cat = await getActiveCatalog();
+    if (cat.ladder) {
+      const mes = opts.mes ?? new Date().toISOString().slice(0, 7) + "-01";
+      const { count } = await sb
+        .from("comisiones")
+        .select("id", { count: "exact", head: true })
+        .eq("usuario_id", teacherUserId)
+        .eq("tipo", "bono_cierre")
+        .eq("mes", mes);
+      const salesThisMonth = (count ?? 0) + 1;
+      const mult = getBonusMultiplier(cat, salesThisMonth);
+      if (mult > 1) bonoCents = Math.round(bonoCents * mult);
+    }
+  }
 
   const piKey = `bono_cierre_${opts.stripePiId}`;
   const mes = opts.mes ?? new Date().toISOString().slice(0, 7) + "-01";

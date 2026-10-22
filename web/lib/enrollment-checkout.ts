@@ -58,7 +58,14 @@ export async function createEnrollmentCheckoutSession(
     of.meta === "kids" ? "Pack Kids — Alemán para niños" :
     oneTimePack        ? oneTimePack.name :
     `Pack ${of.meta}`;
-  const monthlyPriceCents = ritmo ? ritmo.pricePerMonth * 100 : null;
+  // Derive monthly price from the offer — it was set at offer-creation time
+  // using catalog (v2+) or constants (v1), so the offer is the source of truth.
+  const offerMonths = of.clases_por_mes
+    ? Math.ceil((of.clases_totales || 1) / of.clases_por_mes)
+    : null;
+  const monthlyPriceCents = of.tipo_pago === "suscripcion" && offerMonths
+    ? Math.round(of.importe_cents / offerMonths)
+    : ritmo ? ritmo.pricePerMonth * 100 : null;
 
   try {
     const stripe = stripeUS();

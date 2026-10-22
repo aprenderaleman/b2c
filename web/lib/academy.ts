@@ -69,6 +69,7 @@ export type TeacherRow = {
   registered_self?:         boolean;
   approved_at?:             string | null;
   user_active?:             boolean;
+  is_lead?:                 boolean;
 };
 
 // =============================================================================
@@ -85,7 +86,7 @@ export async function getTeacherByUserId(userId: string): Promise<TeacherRow | n
     .from("teachers")
     .select(`
       id, user_id, bio, languages_spoken, specialties,
-      hourly_rate, currency, payment_method, notes, active, accepts_trials, created_at,
+      hourly_rate, currency, payment_method, notes, active, accepts_trials, created_at, is_lead,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("user_id", userId)
@@ -114,6 +115,7 @@ export async function getTeacherByUserId(userId: string): Promise<TeacherRow | n
     notes:                (data.notes as string | null) ?? null,
     accepts_trials:       Boolean(data.accepts_trials),
     created_at:           data.created_at as string,
+    is_lead:              Boolean((data as { is_lead?: boolean }).is_lead),
   };
 }
 
