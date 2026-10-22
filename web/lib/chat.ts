@@ -380,11 +380,14 @@ export async function getColleagueContacts(userId: string): Promise<ColleagueCon
     .eq("active", true)
     .eq("users.active", true);
 
+  const ALLOWED_NAMES = ["sabine", "simon", "veronica", "ana"];
   const colleagues = ((others ?? []) as Array<{
     user_id: string; users: { full_name: string | null; active: boolean } | Array<{ full_name: string | null; active: boolean }>;
   }>).filter(t => {
     const u = Array.isArray(t.users) ? t.users[0] : t.users;
-    return u && u.active;
+    if (!u || !u.active) return false;
+    const lower = (u.full_name ?? "").toLowerCase();
+    return ALLOWED_NAMES.some(n => lower.includes(n));
   });
 
   const { data: parts } = await sb
