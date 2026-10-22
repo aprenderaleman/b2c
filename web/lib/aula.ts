@@ -226,6 +226,17 @@ export async function canViewRecording(
     if (role === "teacher" && (rec as { shared_with_teachers?: boolean }).shared_with_teachers) {
       return { ok: true, classId: (rec as { class_id: string }).class_id };
     }
+    // Lead teacher can view trial recordings from colleagues
+    if (role === "teacher") {
+      const { data: myTeacher } = await sb
+        .from("teachers")
+        .select("is_lead")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if ((myTeacher as { is_lead?: boolean })?.is_lead) {
+        return { ok: true, classId: (rec as { class_id: string }).class_id };
+      }
+    }
     return { ok: false };
   }
 
