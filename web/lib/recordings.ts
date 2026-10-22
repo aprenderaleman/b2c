@@ -162,7 +162,7 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
     .select("id, users(full_name, role)")
     .neq("id", myTeacherId);
 
-  const ALLOWED_NAMES = ["sabine", "veronica", "ana"];
+  const ALLOWED_NAMES = ["sabine", "simon", "veronica", "ana"];
   const otherTeacherIds = ((teachers ?? []) as Array<{
     id: string; users: { full_name: string; role: string } | Array<{ full_name: string; role: string }> | null;
   }>)
