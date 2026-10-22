@@ -187,7 +187,7 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<
       )
     `)
     .in("teacher_id", otherTeacherIds.map(t => t.id))
-    .eq("is_coaching", false);
+    .or("is_coaching.eq.false,is_coaching.is.null");
   if (error) return [];
 
   type Raw = {
