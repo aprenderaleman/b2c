@@ -39,6 +39,7 @@ export async function POST(req: Request) {
     kind: "admin_manual",
     bypassKillSwitch: true,
     bypassNightGate: true,
+    bypassDedup: true,
   });
   if (!r.ok) return NextResponse.json({ ok: false, reason: r.reason }, { status: 502 });
   return NextResponse.json({ ok: true, messageId: r.messageId });

@@ -504,12 +504,22 @@ export async function advanceChain(chain: ChainRow): Promise<{
           const introVars = { ...vars, nombre_estudiante: t.nombre_estudiante };
           const introTpl = `Hola {nombre}, oye — antes de que le des más vueltas, escúchate esto de {nombre_estudiante}. Le pasó igual que a ti 👂`;
           const introText = renderTemplate(introTpl, introVars);
-          const introRes = await sendWhatsappText(phone, introText, { kind: "testimonial_chain2" });
+          // dedupKey para Capa-1 anti-duplicados — identifica unívocamente
+          // "este testimonial en este step de esta chain para este lead".
+          const introDedupKey = `testimonial_intro:${t.id}:${chain.id}:${stepIndex}`;
+          const audioDedupKey = `testimonial_audio:${t.id}:${chain.id}:${stepIndex}`;
+          const introRes = await sendWhatsappText(phone, introText, {
+            kind: "testimonial_chain2",
+            dedupKey: introDedupKey,
+          });
 
           if (introRes.ok) {
             const fetched = await fetchTestimonialAudio(t);
             if (fetched.ok) {
-              const audioRes = await sendWhatsappAudio(phone, fetched.buffer, { kind: "testimonial_chain2" });
+              const audioRes = await sendWhatsappAudio(phone, fetched.buffer, {
+                kind: "testimonial_chain2",
+                dedupKey: audioDedupKey,
+              });
               if (audioRes.ok) {
                 await markTestimonialSent(t.id, chain.lead_id, chain.chain_type, stepIndex);
                 // Persistir flag ANTES del envío de texto principal para
@@ -522,7 +532,13 @@ export async function advanceChain(chain: ChainRow): Promise<{
                   type: "system_message_sent",
                   author: "system",
                   content: `🎤 Testimonial de ${t.nombre_estudiante} enviado (chain ${chain.chain_type} paso ${stepIndex + 1})`,
-                  metadata: { kind: "testimonial_chain2", testimonial_id: t.id, chain_id: chain.id, channel: "whatsapp" },
+                  metadata: {
+                    kind: "testimonial_chain2",
+                    testimonial_id: t.id,
+                    chain_id: chain.id,
+                    channel: "whatsapp",
+                    wa_dedup_key: audioDedupKey,
+                  },
                 });
               } else {
                 console.warn(`[chain-engine] testimonial audio send failed for lead ${chain.lead_id}: ${audioRes.reason}`);

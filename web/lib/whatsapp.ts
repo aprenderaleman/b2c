@@ -360,7 +360,84 @@ export type SendWaOpts = {
    *  Bug Myriam 2026-09-30: chain4_absent bypassPause salta gate del
    *  chain-engine pero era bloqueado por este gate independiente. */
   bypassNightGate?: boolean;
+  /** Firma de contenido para la Capa-1 anti-duplicados (Gelfis 2026-10-23).
+   *  Para text se calcula automáticamente del body. Para audio el caller
+   *  debe pasarlo (ej. "audio:testimonial:marcela:step3"). Si se omite en
+   *  audio, no se dedupea. Si se pasa aquí explícito en text, sobreescribe
+   *  el cálculo automático. */
+  dedupKey?: string;
+  /** Bypass total del dedupe (uso solo para tests o notificaciones críticas
+   *  intencionalmente repetidas). */
+  bypassDedup?: boolean;
 };
+
+/**
+ * Capa-1 anti-duplicados (Gelfis 2026-10-23). Bloquea envíos cuyo
+ * (phone + firma de contenido) ya salió en las últimas 24h. Guard
+ * universal independiente de la lógica de chain-engine — aunque un
+ * bug nuevo haga retry duplicado, este helper lo frena.
+ *
+ * Reutilizamos `lead_timeline` como fuente de verdad (no tabla nueva).
+ * Para TEXT: comparamos los primeros 80 chars del content exacto —
+ * chain-engine escribe el body renderizado en timeline, así que si el
+ * mismo contenido ya salió, lo detectamos. Para AUDIO el caller DEBE
+ * pasar `dedupKey` (ej. "testimonial:marcela:chain2:step3") — el guard
+ * lo busca contra metadata.wa_dedup_key de timeline (que el caller
+ * registra junto al envío).
+ *
+ * Devuelve el motivo si YA se mandó algo con esa firma, null si libre.
+ */
+async function _recentDuplicateReason(
+  phoneE164: string,
+  textOrNull: string | null,
+  dedupKey: string | null,
+): Promise<string | null> {
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const sb = supabaseAdmin();
+    const { data: leadRow } = await sb
+      .from("leads")
+      .select("id")
+      .eq("whatsapp_normalized", phoneE164)
+      .limit(1)
+      .maybeSingle();
+    if (!leadRow?.id) return null;
+    const sinceIso = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+    // Audio / explicit dedupKey → busca por metadata.wa_dedup_key
+    if (dedupKey) {
+      const { data: hitKey } = await sb
+        .from("lead_timeline")
+        .select("id")
+        .eq("lead_id", (leadRow as { id: string }).id)
+        .eq("type", "system_message_sent")
+        .gte("timestamp", sinceIso)
+        .filter("metadata->>wa_dedup_key", "eq", dedupKey)
+        .limit(1)
+        .maybeSingle();
+      if (hitKey) return `dedup_key:${dedupKey}`;
+    }
+    // Text → busca por prefijo exacto 80c
+    if (textOrNull && textOrNull.trim().length > 0) {
+      const prefix = textOrNull.replace(/\s+/g, " ").trim().slice(0, 80);
+      // Escape % y _ para ILIKE y añadimos % final
+      const esc = prefix.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      const { data: hitTxt } = await sb
+        .from("lead_timeline")
+        .select("id,content")
+        .eq("lead_id", (leadRow as { id: string }).id)
+        .eq("type", "system_message_sent")
+        .gte("timestamp", sinceIso)
+        .ilike("content", `${esc}%`)
+        .limit(1)
+        .maybeSingle();
+      if (hitTxt) return `text_prefix:${prefix.slice(0, 40)}...`;
+    }
+    return null;
+  } catch (e) {
+    console.warn("[whatsapp dedup] guard error:", e instanceof Error ? e.message : e);
+    return null;
+  }
+}
 
 /**
  * Send a plain-text WhatsApp message to a phone number in E.164 format.
@@ -423,6 +500,17 @@ export async function sendWhatsappText(
       return { ok: false, reason: "daily_cap_reached" };
     }
   }
+  // Capa-1 anti-duplicados (Gelfis 2026-10-23). Antes de nada chequea si
+  // el mismo texto ya salió al mismo número en las últimas 24h — frena
+  // retries bugueados sin importar su origen. Bypass con bypassDedup.
+  if (!opts.bypassDedup) {
+    const dupReason = await _recentDuplicateReason(phoneE164, text, opts.dedupKey ?? null);
+    if (dupReason) {
+      console.warn(`[whatsapp dedup] blocked duplicate text to ${phoneE164} (${dupReason})`);
+      return { ok: false, reason: `recent_duplicate:${dupReason}` };
+    }
+  }
+
   // Rate limit cliente — separa envíos al menos 15s.
   const now = Date.now();
   const elapsed = now - _lastWaSentAt;
@@ -634,6 +722,16 @@ export async function sendWhatsappAudio(
     const { limit, sent } = await getDailySendState();
     if (sent >= limit && !ALLOWED_WA_KINDS.has(opts.kind ?? "")) {
       return { ok: false, reason: "daily_cap_reached" };
+    }
+  }
+  // Capa-1 anti-duplicados (audio): el caller DEBE pasar dedupKey para
+  // que esto aplique. Sin dedupKey → sin dedup (compatibilidad). Casos
+  // típicos: testimoniales (dedupKey = "testimonial:<id>:<chain>:<step>").
+  if (!opts.bypassDedup && opts.dedupKey) {
+    const dupReason = await _recentDuplicateReason(phoneE164, null, opts.dedupKey);
+    if (dupReason) {
+      console.warn(`[whatsapp dedup] blocked duplicate audio to ${phoneE164} (${dupReason})`);
+      return { ok: false, reason: `recent_duplicate:${dupReason}` };
     }
   }
   // Rate limit — 15s tras último send de este proceso
