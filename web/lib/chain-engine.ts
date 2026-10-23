@@ -488,7 +488,16 @@ export async function advanceChain(chain: ChainRow): Promise<{
     // Fallback gracioso: si no hay testimonials activos, descarga falla,
     // o cualquier send falla → sigue con el texto principal del step
     // sin bloquear la cadena.
-    if (step.preludeTestimonial) {
+    // Fix Gelfis 2026-10-23: cuando el texto principal del step falla por
+    // hourly_cap (retriable), el engine reintenta el step completo +1h
+    // después → el preludio testimonial se re-enviaba cada reintento. Hasta
+    // 28 copias por lead detectadas. Ahora persistimos un flag por step en
+    // chain.metadata para que el preludio solo salga 1 vez por step.
+    const preludeFlagKey = `prelude_sent_step_${stepIndex}`;
+    const currentMetaForPrelude = (chain.metadata ?? {}) as Record<string, unknown>;
+    const preludeAlreadySent = currentMetaForPrelude[preludeFlagKey] === true;
+
+    if (step.preludeTestimonial && !preludeAlreadySent) {
       try {
         const t = await pickTestimonial(chain.lead_id);
         if (t) {
@@ -503,6 +512,11 @@ export async function advanceChain(chain: ChainRow): Promise<{
               const audioRes = await sendWhatsappAudio(phone, fetched.buffer, { kind: "testimonial_chain2" });
               if (audioRes.ok) {
                 await markTestimonialSent(t.id, chain.lead_id, chain.chain_type, stepIndex);
+                // Persistir flag ANTES del envío de texto principal para
+                // que un fallo retriable no borre el estado del preludio.
+                await sb.from("lead_chains").update({
+                  metadata: { ...currentMetaForPrelude, [preludeFlagKey]: true },
+                }).eq("id", chain.id);
                 await sb.from("lead_timeline").insert({
                   lead_id: chain.lead_id,
                   type: "system_message_sent",
