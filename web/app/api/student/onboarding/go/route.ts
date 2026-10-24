@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { recordOnboardingEventByUser } from "@/lib/onboarding";
+import { TEACHER_ONBOARDING_DOC_URL } from "@/lib/teacher-onboarding";
 
 /**
  * GET /api/student/onboarding/go?step=hans
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 const DEST: Record<string, string> = {
   hans: "https://hans.aprender-aleman.de",
+  guia: TEACHER_ONBOARDING_DOC_URL,
 };
 
 export async function GET(req: Request) {

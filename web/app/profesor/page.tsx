@@ -7,6 +7,9 @@ import { getUserIcalToken, icalUrlFor } from "@/lib/user-extras";
 import { CalendarSyncButton } from "@/components/calendar/CalendarSyncButton";
 import { GoogleCalendarConnectButton } from "@/components/calendar/GoogleCalendarConnectButton";
 import { OpenSchuleTeacherButton } from "@/components/entitlements/OpenSchuleTeacherButton";
+import { getTeacherOnboarding } from "@/lib/onboarding";
+import { FirstStepsCard } from "@/components/onboarding/FirstStepsCard";
+import { OnboardingMount } from "@/components/onboarding/OnboardingMount";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +43,10 @@ export default async function TeacherHome() {
 
   const all = await getTeacherUpcomingClasses(teacher.id, new Date(), 30);
   const icalToken = await getUserIcalToken(session.user.id);
+  // Onboarding (tour + primeros pasos). Lista y tour automático solo en la
+  // sesión real del profe; con "Ver como" se revisa con ?tour=1.
+  const isRealTeacher = session.user.role === "teacher";
+  const onboarding = await getTeacherOnboarding(teacher.id, (teacher.language_preference ?? "es") as "es" | "de");
   const [next, ...rest] = all;
 
   const todayEnd = endOfTodayBerlin();
@@ -67,6 +74,11 @@ export default async function TeacherHome() {
           <GoogleCalendarConnectButton />
         </div>
       </header>
+
+      {isRealTeacher && onboarding.showChecklist && (
+        <FirstStepsCard items={onboarding.checklist} lang={onboarding.lang} tourHref="/profesor?tour=1" />
+      )}
+      <OnboardingMount showTour={isRealTeacher && onboarding.showTour} steps={onboarding.tourSteps} lang={onboarding.lang} />
 
       {next ? (
         <NextClassCard

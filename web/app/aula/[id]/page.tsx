@@ -7,6 +7,7 @@ import { livekitConfigured } from "@/lib/livekit";
 import { getTrialSession, verifyTrialToken } from "@/lib/trial-token";
 import { supabaseAdmin } from "@/lib/supabase";
 import { canAccessChat, ensureDirectChat, ensureGroupChat } from "@/lib/chat";
+import { recordOnboardingEventByUser } from "@/lib/onboarding";
 import { AulaClient } from "./AulaClient";
 import { WaitingForAula } from "./WaitingForAula";
 
@@ -169,6 +170,9 @@ export default async function AulaPage({
     );
   }
   const showNotesTab = access.role === "host" && !!viewerUserId && !isTrial && !isSesionPlan;
+  if (access.role === "host" && viewerUserId && sessionRole === "teacher") {
+    recordOnboardingEventByUser("teacher", viewerUserId, "aula").catch(() => {});
+  }
 
   // Botón "Documentos de Apuntes": el host (profe de la clase) y los
   // admins observadores (el endpoint /apuntes también les deja).

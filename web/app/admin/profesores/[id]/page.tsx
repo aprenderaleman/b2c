@@ -113,8 +113,8 @@ export default async function TeacherDetailPage({
 
   const isPending = teacher.registered_self === true && !teacher.approved_at;
   const agreementRes = await supabaseAdmin().from("teachers")
-    .select("agreement_sent_at, agreement_version, agreement_signed_at").eq("id", id).maybeSingle();
-  const agreement = agreementRes.data as { agreement_sent_at: string | null; agreement_version: string | null; agreement_signed_at: string | null } | null;
+    .select("agreement_sent_at, agreement_version, agreement_signed_at, onboarding").eq("id", id).maybeSingle();
+  const agreement = agreementRes.data as { agreement_sent_at: string | null; agreement_version: string | null; agreement_signed_at: string | null; onboarding: Record<string, string> | null } | null;
 
   return (
     <main className="space-y-5">
@@ -220,7 +220,7 @@ export default async function TeacherDetailPage({
             ? `Enviado el ${new Date(agreement.agreement_sent_at).toLocaleDateString("es-ES", { timeZone: "Europe/Berlin" })} · ${agreement.agreement_version ?? ""}`
             : "No enviado"} />
           <div className="pt-2">
-            <AgreementActions teacherId={teacher.id} sent={!!agreement?.agreement_sent_at} signedAt={agreement?.agreement_signed_at ?? null} />
+            <AgreementActions teacherId={teacher.id} sent={!!agreement?.agreement_sent_at} signedAt={agreement?.agreement_signed_at ?? null} receivedAt={agreement?.onboarding?.acuerdo ?? null} />
           </div>
         </Panel>
       </div>
