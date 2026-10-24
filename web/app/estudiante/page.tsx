@@ -71,10 +71,11 @@ export default async function StudentHome() {
   ]);
   const [next, ...rest] = upcoming;
 
-  // Onboarding (tour + primeros pasos): solo para la sesión real del alumno.
-  const onboarding = session.user.role === "student"
-    ? await getStudentOnboarding(student.id, session.user.id, (student.language_preference ?? "es") as "es" | "de")
-    : null;
+  // Onboarding (tour + primeros pasos). La lista y el tour automático solo
+  // para la sesión real del alumno; con "Ver como" (admin) el tour se puede
+  // abrir a mano con ?tour=1 para revisarlo, sin tocar el estado del alumno.
+  const isRealStudent = session.user.role === "student";
+  const onboarding = await getStudentOnboarding(student.id, student.user_id ?? session.user.id, (student.language_preference ?? "es") as "es" | "de");
 
   return (
     <main className="space-y-6">
@@ -107,10 +108,10 @@ export default async function StudentHome() {
       {/* Live-now CTA — auto-polls every 15s, auto-hides when class ends */}
       <LiveClassCta initial={live} />
 
-      {onboarding?.showChecklist && (
+      {isRealStudent && onboarding.showChecklist && (
         <FirstStepsCard items={onboarding.checklist} lang={onboarding.lang} tourHref="/estudiante?tour=1" />
       )}
-      {onboarding && <OnboardingMount showTour={onboarding.showTour} steps={onboarding.tourSteps} lang={onboarding.lang} />}
+      <OnboardingMount showTour={isRealStudent && onboarding.showTour} steps={onboarding.tourSteps} lang={onboarding.lang} />
 
       {/* Post-class review prompt — esquina inferior derecha, no intrusivo.
           Solo aparece si hay una clase atendida en los últimos 7 días sin
