@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getImpersonation } from "@/lib/impersonation";
 import { supabaseAdmin } from "@/lib/supabase";
+import { recordOnboardingEventByUser } from "@/lib/onboarding";
 import { createSchuleSsoLink, packEligible } from "@/lib/entitlements";
 import {
   SCHULE_MAINTENANCE,
@@ -98,6 +99,7 @@ export async function GET(req: Request) {
       return htmlError(403, "Tu pack no está activo. Contacta con el equipo.");
     }
     level = (s as { current_level?: string | null }).current_level ?? null;
+    if (!imp) recordOnboardingEventByUser("student", userId, "schule").catch(() => {});
   }
 
   // Profes y admins entran con su rol real — sin él, Schule los crea

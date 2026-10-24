@@ -62,7 +62,7 @@ export function SidebarDesktop({
           return it.external ? (
             <a key={it.href} href={it.href} target="_blank" rel="noopener noreferrer" className={className}>{inner}</a>
           ) : (
-            <Link key={it.href} href={it.href} className={className}>{inner}</Link>
+            <Link key={it.href} href={it.href} className={className} data-tour={`nav-${it.href.split("/").filter(Boolean).pop() ?? "home"}`}>{inner}</Link>
           );
         })}
       </nav>

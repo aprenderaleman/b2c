@@ -75,6 +75,8 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     // Cursos destacado: justo debajo de "Hoy" (Gelfis 2026-10-01).
     { label: "Cursos",       href: "/estudiante/cursos",        icon: "graduationCap",  priority: 1.1 },
     { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
+    // Tour guiado bajo demanda (Gelfis 2026-10-24).
+    { label: "¿Cómo funciona?", href: "/estudiante?tour=1",     icon: "star",           priority: 9 },
   ],
   closer: closerItems(),
   setter: setterItems(),

@@ -51,7 +51,7 @@ export function BottomNavMobile({
     return it.external ? (
       <a key={it.href} href={it.href} target="_blank" rel="noopener noreferrer" className={cls}>{inner}</a>
     ) : (
-      <Link key={it.href} href={it.href} className={cls}>{inner}</Link>
+      <Link key={it.href} href={it.href} className={cls} data-tour={`nav-${it.href.split("/").filter(Boolean).pop() ?? "home"}`}>{inner}</Link>
     );
   };
 

@@ -85,7 +85,7 @@ export function NextClassCard(p: Props) {
   }
 
   return (
-    <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-white to-brand-50/60 dark:from-slate-900 dark:to-brand-500/5 p-6 shadow-sm">
+    <section data-tour="next-class" className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-gradient-to-br from-white to-brand-50/60 dark:from-slate-900 dark:to-brand-500/5 p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="min-w-0">
           <div className="text-xs font-semibold uppercase tracking-wide text-brand-600 dark:text-brand-400">

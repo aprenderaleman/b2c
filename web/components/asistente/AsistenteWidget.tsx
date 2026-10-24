@@ -85,6 +85,10 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
     setMsgs(next);
     setInput("");
     setLoading(true);
+    // Onboarding: primer uso del asistente (alumno/profe). No bloquea.
+    if (rol === "student" || rol === "teacher") {
+      fetch("/api/student/onboarding", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: "asistente" }) }).catch(() => {});
+    }
     try {
       const res = await fetch("/api/asistente", {
         method:  "POST",
@@ -145,6 +149,7 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
             inline-flex items-center gap-2 rounded-full bg-brand-500 hover:bg-brand-600 text-white
             px-4 py-3 text-sm font-semibold shadow-lg shadow-brand-500/30 transition-colors"
           aria-label="Abrir asistente"
+          data-tour="asistente"
         >
           <span aria-hidden>✨</span> Asistente
         </button>

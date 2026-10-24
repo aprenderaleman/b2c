@@ -18,6 +18,9 @@ import { getPendingReviewForStudent } from "@/lib/class-reviews";
 import { ClassReviewPrompt } from "@/components/student/ClassReviewPrompt";
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
 import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
+import { getStudentOnboarding } from "@/lib/onboarding";
+import { FirstStepsCard } from "@/components/onboarding/FirstStepsCard";
+import { OnboardingMount } from "@/components/onboarding/OnboardingMount";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +71,11 @@ export default async function StudentHome() {
   ]);
   const [next, ...rest] = upcoming;
 
+  // Onboarding (tour + primeros pasos): solo para la sesión real del alumno.
+  const onboarding = session.user.role === "student"
+    ? await getStudentOnboarding(student.id, session.user.id, (student.language_preference ?? "es") as "es" | "de")
+    : null;
+
   return (
     <main className="space-y-6">
       <header>
@@ -98,6 +106,11 @@ export default async function StudentHome() {
 
       {/* Live-now CTA — auto-polls every 15s, auto-hides when class ends */}
       <LiveClassCta initial={live} />
+
+      {onboarding?.showChecklist && (
+        <FirstStepsCard items={onboarding.checklist} lang={onboarding.lang} tourHref="/estudiante?tour=1" />
+      )}
+      {onboarding && <OnboardingMount showTour={onboarding.showTour} steps={onboarding.tourSteps} lang={onboarding.lang} />}
 
       {/* Post-class review prompt — esquina inferior derecha, no intrusivo.
           Solo aparece si hay una clase atendida en los últimos 7 días sin
@@ -406,7 +419,7 @@ function EmptyNext() {
 
 function ExternalToolsRow() {
   return (
-    <section className="grid gap-4 sm:grid-cols-2">
+    <section data-tour="tools" className="grid gap-4 sm:grid-cols-2">
       <OpenSchuleButton />
       <OpenHansButton />
     </section>

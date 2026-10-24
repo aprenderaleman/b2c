@@ -45,7 +45,7 @@ export function OpenHansButton() {
 
   return (
     <a
-      href="https://hans.aprender-aleman.de"
+      href="/api/student/onboarding/go?step=hans"
       onClick={onClick}
       target="_blank"
       rel="noopener noreferrer"

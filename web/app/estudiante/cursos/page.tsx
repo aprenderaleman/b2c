@@ -1,14 +1,18 @@
 import { requireRoleWithImpersonation } from "@/lib/rbac";
+import { recordOnboardingEventByUser } from "@/lib/onboarding";
 import { CursosGrid } from "@/components/cursos/CursosGrid";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Cursos · Aprender-Aleman.de" };
 
 export default async function StudentCursosPage() {
-  await requireRoleWithImpersonation(
+  const session = await requireRoleWithImpersonation(
     ["student", "admin", "superadmin"],
     "student",
   );
+  if (session.user.role === "student") {
+    recordOnboardingEventByUser("student", session.user.id, "cursos").catch(() => {});
+  }
 
   return (
     <main className="space-y-5">
