@@ -112,7 +112,8 @@ export default async function TeacherStudentDetail({
         ← Volver al inicio
       </Link>
 
-      {bonoPendiente && (
+      {/* Banner oculto (Gelfis 2026-10-24); el bono sigue vivo en el saldo. */}
+      {false && bonoPendiente && (
         <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-4">
           <div className="flex items-start gap-3">
             <span className="text-xl" aria-hidden>🎁</span>
