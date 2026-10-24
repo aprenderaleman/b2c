@@ -46,7 +46,7 @@ export default async function TeacherHome() {
   // Onboarding (tour + primeros pasos). Lista y tour automático solo en la
   // sesión real del profe; con "Ver como" se revisa con ?tour=1.
   const isRealTeacher = session.user.role === "teacher";
-  const onboarding = await getTeacherOnboarding(teacher.id, (teacher.language_preference ?? "es") as "es" | "de");
+  const onboarding = await getTeacherOnboarding(teacher.id, (teacher.language_preference ?? "es") as "es" | "de", { record: isRealTeacher });
   const [next, ...rest] = all;
 
   const todayEnd = endOfTodayBerlin();

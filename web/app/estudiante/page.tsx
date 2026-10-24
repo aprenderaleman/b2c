@@ -75,7 +75,7 @@ export default async function StudentHome() {
   // para la sesión real del alumno; con "Ver como" (admin) el tour se puede
   // abrir a mano con ?tour=1 para revisarlo, sin tocar el estado del alumno.
   const isRealStudent = session.user.role === "student";
-  const onboarding = await getStudentOnboarding(student.id, student.user_id ?? session.user.id, (student.language_preference ?? "es") as "es" | "de");
+  const onboarding = await getStudentOnboarding(student.id, student.user_id ?? session.user.id, (student.language_preference ?? "es") as "es" | "de", { record: isRealStudent });
 
   return (
     <main className="space-y-6">

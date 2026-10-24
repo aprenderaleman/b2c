@@ -30,13 +30,14 @@ export type OnboardingState = {
   lang: Lang;
 };
 
-export const STUDENT_EVENTS = ["tour_seen", "tour_dismissed", "checklist_dismissed", "cursos", "schule", "hans", "asistente"] as const;
-export const TEACHER_EVENTS = ["tour_seen", "tour_dismissed", "checklist_dismissed", "guia", "acuerdo", "asistente", "aula"] as const;
+export const STUDENT_EVENTS = ["tour_seen", "tour_dismissed", "checklist_shown", "checklist_dismissed", "cursos", "schule", "hans", "asistente"] as const;
+export const TEACHER_EVENTS = ["tour_seen", "tour_dismissed", "checklist_shown", "checklist_dismissed", "guia", "acuerdo", "asistente", "aula"] as const;
 
 type Events = Record<string, string>;
 
-const CHECKLIST_DAYS = 14;
-const NEW_SINCE = "2026-10-10"; // alumnos/profes anteriores no ven la lista
+const CHECKLIST_DAYS = 14;          // alumnos: días visible desde la primera vez que se muestra
+const TEACHER_CHECKLIST_DAYS = 30;
+const MIN_REMAINING = 10;           // Gelfis 2026-10-24: alumnos acabando su plan (<10) no ven tour ni lista
 
 export async function recordOnboardingEvent(role: OnboardingRole, id: string, event: string): Promise<void> {
   const allowed: readonly string[] = role === "student" ? STUDENT_EVENTS : TEACHER_EVENTS;
@@ -101,14 +102,14 @@ const STUDENT_CHECKLIST: Record<Lang, Array<Omit<ChecklistItem, "done">>> = {
   ],
 };
 
-export async function getStudentOnboarding(studentId: string, userId: string, lang: Lang, forceTour = false): Promise<OnboardingState> {
+export async function getStudentOnboarding(studentId: string, userId: string, lang: Lang, opts: { forceTour?: boolean; record?: boolean } = {}): Promise<OnboardingState> {
+  const forceTour = !!opts.forceTour; const record = opts.record !== false;
   const sb = supabaseAdmin();
-  const { data: st } = await sb.from("students").select("onboarding, converted_at, created_at, schule_completion_pct").eq("id", studentId).maybeSingle();
-  const s = st as { onboarding: Events | null; converted_at: string | null; created_at: string; schule_completion_pct: number | null } | null;
+  const { data: st } = await sb.from("students").select("onboarding, classes_remaining, subscription_status, schule_completion_pct").eq("id", studentId).maybeSingle();
+  const s = st as { onboarding: Events | null; classes_remaining: number | null; subscription_status: string; schule_completion_pct: number | null } | null;
   const ev = (s?.onboarding ?? {}) as Events;
-  const since = s?.converted_at ?? s?.created_at ?? new Date().toISOString();
-  const isNew = since >= NEW_SINCE;
-  const ageDays = (Date.now() - new Date(since).getTime()) / 86400_000;
+  // Todos los alumnos activos (Gelfis 2026-10-24), salvo los que acaban su plan.
+  const eligible = (s?.subscription_status === "active" || s?.subscription_status === "paused") && (s?.classes_remaining ?? 0) >= MIN_REMAINING;
 
   // Señales calculadas
   const [{ count: attended }, { data: myChats }] = await Promise.all([
@@ -134,8 +135,12 @@ export async function getStudentOnboarding(studentId: string, userId: string, la
   const checklist = STUDENT_CHECKLIST[lang].map(i => ({ ...i, done: done[i.key] ?? false }));
   const allDone = checklist.every(i => i.done);
 
-  const showTour = forceTour || (!ev.tour_seen && !ev.tour_dismissed && (isNew || (attended ?? 0) < 3));
-  const showChecklist = isNew && !ev.checklist_dismissed && !allDone && ageDays <= CHECKLIST_DAYS;
+  const showTour = forceTour || (eligible && !ev.tour_seen && !ev.tour_dismissed);
+  let showChecklist = eligible && !ev.checklist_dismissed && !allDone;
+  if (showChecklist) {
+    if (!ev.checklist_shown) { if (record) await recordOnboardingEvent("student", studentId, "checklist_shown"); }
+    else if ((Date.now() - new Date(ev.checklist_shown).getTime()) / 86400_000 > CHECKLIST_DAYS) showChecklist = false;
+  }
   return { showTour, showChecklist, checklist, tourSteps: STUDENT_TOUR[lang], lang };
 }
 
@@ -183,14 +188,13 @@ const TEACHER_CHECKLIST: Record<Lang, Array<Omit<ChecklistItem, "done">>> = {
   ],
 };
 
-export async function getTeacherOnboarding(teacherId: string, lang: Lang): Promise<OnboardingState> {
+export async function getTeacherOnboarding(teacherId: string, lang: Lang, opts: { record?: boolean } = {}): Promise<OnboardingState> {
+  const record = opts.record !== false;
   const sb = supabaseAdmin();
-  const { data: t } = await sb.from("teachers").select("onboarding, approved_at, created_at").eq("id", teacherId).maybeSingle();
-  const tt = t as { onboarding: Events | null; approved_at: string | null; created_at: string } | null;
+  const { data: t } = await sb.from("teachers").select("onboarding, active").eq("id", teacherId).maybeSingle();
+  const tt = t as { onboarding: Events | null; active: boolean } | null;
   const ev = (tt?.onboarding ?? {}) as Events;
-  const since = tt?.approved_at ?? tt?.created_at ?? new Date().toISOString();
-  const isNew = since >= NEW_SINCE;
-  const ageDays = (Date.now() - new Date(since).getTime()) / 86400_000;
+  const eligible = !!tt?.active;   // todos los profes activos (Gelfis 2026-10-24)
 
   const [{ count: slots }, { count: given }] = await Promise.all([
     sb.from("teacher_availability").select("id", { count: "exact", head: true }).eq("teacher_id", teacherId).eq("available", true),
@@ -206,7 +210,11 @@ export async function getTeacherOnboarding(teacherId: string, lang: Lang): Promi
   };
   const checklist = TEACHER_CHECKLIST[lang].map(i => ({ ...i, done: done[i.key] ?? false }));
   const allDone = checklist.every(i => i.done);
-  const showTour = !ev.tour_seen && !ev.tour_dismissed && (isNew || (given ?? 0) < 3);
-  const showChecklist = isNew && !ev.checklist_dismissed && !allDone && ageDays <= 30;
+  const showTour = eligible && !ev.tour_seen && !ev.tour_dismissed;
+  let showChecklist = eligible && !ev.checklist_dismissed && !allDone;
+  if (showChecklist) {
+    if (!ev.checklist_shown) { if (record) await recordOnboardingEvent("teacher", teacherId, "checklist_shown"); }
+    else if ((Date.now() - new Date(ev.checklist_shown).getTime()) / 86400_000 > TEACHER_CHECKLIST_DAYS) showChecklist = false;
+  }
   return { showTour, showChecklist, checklist, tourSteps: TEACHER_TOUR[lang], lang };
 }
