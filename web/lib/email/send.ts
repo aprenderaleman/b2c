@@ -151,12 +151,13 @@ const RETRY_DELAYS_MS = [2_000, 8_000, 30_000];
  * Si el lead no está en BD (estudiante/admin/profesor) devolvemos
  * false (sigue intentando — esos canales no están en leads).
  */
-const _bouncedCache = new Map<string, { v: boolean; ts: number }>();
+const _bouncedCache = new Map<string, { v: string | null; ts: number }>();
 const BOUNCED_TTL_MS = 60_000;
 
-async function isRecipientBounced(to: string): Promise<boolean> {
+/** leads.email_status del destinatario (null si no es lead o no tiene estado). */
+async function recipientEmailStatus(to: string): Promise<string | null> {
   const email = to.toLowerCase().trim();
-  if (!email) return false;
+  if (!email) return null;
   const cached = _bouncedCache.get(email);
   if (cached && Date.now() - cached.ts < BOUNCED_TTL_MS) return cached.v;
   try {
@@ -166,13 +167,13 @@ async function isRecipientBounced(to: string): Promise<boolean> {
       .from("leads")
       .select("email_status")
       .ilike("email", email)
+      .limit(1)
       .maybeSingle();
     const status = (data as { email_status?: string } | null)?.email_status ?? null;
-    const v = status === "bounced" || status === "complained";
-    _bouncedCache.set(email, { v, ts: Date.now() });
-    return v;
+    _bouncedCache.set(email, { v: status, ts: Date.now() });
+    return status;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -184,7 +185,7 @@ async function isRecipientBounced(to: string): Promise<boolean> {
  * los demás correos (trials asignados/reagendados, resúmenes, lifecycle)
  * se colaban. Los correos críticos de cuenta (password reset,
  * bienvenidas con enlace de acceso, factura pagada) pasan `critical:
- * true` y NO se suprimen. Cache 60s, misma mecánica que isRecipientBounced.
+ * true` y NO se suprimen. Cache 60s, misma mecánica que recipientEmailStatus.
  */
 const _optOutCache = new Map<string, { v: boolean; ts: number }>();
 
@@ -241,13 +242,14 @@ function isTransient(err: string): boolean {
 
 async function sendViaResend(
   to: string, subject: string, html: string, text: string,
-  attachments?: EmailAttachment[],
+  attachments?: EmailAttachment[], headers?: Record<string, string>,
 ): Promise<SendResult> {
   const resend = getResend();
   if (!resend) return { ok: false, error: "resend_not_configured" };
   try {
     const { data, error } = await resend.emails.send({
       from: fromAddress(), to, subject, html, text,
+      ...(headers ? { headers } : {}),
       ...(attachments && attachments.length > 0
         ? { attachments: attachments.map(a => ({ filename: a.filename, content: a.content })) }
         : {}),
@@ -261,13 +263,14 @@ async function sendViaResend(
 
 async function sendViaSmtp(
   to: string, subject: string, html: string, text: string,
-  attachments?: EmailAttachment[],
+  attachments?: EmailAttachment[], headers?: Record<string, string>,
 ): Promise<SendResult> {
   const smtp = getSmtp();
   if (!smtp) return { ok: false, error: "smtp_not_configured" };
   try {
     const info = await smtp.sendMail({
       from: fromAddress(), to, subject, html, text,
+      ...(headers ? { headers } : {}),
       ...(attachments && attachments.length > 0
         ? { attachments: attachments.map(a => ({
             filename:    a.filename,
@@ -321,12 +324,22 @@ export async function sendRaw(
   html: string,
   text: string,
   attachments?: EmailAttachment[],
-  opts?: { critical?: boolean },
+  opts?: {
+    critical?: boolean;
+    /** Email comercial (campañas): se suprime si el lead se dio de baja. */
+    marketing?: boolean;
+    /** Cabeceras extra (p.ej. List-Unsubscribe de lib/email-unsubscribe). */
+    headers?: Record<string, string>;
+  },
 ): Promise<SendResult> {
   // Skip si el destinatario está marcado como bounced/complained
   // por el webhook Resend — protege la reputación del dominio.
-  if (await isRecipientBounced(to)) {
+  const emailStatus = await recipientEmailStatus(to);
+  if (emailStatus === "bounced" || emailStatus === "complained") {
     return { ok: false, error: "recipient_email_bounced" };
+  }
+  if (opts?.marketing && emailStatus === "unsubscribed") {
+    return { ok: false, error: "recipient_unsubscribed" };
   }
 
   // Skip si el usuario tiene notifications_opt_out (salvo críticos).
@@ -356,7 +369,7 @@ export async function sendRaw(
   // --- 1. Resend con retry ---
   if (hasResend) {
     const r = await trySendWithBackoff(
-      () => sendViaResend(to, subject, html, text, attachments),
+      () => sendViaResend(to, subject, html, text, attachments, opts?.headers),
       "resend",
     );
     if (r.ok) return r;
@@ -366,7 +379,7 @@ export async function sendRaw(
   // --- 2. SMTP fallback con retry ---
   if (hasSmtp) {
     const s = await trySendWithBackoff(
-      () => sendViaSmtp(to, subject, html, text, attachments),
+      () => sendViaSmtp(to, subject, html, text, attachments, opts?.headers),
       "smtp",
     );
     return s;
