@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
-import { getSetterQueue, type SetterQueueItem } from "@/lib/setter-queue";
+import { getSetterQueue } from "@/lib/setter-queue";
 import { getSetterScoreboard } from "@/lib/setter-metrics";
 import { SetterScoreboardTiles } from "@/components/setter/SetterScoreboardTiles";
-import { formatBerlinShort } from "@/lib/time";
+import { SetterQueueTabs } from "@/components/setter/SetterQueueTabs";
 
 export const metadata = { title: "Mi cola · Setter" };
 export const dynamic = "force-dynamic";
@@ -62,93 +62,11 @@ export default async function SetterColaPage({
 
       <SetterScoreboardTiles s={scoreboard} />
 
-      {queue.items.length === 0 && (
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          🎉 Cola vacía — nada pendiente de confirmar ni recuperar ahora mismo.
-        </p>
-      )}
-
-      <QueueSection
-        title="📞 Trials pendientes — buscar el CONFIRMO"
-        hint="Aún no llega su clase. Llama lo antes posible: confirma y pregunta qué quiere lograr. La cita más próxima, primero."
-        items={pendientes}
-        snoozed={queue.snoozed.pendientes}
-        empty="Todas las citas próximas están confirmadas ✅"
-      />
-
-      <QueueSection
-        title="🔄 No asistieron — recuperar la agenda"
-        hint="Llama y envíale el enlace de reagenda. El no-show más reciente, primero."
-        items={noShows}
-        snoozed={queue.snoozed.noShows}
-        empty="No hay no-shows pendientes de recuperar."
+      <SetterQueueTabs
+        pendientes={pendientes}
+        noShows={noShows}
+        snoozed={queue.snoozed}
       />
     </main>
-  );
-}
-
-function QueueSection({
-  title,
-  hint,
-  items,
-  snoozed,
-  empty,
-}: {
-  title: string;
-  hint: string;
-  items: SetterQueueItem[];
-  snoozed: number;
-  empty: string;
-}) {
-  return (
-    <section className="space-y-2">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-          {title} <span className="text-slate-400 font-normal">({items.length})</span>
-        </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>
-      </div>
-
-      {items.length === 0 ? (
-        <p className="text-sm text-slate-400 dark:text-slate-500">{empty}</p>
-      ) : (
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
-          {items.map((it) => (
-            <Link
-              key={`${it.classId}-${it.tramo}`}
-              href={`/setter/leads/${it.leadId}`}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-            >
-              <span className="font-medium text-slate-900 dark:text-slate-100 min-w-[8rem]">
-                {it.lead.name ?? "(sin nombre)"}
-              </span>
-              <span className="text-xs rounded-full px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                {it.citaTipo === "trial" ? "Clase de prueba" : "Sesión de plan"}
-              </span>
-              <span className="text-sm text-slate-600 dark:text-slate-300">
-                {formatBerlinShort(it.citaAt)}
-                {it.hostName ? ` · ${it.hostName.split(/\s+/)[0]}` : ""}
-              </span>
-              {it.sinMarcar && (
-                <span className="text-xs rounded-full px-2 py-0.5 bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 font-medium">
-                  sin marcar
-                </span>
-              )}
-              <span className="ml-auto text-xs text-slate-400">
-                {it.lastSetterContact
-                  ? `Último toque: ${formatBerlinShort(it.lastSetterContact.occurred_at)}`
-                  : "Sin contactar"}
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
-
-      {snoozed > 0 && (
-        <p className="text-xs text-slate-400 dark:text-slate-500">
-          ⏸️ {snoozed} en espera tras &quot;no contestó&quot; — vuelven solos a la lista (24h, o 2h antes de su clase).
-        </p>
-      )}
-    </section>
   );
 }
