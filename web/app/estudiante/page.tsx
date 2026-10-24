@@ -126,15 +126,9 @@ export default async function StudentHome() {
         />
       )}
 
-      {/* Agendado self-service (fase 3, Gelfis 2026-10-06) */}
-      <div className="flex">
-        <Link
-          href="/estudiante/agendar"
-          className="inline-flex items-center gap-2 rounded-2xl border border-brand-200 dark:border-brand-500/30 bg-brand-50 dark:bg-brand-500/10 px-4 py-2.5 text-sm font-semibold text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-500/20 transition-colors"
-        >
-          ➕ Agendar una clase
-        </Link>
-      </div>
+      {/* Botón "Agendar una clase" retirado (Gelfis 2026-10-24): las clases
+          las agenda el profesor. La ruta /estudiante/agendar sigue viva para
+          "Reagendar esta clase" desde el detalle de una clase. */}
 
       {next ? (
         <NextClassCard
