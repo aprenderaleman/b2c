@@ -469,7 +469,13 @@ export async function advanceChain(chain: ChainRow): Promise<{
     //      abajo tras enviar (steps subsiguientes respetan el gate).
     const bypassGateOnce = (chain.metadata as { bypass_gate_on_start?: boolean } | null)
       ?.bypass_gate_on_start === true;
-    if (!def.bypassPause && !bypassGateOnce && !isWithinSendWindow()) {
+    // Fix Gelfis 2026-10-24: las transaccionales solo saltan el horario en
+    // el PRIMER paso (rescate inmediato). Los seguimientos (24h, 3d…) no son
+    // urgentes: chain4_absent salía a las 02:50 Berlín y gastaba el cap
+    // horario de madrugada. Esos pasos respetan 09-21 (domingo sí vale).
+    const bypassWindow = bypassGateOnce || (def.bypassPause === true && stepIndex === 0);
+    const inWindow = def.bypassPause ? isBerlinDaytime() : isWithinSendWindow();
+    if (!bypassWindow && !inWindow) {
       const next9am = getNext9amBerlin();
       await sb.from("lead_chains").update({
         next_fire_at: next9am.toISOString(),
@@ -557,10 +563,9 @@ export async function advanceChain(chain: ChainRow): Promise<{
     // en def o bypass_gate_on_start en metadata). Bug Myriam 2026-09-30:
     // chain4_absent salta gate del chain-engine pero era bloqueada por
     // night_gate independiente en whatsapp.ts a las 06:00 Berlin.
-    const isTransactional = def.bypassPause === true || bypassGateOnce;
     const res = await sendWhatsappText(phone, text, {
       kind: templateKind,
-      bypassNightGate: isTransactional,
+      bypassNightGate: bypassWindow,
     });
 
     // R4: update last_auto_sent_at after successful send. También
@@ -750,6 +755,13 @@ function isWithinSendWindow(): boolean {
   const hour = berlinNow.getHours();
   const day = berlinNow.getDay();
   if (day === 0) return false; // No Sundays
+  return hour >= 9 && hour < 21;
+}
+
+function isBerlinDaytime(): boolean {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Berlin", hour: "2-digit", hour12: false,
+  }).format(new Date()));
   return hour >= 9 && hour < 21;
 }
 

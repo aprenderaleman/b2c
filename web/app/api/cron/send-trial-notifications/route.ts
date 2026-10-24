@@ -66,10 +66,7 @@ async function run(req: Request) {
   const { data: pending, error: pendErr } = await sb
     .from("classes")
     .select(`
-      id, scheduled_at, duration_minutes, short_code, lead_id, teacher_id,
-      title, deposit_paid_at,
-      lead:leads!inner(id, name, email, whatsapp_normalized, language, german_level, goal, landing_intent, reserva_prioritaria, qualification_answers),
-      teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email))
+      ${CLASS_SELECT}
     `)
     .eq("is_trial", true)
     .eq("status", "scheduled")
@@ -82,32 +79,11 @@ async function run(req: Request) {
     return NextResponse.json({ error: "query_failed", reason: pendErr.message }, { status: 500 });
   }
   if (!pending || pending.length === 0) {
+    const wa_retried = await retryPendingWhatsappConfirmations(sb).catch(() => 0);
     // Sesiones de Plan (closers) comparten este cron (2026-08-13)
     const sesiones = await sendSesionConfirmations(sb).catch(() => 0);
-    return NextResponse.json({ ok: true, processed: 0, sesiones });
+    return NextResponse.json({ ok: true, processed: 0, wa_retried, sesiones });
   }
-
-  type ClassRow = {
-    id: string; scheduled_at: string; duration_minutes: number | null;
-    short_code: string | null; lead_id: string; teacher_id: string;
-    title: string | null; deposit_paid_at: string | null;
-    lead: { id: string; name: string | null; email: string | null;
-            whatsapp_normalized: string | null; language: "es" | "de" | null;
-            german_level: string | null; goal: string | null;
-            landing_intent: string | null; reserva_prioritaria: boolean | null;
-            qualification_answers: Record<string, string> | null; } |
-          Array<{ id: string; name: string | null; email: string | null;
-                  whatsapp_normalized: string | null; language: "es" | "de" | null;
-                  german_level: string | null; goal: string | null;
-                  landing_intent: string | null; reserva_prioritaria: boolean | null;
-                  qualification_answers: Record<string, string> | null; }>;
-    teacher: { users: { full_name: string | null; email: string } |
-                       Array<{ full_name: string | null; email: string }> } |
-             Array<{ users: { full_name: string | null; email: string } |
-                            Array<{ full_name: string | null; email: string }> }>;
-  };
-  const flat = <T,>(x: T | T[] | null | undefined): T | null =>
-    !x ? null : Array.isArray(x) ? x[0] ?? null : x;
 
   const results: Array<{ classId: string; email: boolean; wa: boolean | null; paid: boolean }> = [];
 
@@ -208,23 +184,20 @@ async function run(req: Request) {
     // aprobado, salvo los VIP que ya pagaron (variante paid).
     let waOk: boolean | null = null;
     if (lead.whatsapp_normalized) {
-      let waText: string;
-      if (isMetaAdsPaid && paid) {
-        // Lead VIP (ya pagó la Agenda Prioritaria) → confirmación
-        // reconociendo el estado + copy amable estándar.
-        waText = `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\n🌟 Tu Agenda Prioritaria está confirmada para\n${startDate}.\n\nTu profesor ya prepara la clase enfocada en ${goalLabel}. 🎯\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
-      } else {
-        // Copy estándar único para todos los demás flows (incluye
-        // meta-ads-paid sin depósito). Copy actualizado 2026-08-02
-        // tras incidente trial-slot-release: eliminada la amenaza
-        // "sin tu respuesta en 12h tu slot se libera". Ver
-        // docs/no-auto-cancel-policy.md — el sistema NO libera slots
-        // por falta de confirmación.
-        waText = `¡Hola ${leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${startDate}.\n\n🔗 Aquí entras el día de la clase:\n${joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
-      }
+      const waText = buildConfirmationWa({ leadFirst, startDate, joinUrl, vip: isMetaAdsPaid && paid, goalLabel });
 
       const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
       waOk = r?.ok ?? false;
+      // Fix Gelfis 2026-10-24 (caso Tatiane + 8 leads): si el email salió
+      // pero el WA falló por algo pasajero (instancia caída, kill switch,
+      // night gate), el lock de abajo se queda y el WA no se reintentaba
+      // NUNCA. Marcamos la clase para que retryPendingWhatsappConfirmations
+      // reintente SOLO el WA (sin reenviar el email).
+      if (!waOk && emailOk && !isPermanentWaFailure((r as { reason?: string } | null)?.reason)) {
+        await sb.from("classes")
+          .update({ notes_admin: `${c.notes_admin ?? ""}\n${WA_PENDING_TAG}`.trim() })
+          .eq("id", c.id);
+      }
       await sb.from("lead_timeline").insert({
         lead_id: lead.id,
         type:    waOk ? "system_message_sent" : "send_failed",
@@ -252,10 +225,134 @@ async function run(req: Request) {
     if (bothFailed || noneAttempted) console.log(`[send-trial-notifications] ${c.id} rolled back for retry`);
   }
 
+  const wa_retried = await retryPendingWhatsappConfirmations(sb).catch(() => 0);
+
   // Sesiones de Plan (closers) comparten este cron (2026-08-13)
   const sesiones = await sendSesionConfirmations(sb).catch(() => 0);
 
-  return NextResponse.json({ ok: true, processed: results.length, results, sesiones });
+  return NextResponse.json({ ok: true, processed: results.length, results, wa_retried, sesiones });
+}
+
+const CLASS_SELECT = `
+  id, scheduled_at, duration_minutes, short_code, lead_id, teacher_id,
+  title, deposit_paid_at, notes_admin,
+  lead:leads!inner(id, name, email, whatsapp_normalized, language, german_level, goal, landing_intent, reserva_prioritaria, qualification_answers),
+  teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email))
+`;
+
+type ClassRow = {
+  id: string; scheduled_at: string; duration_minutes: number | null;
+  short_code: string | null; lead_id: string; teacher_id: string;
+  title: string | null; deposit_paid_at: string | null; notes_admin: string | null;
+  lead: { id: string; name: string | null; email: string | null;
+          whatsapp_normalized: string | null; language: "es" | "de" | null;
+          german_level: string | null; goal: string | null;
+          landing_intent: string | null; reserva_prioritaria: boolean | null;
+          qualification_answers: Record<string, string> | null; } |
+        Array<{ id: string; name: string | null; email: string | null;
+                whatsapp_normalized: string | null; language: "es" | "de" | null;
+                german_level: string | null; goal: string | null;
+                landing_intent: string | null; reserva_prioritaria: boolean | null;
+                qualification_answers: Record<string, string> | null; }>;
+  teacher: { users: { full_name: string | null; email: string } |
+                     Array<{ full_name: string | null; email: string }> } |
+           Array<{ users: { full_name: string | null; email: string } |
+                          Array<{ full_name: string | null; email: string }> }>;
+};
+
+const flat = <T,>(x: T | T[] | null | undefined): T | null =>
+  !x ? null : Array.isArray(x) ? x[0] ?? null : x;
+
+const WA_PENDING_TAG = "[trial_confirmation_wa_pending]";
+
+/** Fallos de WA que no se arreglan reintentando. */
+function isPermanentWaFailure(reason: string | undefined): boolean {
+  const r = reason ?? "";
+  return r === "no_whatsapp_on_lead" || r === "blocklisted"
+    || r.startsWith("recent_duplicate") || /"exists"\s*:\s*false/.test(r);
+}
+
+function buildConfirmationWa(a: { leadFirst: string; startDate: string; joinUrl: string; vip: boolean; goalLabel: string }): string {
+  if (a.vip) {
+    // Lead VIP (ya pagó la Agenda Prioritaria) → confirmación
+    // reconociendo el estado + copy amable estándar.
+    return `¡Hola ${a.leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\n🌟 Tu Agenda Prioritaria está confirmada para\n${a.startDate}.\n\nTu profesor ya prepara la clase enfocada en ${a.goalLabel}. 🎯\n\n🔗 Aquí entras el día de la clase:\n${a.joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
+  }
+  // Copy estándar único para todos los demás flows (incluye
+  // meta-ads-paid sin depósito). Copy actualizado 2026-08-02
+  // tras incidente trial-slot-release: eliminada la amenaza
+  // "sin tu respuesta en 12h tu slot se libera". Ver
+  // docs/no-auto-cancel-policy.md — el sistema NO libera slots
+  // por falta de confirmación.
+  return `¡Hola ${a.leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${a.startDate}.\n\n🔗 Aquí entras el día de la clase:\n${a.joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
+}
+
+/**
+ * Reintenta SOLO el WhatsApp de confirmación de las clases marcadas con
+ * WA_PENDING_TAG (email ya enviado, WA falló por algo pasajero). Corre cada
+ * 10 min para no martillear una instancia caída; sin timeline en cada fallo
+ * (sería una entrada por minuto). Deja de intentar cuando faltan <30 min
+ * para la clase: ahí ya cubren los recordatorios.
+ */
+async function retryPendingWhatsappConfirmations(sb: ReturnType<typeof supabaseAdmin>): Promise<number> {
+  if (new Date().getUTCMinutes() % 10 !== 0) return 0;
+  // trial_confirmation está exento del night gate (el lead acaba de
+  // reservar); un REINTENTO no lo está: solo 09-21 Berlín.
+  const berlinHour = Number(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Berlin", hour: "2-digit", hour12: false,
+  }).format(new Date()));
+  if (berlinHour < 9 || berlinHour >= 21) return 0;
+  const { data } = await sb
+    .from("classes")
+    .select(CLASS_SELECT)
+    .eq("is_trial", true)
+    .eq("status", "scheduled")
+    .gte("scheduled_at", new Date(Date.now() + 30 * 60_000).toISOString())
+    .ilike("notes_admin", `%${WA_PENDING_TAG}%`)
+    .limit(5);
+
+  let sent = 0;
+  for (const c of (data ?? []) as ClassRow[]) {
+    const lead = flat(c.lead);
+    const dropTag = () => sb.from("classes")
+      .update({ notes_admin: (c.notes_admin ?? "").replace(`\n${WA_PENDING_TAG}`, "").replace(WA_PENDING_TAG, "").trim() })
+      .eq("id", c.id);
+    if (!lead?.whatsapp_normalized) { await dropTag(); continue; }
+
+    const language: "es" | "de" = lead.language === "de" ? "de" : "es";
+    const leadFirst = (lead.name ?? "").trim().split(/\s+/)[0] || (lead.name ?? "");
+    const startDate = new Date(c.scheduled_at).toLocaleString(language === "de" ? "de-DE" : "es-ES", {
+      timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long",
+      hour: "2-digit", minute: "2-digit",
+    }) + (language === "de" ? " (Berlin)" : " (Berlín)");
+    const joinUrl = buildLeadJoinUrl({ classId: c.id, leadId: lead.id, shortCode: c.short_code, baseUrl: PLATFORM_URL });
+    const paid = !!c.deposit_paid_at || lead.reserva_prioritaria === true;
+    const waText = buildConfirmationWa({
+      leadFirst, startDate, joinUrl,
+      vip: lead.landing_intent === "meta-ads-paid" && paid,
+      goalLabel: qualificationGoalLabel((lead.qualification_answers ?? {}).goal),
+    });
+
+    const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
+    if (r.ok) {
+      sent++;
+      await dropTag();
+      await sb.from("lead_timeline").insert({
+        lead_id: lead.id, type: "system_message_sent", author: "system", content: waText,
+        metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: c.id, sent_to: lead.whatsapp_normalized, retry: true },
+      });
+    } else if (isPermanentWaFailure(r.reason)) {
+      await dropTag();
+      await sb.from("lead_timeline").insert({
+        lead_id: lead.id, type: "send_failed", author: "system",
+        content: `💬 Reintento de confirmación WA abandonado: ${r.reason}`,
+        metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: c.id, retry: true },
+      });
+    } else {
+      console.warn(`[send-trial-notifications] WA retry ${c.id} sigue fallando: ${r.reason}`);
+    }
+  }
+  return sent;
 }
 
 /**
