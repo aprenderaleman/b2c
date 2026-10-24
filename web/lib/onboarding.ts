@@ -64,21 +64,21 @@ export async function recordOnboardingEventByUser(role: OnboardingRole, userId: 
 const STUDENT_TOUR: Record<Lang, TourStep[]> = {
   es: [
     { anchor: "next-class",    title: "Tu próxima clase",      body: "Aquí ves tu próxima clase. 15 minutos antes aparece aquí mismo el botón «Entrar al aula»; no necesitas ningún enlace." },
-    { anchor: "nav-cursos",    title: "Cursos",                body: "Tu curso completo de A1 a C1: lecciones, vídeos y ejercicios de cada nivel. Avanza por tu ruta entre clase y clase." },
+    { anchor: "nav-cursos",    title: "Cursos",                body: "Tu curso completo de A1 a C1 en SCHULE: lecciones y ejercicios de cada nivel con corrección instantánea. Avanza por tu ruta entre clase y clase." },
     { anchor: "nav-clases",    title: "Mis clases",            body: "Todas tus clases, pasadas y futuras, y tu saldo." },
     { anchor: "nav-chats",     title: "Chats",                 body: "Tu profesor te escribe aquí para horarios y dudas, y aquí también hablas conmigo (Gelfis). Es nuestro único canal: revísalo cada día." },
     { anchor: "tools",         title: "SCHULE y HANS",         body: "SCHULE son tus ejercicios: el 85 % completado mantiene activa tu Garantía de Nivel. HANS es tu tutor de IA para practicar conversación 24/7." },
     { anchor: "nav-apuntes",   title: "Apuntes",               body: "El documento donde tu profesor escribe durante la clase. Siempre es el mismo; aquí queda todo lo que avanzáis." },
-    { anchor: "asistente",     title: "Asistente Virtual",     body: "Pregúntale cualquier duda sobre la plataforma, tus clases o tu plan, a cualquier hora. Si no puede resolverlo, me lo pasa a mí." },
+    { anchor: "asistente",     title: "Asistente Virtual",     body: "Pregúntale cualquier duda sobre la plataforma, tus clases o tu plan, a cualquier hora. Para lo que no pueda resolver, escríbeme por Chats." },
   ],
   de: [
     { anchor: "next-class",    title: "Deine nächste Stunde",  body: "Hier siehst du deine nächste Stunde. 15 Minuten vorher erscheint genau hier der Button «Zum Klassenraum»; du brauchst keinen Link." },
-    { anchor: "nav-cursos",    title: "Kurse",                 body: "Dein kompletter Kurs von A1 bis C1: Lektionen, Videos und Übungen für jedes Niveau. Arbeite zwischen den Stunden deinen Weg weiter." },
+    { anchor: "nav-cursos",    title: "Kurse",                 body: "Dein kompletter Kurs von A1 bis C1 in SCHULE: Lektionen und Übungen für jedes Niveau mit sofortiger Korrektur. Arbeite zwischen den Stunden deinen Weg weiter." },
     { anchor: "nav-clases",    title: "Meine Stunden",         body: "Alle deine Stunden, vergangene und kommende, und dein Guthaben." },
     { anchor: "nav-chats",     title: "Chats",                 body: "Hier schreibt dir dein Lehrer wegen Terminen und Fragen, und hier erreichst du auch mich (Gelfis). Es ist unser einziger Kanal: schau jeden Tag rein." },
     { anchor: "tools",         title: "SCHULE und HANS",       body: "SCHULE sind deine Übungen: 85 % erledigt hält deine Niveau-Garantie aktiv. HANS ist dein KI-Tutor zum Sprechen üben, rund um die Uhr." },
     { anchor: "nav-apuntes",   title: "Notizen",               body: "Das Dokument, in dem dein Lehrer während der Stunde schreibt. Es ist immer dasselbe; hier bleibt alles, was ihr erarbeitet." },
-    { anchor: "asistente",     title: "Virtueller Assistent",  body: "Frag ihn jederzeit alles zur Plattform, deinen Stunden oder deinem Plan. Wenn er nicht weiterweiß, gibt er es an mich weiter." },
+    { anchor: "asistente",     title: "Virtueller Assistent",  body: "Frag ihn jederzeit alles zur Plattform, deinen Stunden oder deinem Plan. Was er nicht lösen kann, schreib mir über Chats." },
   ],
 };
 
@@ -147,7 +147,7 @@ const TEACHER_TOUR: Record<Lang, TourStep[]> = {
   es: [
     { anchor: "nav-calendario",    title: "Calendario",        body: "Tu semana: aquí cargas tu disponibilidad (franjas de 50 min, hora de Berlín) y bloqueas días sueltos. De aquí salen las clases de prueba que te asignamos." },
     { anchor: "nav-clasedeprueba", title: "Clases de prueba",  body: "Las pruebas que te llegan. Abre cada una, lee la ficha del lead y sigue el guion paso a paso (está en la guía de primeros pasos y en el botón Guion). Al terminar marca si asistió." },
-    { anchor: "nav-estudiantes",   title: "Estudiantes",       body: "Tus alumnos activos: saldo, próxima clase y ficha. Desde la ficha agendas sus clases y abres su documento de apuntes." },
+    { anchor: "nav-estudiantes",   title: "Estudiantes",       body: "Tus alumnos activos: saldo, progreso del plan y ficha. Desde la ficha agendas sus clases y abres su documento de apuntes." },
     { anchor: "nav-grupos",        title: "Grupos",            body: "Dúos y tríos. Agenda las clases del grupo desde aquí, nunca desde un alumno suelto." },
     { anchor: "nav-chats",         title: "Chats",             body: "Aquí hablas con cada alumno y conmigo (Gelfis). Es el único canal de la academia; revísalo cada día." },
     { anchor: "nav-ganancias",     title: "Ganancias",         body: "Tus clases, bonos y comisiones del mes, y el recibo cuando te pagamos. Cobras por clase cerrada con el botón Terminar." },
@@ -156,7 +156,7 @@ const TEACHER_TOUR: Record<Lang, TourStep[]> = {
   de: [
     { anchor: "nav-calendario",    title: "Kalender",          body: "Deine Woche: hier trägst du deine Verfügbarkeit ein (50-Min-Slots, Berliner Zeit) und blockierst einzelne Tage. Daraus ergeben sich die Probestunden, die wir dir zuweisen." },
     { anchor: "nav-clasedeprueba", title: "Probestunden",      body: "Deine Probestunden. Öffne jede, lies die Lead-Karte und folge dem Leitfaden Schritt für Schritt (steht im Einstiegsleitfaden und im Button Guion). Markiere am Ende, ob der Lead da war." },
-    { anchor: "nav-estudiantes",   title: "Lernende",          body: "Deine aktiven Lernenden: Guthaben, nächste Stunde, Profil. Vom Profil aus planst du Stunden und öffnest das Notizdokument." },
+    { anchor: "nav-estudiantes",   title: "Lernende",          body: "Deine aktiven Lernenden: Guthaben, Planfortschritt und Profil. Vom Profil aus planst du Stunden und öffnest das Notizdokument." },
     { anchor: "nav-grupos",        title: "Gruppen",           body: "Duos und Trios. Plane Gruppenstunden immer hier, nie über einen einzelnen Lernenden." },
     { anchor: "nav-chats",         title: "Chats",             body: "Hier schreibst du mit jedem Lernenden und mit mir (Gelfis). Es ist der einzige Kanal der Akademie; schau jeden Tag rein." },
     { anchor: "nav-ganancias",     title: "Verdienst",         body: "Deine Stunden, Boni und Provisionen des Monats sowie die Abrechnung nach der Zahlung. Bezahlt wird jede Stunde, die du mit dem Button Beenden abschließt." },
