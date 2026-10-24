@@ -106,7 +106,11 @@ async function run(req: Request) {
       const waText = lead.language === "de"
         ? `⏰ 15 Minuten bis zu deiner Stunde.\n\nJetzt beitreten: ${joinUrl}`
         : `⏰ 15 minutos para tu clase.\n\nÚnete ahora: ${joinUrl}`;
-      const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_15m" });
+      const res = await sendWhatsappText(lead.whatsapp_normalized, waText, {
+        kind: "trial_reminder_15m",
+        // dedupKey por clase → mismo lead con 2 trials misma hora NO choca.
+        dedupKey: `trial_reminder_15m:${r.id}`,
+      });
       if (res.ok) { sentWa++; waDelivered = true; }
       else {
         failed++;

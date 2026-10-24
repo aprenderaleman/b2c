@@ -154,7 +154,10 @@ async function run(req: Request) {
       const waText = lead.language === "de"
         ? `RECORDATORIO:\n\nHallo ${leadFirst}!\nMorgen ${dayLabel} um ${timeLabel} ist deine Deutsch-Stunde.\n\n🔗 Hier kommst du rein:\n${leadJoinUrl}`
         : `RECORDATORIO:\n\n¡Hola ${leadFirst}!\nMañana ${dayLabel} a las ${timeLabel} es tu clase de alemán.\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}`;
-      const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_24h" });
+      const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, {
+        kind: "trial_reminder_24h",
+        dedupKey: `trial_reminder_24h:${r.id}`,
+      });
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
       else {
         // Visible en timeline del lead + desactivar número si exists:false.

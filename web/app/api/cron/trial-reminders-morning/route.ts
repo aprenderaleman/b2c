@@ -202,7 +202,10 @@ async function run(req: Request) {
       // heute 😊" del copy ES — residuo del cleanup DE que salía a todos
       // los leads matutinos. Idioma unificado a ES (task #36).
       const waText = `¡Buenos días ${leadFirst}! Hoy es el día 😊\n\nTu clase de alemán es a las ${timeLabel}.\n\nTe recomiendo:\n- Computador con cámara y micrófono\n- Lugar tranquilo\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}`;
-      const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_reminder_morning" });
+      const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, {
+        kind: "trial_reminder_morning",
+        dedupKey: `trial_reminder_morning:${r.id}`,
+      });
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
       else {
         // Visible en timeline del lead + desactivar número si exists:false.
