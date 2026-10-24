@@ -564,7 +564,12 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
  */
 export async function sendRescheduleLinkMessage(
   leadId: string,
-  opts?: { actorName?: string },
+  opts?: {
+    actorName?: string;
+    /** "setter": copy "como hablamos, aquí te envío el enlace…" — el
+     *  setter acaba de hablar con el lead por teléfono (Gelfis 2026-10-24). */
+    copy?: "setter";
+  },
 ): Promise<{ ok: boolean; reason?: string }> {
   const actorName = opts?.actorName ?? "teacher";
   const sb = supabaseAdmin();
@@ -668,7 +673,9 @@ export async function sendRescheduleLinkMessage(
   // Fix auditoría 2026-08-14: "He cancelado tu clase actual" solo es
   // cierto si HABÍA una clase futura que cancelar. Sin ella (lead
   // post-trial o de sesión), el copy invita a agendar, no a reagendar.
-  const waText = trial
+  const waText = opts?.copy === "setter"
+    ? `¡Hola ${firstName}! 👋\n\nComo hablamos, aquí te envío el enlace para que reagendes tu clase de prueba de alemán — eliges tu nuevo horario en 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando lo tengas. 😊\n\n— Stiv · Aprender-Aleman.de`
+    : trial
     ? `¡Hola ${firstName}! 👋\n\nHe cancelado tu clase de prueba actual. Puedes elegir un nuevo horario con este enlace, tardarás solo 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu nuevo horario. 😊\n\n— Stiv · Aprender-Aleman.de`
     : `¡Hola ${firstName}! 👋\n\nTe comparto el enlace para agendar tu clase de prueba de alemán — eliges tu horario en 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu horario. 😊\n\n— Stiv · Aprender-Aleman.de`;
 
@@ -745,7 +752,11 @@ export async function sendRescheduleLinkMessage(
  */
 export async function sendSesionRescheduleLinkMessage(
   leadId: string,
-  opts?: { actorName?: string },
+  opts?: {
+    actorName?: string;
+    /** "setter": copy "como hablamos…" — el setter acaba de llamar al lead. */
+    copy?: "setter";
+  },
 ): Promise<{ ok: boolean; reason?: string }> {
   const actorName = opts?.actorName ?? "closer";
   const sb = supabaseAdmin();
@@ -813,7 +824,9 @@ export async function sendSesionRescheduleLinkMessage(
   const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
   const sesionUrl = `${baseUrl}/sesion-plan/funnel`;
 
-  const waText = sesion
+  const waText = opts?.copy === "setter"
+    ? `¡Hola ${firstName}! 👋\n\nComo hablamos, aquí te envío el enlace para que reagendes tu sesión de plan de alemán — eliges tu nuevo horario en un momento:\n\n👉 ${sesionUrl}\n\nEs una videollamada de 25 minutos donde veremos tu plan personalizado. Avísame cuando lo tengas. 😊\n\n— Aprender-Aleman.de`
+    : sesion
     ? `¡Hola ${firstName}! 👋\n\nHe cancelado tu sesión de plan actual. Puedes elegir un nuevo horario con este enlace:\n\n👉 ${sesionUrl}\n\nEs una videollamada de 25 minutos donde veremos tu plan personalizado de alemán. Avísame cuando hayas elegido tu nuevo horario. 😊\n\n— Aprender-Aleman.de`
     : `¡Hola ${firstName}! 👋\n\nTe comparto el enlace para agendar tu sesión de plan de alemán — eliges tu horario en un momento:\n\n👉 ${sesionUrl}\n\nEs una videollamada de 25 minutos donde veremos tu plan personalizado. 😊\n\n— Aprender-Aleman.de`;
 

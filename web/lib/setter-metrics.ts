@@ -148,15 +148,21 @@ export async function getSetterMetrics(days: number, setterId?: string): Promise
     }
   }
 
-  // ── M2 — rescatados: absent < agendar_prueba (en ventana) < attended ──
+  // ── M2 — rescatados: absent < agendar_prueba (en ventana) < NUEVA cita ──
+  // Desde 2026-10-24 "agendar_prueba" es el envío del link por Stiv, así
+  // que exigimos evidencia de rebooking real (nueva cita o asistencia
+  // posteriores al contacto) para contar el rescate.
   let reagendados = 0;
   let rescatadosAsistieron = 0;
   if (rescateLeadIds.length > 0) {
     const { data } = await sb
       .from("leads")
-      .select("id, trial_absent_at, trial_attended_at")
+      .select("id, trial_absent_at, trial_attended_at, trial_scheduled_at, sesion_plan_at")
       .in("id", rescateLeadIds);
-    for (const l of (data ?? []) as Array<{ id: string; trial_absent_at: string | null; trial_attended_at: string | null }>) {
+    for (const l of (data ?? []) as Array<{
+      id: string; trial_absent_at: string | null; trial_attended_at: string | null;
+      trial_scheduled_at: string | null; sesion_plan_at: string | null;
+    }>) {
       if (!l.trial_absent_at) continue;
       const absentMs = T(l.trial_absent_at);
       const rescates = (contactsByLead.get(l.id) ?? []).filter(c =>
@@ -164,6 +170,12 @@ export async function getSetterMetrics(days: number, setterId?: string): Promise
         T(c.occurred_at) > absentMs &&
         T(c.occurred_at) >= T(fromIso));
       if (rescates.length === 0) continue;
+      const firstMs = T(rescates[0].occurred_at);
+      const rebooked =
+        (l.trial_scheduled_at && T(l.trial_scheduled_at) > firstMs) ||
+        (l.sesion_plan_at && T(l.sesion_plan_at) > firstMs) ||
+        (l.trial_attended_at && T(l.trial_attended_at) > firstMs);
+      if (!rebooked) continue;
       reagendados++;
       const firstRescateMs = T(rescates[0].occurred_at);
       if (l.trial_attended_at && T(l.trial_attended_at) > firstRescateMs) {
@@ -239,5 +251,133 @@ export async function getSetterMetrics(days: number, setterId?: string): Promise
       muestras: deltasHoras.length,
     },
     ventas,
+  };
+}
+
+// ── Contador del setter (Gelfis 2026-10-24) ──────────────────────────────
+// Las 3 únicas cifras que ve en su panel, con filtro 7d / mes / 3 meses:
+//   1. Tasa de asistencia de TODA la academia (su misión es subirla).
+//   2. Confirmados → asistidos (sus confirmos que terminaron en clase).
+//   3. Rescatados (no-shows suyos que volvieron a agendar, y asistieron).
+
+export type SetterScoreboard = {
+  days: number;
+  academia: { asistieron: number; total: number; ratePct: number | null };
+  confirmados: { confirmados: number; asistieron: number };
+  rescatados: { reagendaron: number; asistieron: number };
+};
+
+export async function getSetterScoreboard(days: number, setterId?: string): Promise<SetterScoreboard> {
+  const sb = supabaseAdmin();
+  const now = Date.now();
+  const fromIso = new Date(now - days * D).toISOString();
+  const nowIso = new Date(now).toISOString();
+
+  const contactsQuery = () => {
+    let q = sb.from("lead_contacts")
+      .select("lead_id, action_type, occurred_at")
+      .eq("actor_type", "setter");
+    if (setterId) q = q.eq("actor_id", setterId);
+    return q;
+  };
+
+  const [winContactsRes, trialCohortRes, sesionCohortRes] = await Promise.all([
+    contactsQuery()
+      .in("action_type", ["confirmar_cita", "agendar_prueba"])
+      .gte("occurred_at", fromIso)
+      .order("occurred_at", { ascending: true })
+      .limit(5000),
+    sb.from("leads")
+      .select("id, trial_scheduled_at, trial_attended_at")
+      .gte("trial_scheduled_at", fromIso)
+      .lte("trial_scheduled_at", nowIso),
+    sb.from("leads")
+      .select("id, sesion_plan_at, trial_attended_at")
+      .gte("sesion_plan_at", fromIso)
+      .lte("sesion_plan_at", nowIso),
+  ]);
+
+  // 1) Tasa de asistencia de la academia: citas resueltas del periodo
+  //    (convención del funnel: cita pasada sin marcar = ausencia). Un
+  //    lead con trial Y sesión cuenta una vez.
+  const attendedByLead = new Map<string, boolean>();
+  for (const l of (trialCohortRes.data ?? []) as Array<{ id: string; trial_attended_at: string | null }>) {
+    attendedByLead.set(l.id, !!l.trial_attended_at);
+  }
+  for (const l of (sesionCohortRes.data ?? []) as Array<{ id: string; trial_attended_at: string | null }>) {
+    if (!attendedByLead.has(l.id)) attendedByLead.set(l.id, !!l.trial_attended_at);
+  }
+  const academiaTotal = attendedByLead.size;
+  const academiaAsistieron = [...attendedByLead.values()].filter(Boolean).length;
+
+  // 2) + 3) Secuencias sobre sus contactos del periodo.
+  const winContacts = (winContactsRes.data ?? []) as SetterContact[];
+  const firstByLeadAction = new Map<string, number>();   // `${leadId}|${action}` → occurred_at ms
+  for (const c of winContacts) {
+    const key = `${c.lead_id}|${c.action_type}`;
+    if (!firstByLeadAction.has(key)) firstByLeadAction.set(key, T(c.occurred_at));
+  }
+
+  const touchedLeadIds = [...new Set(winContacts.map(c => c.lead_id))];
+  const leadById = new Map<string, {
+    trial_absent_at: string | null; trial_attended_at: string | null;
+    trial_scheduled_at: string | null; sesion_plan_at: string | null;
+  }>();
+  if (touchedLeadIds.length > 0) {
+    const chunks: string[][] = [];
+    for (let i = 0; i < touchedLeadIds.length; i += 200) chunks.push(touchedLeadIds.slice(i, i + 200));
+    const results = await Promise.all(chunks.map(ids =>
+      sb.from("leads")
+        .select("id, trial_absent_at, trial_attended_at, trial_scheduled_at, sesion_plan_at")
+        .in("id", ids),
+    ));
+    for (const r of results) {
+      for (const l of (r.data ?? []) as Array<{
+        id: string; trial_absent_at: string | null; trial_attended_at: string | null;
+        trial_scheduled_at: string | null; sesion_plan_at: string | null;
+      }>) {
+        leadById.set(l.id, l);
+      }
+    }
+  }
+
+  let confirmados = 0;
+  let confirmadosAsistieron = 0;
+  let rescatadosReagendaron = 0;
+  let rescatadosAsistieron = 0;
+
+  for (const leadId of touchedLeadIds) {
+    const l = leadById.get(leadId);
+    if (!l) continue;
+
+    const confirmoMs = firstByLeadAction.get(`${leadId}|confirmar_cita`);
+    if (confirmoMs != null) {
+      confirmados++;
+      if (l.trial_attended_at && T(l.trial_attended_at) > confirmoMs) confirmadosAsistieron++;
+    }
+
+    // Rescate: era no-show → le envió el enlace → volvió a agendar.
+    const rescateMs = firstByLeadAction.get(`${leadId}|agendar_prueba`);
+    if (rescateMs != null && l.trial_absent_at && T(l.trial_absent_at) < rescateMs) {
+      const rebooked =
+        (l.trial_scheduled_at && T(l.trial_scheduled_at) > rescateMs) ||
+        (l.sesion_plan_at && T(l.sesion_plan_at) > rescateMs) ||
+        (l.trial_attended_at && T(l.trial_attended_at) > rescateMs);
+      if (rebooked) {
+        rescatadosReagendaron++;
+        if (l.trial_attended_at && T(l.trial_attended_at) > rescateMs) rescatadosAsistieron++;
+      }
+    }
+  }
+
+  return {
+    days,
+    academia: {
+      asistieron: academiaAsistieron,
+      total: academiaTotal,
+      ratePct: pct(academiaAsistieron, academiaTotal),
+    },
+    confirmados: { confirmados, asistieron: confirmadosAsistieron },
+    rescatados: { reagendaron: rescatadosReagendaron, asistieron: rescatadosAsistieron },
   };
 }
