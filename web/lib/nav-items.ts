@@ -108,13 +108,15 @@ function adminItems(): NavItem[] {
     { label: "Referidos",   href: "/admin/referidos",   icon: "heart",         priority: 8.7 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
     { label: "Closers",     href: "/admin/closers",     icon: "userCheck",     priority: 9.5 },
+    // Restaurado 2026-10-26: el primer setter empieza a trabajar y
+    // Gelfis necesita gestionarlos desde el menú (alta + métricas).
+    { label: "Setters",     href: "/admin/setters",     icon: "userCheck",     priority: 9.52 },
     // Ocultos del menú (Gelfis 2026-10-07, simplificación de la vista
     // admin) — las rutas siguen vivas por enlace directo: Sesiones Plan
     // (/admin/sesiones), Grupos (/admin/grupos), Semáforo
-    // (/admin/semaforo), Reportes (/admin/reportes), Setters
-    // (/admin/setters), Reactivación (/admin/reactivacion),
-    // Aprobaciones (/admin/aprobaciones) y Config CRM
-    // (/admin/config/cadencia).
+    // (/admin/semaforo), Reportes (/admin/reportes), Reactivación
+    // (/admin/reactivacion), Aprobaciones (/admin/aprobaciones) y
+    // Config CRM (/admin/config/cadencia).
   ];
 }
 
