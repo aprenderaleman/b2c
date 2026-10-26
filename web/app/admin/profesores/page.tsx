@@ -12,6 +12,10 @@ export default async function TeachersListPage({ searchParams }: { searchParams:
 
   const [rows, byTeacher] = await Promise.all([getTeachers(), getTeacherStudents()]);
 
+  // Vista "activos" (default): solo profes activos (Gelfis 2026-10-26).
+  // La pestaña "Todos" sigue enseñando también a los desactivados.
+  const teachers = vista === "activos" ? rows.filter(t => t.active) : rows;
+
   const totalActivos = new Set(Object.values(byTeacher).flat().filter(s => s.active).map(s => s.student_id)).size;
   const totalTodos   = new Set(Object.values(byTeacher).flat().map(s => s.student_id)).size;
 
@@ -21,7 +25,8 @@ export default async function TeachersListPage({ searchParams }: { searchParams:
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Profesores</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            {rows.length.toLocaleString("es-ES")} profesor{rows.length === 1 ? "" : "es"}
+            {teachers.length.toLocaleString("es-ES")} profesor{teachers.length === 1 ? "" : "es"}
+            {vista === "activos" && rows.length > teachers.length ? ` (${rows.length - teachers.length} inactivos ocultos)` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -39,10 +44,10 @@ export default async function TeachersListPage({ searchParams }: { searchParams:
 
       <div className="inline-flex rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1 text-sm">
         <Tab href="/admin/profesores" active={vista === "activos"}>
-          Estudiantes activos <Count n={totalActivos} />
+          Activos <Count n={totalActivos} />
         </Tab>
         <Tab href="/admin/profesores?vista=todos" active={vista === "todos"}>
-          Todos los estudiantes <Count n={totalTodos} />
+          Todos <Count n={totalTodos} />
         </Tab>
       </div>
 
@@ -57,14 +62,14 @@ export default async function TeachersListPage({ searchParams }: { searchParams:
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-slate-800 dark:text-slate-200">
-            {rows.length === 0 && (
+            {teachers.length === 0 && (
               <tr>
                 <td colSpan={4} className="p-8 text-center text-slate-500 dark:text-slate-400">
                   Aún no hay profesores. Crea el primero con el botón de arriba.
                 </td>
               </tr>
             )}
-            {rows.map(t => {
+            {teachers.map(t => {
               const all = byTeacher[t.id] ?? [];
               const list = vista === "activos" ? all.filter(s => s.active) : all;
               const nActivos = all.filter(s => s.active).length;
