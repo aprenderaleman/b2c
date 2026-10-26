@@ -27,6 +27,10 @@ import {
   type TrialReminderVars,
 } from "./templates/trial-reminder";
 import {
+  renderSetterTrialAccess,
+  type SetterTrialAccessVars,
+} from "./templates/setter-trial-access";
+import {
   renderTrialAttendedFollowup,
   type TrialAttendedFollowupVars,
 } from "./templates/trial-attended-followup";
@@ -585,6 +589,21 @@ export async function sendTrialReminderEmail(
     assertLeadJoinUrl(vars.joinUrl, "sendTrialReminderEmail/lead");
   }
   const { subject, html, text } = renderTrialReminder(vars);
+  return sendRaw(to, subject, html, text);
+}
+
+/**
+ * Emails breves del setter (Gelfis 2026-10-26): enlace de acceso al aula
+ * o "gracias por confirmar" + enlace. Gemelos de sus WhatsApps, enviados
+ * justo después de hablar con el lead por teléfono.
+ */
+export async function sendSetterTrialAccessEmail(
+  to: string,
+  vars: SetterTrialAccessVars,
+): Promise<SendResult> {
+  const { assertLeadJoinUrl } = await import("@/lib/trial-token");
+  assertLeadJoinUrl(vars.joinUrl, "sendSetterTrialAccessEmail");
+  const { subject, html, text } = renderSetterTrialAccess(vars);
   return sendRaw(to, subject, html, text);
 }
 

@@ -145,6 +145,12 @@ const ALLOWED_WA_KINDS = new Set([
   "admin_manual",  // bypass para Gelfis desde endpoints admin
   // Notificación al profesor cuando su lead convierte (post-conversion-flow)
   "teacher_conversion_notify",
+  // Envíos del setter tras hablar con el lead (Gelfis 2026-10-26):
+  // humano-iniciados — el lead acaba de contestar su llamada, así que
+  // son transaccionales y exentos del gate nocturno (la setter trabaja
+  // tarde Latam = noche Berlín).
+  "setter_class_link",   // enlace de acceso al aula + instrucciones
+  "setter_confirm_ack",  // gracias por confirmar + enlace + Wir sehen uns
 ]);
 
 /**
