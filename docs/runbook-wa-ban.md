@@ -17,6 +17,7 @@ Todas editables por SQL — el wrapper (TS y Python) las lee con cache 60s.
 | `wa_warmup_day` | `''` | Día 1–14 del warm-up post-ban. `''` = sin warm-up. Cap efectivo: 30/día días 1-3, 100/día días 4-7. |
 | `wa_warmup_started_at` | `''` | Timestamp de inicio del warm-up. Solo referencia. |
 | `wa_setter_instance` | `''` | Canal del setter (2026-10-26). Si está configurada, los envíos del setter (enlace de clase, gracias-confirmo, reagenda) salen por ESA instancia y quedan exentos del kill switch global. `''` = los envíos del setter van por el canal principal como todo lo demás. |
+| `wa_setter_daily_cap` | `30` | Tope diario del canal del setter (sus kinds se saltan los caps globales por estar en la whitelist). Superado, el WA del setter se silencia hasta medianoche Berlín — el email del helper sigue saliendo. Contador en `wa_setter_sent_today` ("YYYY-MM-DD:N", se resetea solo). |
 
 ## Detección de ban
 

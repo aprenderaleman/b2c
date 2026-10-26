@@ -384,6 +384,51 @@ export type SendWaOpts = {
 };
 
 // ── Canal del setter: instancia propia para el warm-up del número nuevo ──
+
+/** Contador diario del canal setter. Una sola fila en system_config
+ *  (`wa_setter_sent_today`, valor "YYYY-MM-DD:N" en día Berlín) — al
+ *  cambiar el día se resetea sola. Read-modify-write sin lock: para un
+ *  cap protector con volumen humano (decenas/día) es suficiente. */
+const SETTER_SENT_KEY = "wa_setter_sent_today";
+
+function berlinDayKey(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+}
+
+async function getSetterDailyState(): Promise<{ sent: number; limit: number }> {
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const sb = supabaseAdmin();
+    const { data: rows } = await sb
+      .from("system_config").select("key,value")
+      .in("key", ["wa_setter_daily_cap", SETTER_SENT_KEY]);
+    const cfg = new Map((rows ?? []).map(r => [r.key as string, String(r.value ?? "")]));
+    const limit = parseInt(cfg.get("wa_setter_daily_cap") ?? "30", 10) || 30;
+    const raw = cfg.get(SETTER_SENT_KEY) ?? "";
+    const [day, n] = raw.split(":");
+    const sent = day === berlinDayKey() ? (parseInt(n ?? "0", 10) || 0) : 0;
+    return { sent, limit };
+  } catch {
+    return { sent: 0, limit: 30 };
+  }
+}
+
+async function bumpSetterDailyCount(): Promise<void> {
+  try {
+    const { sent } = await getSetterDailyState();
+    const { supabaseAdmin } = await import("./supabase");
+    const sb = supabaseAdmin();
+    await sb.from("system_config").upsert({
+      key: SETTER_SENT_KEY,
+      value: `${berlinDayKey()}:${sent + 1}`,
+    });
+  } catch {
+    // contador best-effort — nunca bloquea el envío ya hecho
+  }
+}
+
 let _setterInstanceCache: { value: string | null; ts: number } | null = null;
 async function getSetterInstance(): Promise<string | null> {
   const now = Date.now();
@@ -496,8 +541,21 @@ export async function sendWhatsappText(
   // Canal del setter (warm-up del número nuevo): si el envío viene del
   // setter Y wa_setter_instance está configurada, sale por ESA instancia
   // y no le aplica el kill switch global (que protege el canal
-  // principal). Blocklist, dedup, caps y gate nocturno siguen aplicando.
+  // principal). Blocklist, dedup y separación mínima siguen aplicando.
   const setterInstance = opts.channel === "setter" ? await getSetterInstance() : null;
+
+  // Cap diario PROPIO del número en warm-up (Gelfis 2026-10-26). Los
+  // kinds del setter están en ALLOWED_WA_KINDS y por eso se saltan los
+  // caps globales — este tope es su red de seguridad: superado, el WA
+  // se silencia (el email del helper sigue saliendo) hasta medianoche
+  // Berlín. Config: system_config.wa_setter_daily_cap (default 30).
+  if (setterInstance && !opts.bypassKillSwitch) {
+    const { sent, limit } = await getSetterDailyState();
+    if (sent >= limit) {
+      console.warn(`[whatsapp setter] cap diario ${limit} alcanzado (${sent}) — WA silenciado hasta mañana`);
+      return { ok: false, reason: "setter_daily_cap" };
+    }
+  }
 
   // Kill switch global con dos modos:
   //  - "true" / true / "1"  → bloquea TODO (ni siquiera los 5 kinds de
@@ -649,6 +707,7 @@ export async function sendWhatsappText(
       messageId?: string;
     };
     const messageId = data.key?.id ?? data.messageId ?? null;
+    if (setterInstance) await bumpSetterDailyCount();
     return { ok: true, messageId };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : "unknown" };
