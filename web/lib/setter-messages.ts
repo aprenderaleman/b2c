@@ -129,3 +129,72 @@ export async function sendSetterAccessMessage(
   }
   return { ok: true, waSent, emailSent, startLabel };
 }
+
+/**
+ * Mensaje tras "No contestó" (Gelfis 2026-10-26): Stiv le escribe al
+ * lead de parte del setter pidiendo el confirmo. Solo WhatsApp (acaba
+ * de no contestar una llamada — el mensaje es el canal natural) y solo
+ * si tiene cita futura.
+ */
+export async function sendSetterNoContestoMessage(
+  leadId: string,
+  setterName: string,
+): Promise<SetterSendResult> {
+  const sb = supabaseAdmin();
+
+  const { data: leadRow } = await sb
+    .from("leads")
+    .select("id, name, whatsapp_normalized, language")
+    .eq("id", leadId)
+    .maybeSingle();
+  const lead = leadRow as {
+    id: string; name: string | null; whatsapp_normalized: string | null; language: "es" | "de" | null;
+  } | null;
+  if (!lead) return { ok: false, waSent: false, emailSent: false, startLabel: null, reason: "lead_not_found" };
+  if (!lead.whatsapp_normalized) {
+    return { ok: false, waSent: false, emailSent: false, startLabel: null, reason: "el lead no tiene WhatsApp" };
+  }
+
+  const { data: clsRow } = await sb
+    .from("classes")
+    .select("id, scheduled_at, sesion_closer_id")
+    .eq("lead_id", leadId)
+    .or("is_trial.eq.true,sesion_closer_id.not.is.null")
+    .eq("status", "scheduled")
+    .is("deleted_at", null)
+    .gte("scheduled_at", new Date().toISOString())
+    .order("scheduled_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  const cls = clsRow as { id: string; scheduled_at: string; sesion_closer_id: string | null } | null;
+  if (!cls) {
+    return { ok: false, waSent: false, emailSent: false, startLabel: null, reason: "sin cita futura (no-show: no aplica)" };
+  }
+
+  const lang = (lead.language === "de" ? "de" : "es") as "es" | "de";
+  const firstName = (lead.name ?? "").trim().split(/\s+/)[0] || "";
+  const setterFirst = setterName.trim().split(/\s+/)[0] || setterName;
+  const startLabel = formatBerlinFull(cls.scheduled_at, lang);
+  const claseES = cls.sesion_closer_id ? "sesión de plan" : "clase de prueba";
+  const claseDE = cls.sesion_closer_id ? "Plan-Session" : "Probestunde";
+
+  const waText = lang === "de"
+    ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nDeine Deutsch-${claseDE} ist am ${startLabel}.\n\nKannst du mir bitte mit einem "Ja" bestätigen, dass du dabei bist? 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`
+    : `¡Hola ${firstName}! 👋 Soy ${setterFirst}, de la academia Aprender-Aleman.de — acabo de intentar llamarte 😊\n\nTu ${claseES} de alemán es el ${startLabel}.\n\n¿Me confirmas con un "Sí" que podrás conectarte? 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`;
+
+  const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "setter_no_contesto", channel: "setter" })
+    .catch(() => ({ ok: false as const }));
+  const waSent = res.ok === true;
+
+  await sb.from("lead_timeline").insert({
+    lead_id: leadId,
+    type: waSent ? "system_message_sent" : "send_failed",
+    author: "setter",
+    content: waSent
+      ? `📵→💬 No contestó la llamada de ${setterName} (setter) — Stiv le pidió el confirmo por WA`
+      : `📵 No contestó y el WA de seguimiento falló`,
+    metadata: { kind: "setter_no_contesto", class_id: cls.id, wa_sent: waSent },
+  }).then(() => {}, () => {});
+
+  return { ok: waSent, waSent, emailSent: false, startLabel, reason: waSent ? undefined : "el WhatsApp no se pudo enviar" };
+}

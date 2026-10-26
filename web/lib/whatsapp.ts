@@ -151,6 +151,7 @@ const ALLOWED_WA_KINDS = new Set([
   // tarde Latam = noche Berlín).
   "setter_class_link",   // enlace de acceso al aula + instrucciones
   "setter_confirm_ack",  // gracias por confirmar + enlace + Wir sehen uns
+  "setter_no_contesto",  // "soy {setter}, te acabo de llamar — ¿confirmas?"
 ]);
 
 /**

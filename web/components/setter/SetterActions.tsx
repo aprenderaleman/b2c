@@ -23,7 +23,7 @@ import { useState, useTransition } from "react";
  * pre-rellenada para que registrar sea un clic.
  */
 
-type Mode = "confirmado" | "enlace_clase" | "reagendar" | "no_contesto" | "nota";
+type Mode = "confirmado" | "enlace_clase" | "reagendar" | "no_contesto" | "nota" | "descartar";
 
 const MODE_CONFIG: Record<Mode, {
   title: string;
@@ -67,6 +67,16 @@ const MODE_CONFIG: Record<Mode, {
     placeholder: "Ej: No contestó, buzón de voz.",
     cta: "Registrar intento",
     pendingCta: "Registrando…",
+    preview: "Si tiene cita futura, Stiv le escribe por WhatsApp de tu parte: “Soy {tu nombre}, de Aprender-Aleman.de — acabo de intentar llamarte. Tu clase es el {fecha}, ¿me confirmas que podrás conectarte?”",
+  },
+  descartar: {
+    title: "❌ Descartar lead",
+    noteLabel: "Nota (obligatoria) — qué dijo exactamente",
+    defaultNote: "",
+    placeholder: "Ej: Dice que él no agendó nada, que debió ser otra persona con su número.",
+    cta: "Descartar lead",
+    pendingCta: "Descartando…",
+    preview: "⚠️ El lead sale de TODAS las listas, su cita se cancela (se libera el hueco del profe) y no recibirá más mensajes. Úsalo solo cuando la cita no es real: no agendó, fue un error o número equivocado.",
   },
   nota: {
     title: "📝 Nota en el perfil del lead",
@@ -99,6 +109,7 @@ export function SetterActions({
   const [error, setError] = useState<string | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const [motivo, setMotivo] = useState<"no_agendo" | "numero_equivocado">("no_agendo");
 
   const open = (m: Mode) => {
     setMode(m);
@@ -134,15 +145,26 @@ export function SetterActions({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tipo: citaTipo, note: note.trim() }),
         });
+      } else if (mode === "no_contesto") {
+        res = await fetch(`/api/setter/leads/${leadId}/no-contesto`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note: note.trim() }),
+        });
+      } else if (mode === "descartar") {
+        res = await fetch(`/api/setter/leads/${leadId}/descartar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ motivo, note: note.trim() }),
+        });
       } else {
-        const actionType = mode === "no_contesto" ? "no_contesto" : "nota_libre";
         res = await fetch("/api/contacts/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             leadId,
-            actionType,
-            channel: mode === "nota" ? "otro" : "llamada",
+            actionType: "nota_libre",
+            channel: "otro",
             note: note.trim(),
           }),
         });
@@ -155,15 +177,21 @@ export function SetterActions({
       if (mode === "confirmado") {
         const canales = fmtCanales(body as { wa_sent?: boolean; email_sent?: boolean });
         setOkMsg(canales
-          ? `✅ Confirmo registrado y mensaje de gracias + enlace enviado por ${canales}. El lead sale de tu lista de pendientes.`
-          : `✅ Confirmo registrado — pero el mensaje NO se pudo enviar (${(body as { send_reason?: string }).send_reason ?? "sin canales"}). Avísale tú el enlace.`);
+          ? `✅ Confirmo registrado y mensaje de gracias + enlace enviado por ${canales}. El profe de la cita lo verá como confirmado. El lead sale de tu lista.`
+          : `✅ Confirmo registrado y el profe lo verá — pero el mensaje NO se pudo enviar (${(body as { send_reason?: string }).send_reason ?? "sin canales"}). Avísale tú el enlace.`);
       } else if (mode === "enlace_clase") {
         const canales = fmtCanales(body as { wa_sent?: boolean; email_sent?: boolean });
         setOkMsg(`🎓 Enlace de acceso enviado por ${canales || "—"}.`);
       } else if (mode === "reagendar") {
         setOkMsg("🔗 Enlace enviado por WhatsApp. Cuando el lead elija su nuevo horario, la cita aparecerá agendada.");
       } else if (mode === "no_contesto") {
-        setOkMsg("📵 Registrado. El lead vuelve a tu lista en 24 horas (o 2 horas antes de su clase, lo que llegue primero).");
+        const waSent = (body as { wa_sent?: boolean }).wa_sent;
+        setOkMsg(waSent
+          ? "📵 Registrado y Stiv le pidió el confirmo por WhatsApp. El lead vuelve a tu lista en 24 horas (o 2 horas antes de su clase)."
+          : `📵 Registrado. El lead vuelve a tu lista en 24 horas (o 2 horas antes de su clase). Sin mensaje de WhatsApp (${(body as { send_reason?: string }).send_reason ?? "no aplica"}).`);
+      } else if (mode === "descartar") {
+        const n = (body as { citas_canceladas?: number }).citas_canceladas ?? 0;
+        setOkMsg(`❌ Lead descartado — fuera de todas las listas${n > 0 ? ` y ${n} cita${n > 1 ? "s" : ""} cancelada${n > 1 ? "s" : ""} (hueco liberado)` : ""}. No recibirá más mensajes.`);
       } else {
         setOkMsg("📝 Nota guardada en el perfil del lead.");
       }
@@ -213,6 +241,13 @@ export function SetterActions({
         >
           📝 Nota
         </button>
+        <button
+          type="button"
+          onClick={() => open("descartar")}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-red-300 dark:border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 px-4 py-2 text-sm font-medium transition-colors"
+        >
+          ❌ Descartar
+        </button>
       </div>
 
       {mode && cfg && (
@@ -247,6 +282,20 @@ export function SetterActions({
                       </p>
                     )}
                   </div>
+                )}
+
+                {mode === "descartar" && (
+                  <label className="block text-sm">
+                    <span className="font-medium text-slate-700 dark:text-slate-200">Motivo</span>
+                    <select
+                      value={motivo}
+                      onChange={(e) => setMotivo(e.target.value as "no_agendo" | "numero_equivocado")}
+                      className="input-text mt-1 w-full"
+                    >
+                      <option value="no_agendo">Dice que no agendó / fue un error</option>
+                      <option value="numero_equivocado">Número equivocado</option>
+                    </select>
+                  </label>
                 )}
 
                 <label className="block text-sm">

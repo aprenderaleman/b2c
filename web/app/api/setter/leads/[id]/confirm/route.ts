@@ -75,6 +75,55 @@ export async function POST(
   // 2) Gracias + enlace + "Wir sehen uns am {fecha}" (WA + email).
   const send = await sendSetterAccessMessage(leadId, "confirmed", setter.name);
 
+  // 3) Que el profe (o closer) de la cita LO VEA (Gelfis 2026-10-26):
+  //    trial_confirmed_at enciende el badge "confirmó asistencia" del
+  //    Trial Hub, y además le llega notificación in-app.
+  try {
+    await sb.from("leads")
+      .update({ trial_confirmed_at: new Date().toISOString() })
+      .eq("id", leadId)
+      .is("trial_confirmed_at", null);
+
+    const { data: clsRow } = await sb
+      .from("classes")
+      .select("id, scheduled_at, teacher_id, sesion_closer_id, leads:lead_id(name)")
+      .eq("lead_id", leadId)
+      .eq("status", "scheduled")
+      .is("deleted_at", null)
+      .gte("scheduled_at", new Date().toISOString())
+      .order("scheduled_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const cls = clsRow as unknown as {
+      id: string; scheduled_at: string; teacher_id: string | null;
+      sesion_closer_id: string | null; leads: { name: string | null } | null;
+    } | null;
+    if (cls) {
+      const leadName = cls.leads?.name ?? "El lead";
+      const { formatBerlinShort } = await import("@/lib/time");
+      const fecha = formatBerlinShort(cls.scheduled_at);
+      let notifyUserId: string | null = cls.sesion_closer_id;
+      let link = "/closer/sesiones";
+      if (!notifyUserId && cls.teacher_id) {
+        const { data: t } = await sb.from("teachers").select("user_id").eq("id", cls.teacher_id).maybeSingle();
+        notifyUserId = (t as { user_id: string } | null)?.user_id ?? null;
+        link = "/profesor/clasedeprueba";
+      }
+      if (notifyUserId) {
+        await sb.from("notifications").insert({
+          user_id: notifyUserId,
+          type: "class_updated",
+          title: `✅ ${leadName} confirmó su asistencia`,
+          body: `Confirmado por teléfono por ${setter.name} (setter) — cita del ${fecha}.`,
+          link,
+          class_id: cls.id,
+        }).then(() => {}, () => {});
+      }
+    }
+  } catch (e) {
+    console.error("[setter-confirm] notify teacher/closer failed:", e);
+  }
+
   return NextResponse.json({
     ok: true,
     wa_sent: send.waSent,
