@@ -66,6 +66,7 @@ export default async function SetterColaPage({
         pendientes={pendientes}
         noShows={noShows}
         snoozed={queue.snoozed}
+        noShowBacklog={queue.noShowBacklog}
       />
     </main>
   );

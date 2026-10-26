@@ -30,6 +30,10 @@ export const SIN_MARCAR_DELAY_MS = 2 * H;
 export const NO_CONTESTO_SNOOZE_MS = 24 * H;
 /** …o hasta 2h antes de su clase, lo que llegue primero. */
 export const NO_CONTESTO_PRECLASE_MS = 2 * H;
+/** Lote de no-shows visible a la vez: el setter los trabaja poco a poco
+ *  sin abrumarse (Gelfis 2026-10-26). Al trabajar uno (confirmo,
+ *  reagenda o "no contestó"), entra el siguiente del backlog solo. */
+export const NO_SHOW_BATCH = 15;
 
 export type SetterTramo = "pendiente" | "no_show";
 
@@ -61,6 +65,8 @@ export type SetterQueue = {
   items: SetterQueueItem[];
   /** Leads en espera tras "no contestó" (vuelven solos a la lista). */
   snoozed: { pendientes: number; noShows: number };
+  /** No-shows más allá del lote visible — entran solos al trabajar el lote. */
+  noShowBacklog: number;
 };
 
 type ClassRow = {
@@ -121,7 +127,7 @@ export async function getSetterQueue(now = Date.now()): Promise<SetterQueue> {
     .limit(2000);
 
   const classes = (classesData ?? []) as ClassRow[];
-  if (classes.length === 0) return { items: [], snoozed: { pendientes: 0, noShows: 0 } };
+  if (classes.length === 0) return { items: [], snoozed: { pendientes: 0, noShows: 0 }, noShowBacklog: 0 };
 
   const leadIds = [...new Set(classes.map(c => c.lead_id))];
 
@@ -282,5 +288,15 @@ export async function getSetterQueue(now = Date.now()): Promise<SetterQueue> {
     return T(bRef) - T(aRef);
   });
 
-  return { items: deduped, snoozed };
+  // Lote: solo los NO_SHOW_BATCH no-shows más recientes a la vista; el
+  // resto queda en backlog y entra solo a medida que se trabaja el lote.
+  const pendientesAll = deduped.filter(it => it.tramo === "pendiente");
+  const noShowsAll = deduped.filter(it => it.tramo === "no_show");
+  const noShowBacklog = Math.max(0, noShowsAll.length - NO_SHOW_BATCH);
+
+  return {
+    items: [...pendientesAll, ...noShowsAll.slice(0, NO_SHOW_BATCH)],
+    snoozed,
+    noShowBacklog,
+  };
 }

@@ -20,7 +20,7 @@ const TABS = [
   {
     key: "no_show" as const,
     label: "🔄 No asistieron",
-    hint: "Llama y envíale el enlace de reagenda. El no-show más reciente, primero.",
+    hint: "Tu lote de hoy: los más recientes primero. Llama y envíale el enlace de reagenda — al trabajar uno, entra el siguiente solo.",
     empty: "No hay no-shows pendientes de recuperar.",
   },
 ];
@@ -36,10 +36,12 @@ export function SetterQueueTabs({
   pendientes,
   noShows,
   snoozed,
+  noShowBacklog,
 }: {
   pendientes: SetterQueueItem[];
   noShows: SetterQueueItem[];
   snoozed: { pendientes: number; noShows: number };
+  noShowBacklog: number;
 }) {
   const [active, setActive] = useState<"pendiente" | "no_show">("pendiente");
 
@@ -114,6 +116,12 @@ export function SetterQueueTabs({
             </Link>
           ))}
         </div>
+      )}
+
+      {active === "no_show" && noShowBacklog > 0 && (
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          📦 {noShowBacklog} más esperan en el backlog — entran solos a tu lista a medida que trabajas estos.
+        </p>
       )}
 
       {snoozedByTab[active] > 0 && (
