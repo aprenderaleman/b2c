@@ -618,7 +618,9 @@ export async function sendRescheduleLinkMessage(
     // que el deleteTrialEvent inline no tocaba (Gelfis 2026-09-02).
     {
       const { removeTeacherCalendarEvents } = await import("./teacher-calendar-sync");
-      removeTeacherCalendarEvents([trial.id]).catch(() => {});
+      // AWAITED (fix Ricardo 2026-10-26): fire-and-forget muere congelado
+      // en Vercel y el evento queda huérfano en el calendario del profe.
+      await removeTeacherCalendarEvents([trial.id]).catch(() => {});
     }
 
     // Notificar al profesor in-app si el que reagenda NO es el propio profesor

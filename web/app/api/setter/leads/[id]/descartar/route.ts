@@ -87,12 +87,15 @@ export async function POST(
     await sb.from("classes").update({ status: "cancelled", updated_at: nowIso }).eq("id", cls.id);
     canceladas.push(cls.id);
 
+    // AWAITED a propósito (fix Ricardo 2026-10-26): en Vercel un
+    // fire-and-forget puede morir congelado a mitad de la llamada a
+    // Google y el evento queda huérfano en el calendario.
     if (cls.sesion_closer_id) {
       if (cls.closer_gcal_event_id) {
         const { deleteSesionEventForCloser } = await import("@/lib/closer-calendar-sync");
-        deleteSesionEventForCloser(cls.sesion_closer_id, cls.closer_gcal_event_id).catch(() => {});
+        await deleteSesionEventForCloser(cls.sesion_closer_id, cls.closer_gcal_event_id).catch(() => {});
       }
-      void notifyCloserSesionChanged({
+      await notifyCloserSesionChanged({
         sesionId: cls.id,
         kind: "cancelled",
         previousDate: cls.scheduled_at,
@@ -101,8 +104,10 @@ export async function POST(
       });
     } else {
       const { removeTeacherCalendarEvents } = await import("@/lib/teacher-calendar-sync");
-      removeTeacherCalendarEvents([cls.id]).catch(() => {});
-      void notifyTeacherClassChanged({
+      await removeTeacherCalendarEvents([cls.id]).catch((e) => {
+        console.error("[setter-descartar] removeTeacherCalendarEvents failed:", e);
+      });
+      await notifyTeacherClassChanged({
         classId: cls.id,
         kind: "cancelled",
         previousDate: cls.scheduled_at,

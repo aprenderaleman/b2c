@@ -119,17 +119,30 @@ export async function removeTeacherCalendarEvents(classIds: string[]): Promise<v
   const sb = supabaseAdmin();
   const rows = await loadClasses(classIds);
   for (const c of rows) {
+    // Caso Ricardo 2026-10-26: los delete* devuelven false al fallar (no
+    // lanzan), y aquí se anulaba la columna IGUALMENTE — el evento quedaba
+    // huérfano en el calendario y perdíamos su id para reintentarlo.
+    // Ahora la columna solo se anula si el delete confirmó éxito (los
+    // helpers ya tratan 404/"Resource has been deleted" como éxito).
     if (c.teacher_id && c.teacher_gcal_event_id) {
-      await deleteTeacherCalendarEvent(c.teacher_id, c.teacher_gcal_event_id);
-      await sb.from("classes").update({ teacher_gcal_event_id: null }).eq("id", c.id);
+      const ok = await deleteTeacherCalendarEvent(c.teacher_id, c.teacher_gcal_event_id);
+      if (ok) {
+        await sb.from("classes").update({ teacher_gcal_event_id: null }).eq("id", c.id);
+      } else {
+        console.warn(`[teacher-gcal-sync] teacher delete failed for ${c.id} — se conserva el event id para reintento`);
+      }
     }
     if (c.google_calendar_event_id) {
       try {
         const { deleteTrialEvent } = await import("./google-calendar");
-        await deleteTrialEvent(c.google_calendar_event_id);
-        await sb.from("classes").update({ google_calendar_event_id: null }).eq("id", c.id);
+        const ok = await deleteTrialEvent(c.google_calendar_event_id);
+        if (ok) {
+          await sb.from("classes").update({ google_calendar_event_id: null }).eq("id", c.id);
+        } else {
+          console.warn(`[teacher-gcal-sync] central delete failed for ${c.id} — se conserva el event id para reintento`);
+        }
       } catch (e) {
-        console.warn(`[teacher-gcal-sync] central delete failed for ${c.id}:`, e);
+        console.warn(`[teacher-gcal-sync] central delete threw for ${c.id}:`, e);
       }
     }
     if (c.sesion_closer_id && c.closer_gcal_event_id) {

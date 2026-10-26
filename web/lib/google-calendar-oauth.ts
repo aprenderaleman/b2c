@@ -401,7 +401,14 @@ export async function deleteTeacherCalendarEvent(
     await cal.events.delete({ calendarId: "primary", eventId });
     return true;
   } catch (e) {
-    console.error(`[gcal-oauth] deleteTeacherCalendarEvent ${eventId} failed:`, e instanceof Error ? e.message : e);
+    const msg = e instanceof Error ? e.message : String(e);
+    // Evento ya borrado a mano en Google → éxito (mismo criterio que
+    // deleteTrialEvent; sin esto la columna nunca se limpia y se
+    // reintenta para siempre).
+    if (msg.includes("404") || msg.includes("410") || msg.includes("Resource has been deleted") || msg.includes("Not Found")) {
+      return true;
+    }
+    console.error(`[gcal-oauth] deleteTeacherCalendarEvent ${eventId} failed:`, msg);
     return false;
   }
 }
