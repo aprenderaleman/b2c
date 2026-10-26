@@ -682,7 +682,11 @@ export async function sendRescheduleLinkMessage(
   let waOk = false;
   let waReason: string | null = null;
   if (linfo.whatsapp_normalized) {
-    const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "trial_reschedule_link" });
+    const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, {
+      kind: "trial_reschedule_link",
+      // El setter envía por su propio canal (número en warm-up).
+      ...(opts?.copy === "setter" ? { channel: "setter" as const } : {}),
+    });
     waOk = waRes.ok;
     waReason = waRes.ok ? null : (waRes.reason ?? "unknown");
     await sb.from("lead_timeline").insert({
@@ -830,7 +834,11 @@ export async function sendSesionRescheduleLinkMessage(
     ? `¡Hola ${firstName}! 👋\n\nHe cancelado tu sesión de plan actual. Puedes elegir un nuevo horario con este enlace:\n\n👉 ${sesionUrl}\n\nEs una videollamada de 25 minutos donde veremos tu plan personalizado de alemán. Avísame cuando hayas elegido tu nuevo horario. 😊\n\n— Aprender-Aleman.de`
     : `¡Hola ${firstName}! 👋\n\nTe comparto el enlace para agendar tu sesión de plan de alemán — eliges tu horario en un momento:\n\n👉 ${sesionUrl}\n\nEs una videollamada de 25 minutos donde veremos tu plan personalizado. 😊\n\n— Aprender-Aleman.de`;
 
-  const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, { kind: "sesion_reschedule_link" });
+  const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, {
+    kind: "sesion_reschedule_link",
+    // El setter envía por su propio canal (número en warm-up).
+    ...(opts?.copy === "setter" ? { channel: "setter" as const } : {}),
+  });
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
     type:    waRes.ok ? "system_message_sent" : "send_failed",

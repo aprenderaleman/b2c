@@ -96,7 +96,7 @@ export async function sendSetterAccessMessage(
   let emailSent = false;
 
   if (lead.whatsapp_normalized) {
-    const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: waKind })
+    const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: waKind, channel: "setter" })
       .catch(() => ({ ok: false as const }));
     waSent = res.ok === true;
   }

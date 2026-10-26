@@ -16,6 +16,7 @@ Todas editables por SQL — el wrapper (TS y Python) las lee con cache 60s.
 | `wa_burst_cap_per_tick` | `20` | Máximo mensajes por ejecución de cron. Los crons hacen LIMIT en su query. |
 | `wa_warmup_day` | `''` | Día 1–14 del warm-up post-ban. `''` = sin warm-up. Cap efectivo: 30/día días 1-3, 100/día días 4-7. |
 | `wa_warmup_started_at` | `''` | Timestamp de inicio del warm-up. Solo referencia. |
+| `wa_setter_instance` | `''` | Canal del setter (2026-10-26). Si está configurada, los envíos del setter (enlace de clase, gracias-confirmo, reagenda) salen por ESA instancia y quedan exentos del kill switch global. `''` = los envíos del setter van por el canal principal como todo lo demás. |
 
 ## Detección de ban
 
@@ -110,6 +111,49 @@ Comando diario:
 ```sql
 UPDATE system_config SET value = (value::int + 1)::text WHERE key = 'wa_warmup_day';
 ```
+
+## Variante v6 (2026-10-26): warm-up HUMANO con el setter antes del cutover
+
+Lección de v5: cayó en pleno warm-up (día 5) CON caps activos — el
+volumen no basta, el patrón automatizado también quema. Para v6 el
+número nuevo lo calienta la setter (Sheila) con tráfico humano-iniciado
+1-2 semanas ANTES de mover a Stiv.
+
+1. **Preparación humana (días 0-2, antes de tocar leads):** SIM en móvil
+   físico, perfil completo (nombre + foto academia), chats reales con el
+   equipo, recibir más que enviar.
+2. **Crear instancia + QR + webhook** (pasos 4-5 de arriba con el nombre
+   nuevo) y además configurar el webhook — el self-heal solo cubre la
+   instancia ACTIVA, la del setter se configura a mano:
+
+   ```bash
+   docker exec evolution_api curl -X POST "http://localhost:8080/webhook/set/INSTANCIA" \
+     -H "apikey: $EVOLUTION_API_KEY" -H "Content-Type: application/json" \
+     -d '{"url":"http://10.0.1.5:8000/webhook/whatsapp","webhookByEvents":false,"webhookBase64":false,"events":["MESSAGES_UPSERT","MESSAGES_UPDATE","CONNECTION_UPDATE","QRCODE_UPDATED"]}'
+   ```
+
+3. **Activar el canal del setter** (con `whatsapp_disabled` como esté —
+   el canal del setter lo ignora):
+
+   ```sql
+   INSERT INTO system_config (key, value) VALUES ('wa_setter_instance', 'aprender-aleman-v6')
+   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+   ```
+
+   Desde ese momento los 3 envíos del setter salen por v6. Stiv sigue
+   mudo (kill switch). Los entrantes de v6 llegan al mismo webhook
+   (el handler no filtra por instancia) y los auto-replies de Stiv
+   siguen bloqueados por el kill switch — responde la setter.
+4. **Monitoreo del warm-up: PASIVO.** No añadir la instancia del setter
+   a evolution-health — el polling cada 5 min es sospechoso de
+   contribuir a los bans (circuit breaker 2026-10-13). Señales: errores
+   en los modales del setter, y `lead_timeline` (`send_failed` con
+   metadata de sus kinds).
+5. **Criterio de cutover:** 10+ días sin desconexiones ni warnings, con
+   respuestas de leads fluyendo. Entonces ejecutar Paso 6 normal
+   (active_whatsapp_instance/number → v6, warm-up día 1 para el tráfico
+   automatizado) + Paso 7 (firmas). `wa_setter_instance` puede quedarse
+   (apunta a la misma instancia) o vaciarse.
 
 ## Contingencia si el playbook falla
 

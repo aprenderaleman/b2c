@@ -375,7 +375,37 @@ export type SendWaOpts = {
   /** Bypass total del dedupe (uso solo para tests o notificaciones críticas
    *  intencionalmente repetidas). */
   bypassDedup?: boolean;
+  /** Canal de envío (Gelfis 2026-10-26, warm-up post-ban v5). "setter"
+   *  enruta por la instancia de `system_config.wa_setter_instance` (el
+   *  número nuevo que calienta la setter) y queda EXENTO del kill switch
+   *  global — es otro canal, no toca el número principal. Si la key no
+   *  está configurada, se comporta como un envío normal (inerte). */
+  channel?: "setter";
 };
+
+// ── Canal del setter: instancia propia para el warm-up del número nuevo ──
+let _setterInstanceCache: { value: string | null; ts: number } | null = null;
+async function getSetterInstance(): Promise<string | null> {
+  const now = Date.now();
+  if (_setterInstanceCache && now - _setterInstanceCache.ts < 60_000) {
+    return _setterInstanceCache.value;
+  }
+  try {
+    const { supabaseAdmin } = await import("./supabase");
+    const sb = supabaseAdmin();
+    const { data } = await sb
+      .from("system_config")
+      .select("value")
+      .eq("key", "wa_setter_instance")
+      .maybeSingle();
+    const raw = ((data as { value?: string } | null)?.value ?? "").trim();
+    const value = raw.length > 0 ? raw : null;
+    _setterInstanceCache = { value, ts: now };
+    return value;
+  } catch {
+    return _setterInstanceCache?.value ?? null;
+  }
+}
 
 /**
  * Capa-1 anti-duplicados (Gelfis 2026-10-23). Bloquea envíos cuyo
@@ -463,6 +493,12 @@ export async function sendWhatsappText(
     console.warn("[whatsapp] número en blocklist, mensaje suprimido:", phoneE164);
     return { ok: false, reason: "blocklisted" };
   }
+  // Canal del setter (warm-up del número nuevo): si el envío viene del
+  // setter Y wa_setter_instance está configurada, sale por ESA instancia
+  // y no le aplica el kill switch global (que protege el canal
+  // principal). Blocklist, dedup, caps y gate nocturno siguen aplicando.
+  const setterInstance = opts.channel === "setter" ? await getSetterInstance() : null;
+
   // Kill switch global con dos modos:
   //  - "true" / true / "1"  → bloquea TODO (ni siquiera los 5 kinds de
   //    la whitelist; usado tras bans repetidos a v3).
@@ -470,7 +506,7 @@ export async function sendWhatsappText(
   //    ALLOWED_WA_KINDS (modo WA mínimo).
   // El bypass se usa solo desde endpoints admin (Gelfis manualmente).
   const killMode = await getWhatsappDisableMode();
-  if (killMode !== "off") {
+  if (killMode !== "off" && !setterInstance) {
     if (!opts.bypassKillSwitch) {
       const kind = opts.kind ?? "";
       const passesWhitelist = killMode === "partial" && ALLOWED_WA_KINDS.has(kind);
@@ -543,9 +579,12 @@ export async function sendWhatsappText(
     );
     return { ok: false, reason: "missing_evolution_env" };
   }
-  // Resolver instancia activa (misma fuente que agent_3_sender en Python).
+  // Resolver instancia: canal setter → wa_setter_instance; si no, la
+  // activa (misma fuente que agent_3_sender en Python).
   let instance: string;
-  try {
+  if (setterInstance) {
+    instance = setterInstance;
+  } else try {
     const { supabaseAdmin } = await import("./supabase");
     const sb = supabaseAdmin();
     const { data } = await sb
