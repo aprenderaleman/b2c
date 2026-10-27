@@ -38,6 +38,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "missing_or_invalid_instance" }, { status: 400 });
   }
   const dryRun = url.searchParams.get("dry") === "1";
+  // restart=1 → POST /instance/restart/{instance}: reconexión limpia de
+  // la sesión Baileys que además recarga la config de webhook (algunas
+  // builds de Evolution cachean la config vieja en runtime). No requiere
+  // re-escanear el QR. Un único restart puntual — no loops (anti-ban).
+  const restart = url.searchParams.get("restart") === "1";
 
   const evoUrl = (process.env.EVOLUTION_API_URL ?? "").replace(/\/$/, "");
   const evoKey = process.env.EVOLUTION_API_KEY;
@@ -93,5 +98,30 @@ export async function POST(req: Request) {
     after = { error: e instanceof Error ? e.message : "fetch_failed" };
   }
 
-  return NextResponse.json({ ok: true, instance, connection, target_url: WEBHOOK_URL, before, after });
+  // 3) Restart opcional de la instancia (recarga config + sesión)
+  let restarted: unknown = null;
+  if (restart) {
+    try {
+      const res = await fetch(`${evoUrl}/instance/restart/${instance}`, {
+        method: "PUT",
+        headers: { apikey: evoKey },
+        signal: AbortSignal.timeout(20_000),
+      });
+      // Evolution v1.8 usa PUT; algunas builds aceptan POST.
+      if (res.status === 404 || res.status === 405) {
+        const alt = await fetch(`${evoUrl}/instance/restart/${instance}`, {
+          method: "POST",
+          headers: { apikey: evoKey },
+          signal: AbortSignal.timeout(20_000),
+        });
+        restarted = { http: alt.status, via: "POST" };
+      } else {
+        restarted = { http: res.status, via: "PUT" };
+      }
+    } catch (e) {
+      restarted = { error: e instanceof Error ? e.message : "fetch_failed" };
+    }
+  }
+
+  return NextResponse.json({ ok: true, instance, connection, target_url: WEBHOOK_URL, before, after, restarted });
 }
