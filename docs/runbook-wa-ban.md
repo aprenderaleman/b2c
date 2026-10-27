@@ -130,8 +130,12 @@ número nuevo lo calienta la setter (Sheila) con tráfico humano-iniciado
    ```bash
    docker exec evolution_api curl -X POST "http://localhost:8080/webhook/set/INSTANCIA" \
      -H "apikey: $EVOLUTION_API_KEY" -H "Content-Type: application/json" \
-     -d '{"url":"http://10.0.1.5:8000/webhook/whatsapp","webhookByEvents":false,"webhookBase64":false,"events":["MESSAGES_UPSERT","MESSAGES_UPDATE","CONNECTION_UPDATE","QRCODE_UPDATED"]}'
+     -d '{"url":"https://agents.aprender-aleman.de/webhook/whatsapp","webhookByEvents":false,"webhookBase64":false,"events":["MESSAGES_UPSERT","MESSAGES_UPDATE","CONNECTION_UPDATE","QRCODE_UPDATED"]}'
    ```
+
+   ⚠️ La URL del webhook es la PÚBLICA (agents.aprender-aleman.de) — la
+   interna 10.0.1.5:8000 NO es alcanzable desde el contenedor Evolution
+   (lección 2026-10-27: v6 estuvo 1 día sin entrantes por esto).
 
 3. **Activar el canal del setter** (con `whatsapp_disabled` como esté —
    el canal del setter lo ignora):

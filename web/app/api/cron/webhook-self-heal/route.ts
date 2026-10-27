@@ -22,8 +22,13 @@ export const dynamic = "force-dynamic";
  * Auth: Bearer CRON_SECRET o X-Cron-Secret.
  */
 
+// Default corregido 2026-10-27: la URL probada en producción es la
+// PÚBLICA — los entrantes fluyeron por ella hasta el ban de v5
+// (24-10 06:21). El default anterior (http://10.0.1.5:8000/…) nunca
+// demostró funcionar, y el heal del 26-10 reescribió el webhook de v5
+// de la pública a esa interna; con v6 activa habría roto los entrantes.
 const INTERNAL_WEBHOOK_URL = process.env.EVOLUTION_WEBHOOK_INTERNAL_URL
-  ?? "http://10.0.1.5:8000/webhook/whatsapp";
+  ?? "https://agents.aprender-aleman.de/webhook/whatsapp";
 const EVENTS = ["MESSAGES_UPSERT", "MESSAGES_UPDATE", "CONNECTION_UPDATE", "QRCODE_UPDATED"];
 
 function authorised(req: Request): boolean {
