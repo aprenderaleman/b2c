@@ -183,7 +183,10 @@ export function SetterActions({
         const canales = fmtCanales(body as { wa_sent?: boolean; email_sent?: boolean });
         setOkMsg(`🎓 Enlace de acceso enviado por ${canales || "—"}.`);
       } else if (mode === "reagendar") {
-        setOkMsg("🔗 Enlace enviado por WhatsApp. Cuando el lead elija su nuevo horario, la cita aparecerá agendada.");
+        const canales = fmtCanales(body as { wa_sent?: boolean; email_sent?: boolean });
+        setOkMsg(canales.includes("WhatsApp")
+          ? `🔗 Enlace enviado por ${canales}. Cuando el lead elija su nuevo horario, la cita aparecerá agendada.`
+          : `🔗 El WhatsApp no salió — el enlace se envió por ${canales || "ningún canal"}. Avísale al lead que lo busque en su correo.`);
       } else if (mode === "no_contesto") {
         const waSent = (body as { wa_sent?: boolean }).wa_sent;
         setOkMsg(waSent

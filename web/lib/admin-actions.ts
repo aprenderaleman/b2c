@@ -570,7 +570,7 @@ export async function sendRescheduleLinkMessage(
      *  setter acaba de hablar con el lead por teléfono (Gelfis 2026-10-24). */
     copy?: "setter";
   },
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<{ ok: boolean; reason?: string; waSent?: boolean; emailSent?: boolean }> {
   const actorName = opts?.actorName ?? "teacher";
   const sb = supabaseAdmin();
   const { data: leadInfo } = await sb
@@ -733,7 +733,7 @@ export async function sendRescheduleLinkMessage(
   await cancelActiveChain(leadId, "reschedule")
     .catch(err => console.warn("[sendRescheduleLinkMessage] cancelActiveChain error:", err));
 
-  if (waOk || emailOk) return { ok: true };
+  if (waOk || emailOk) return { ok: true, waSent: waOk, emailSent: emailOk };
   const noWa = !linfo.whatsapp_normalized;
   const waMsg = /exists.*false|http_400/i.test(waReason ?? "")
     ? "el número no tiene cuenta de WhatsApp"
@@ -763,7 +763,7 @@ export async function sendSesionRescheduleLinkMessage(
     /** "setter": copy "como hablamos…" — el setter acaba de llamar al lead. */
     copy?: "setter";
   },
-): Promise<{ ok: boolean; reason?: string }> {
+): Promise<{ ok: boolean; reason?: string; waSent?: boolean; emailSent?: boolean }> {
   const actorName = opts?.actorName ?? "closer";
   const sb = supabaseAdmin();
 
@@ -854,7 +854,9 @@ export async function sendSesionRescheduleLinkMessage(
   await cancelActiveChain(leadId, "sesion_reschedule")
     .catch(err => console.warn("[sendSesionRescheduleLinkMessage] cancelActiveChain error:", err));
 
-  return waRes.ok ? { ok: true } : { ok: false, reason: waRes.reason ?? "send_failed" };
+  return waRes.ok
+    ? { ok: true, waSent: true, emailSent: false }
+    : { ok: false, reason: waRes.reason ?? "send_failed", waSent: false, emailSent: false };
 }
 
 /**

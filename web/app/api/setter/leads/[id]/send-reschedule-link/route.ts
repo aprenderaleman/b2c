@@ -76,7 +76,7 @@ export async function POST(
   }
 
   const actorName = `${setter.name} (setter)`;
-  let result: { ok: boolean; reason?: string };
+  let result: { ok: boolean; reason?: string; waSent?: boolean; emailSent?: boolean };
   if (b.tipo === "sesion") {
     const { sendSesionRescheduleLinkMessage } = await import("@/lib/admin-actions");
     result = await sendSesionRescheduleLinkMessage(leadId, { actorName, copy: "setter" });
@@ -91,13 +91,19 @@ export async function POST(
 
   // Registrar el contacto del setter (nota obligatoria). De aquí salen
   // las métricas; el rebooking real se detecta cuando el lead usa el link.
+  const canales = [result.waSent ? "WA" : null, result.emailSent ? "email" : null]
+    .filter(Boolean).join(" + ") || "—";
   await registerContact({
     leadId,
     actor: { type: "setter", id: setter.id, name: setter.name },
     actionType: "agendar_prueba",
-    channel: "whatsapp",
-    note: `🔗 Stiv envió el enlace de reagenda — ${b.note}`,
+    channel: result.waSent ? "whatsapp" : "email",
+    note: `🔗 Stiv envió el enlace de reagenda (${canales}) — ${b.note}`,
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    wa_sent: result.waSent ?? false,
+    email_sent: result.emailSent ?? false,
+  });
 }
