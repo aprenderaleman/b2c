@@ -131,15 +131,21 @@ export async function sendSetterAccessMessage(
 }
 
 /**
- * Mensaje tras "No contestó" (Gelfis 2026-10-26): Stiv le escribe al
- * lead de parte del setter pidiendo el confirmo. Solo WhatsApp (acaba
- * de no contestar una llamada — el mensaje es el canal natural) y solo
- * si tiene cita futura.
+ * Mensaje tras "No contestó" (Gelfis 2026-10-26/27): Stiv le escribe al
+ * lead de parte del setter. Solo WhatsApp (acaba de no contestar una
+ * llamada — el mensaje es el canal natural). Dos variantes:
+ *
+ *   - CON cita futura  → pedir el confirmo ("tu clase es el {fecha},
+ *                        ¿me confirmas?").
+ *   - SIN cita futura  → es un no-show: enviarle el enlace de reagenda
+ *                        ("intenté llamarte… elige un nuevo horario
+ *                        aquí"). Antes estos no recibían nada (Gelfis
+ *                        2026-10-27: "varios en cola" sin mensaje).
  */
 export async function sendSetterNoContestoMessage(
   leadId: string,
   setterName: string,
-): Promise<SetterSendResult> {
+): Promise<SetterSendResult & { variant?: "confirmo" | "rescate" }> {
   const sb = supabaseAdmin();
 
   const { data: leadRow } = await sb
@@ -155,32 +161,59 @@ export async function sendSetterNoContestoMessage(
     return { ok: false, waSent: false, emailSent: false, startLabel: null, reason: "el lead no tiene WhatsApp" };
   }
 
-  const { data: clsRow } = await sb
+  // Última cita del lead: la futura manda; si no hay, la más reciente
+  // nos dice el TIPO (trial/sesión) para el enlace de reagenda.
+  const { data: clsData } = await sb
     .from("classes")
-    .select("id, scheduled_at, sesion_closer_id")
+    .select("id, scheduled_at, status, sesion_closer_id")
     .eq("lead_id", leadId)
     .or("is_trial.eq.true,sesion_closer_id.not.is.null")
-    .eq("status", "scheduled")
     .is("deleted_at", null)
-    .gte("scheduled_at", new Date().toISOString())
-    .order("scheduled_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  const cls = clsRow as { id: string; scheduled_at: string; sesion_closer_id: string | null } | null;
-  if (!cls) {
-    return { ok: false, waSent: false, emailSent: false, startLabel: null, reason: "sin cita futura (no-show: no aplica)" };
+    .order("scheduled_at", { ascending: false })
+    .limit(5);
+  const citas = (clsData ?? []) as Array<{
+    id: string; scheduled_at: string; status: string; sesion_closer_id: string | null;
+  }>;
+  const nowMs = Date.now();
+  const futura = citas.find(c => c.status === "scheduled" && new Date(c.scheduled_at).getTime() > nowMs) ?? null;
+  const ultima = citas[0] ?? null;
+  if (!futura && !ultima) {
+    return { ok: false, waSent: false, emailSent: false, startLabel: null, reason: "sin citas en el sistema" };
   }
 
   const lang = (lead.language === "de" ? "de" : "es") as "es" | "de";
   const firstName = (lead.name ?? "").trim().split(/\s+/)[0] || "";
   const setterFirst = setterName.trim().split(/\s+/)[0] || setterName;
-  const startLabel = formatBerlinFull(cls.scheduled_at, lang);
-  const claseES = cls.sesion_closer_id ? "sesión de plan" : "clase de prueba";
-  const claseDE = cls.sesion_closer_id ? "Plan-Session" : "Probestunde";
 
-  const waText = lang === "de"
-    ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nDeine Deutsch-${claseDE} ist am ${startLabel}.\n\nKannst du mir bitte mit einem "Ja" bestätigen, dass du dabei bist? 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`
-    : `¡Hola ${firstName}! 👋 Soy ${setterFirst}, de la academia Aprender-Aleman.de — acabo de intentar llamarte 😊\n\nTu ${claseES} de alemán es el ${startLabel}.\n\n¿Me confirmas con un "Sí" que podrás conectarte? 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`;
+  let waText: string;
+  let variant: "confirmo" | "rescate";
+  let startLabel: string | null = null;
+  let classId: string;
+
+  if (futura) {
+    variant = "confirmo";
+    classId = futura.id;
+    startLabel = formatBerlinFull(futura.scheduled_at, lang);
+    const claseES = futura.sesion_closer_id ? "sesión de plan" : "clase de prueba";
+    const claseDE = futura.sesion_closer_id ? "Plan-Session" : "Probestunde";
+    waText = lang === "de"
+      ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nDeine Deutsch-${claseDE} ist am ${startLabel}.\n\nKannst du mir bitte mit einem "Ja" bestätigen, dass du dabei bist? 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`
+      : `¡Hola ${firstName}! 👋 Soy ${setterFirst}, de la academia Aprender-Aleman.de — acabo de intentar llamarte 😊\n\nTu ${claseES} de alemán es el ${startLabel}.\n\n¿Me confirmas con un "Sí" que podrás conectarte? 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`;
+  } else {
+    // No-show: rescate con enlace de reagenda (nada se cancela — no hay
+    // cita futura que tocar).
+    variant = "rescate";
+    classId = ultima!.id;
+    const esSesion = !!ultima!.sesion_closer_id;
+    const rescheduleUrl = esSesion
+      ? `${PLATFORM_URL}/sesion-plan/funnel`
+      : `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=setter_reschedule`;
+    const claseES = esSesion ? "sesión de plan" : "clase de prueba";
+    const claseDE = esSesion ? "Plan-Session" : "Probestunde";
+    waText = lang === "de"
+      ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nDeine Deutsch-${claseDE} hat leider nicht geklappt. Möchtest du einen neuen Termin? Hier kannst du ihn in 3 Minuten wählen:\n\n👉 ${rescheduleUrl}\n\n— ${setterFirst} · Aprender-Aleman.de`
+      : `¡Hola ${firstName}! 👋 Soy ${setterFirst}, de la academia Aprender-Aleman.de — acabo de intentar llamarte 😊\n\nTuvimos tu ${claseES} de alemán agendada y no pudiste conectarte. ¿Te busco un nuevo horario? Elígelo aquí en 3 minutos:\n\n👉 ${rescheduleUrl}\n\n— ${setterFirst} · Aprender-Aleman.de`;
+  }
 
   const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "setter_no_contesto", channel: "setter" })
     .catch(() => ({ ok: false as const }));
@@ -191,10 +224,12 @@ export async function sendSetterNoContestoMessage(
     type: waSent ? "system_message_sent" : "send_failed",
     author: "setter",
     content: waSent
-      ? `📵→💬 No contestó la llamada de ${setterName} (setter) — Stiv le pidió el confirmo por WA`
+      ? (variant === "confirmo"
+        ? `📵→💬 No contestó la llamada de ${setterName} (setter) — Stiv le pidió el confirmo por WA`
+        : `📵→🔗 No contestó la llamada de ${setterName} (setter) — Stiv le envió el enlace de reagenda por WA`)
       : `📵 No contestó y el WA de seguimiento falló`,
-    metadata: { kind: "setter_no_contesto", class_id: cls.id, wa_sent: waSent },
+    metadata: { kind: "setter_no_contesto", variant, class_id: classId, wa_sent: waSent },
   }).then(() => {}, () => {});
 
-  return { ok: waSent, waSent, emailSent: false, startLabel, reason: waSent ? undefined : "el WhatsApp no se pudo enviar" };
+  return { ok: waSent, waSent, emailSent: false, startLabel, variant, reason: waSent ? undefined : "el WhatsApp no se pudo enviar" };
 }

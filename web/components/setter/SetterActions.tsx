@@ -67,7 +67,7 @@ const MODE_CONFIG: Record<Mode, {
     placeholder: "Ej: No contestó, buzón de voz.",
     cta: "Registrar intento",
     pendingCta: "Registrando…",
-    preview: "Si tiene cita futura, Stiv le escribe por WhatsApp de tu parte: “Soy {tu nombre}, de Aprender-Aleman.de — acabo de intentar llamarte. Tu clase es el {fecha}, ¿me confirmas que podrás conectarte?”",
+    preview: "Stiv le escribe por WhatsApp de tu parte: si tiene cita futura, le pide el confirmo (“tu clase es el {fecha}, ¿me confirmas?”); si es un no-show, le envía el enlace para reagendar (“intenté llamarte… elige un nuevo horario aquí”).",
   },
   descartar: {
     title: "❌ Descartar lead",
@@ -188,10 +188,12 @@ export function SetterActions({
           ? `🔗 Enlace enviado por ${canales}. Cuando el lead elija su nuevo horario, la cita aparecerá agendada.`
           : `🔗 El WhatsApp no salió — el enlace se envió por ${canales || "ningún canal"}. Avísale al lead que lo busque en su correo.`);
       } else if (mode === "no_contesto") {
-        const waSent = (body as { wa_sent?: boolean }).wa_sent;
-        setOkMsg(waSent
-          ? "📵 Registrado y Stiv le pidió el confirmo por WhatsApp. El lead vuelve a tu lista en 24 horas (o 2 horas antes de su clase)."
-          : `📵 Registrado. El lead vuelve a tu lista en 24 horas (o 2 horas antes de su clase). Sin mensaje de WhatsApp (${(body as { send_reason?: string }).send_reason ?? "no aplica"}).`);
+        const b2 = body as { wa_sent?: boolean; variant?: string; send_reason?: string };
+        setOkMsg(b2.wa_sent
+          ? (b2.variant === "rescate"
+            ? "📵 Registrado y Stiv le envió el enlace de reagenda por WhatsApp. El lead vuelve a tu lista en 24 horas."
+            : "📵 Registrado y Stiv le pidió el confirmo por WhatsApp. El lead vuelve a tu lista en 24 horas (o 2 horas antes de su clase).")
+          : `📵 Registrado. El lead vuelve a tu lista en 24 horas (o 2 horas antes de su clase). Sin mensaje de WhatsApp (${b2.send_reason ?? "no aplica"}).`);
       } else if (mode === "descartar") {
         const n = (body as { citas_canceladas?: number }).citas_canceladas ?? 0;
         setOkMsg(`❌ Lead descartado — fuera de todas las listas${n > 0 ? ` y ${n} cita${n > 1 ? "s" : ""} cancelada${n > 1 ? "s" : ""} (hueco liberado)` : ""}. No recibirá más mensajes.`);

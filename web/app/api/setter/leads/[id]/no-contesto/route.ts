@@ -66,12 +66,14 @@ export async function POST(
     return NextResponse.json({ ok: false, error: contact.error }, { status });
   }
 
-  // 2) Stiv le pide el confirmo por WA (solo si hay cita futura).
+  // 2) Stiv le escribe por WA: pide el confirmo (cita futura) o le
+  //    envía el enlace de reagenda (no-show).
   const send = await sendSetterNoContestoMessage(leadId, setter.name);
 
   return NextResponse.json({
     ok: true,
     wa_sent: send.waSent,
+    variant: send.variant ?? null,
     send_reason: send.ok ? null : send.reason ?? null,
   });
 }
