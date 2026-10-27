@@ -658,15 +658,22 @@ function MessageBubble({ message, mine, showAuthor }: {
           <Linkify text={message.content} mine={mine} />
           {message.attachments.length > 0 && (
             <div className={`mt-2 space-y-1 text-xs ${mine ? "text-white/90" : "text-slate-600 dark:text-slate-300"}`}>
-              {message.attachments.filter(a => /^(video|image)\//.test(a.content_type ?? "")).map((a, i) => (
-                (a.content_type ?? "").startsWith("video/")
-                  ? <video key={`m${i}`} src={a.url} controls preload="metadata" className="mt-1 max-h-72 w-full max-w-sm rounded-lg bg-black" />
-                  : <a key={`m${i}`} href={a.url} target="_blank" rel="noopener noreferrer"><img src={a.url} alt={a.name} className="mt-1 max-h-72 max-w-sm rounded-lg object-contain" /></a>
-              ))}
+              {/* Siempre vía /api/chat/attachment (re-firma al vuelo) — las
+                  URLs guardadas caducan a los 7 días (caso Sabine 2026-10-27). */}
+              {message.attachments.map((a, i) => {
+                const fresh = `/api/chat/attachment?m=${message.id}&i=${i}`;
+                if ((a.content_type ?? "").startsWith("video/")) {
+                  return <video key={`m${i}`} src={fresh} controls preload="metadata" className="mt-1 max-h-72 w-full max-w-sm rounded-lg bg-black" />;
+                }
+                if ((a.content_type ?? "").startsWith("image/")) {
+                  return <a key={`m${i}`} href={fresh} target="_blank" rel="noopener noreferrer"><img src={fresh} alt={a.name} className="mt-1 max-h-72 max-w-sm rounded-lg object-contain" /></a>;
+                }
+                return null;
+              })}
               {message.attachments.map((a, i) => (
                 <a
                   key={i}
-                  href={a.url}
+                  href={`/api/chat/attachment?m=${message.id}&i=${i}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block underline underline-offset-2 hover:opacity-80"

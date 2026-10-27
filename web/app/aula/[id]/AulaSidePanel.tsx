@@ -222,10 +222,12 @@ function Bubble({ message, mine }: { message: Message; mine: boolean }) {
           {message.content}
           {message.attachments.length > 0 && (
             <div className={`mt-1.5 space-y-1 text-xs ${mine ? "text-white/90" : "text-slate-300"}`}>
+              {/* Vía /api/chat/attachment: las URLs guardadas caducan a los
+                  7 días (caso Sabine 2026-10-27). */}
               {message.attachments.map((a, i) => (
                 <a
                   key={i}
-                  href={a.url}
+                  href={`/api/chat/attachment?m=${message.id}&i=${i}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block underline underline-offset-2 hover:opacity-80"
