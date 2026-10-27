@@ -45,6 +45,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "evolution_env_missing" }, { status: 503 });
   }
 
+  // 0) Estado de conexión de la instancia (¿sesión Baileys viva?)
+  let connection: unknown = null;
+  try {
+    const res = await fetch(`${evoUrl}/instance/connectionState/${instance}`, {
+      headers: { apikey: evoKey },
+      signal: AbortSignal.timeout(15_000),
+    });
+    connection = res.ok ? await res.json().catch(() => null) : { http: res.status };
+  } catch (e) {
+    connection = { error: e instanceof Error ? e.message : "fetch_failed" };
+  }
+
   // 1) Leer config actual
   let before: unknown = null;
   try {
@@ -58,7 +70,7 @@ export async function POST(req: Request) {
   }
 
   if (dryRun) {
-    return NextResponse.json({ ok: true, instance, before, after: null, dry: true });
+    return NextResponse.json({ ok: true, instance, connection, before, after: null, dry: true });
   }
 
   // 2) Aplicar la config buena
@@ -81,5 +93,5 @@ export async function POST(req: Request) {
     after = { error: e instanceof Error ? e.message : "fetch_failed" };
   }
 
-  return NextResponse.json({ ok: true, instance, target_url: WEBHOOK_URL, before, after });
+  return NextResponse.json({ ok: true, instance, connection, target_url: WEBHOOK_URL, before, after });
 }
