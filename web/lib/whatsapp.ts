@@ -21,17 +21,19 @@ export type WhatsappResult =
  * Lista de bloqueo de números que NUNCA deben recibir mensajes
  * automáticos (alertas admin, drip de followups, recordatorios, etc).
  *
- * Caso Gelfis 2026-05-27: su número personal +491607530948 se usó como
- * destino de alertas y para testing; pidió que dejara de recibir
- * mensajes automáticos. Cualquier número en esta lista se silencia al
- * nivel más bajo del sender, así que ningún flujo lo alcanza.
+ * Cualquier número en esta lista se silencia al nivel más bajo del
+ * sender, así que ningún flujo lo alcanza.
+ *
+ * HISTORIA: hubo un número fijo aquí desde 2026-05-27 anotado como
+ * "personal de Gelfis para testing". El 2026-10-27 Gelfis confirmó que
+ * no lo reconocía, y el 2026-10-28 resultó pertenecer a un lead activo
+ * (SIM prepago reciclada) cuyos mensajes del setter se silenciaban.
+ * Retirado — si hace falta bloquear números, usar WHATSAPP_BLOCKLIST.
  *
  * Se puede ampliar vía env WHATSAPP_BLOCKLIST (lista separada por comas).
  * Los números se comparan por sus dígitos (ignorando +, espacios, etc).
  */
-const HARDCODED_BLOCKLIST = [
-  "+491607530948",
-];
+const HARDCODED_BLOCKLIST: string[] = [];
 function blocklistDigits(): Set<string> {
   const fromEnv = (process.env.WHATSAPP_BLOCKLIST ?? "")
     .split(",").map(s => s.trim()).filter(Boolean);

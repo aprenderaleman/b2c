@@ -216,8 +216,9 @@ export async function sendSetterNoContestoMessage(
   }
 
   const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "setter_no_contesto", channel: "setter" })
-    .catch(() => ({ ok: false as const }));
+    .catch(() => ({ ok: false as const, reason: "error" }));
   const waSent = res.ok === true;
+  const waReason = waSent ? undefined : fmtWaReason((res as { reason?: string }).reason);
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
@@ -231,5 +232,15 @@ export async function sendSetterNoContestoMessage(
     metadata: { kind: "setter_no_contesto", variant, class_id: classId, wa_sent: waSent },
   }).then(() => {}, () => {});
 
-  return { ok: waSent, waSent, emailSent: false, startLabel, variant, reason: waSent ? undefined : "el WhatsApp no se pudo enviar" };
+  return { ok: waSent, waSent, emailSent: false, startLabel, variant, reason: waReason };
+}
+
+/** Razones técnicas de sendWhatsappText → texto claro para el setter. */
+function fmtWaReason(reason?: string): string {
+  if (!reason) return "el WhatsApp no se pudo enviar";
+  if (reason === "blocklisted") return "este número está en la lista de bloqueo — avisa a Gelfis";
+  if (reason === "setter_daily_cap") return "tope diario de WhatsApp del número nuevo alcanzado — mañana se reinicia";
+  if (reason.startsWith("recent_duplicate")) return "mensaje idéntico enviado a este lead hace menos de 24h";
+  if (reason.startsWith("http_400") && reason.includes("exists")) return "este número no tiene cuenta de WhatsApp";
+  return `el WhatsApp no se pudo enviar (${reason.slice(0, 60)})`;
 }
