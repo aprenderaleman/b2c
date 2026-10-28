@@ -460,7 +460,13 @@ async function handleInvoicePaid(
     // (unificación 2026-08-21 — suscriptores legacy sin oferta también
     // desbloquean mes a mes).
     const perMonth = s?.clases_por_mes?.clases_por_mes ?? s?.classes_per_month ?? null;
-    if (s && perMonth) {
+    // Solo RENOVACIONES desbloquean aquí. La primera factura
+    // (billing_reason=subscription_create) ya desbloqueó su mes en la
+    // conversión (handleFirstPayment vía checkout.session.completed); sumar
+    // otra vez duplicaba el primer mes (bug detectado 2026-10-28: 15
+    // alumnos con un mes extra desbloqueado desde septiembre).
+    const firstInvoice = (invoice as unknown as { billing_reason?: string | null }).billing_reason === "subscription_create";
+    if (s && perMonth && !firstInvoice) {
       const cap = s.clases_totales ?? Infinity;
       const newUnlocked = Math.min(s.clases_desbloqueadas + perMonth, cap);
       await sb.from("students")
