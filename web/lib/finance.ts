@@ -155,55 +155,23 @@ export async function logClassHoursAndRollup(args: {
 }
 
 /**
- * Recompute teacher_earnings for (teacher, month-of-date) by summing
- * class_hours_log rows in that month. Upserts the row.
+ * Recompute teacher_earnings for (teacher, month-of-date). Delegates to the
+ * SQL function recompute_teacher_month (migration 122): clases de
+ * class_hours_log + comisiones/bonos de `comisiones`. Antes esta versión TS
+ * sumaba solo las clases y, al cerrarse una clase, sobrescribía el total
+ * borrando el bono del mes (Veronica 2026-10-28).
  */
 export async function rollupTeacherMonth(
   teacherId: string,
   anyDateInMonth: Date,
 ): Promise<void> {
   const sb = supabaseAdmin();
-
-  const monthStart = new Date(Date.UTC(
-    anyDateInMonth.getUTCFullYear(),
-    anyDateInMonth.getUTCMonth(),
-    1, 0, 0, 0,
-  ));
-  const monthEnd = new Date(Date.UTC(
-    anyDateInMonth.getUTCFullYear(),
-    anyDateInMonth.getUTCMonth() + 1,
-    1, 0, 0, 0,
-  ));
-  const monthDateStr = monthStart.toISOString().slice(0, 10);
-
-  const { data: rows, error } = await sb
-    .from("class_hours_log")
-    .select("duration_minutes, amount_cents, currency")
-    .eq("teacher_id", teacherId)
-    .gte("created_at", monthStart.toISOString())
-    .lt("created_at", monthEnd.toISOString());
-  if (error) {
-    console.error("rollup select failed:", error.message);
-    return;
-  }
-
-  const totalMinutes  = (rows ?? []).reduce((s, r) => s + Number((r as { duration_minutes: number }).duration_minutes), 0);
-  const amountCents   = (rows ?? []).reduce((s, r) => s + Number((r as { amount_cents: number }).amount_cents), 0);
-  const classesCount  = (rows ?? []).length;
-  const currency      = (rows?.[0] as { currency: string } | undefined)?.currency ?? "EUR";
-
-  await sb.from("teacher_earnings").upsert(
-    {
-      teacher_id:   teacherId,
-      month:        monthDateStr,
-      total_minutes: totalMinutes,
-      classes_count: classesCount,
-      amount_cents:  amountCents,
-      currency,
-      // Preserve paid-state fields if the row already exists.
-    },
-    { onConflict: "teacher_id,month", ignoreDuplicates: false },
-  );
+  const monthStart = new Date(Date.UTC(anyDateInMonth.getUTCFullYear(), anyDateInMonth.getUTCMonth(), 1, 0, 0, 0));
+  const { error } = await sb.rpc("recompute_teacher_month", {
+    p_teacher_id: teacherId,
+    p_any_date_in_month: monthStart.toISOString(),
+  });
+  if (error) console.error("recompute_teacher_month failed:", error.message);
 }
 
 // =============================================================================

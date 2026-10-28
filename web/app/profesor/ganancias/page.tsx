@@ -246,7 +246,7 @@ async function CommissionSection({ userId }: { userId: string }) {
   const currentMonth = new Date().toISOString().slice(0, 7) + "-01";
   const { data: comisiones } = await sb
     .from("comisiones")
-    .select("id, monto_cents, moneda, base_amount_cents, comision_pct, created_at")
+    .select("id, monto_cents, base_amount_cents, comision_pct, created_at")
     .eq("usuario_id", userId)
     .eq("mes", currentMonth)
     .order("created_at", { ascending: false });
@@ -278,7 +278,7 @@ async function CommissionSection({ userId }: { userId: string }) {
 
           {/* Mobile: cards apilados */}
           <div className="sm:hidden mt-4 space-y-2">
-            {(comisiones as Array<{ id: string; monto_cents: number; moneda: string; base_amount_cents: number; comision_pct: number; created_at: string }>).map(c => (
+            {(comisiones as Array<{ id: string; monto_cents: number; base_amount_cents: number; comision_pct: number; created_at: string }>).map(c => (
               <article
                 key={c.id}
                 className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50 p-3 flex items-center justify-between gap-3"
@@ -312,7 +312,7 @@ async function CommissionSection({ userId }: { userId: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {(comisiones as Array<{ id: string; monto_cents: number; moneda: string; base_amount_cents: number; comision_pct: number; created_at: string }>).map(c => (
+                {(comisiones as Array<{ id: string; monto_cents: number; base_amount_cents: number; comision_pct: number; created_at: string }>).map(c => (
                   <tr key={c.id} className="text-slate-800 dark:text-slate-200">
                     <Td>{new Date(c.created_at).toLocaleDateString("es-ES", { day: "2-digit", month: "short" })}</Td>
                     <Td className="tabular-nums">{(c.base_amount_cents / 100).toFixed(2)} EUR</Td>

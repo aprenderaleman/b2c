@@ -31,7 +31,7 @@ export async function GET(req: Request) {
 
   const { data: comisiones } = await sb
     .from("comisiones")
-    .select("id, monto_cents, moneda, base_amount_cents, comision_pct, escenario, mes, pagado, created_at")
+    .select("id, monto_cents, base_amount_cents, comision_pct, escenario, mes, pagado, created_at")
     .eq("usuario_id", user.id)
     .eq("mes", mes)
     .order("created_at", { ascending: false });
