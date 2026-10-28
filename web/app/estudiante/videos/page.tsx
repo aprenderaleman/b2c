@@ -1,0 +1,61 @@
+import Link from "next/link";
+import { requireRoleWithImpersonation } from "@/lib/rbac";
+import { getStudentByUserId } from "@/lib/academy";
+import { listEpisodes, fmtDuration } from "@/lib/serie";
+import { Stars } from "./Stars";
+
+export const dynamic = "force-dynamic";
+export const metadata = { title: "Videos · Aprender-Aleman.de" };
+
+/**
+ * Serie "Un dominicano en Alemania" — temporada 1 (A1). 10 capítulos con
+ * subtítulos DE/ES. Grid de tarjetas; el detalle reproduce, valora y comenta.
+ */
+export default async function StudentVideosPage() {
+  const session = await requireRoleWithImpersonation(["student", "admin", "superadmin"], "student");
+  const student = await getStudentByUserId(session.user.id);
+  const episodes = await listEpisodes(student?.id ?? null);
+
+  return (
+    <main className="space-y-5">
+      <header>
+        <p className="text-xs font-semibold uppercase tracking-wider text-brand-600 dark:text-brand-400">Serie · Temporada 1 · A1</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">Un dominicano en Alemania</h1>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Diez capítulos cortos con subtítulos en alemán y español. Míralos a tu ritmo, aprende el vocabulario de cada capítulo y cuéntanos qué te parecen.
+        </p>
+      </header>
+
+      {episodes.length === 0 ? (
+        <section className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center text-sm text-slate-500">
+          Los capítulos se están publicando. Vuelve en unos días.
+        </section>
+      ) : (
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {episodes.map(e => (
+            <Link key={e.id} href={`/estudiante/videos/${e.slug}`}
+                  className="group overflow-hidden rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm transition hover:-translate-y-0.5 hover:border-brand-400 dark:hover:border-brand-500">
+              <div className="relative aspect-video bg-slate-200 dark:bg-slate-800">
+                {e.poster_signed
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={e.poster_signed} alt={e.title_es} className="h-full w-full object-cover" loading="lazy" />
+                  : <div className="flex h-full items-center justify-center text-4xl">🎬</div>}
+                <span className="absolute left-3 top-3 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white">Kapitel {e.number}</span>
+                <span className="absolute right-3 top-3 rounded-full bg-brand-500 px-2 py-0.5 text-[11px] font-semibold text-white">{e.level}</span>
+                {e.duration_s != null && <span className="absolute bottom-3 right-3 rounded-md bg-black/70 px-1.5 py-0.5 text-[11px] font-mono text-white">{fmtDuration(e.duration_s)}</span>}
+              </div>
+              <div className="p-4">
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-50 group-hover:text-brand-600 dark:group-hover:text-brand-400">{e.title_de}</h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">{e.title_es}</p>
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <Stars value={e.avg_stars ?? 0} size="sm" />
+                  <span>{e.ratings_count > 0 ? `${e.avg_stars} · ${e.ratings_count} valoración${e.ratings_count === 1 ? "" : "es"}` : "Sin valoraciones aún"}</span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </section>
+      )}
+    </main>
+  );
+}

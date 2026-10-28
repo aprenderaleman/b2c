@@ -231,3 +231,28 @@ export async function deleteRecordingObject(fileUrl: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * URL firmada de PUT para subir un objeto DIRECTAMENTE desde el navegador
+ * (sin pasar por Vercel, que corta el body a 4,5 MB). Serie de vídeos
+ * (Gelfis 2026-10-28): claves serie/t1/<slug>.mp4 y .jpg. El bucket
+ * necesita CORS que permita PUT desde el dominio de la app.
+ * @returns { uploadUrl, fileUrl } — fileUrl con el formato de recordings.file_url.
+ */
+export async function signUploadUrl(
+  key: string,
+  contentType: string,
+  expiresIn: number = 3600,
+): Promise<{ ok: true; uploadUrl: string; fileUrl: string } | { ok: false; error: string }> {
+  const c = client();
+  if (!c) return { ok: false, error: "r2_not_configured" };
+  const bucket = process.env.R2_BUCKET || DEFAULT_BUCKET;
+  const cmd = new PutObjectCommand({ Bucket: bucket, Key: key, ContentType: contentType });
+  try {
+    const uploadUrl = await getSignedUrl(c, cmd, { expiresIn });
+    const fileUrl = `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${bucket}/${key}`;
+    return { ok: true, uploadUrl, fileUrl };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "unknown" };
+  }
+}
