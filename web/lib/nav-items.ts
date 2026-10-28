@@ -67,6 +67,8 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
     { label: "Mis clases",   href: "/estudiante/clases",        icon: "calendarDays",   priority: 2 },
     { label: "Apuntes",     href: "/estudiante/apuntes",       icon: "fileText",       priority: 2.3 },
+    // Serie "Un dominicano en Alemania" (Gelfis 2026-10-28). En móvil cae en «Más».
+    { label: "Videos",      href: "/estudiante/videos",        icon: "video",          priority: 2.4 },
     { label: "Chats",       href: "/estudiante/chats",      icon: "messageCircle",  priority: 2.5 },
     // "Material" oculto del menú (Gelfis 2026-10-01) — ruta viva; el
     // contenido canónico son los Cursos (SCHULE).
@@ -91,6 +93,7 @@ function adminItems(): NavItem[] {
     { label: "Clases de prueba",   href: "/admin/clasedeprueba",  icon: "userCheck",     priority: 2.3 },
     { label: "Mi disponibilidad",  href: "/admin/disponibilidad", icon: "clock",         priority: 2.4 },
     { label: "Grabaciones",      href: "/admin/grabaciones",    icon: "video",         priority: 2.5 },
+    { label: "Videos",           href: "/admin/videos",         icon: "video",         priority: 2.55 },
     // Chat de plataforma del admin (Gelfis 2026-10-09) — sus directos
     // con profes/estudiantes. No confundir con "Mensajes"
     // (/admin/mensajes = estadísticas de plantillas).
