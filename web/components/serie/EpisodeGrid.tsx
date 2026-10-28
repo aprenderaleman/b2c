@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { fmtDuration, type EpisodeCard } from "@/lib/serie";
-import { Stars } from "./Stars";
 
 /**
  * Rejilla de capítulos de la serie "Un dominicano en Alemania". Compartida
- * por /estudiante/videos y /profesor/serie (profes solo ven, no valoran).
+ * por /estudiante/videos y /profesor/serie. Las medias de valoración solo se
+ * muestran en /admin/videos (Gelfis 2026-10-28).
  */
 export function EpisodeGrid({ episodes, basePath }: { episodes: EpisodeCard[]; basePath: string }) {
   return (
@@ -38,10 +38,6 @@ export function EpisodeGrid({ episodes, basePath }: { episodes: EpisodeCard[]; b
               <div className="p-4">
                 <h2 className="text-base font-bold text-slate-900 dark:text-slate-50 group-hover:text-brand-600 dark:group-hover:text-brand-400">{e.title_de}</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-400">{e.title_es}</p>
-                <div className="mt-2 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <Stars value={e.avg_stars ?? 0} size="sm" />
-                  <span>{e.ratings_count > 0 ? `${e.avg_stars} · ${e.ratings_count} valoración${e.ratings_count === 1 ? "" : "es"}` : "Sin valoraciones aún"}</span>
-                </div>
               </div>
             </Link>
           ))}

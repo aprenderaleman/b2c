@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { fmtDuration, type Comment, type getEpisode } from "@/lib/serie";
 import { EpisodeInteractions } from "./EpisodeInteractions";
-import { Stars } from "./Stars";
 
 type EpisodeFull = NonNullable<Awaited<ReturnType<typeof getEpisode>>>;
 
@@ -27,10 +26,7 @@ export function EpisodeView({ ep, comments, canInteract, basePath }: { ep: Episo
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-          <Stars value={ep.avg_stars ?? 0} />
-          <span>{ep.ratings_count > 0 ? `${ep.avg_stars} de 5 · ${ep.ratings_count} valoración${ep.ratings_count === 1 ? "" : "es"}` : "Sé el primero en valorarlo"}</span>
-        </div>
+        <span className="text-xs text-slate-400">Las valoraciones son privadas: solo las ve la academia.</span>
         <div className="flex gap-2">
           {ep.prev && <Link href={`${basePath}/${ep.prev.slug}`} className="btn-secondary text-xs">← Kapitel {ep.prev.number}</Link>}
           {ep.next && <Link href={`${basePath}/${ep.next.slug}`} className="btn-secondary text-xs">Kapitel {ep.next.number} →</Link>}
