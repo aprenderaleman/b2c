@@ -11,6 +11,17 @@ import { supabaseAdmin } from "@/lib/supabase";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Misma regla que /api/admin/wa-test: CRON_SECRET (ops desde fuera) o sesión admin/superadmin. */
+async function authorised(req: Request): Promise<boolean> {
+  const expected = process.env.CRON_SECRET;
+  const bearer = req.headers.get("authorization");
+  if (expected && bearer && bearer.toLowerCase().startsWith("bearer ") && bearer.slice(7).trim() === expected) return true;
+  if (expected && req.headers.get("x-cron-secret") === expected) return true;
+  const session = await auth();
+  const role = (session?.user as { role?: string } | undefined)?.role;
+  return role === "admin" || role === "superadmin";
+}
+
 const Body = z.object({
   video_url:  z.string().url().regex(/\.r2\.cloudflarestorage\.com\//).optional(),
   poster_url: z.string().url().regex(/\.r2\.cloudflarestorage\.com\//).optional(),
@@ -18,9 +29,7 @@ const Body = z.object({
 });
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ slug: string }> }) {
-  const session = await auth();
-  const role = (session?.user as { role?: string } | undefined)?.role;
-  if (!session?.user || (role !== "admin" && role !== "superadmin")) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if (!(await authorised(req))) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { slug } = await params;
   const parsed = Body.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ error: "invalid_body", details: parsed.error.flatten() }, { status: 400 });
