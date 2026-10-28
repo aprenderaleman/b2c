@@ -50,8 +50,6 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Estudiantes",      href: "/profesor/estudiantes",     icon: "graduationCap",  priority: 3 },
     // "Grupos" visible (Simon 2026-10-22: dúos/tríos se agendan desde aquí).
     { label: "Grupos",           href: "/profesor/grupos",          icon: "users",          priority: 3.2 },
-    // Serie "Un dominicano en Alemania", solo lectura para profes (Gelfis 2026-10-28).
-    { label: "Videos",           href: "/profesor/serie",           icon: "video",          priority: 3.3 },
     { label: "Chats",            href: "/profesor/chats",        icon: "messageCircle",  priority: 3.5 },
     { label: "Ganancias",        href: "/profesor/ganancias",       icon: "wallet",         priority: 4 },
     // "Disponibilidad" oculta del menú (Gelfis 2026-10-07) — se edita

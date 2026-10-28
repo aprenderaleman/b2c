@@ -3,7 +3,7 @@ import { fmtDuration, type EpisodeCard } from "@/lib/serie";
 
 /**
  * Rejilla de capítulos de la serie "Un dominicano en Alemania". Compartida
- * por /estudiante/videos y /profesor/serie. Las medias de valoración solo se
+ * en /estudiante/videos (solo alumnos, Gelfis 2026-10-28). Las medias solo se
  * muestran en /admin/videos (Gelfis 2026-10-28).
  */
 export function EpisodeGrid({ episodes, basePath }: { episodes: EpisodeCard[]; basePath: string }) {
