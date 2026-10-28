@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Stars } from "../Stars";
+import { Stars } from "./Stars";
 import type { Comment } from "@/lib/serie";
 
 /** Valoración 1–5 (se guarda al instante) + comentarios del capítulo. */

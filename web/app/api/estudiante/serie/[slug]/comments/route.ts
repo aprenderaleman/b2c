@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
-import { getStudentByUserId } from "@/lib/academy";
+import { resolveSerieActor } from "@/lib/serie-actor";
 import { supabaseAdmin } from "@/lib/supabase";
 import { addComment, listComments } from "@/lib/serie";
 
@@ -15,10 +14,9 @@ export const dynamic = "force-dynamic";
 const Body = z.object({ body: z.string().trim().min(1).max(1000) });
 
 async function ctx(slug: string) {
-  const session = await auth();
-  if (!session?.user) return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
-  const role = (session.user as { role?: string }).role;
-  const student = role === "student" ? await getStudentByUserId((session.user as { id: string }).id) : null;
+  const actor = await resolveSerieActor();
+  if (!actor) return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
+  const { role, student } = actor;
   const { data: ep } = await supabaseAdmin().from("serie_episodes").select("id").eq("slug", slug).eq("published", true).maybeSingle();
   if (!ep) return { error: NextResponse.json({ error: "not_found" }, { status: 404 }) };
   return { role, student, episodeId: (ep as { id: string }).id };
