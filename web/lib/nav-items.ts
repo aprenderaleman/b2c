@@ -62,6 +62,8 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Cursos",           href: "/profesor/cursos",          icon: "graduationCap",  priority: 1.1 },
     // Tour guiado bajo demanda (Gelfis 2026-10-24).
     { label: "¿Cómo funciona?",  href: "/profesor?tour=1",          icon: "star",           priority: 9 },
+    // Perfil con cambio de contraseña (Gelfis 2026-10-29, caso Adrián).
+    { label: "Perfil",           href: "/profesor/perfil",          icon: "userCircle",     priority: 8 },
   ],
   student: [
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
@@ -81,6 +83,8 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
     // Tour guiado bajo demanda (Gelfis 2026-10-24).
     { label: "¿Cómo funciona?", href: "/estudiante?tour=1",     icon: "star",           priority: 9 },
+    // Perfil con cambio de contraseña (Gelfis 2026-10-29, caso Adrián).
+    { label: "Perfil",       href: "/estudiante/perfil",        icon: "userCircle",     priority: 8 },
   ],
   closer: closerItems(),
   setter: setterItems(),
