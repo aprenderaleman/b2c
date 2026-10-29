@@ -3,8 +3,10 @@ import { randomBytes } from "crypto";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 
+// Mismo fix que en /api/public/book-trial (Gelfis 2026-10-29): pedir
+// más bytes para garantizar 8 chars tras remover `_` y `-`.
 function generateShortCode(): string {
-  return randomBytes(6).toString("base64url").replace(/[_-]/g, "").slice(0, 8).toLowerCase();
+  return randomBytes(12).toString("base64url").replace(/[_-]/g, "").slice(0, 8).toLowerCase();
 }
 
 /**

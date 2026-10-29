@@ -23,10 +23,15 @@ import { findTeacherConflicts, earlierConflicts } from "@/lib/teacher-conflicts"
 import { NIVEL_ESCOLAR, TIEMPO_ALEMANIA, OBJETIVO_MENOR, nombreMenorParaProfe, resumenMenor, type MenorDatos } from "@/lib/menor";
 import { closeRescueChainsForRebook } from "@/lib/rescue-chains";
 
-/** Random URL-safe 8-char code, used as the magic-link short ID. */
+/** Random URL-safe 8-char code, used as the magic-link short ID.
+ *  Bug Gelfis 2026-10-29: randomBytes(6)→base64url produce 8 chars, pero
+ *  si incluyen `_` o `-` el .replace() los quita y queda 7 (o menos).
+ *  Catherine recibió `/c/hft40zo` (7) y "no le dejaba entrar" en algunos
+ *  entornos. Fix: pedir más bytes para garantizar 8 tras el filtro. */
 function generateShortCode(): string {
-  // base36 → 26 letters + 10 digits, lowercase, friendly to type/share.
-  return randomBytes(6).toString("base64url").replace(/[_-]/g, "").slice(0, 8).toLowerCase();
+  // 12 bytes → 16 base64url chars; worst case 4 son `_`/`-` → 12 limpios
+  // → slice(0,8) devuelve siempre 8 chars.
+  return randomBytes(12).toString("base64url").replace(/[_-]/g, "").slice(0, 8).toLowerCase();
 }
 
 /**
