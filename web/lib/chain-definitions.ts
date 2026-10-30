@@ -52,7 +52,7 @@ export type ChainStep = {
   delayMs: number;
   templateKind: string;
   templateSubN: number;
-  channels: ("whatsapp" | "email")[];
+  channels: ("whatsapp" | "email" | "chat")[];
   skipIfPaid?: boolean;
   /**
    * Si el lead ya usó la herramienta indicada, sustituye el template
@@ -533,13 +533,17 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
     label: "Bienvenida — primera semana",
     steps: [
       // Step 0 — placeholder (skipped en producción, se envía síncrono).
+      // Gelfis 2026-10-30: SOLO el primer mensaje de bienvenida sigue por
+      // WhatsApp. Los siguientes 4 (HANS, SCHULE, check-in, cierre) salen
+      // por el chat interno de la academia — toda la comunicación con el
+      // estudiante ya convertido ocurre dentro del panel, no por WA.
       { delayMs: 0, templateKind: "welcome_week", templateSubN: 1, channels: ["whatsapp"] },
       // T+1d — Hans (variante celebración si ya lo usó)
       {
         delayMs: 24 * H,
         templateKind: "welcome_week",
         templateSubN: 2,
-        channels: ["whatsapp"],
+        channels: ["chat"],
         celebrationIfUsed: "hans",
       },
       // T+3d — SCHULE (variante celebración si ya lo usó)
@@ -547,7 +551,7 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
         delayMs: 3 * D,
         templateKind: "welcome_week",
         templateSubN: 3,
-        channels: ["whatsapp"],
+        channels: ["chat"],
         celebrationIfUsed: "schule",
       },
       // T+7d — check-in 1/2/3 (setea phase para que Python detecte respuesta)
@@ -555,7 +559,7 @@ export const CHAIN_DEFINITIONS: Record<ChainType, ChainDef> = {
         delayMs: 7 * D,
         templateKind: "welcome_week",
         templateSubN: 4,
-        channels: ["whatsapp"],
+        channels: ["chat"],
         setStatePhase: "AWAITING_WELCOME_CHECKIN",
         onComplete: { setStatus: "student_active" },
       },

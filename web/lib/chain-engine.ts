@@ -14,6 +14,7 @@ import { sendWhatsappText, sendWhatsappAudio } from "./whatsapp";
 import { renderTemplate } from "./message-stats";
 import { resolveChainVariables, isBonusAlive } from "./chain-variables";
 import { pickTestimonial, markTestimonialSent, fetchTestimonialAudio } from "./audio-testimonials";
+import { ensureDirectChat, sendMessage } from "./chat";
 import {
   CHAIN_DEFINITIONS,
   type ChainType,
@@ -559,14 +560,52 @@ export async function advanceChain(chain: ChainRow): Promise<{
       }
     }
 
-    // Pasar bypassNightGate cuando la chain es transaccional (bypassPause
-    // en def o bypass_gate_on_start en metadata). Bug Myriam 2026-09-30:
-    // chain4_absent salta gate del chain-engine pero era bloqueada por
-    // night_gate independiente en whatsapp.ts a las 06:00 Berlin.
-    const res = await sendWhatsappText(phone, text, {
-      kind: templateKind,
-      bypassNightGate: bypassWindow,
-    });
+    // Gelfis 2026-10-30: Routing por canal. welcome_week steps 1-4 ahora
+    // usan channel="chat" (chat interno de la academia). El resto sigue
+    // en WhatsApp. Si el step tiene channel="chat" y el lead tiene
+    // converted_to_user_id, enviar por mensaje interno; si no (lead no
+    // convertido todavía) fallback a WhatsApp para no perder el mensaje.
+    const wantsChat = step.channels.includes("chat");
+    let res: { ok: boolean; reason?: string; messageId?: string };
+    if (wantsChat) {
+      const { data: leadFull } = await sb
+        .from("leads")
+        .select("converted_to_user_id")
+        .eq("id", chain.lead_id)
+        .maybeSingle();
+      const studentUserId = (leadFull as { converted_to_user_id: string | null } | null)?.converted_to_user_id;
+      if (!studentUserId) {
+        console.warn(`[chain-engine] step channel=chat pero lead ${chain.lead_id} no está convertido — fallback a WhatsApp`);
+        res = await sendWhatsappText(phone, text, { kind: templateKind, bypassNightGate: bypassWindow });
+      } else {
+        try {
+          const { data: adminRow } = await sb
+            .from("users")
+            .select("id")
+            .in("role", ["superadmin", "admin"])
+            .eq("active", true)
+            .order("created_at", { ascending: true })
+            .limit(1)
+            .maybeSingle();
+          const adminId = (adminRow as { id: string } | null)?.id;
+          if (!adminId) throw new Error("no_admin_user_found");
+          const chatId = await ensureDirectChat(adminId, studentUserId);
+          const msg = await sendMessage({ chatId, authorId: adminId, content: text });
+          res = msg ? { ok: true, messageId: msg.id } : { ok: false, reason: "empty_chat_message" };
+        } catch (e) {
+          res = { ok: false, reason: `chat_send_failed:${e instanceof Error ? e.message : "unknown"}` };
+        }
+      }
+    } else {
+      // Pasar bypassNightGate cuando la chain es transaccional (bypassPause
+      // en def o bypass_gate_on_start en metadata). Bug Myriam 2026-09-30:
+      // chain4_absent salta gate del chain-engine pero era bloqueada por
+      // night_gate independiente en whatsapp.ts a las 06:00 Berlin.
+      res = await sendWhatsappText(phone, text, {
+        kind: templateKind,
+        bypassNightGate: bypassWindow,
+      });
+    }
 
     // R4: update last_auto_sent_at after successful send. También
     // consumimos bypass_gate_on_start (si estaba en metadata) — el flag
@@ -595,7 +634,7 @@ export async function advanceChain(chain: ChainRow): Promise<{
         : `💬 Falló cadena ${chain.chain_type} paso ${stepIndex + 1}: ${res.reason}`,
       metadata: {
         kind: templateKind,
-        channel: "whatsapp",
+        channel: wantsChat ? "chat" : "whatsapp",
         chain_id: chain.id,
         chain_type: chain.chain_type,
         chain_step: stepIndex,
