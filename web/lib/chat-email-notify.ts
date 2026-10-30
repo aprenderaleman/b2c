@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { sendChatMessageEmail } from "./email/send";
-import { chatDisplayName, type ChatViewerRole } from "./chat-display";
+import type { ChatViewerRole } from "./chat-display";
 
 /**
  * Aviso por email cuando alguien recibe un mensaje en el chat de la
@@ -12,12 +12,11 @@ import { chatDisplayName, type ChatViewerRole } from "./chat-display";
  *    varios mensajes seguidos, el primero avisa y el resto se agrupa
  *    implícitamente (registro en chat_email_notices, migración 148).
  *  - Respeta users.notifications_opt_out (lo aplica sendRaw).
- *  - El nombre del autor se muestra con el alias que ve ese destinatario
- *    (alumnos ven la cuenta de la academia como "Stiv (Asistente)").
+ *  - El email no dice quién escribió ni qué: solo "tienes un mensaje" y
+ *    el botón al chat (Gelfis 2026-10-30).
  *  - Nunca rompe el envío del mensaje: todo error se loguea y ya.
  */
 const DEBOUNCE_MIN = 30;
-const PREVIEW_MAX = 220;
 const PLATFORM_URL = (process.env.NEXT_PUBLIC_PLATFORM_URL || process.env.PLATFORM_URL || "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
 type Role = Exclude<ChatViewerRole, undefined>;
@@ -36,31 +35,16 @@ function firstName(full: string | null, email: string): string {
   return parts.length <= 2 ? parts.join(" ") : parts[0];
 }
 
-export function previewOf(content: string, attachments: unknown[] | null | undefined, lang: "es" | "de"): string {
-  const clean = content.replace(/\s+/g, " ").trim();
-  if (!clean) {
-    if ((attachments?.length ?? 0) > 0) return lang === "de" ? "📎 Hat dir eine Datei geschickt" : "📎 Te ha enviado un archivo";
-    return "";
-  }
-  return clean.length > PREVIEW_MAX ? clean.slice(0, PREVIEW_MAX - 1).trimEnd() + "…" : clean;
-}
-
 export async function notifyChatMessageByEmail(args: {
   chatId: string; messageId: string; authorId: string; content: string; attachments?: unknown[] | null;
 }): Promise<{ sent: number; skipped: number }> {
   const sb = supabaseAdmin();
   let sent = 0, skipped = 0;
   try {
-    const [{ data: chat }, { data: parts }, { data: author }] = await Promise.all([
-      sb.from("chats").select("id, type, title").eq("id", args.chatId).maybeSingle(),
-      sb.from("chat_participants").select("user_id, users!inner(full_name, email, role, active, language_preference)").eq("chat_id", args.chatId),
-      sb.from("users").select("full_name, email").eq("id", args.authorId).maybeSingle(),
-    ]);
-    if (!chat || !author) return { sent, skipped };
-    const ch = chat as { type: string; title: string | null };
-    const groupName = ch.type === "group" ? (ch.title ?? "tu grupo") : null;
+    if (!args.content.trim() && (args.attachments?.length ?? 0) === 0) return { sent, skipped };
+    const { data: parts } = await sb.from("chat_participants")
+      .select("user_id, users!inner(full_name, email, role, active, language_preference)").eq("chat_id", args.chatId);
     const since = new Date(Date.now() - DEBOUNCE_MIN * 60_000).toISOString();
-    const au = author as { full_name: string | null; email: string };
 
     for (const row of (parts ?? []) as Array<{ user_id: string; users: unknown }>) {
       if (row.user_id === args.authorId) continue;
@@ -75,16 +59,10 @@ export async function notifyChatMessageByEmail(args: {
       if (recentErr) { console.warn("[chat-email] debounce no disponible:", recentErr.message); skipped++; continue; }
       if ((recent ?? []).length > 0) { skipped++; continue; }
 
-      const lang = u.language_preference ?? "es";
-      const preview = previewOf(args.content, args.attachments, lang);
-      if (!preview) { skipped++; continue; }
-
       const r = await sendChatMessageEmail(u.email, {
-        name:      firstName(u.full_name, u.email),
-        author:    chatDisplayName(au, u.role) ?? au.email,
-        groupName, preview,
-        chatUrl:   chatPathFor(u.role, args.chatId),
-        language:  lang,
+        name:     firstName(u.full_name, u.email),
+        chatUrl:  chatPathFor(u.role, args.chatId),
+        language: u.language_preference ?? "es",
       });
       if (r.ok) {
         sent++;
