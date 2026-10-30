@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { berlinWallClockToIso } from "@/lib/schedule";
 
 /**
  * Admin edit modal for a single class. Supports editing either THIS
@@ -110,7 +111,8 @@ export function ClassEditModal({
     if (!dateStr || !timeStr) { setError("Indica fecha y hora."); return; }
     if (!teacherId) { setError("Selecciona un profesor."); return; }
 
-    const scheduledAt = new Date(`${dateStr}T${timeStr}:00`).toISOString();
+    // Hora de Berlín → ISO, independiente de la zona del navegador (2026-10-30).
+    const scheduledAt = berlinWallClockToIso(dateStr, timeStr);
 
     const body: Record<string, unknown> = {
       scope,
@@ -393,17 +395,21 @@ function ScopeRadio({ checked, onChange, title, subtitle }: {
   );
 }
 
+// Prefill en hora de Berlín (antes usaba la zona del navegador).
+function berlinParts(iso: string): Record<string, string> {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(iso));
+  const out: Record<string, string> = {};
+  for (const p of parts) out[p.type] = p.value;
+  if (out.hour === "24") out.hour = "00";
+  return out;
+}
+
 function isoToDate(iso: string): string {
-  const d = new Date(iso);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
+  const p = berlinParts(iso);
+  return `${p.year}-${p.month}-${p.day}`;
 }
 
 function isoToTime(iso: string): string {
-  const d = new Date(iso);
-  const h = String(d.getHours()).padStart(2, "0");
-  const mi = String(d.getMinutes()).padStart(2, "0");
-  return `${h}:${mi}`;
+  const p = berlinParts(iso);
+  return `${p.hour}:${p.minute}`;
 }

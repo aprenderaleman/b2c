@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { berlinWallClockToIso } from "@/lib/schedule";
 
 type TeacherOption = {
   id:        string;
@@ -127,9 +128,11 @@ export function CreateClassModal({ open, onClose, mode = "admin", initialDate, i
       setError("Define cuándo termina la recurrencia."); return;
     }
 
-    // Berlin local time → UTC ISO. JS builds the Date using the browser's
-    // timezone, which for Gelfis is Europe/Berlin already. Good enough.
-    const scheduledAt = new Date(`${dateStr}T${timeStr}:00`).toISOString();
+    // La hora del formulario es SIEMPRE hora de Berlín, esté donde esté
+    // el navegador. Hasta 2026-10-30 se usaba new Date(`${d}T${t}`), que
+    // interpreta la hora en la zona del navegador: a Simon (Colombia) le
+    // guardaba las clases del dúo 6 h desplazadas.
+    const scheduledAt = berlinWallClockToIso(dateStr, timeStr);
 
     const endpoint = mode === "teacher" ? "/api/teacher/classes" : "/api/admin/classes";
     const payload: Record<string, unknown> = {
