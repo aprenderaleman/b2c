@@ -566,7 +566,10 @@ export async function advanceChain(chain: ChainRow): Promise<{
     // converted_to_user_id, enviar por mensaje interno; si no (lead no
     // convertido todavía) fallback a WhatsApp para no perder el mensaje.
     const wantsChat = step.channels.includes("chat");
-    let res: { ok: boolean; reason?: string; messageId?: string };
+    // Tipo laxo para unificar WhatsappResult y resultado de chat (que no
+    // es un discriminated union estricto).
+    type SendRes = { ok: true; messageId?: string | null } | { ok: false; reason: string };
+    let res: SendRes;
     if (wantsChat) {
       const { data: leadFull } = await sb
         .from("leads")
