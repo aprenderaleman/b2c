@@ -167,6 +167,10 @@
       "schedule": "0 8 * * *"
     },
     {
+      "path": "/api/cron/student-inactivity",
+      "schedule": "0 8 * * *"
+    },
+    {
       "path": "/api/cron/garantia-nivel",
       "schedule": "0 5 * * *"
     },

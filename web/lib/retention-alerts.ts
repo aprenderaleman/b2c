@@ -31,9 +31,9 @@ export async function computeTeacherRetentionAlerts(): Promise<RetentionAlert[]>
     .from("student_group_members")
     .select(`
       student_id,
-      student_groups!inner(teacher_id, type)
+      student_groups!inner(teacher_id, class_type)
     `)
-    .eq("student_groups.type", "individual");
+    .eq("student_groups.class_type", "individual");
 
   const studentTeacher: Record<string, string> = {};
   for (const g of groups ?? []) {
@@ -171,11 +171,10 @@ export async function sendRetentionAlertsToTeachers(): Promise<number> {
   let sent = 0;
 
   for (const alert of alerts) {
-    const notifType = alert.kind === "no_classes_scheduled"
-      ? "retention_no_classes" as const
-      : alert.kind === "low_pace"
-        ? "retention_low_pace" as const
-        : "retention_inactive" as const;
+    // Bug hasta 2026-10-30: se usaba student_groups.type (la columna es
+    // class_type) y tipos retention_* que no existen en el enum de la BD,
+    // así que ninguna alerta llegó nunca. Tipo "generic" + title como clave.
+    const notifType = "generic" as const;
 
     const title = alert.kind === "no_classes_scheduled"
       ? `${alert.studentName} — sin clases agendadas`
