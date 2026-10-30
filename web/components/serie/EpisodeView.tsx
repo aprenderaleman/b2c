@@ -32,6 +32,10 @@ export function EpisodeView({ ep, comments, canInteract, basePath }: { ep: Episo
         </div>
       </div>
 
+      {/* Valoración + comentarios justo bajo el video y vocabulario al
+          final (Gelfis 2026-10-30): así nadie se va sin verlos. */}
+      <EpisodeInteractions slug={ep.slug} myStars={ep.my_stars} initialComments={comments} canInteract={canInteract} />
+
       {ep.keywords.length > 0 && (
         <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">Vocabulario del capítulo</h2>
@@ -48,8 +52,6 @@ export function EpisodeView({ ep, comments, canInteract, basePath }: { ep: Episo
           </ul>
         </section>
       )}
-
-      <EpisodeInteractions slug={ep.slug} myStars={ep.my_stars} initialComments={comments} canInteract={canInteract} />
     </main>
   );
 }
