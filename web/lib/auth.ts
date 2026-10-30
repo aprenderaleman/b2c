@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { CredentialsSignin } from "next-auth";
 import bcrypt from "bcryptjs";
 import { authConfig } from "./auth.config";
 import { supabaseAdmin } from "./supabase";
@@ -9,6 +10,16 @@ import { checkRateLimit } from "./rate-limit";
 // from middleware.
 
 type Role = "superadmin" | "admin" | "teacher" | "student" | "closer" | "setter";
+
+/**
+ * Login bloqueado por el limitador de intentos. Antes devolvíamos null y
+ * el usuario veía "Credenciales incorrectas" aunque la contraseña fuese
+ * correcta (caso Tatiane 2026-10-30: 4 resets seguidos y nunca pudo
+ * entrar). Con un código propio la UI puede decir "espera unos minutos".
+ */
+export class RateLimitedSignin extends CredentialsSignin {
+  code = "rate_limited";
+}
 
 type UserRow = {
   id: string;
@@ -118,10 +129,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const rl = await checkRateLimit({
           scope: "login",
           key: email,
-          max: 5,
+          max: 8,
           windowMs: 15 * 60_000,
         });
-        if (!rl.ok) return null;
+        if (!rl.ok) throw new RateLimitedSignin();
 
         return verifyCredentials(email, pw);
       },

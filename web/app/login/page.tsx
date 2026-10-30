@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { AuthError } from "next-auth";
+import { AuthError, CredentialsSignin } from "next-auth";
 import { signIn, auth } from "@/lib/auth";
 import { defaultPathForRole, type Role } from "@/lib/rbac";
 
@@ -57,6 +57,10 @@ export default async function LoginPage({
       // Map them back to /login?error=... so the UI shows "credenciales
       // incorrectas" instead of a 500.
       if (e instanceof AuthError) {
+        // Límite de intentos: mensaje distinto, la contraseña puede ser válida.
+        const code = e instanceof CredentialsSignin ? e.code
+          : (e.cause as { err?: { code?: string } } | undefined)?.err?.code;
+        if (code === "rate_limited") redirect("/login?error=rate_limited");
         redirect(`/login?error=${encodeURIComponent(e.type)}`);
       }
       // Anything else — log and re-throw so the error boundary can
@@ -114,7 +118,12 @@ export default async function LoginPage({
             />
           </label>
 
-          {error && (
+          {error === "rate_limited" ? (
+            <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
+              Demasiados intentos seguidos. Espera 15 minutos antes de volver a entrar
+              (tu contraseña puede ser correcta: no la cambies otra vez).
+            </p>
+          ) : error && (
             <p className="mt-4 text-sm text-red-600 dark:text-red-400" role="alert">
               Credenciales incorrectas. Inténtalo de nuevo.
             </p>
