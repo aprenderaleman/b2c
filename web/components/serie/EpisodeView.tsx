@@ -25,8 +25,7 @@ export function EpisodeView({ ep, comments, canInteract, basePath }: { ep: Episo
         <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center text-sm text-slate-500">Este capítulo se está publicando. Vuelve en unos días.</div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs text-slate-400">Las valoraciones son privadas: solo las ve la academia.</span>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <div className="flex gap-2">
           {ep.prev && <Link href={`${basePath}/${ep.prev.slug}`} className="btn-secondary text-xs">← Kapitel {ep.prev.number}</Link>}
           {ep.next && <Link href={`${basePath}/${ep.next.slug}`} className="btn-secondary text-xs">Kapitel {ep.next.number} →</Link>}
