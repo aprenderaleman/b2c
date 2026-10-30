@@ -21,7 +21,7 @@ const PLATFORM_URL = (process.env.NEXT_PUBLIC_PLATFORM_URL || process.env.PLATFO
 
 type Role = Exclude<ChatViewerRole, undefined>;
 
-function chatPathFor(role: Role, chatId: string): string {
+export function chatPathFor(role: Role, chatId: string): string {
   const base = role === "student" ? "/estudiante/chats"
     : role === "teacher" ? "/profesor/chats"
     : role === "admin" || role === "superadmin" ? "/admin/chats"
@@ -29,7 +29,7 @@ function chatPathFor(role: Role, chatId: string): string {
   return `${PLATFORM_URL}${base}?chat=${chatId}`;
 }
 
-function firstName(full: string | null, email: string): string {
+export function firstName(full: string | null, email: string): string {
   const parts = (full ?? "").trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return email.split("@")[0];
   return parts.length <= 2 ? parts.join(" ") : parts[0];
@@ -76,4 +76,22 @@ export async function notifyChatMessageByEmail(args: {
     console.error("[chat-email] fallo:", e instanceof Error ? e.message : e);
   }
   return { sent, skipped };
+}
+
+/**
+ * Recordatorio manual de mensajes sin leer (Gelfis 2026-10-30): mismo
+ * email "Tienes un mensaje nuevo" + botón al chat, para un participante
+ * concreto. Sin debounce: lo dispara un admin a propósito.
+ */
+export async function sendUnreadChatReminder(chatId: string, userId: string): Promise<{ ok: boolean; error?: string; to?: string }> {
+  const sb = supabaseAdmin();
+  const { data: row } = await sb.from("chat_participants")
+    .select("user_id, users!inner(full_name, email, role, active, language_preference)")
+    .eq("chat_id", chatId).eq("user_id", userId).maybeSingle();
+  if (!row) return { ok: false, error: "not_participant" };
+  const u = (Array.isArray(row.users) ? row.users[0] : row.users) as { full_name: string | null; email: string; role: Role; active: boolean; language_preference: "es" | "de" | null };
+  if (!u.active || !u.email) return { ok: false, error: "inactive_or_no_email" };
+  const r = await sendChatMessageEmail(u.email, { name: firstName(u.full_name, u.email), chatUrl: chatPathFor(u.role, chatId), language: u.language_preference ?? "es" });
+  if (r.ok) await sb.from("chat_email_notices").insert({ chat_id: chatId, user_id: userId, message_id: null });
+  return r.ok ? { ok: true, to: u.email } : { ok: false, error: r.error, to: u.email };
 }
