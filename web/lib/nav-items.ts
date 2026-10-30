@@ -65,13 +65,15 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     // Perfil con cambio de contraseña (Gelfis 2026-10-29, caso Adrián).
     { label: "Perfil",           href: "/profesor/perfil",          icon: "userCircle",     priority: 8 },
   ],
+  // OJO: el sidebar de ESCRITORIO pinta en el orden de este array; la
+  // `priority` solo ordena la barra inferior móvil. Mantener ambos en
+  // sintonía (lección 2026-10-30: reordenar solo priority no bastó).
   student: [
     { label: "Hoy",          href: "/estudiante",               icon: "home",           priority: 1 },
     { label: "Mis clases",   href: "/estudiante/clases",        icon: "calendarDays",   priority: 2 },
+    // Cursos en 3ª posición, tras Hoy y Mis clases (Gelfis 2026-10-30).
+    { label: "Cursos",       href: "/estudiante/cursos",        icon: "graduationCap",  priority: 2.1 },
     { label: "Apuntes",     href: "/estudiante/apuntes",       icon: "fileText",       priority: 2.3 },
-    // Serie "Un dominicano en Alemania" (Gelfis 2026-10-28). Abajo,
-    // justo encima de "Perfil" (Gelfis 2026-10-30).
-    { label: "Videos",      href: "/estudiante/videos",        icon: "video",          priority: 7.5 },
     { label: "Chats",       href: "/estudiante/chats",      icon: "messageCircle",  priority: 2.5 },
     // "Material" oculto del menú (Gelfis 2026-10-01) — ruta viva; el
     // contenido canónico son los Cursos (SCHULE).
@@ -79,13 +81,14 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     // ya lo pidió el 2026-10-20 y otra sesión lo restauró el 22; si se
     // vuelve a pedir que sea visible, confirmar con Gelfis primero).
     // La ruta /estudiante/grabaciones sigue viva por enlace directo.
-    // Cursos en 3ª posición, tras Hoy y Mis clases (Gelfis 2026-10-30).
-    { label: "Cursos",       href: "/estudiante/cursos",        icon: "graduationCap",  priority: 2.1 },
     { label: "Certificados", href: "/estudiante/certificados",  icon: "award",          priority: 6 },
-    // Tour guiado bajo demanda (Gelfis 2026-10-24).
-    { label: "¿Cómo funciona?", href: "/estudiante?tour=1",     icon: "star",           priority: 9 },
+    // Serie "Un dominicano en Alemania" (Gelfis 2026-10-28). Abajo,
+    // justo encima de "Perfil" (Gelfis 2026-10-30).
+    { label: "Videos",      href: "/estudiante/videos",        icon: "video",          priority: 7.5 },
     // Perfil con cambio de contraseña (Gelfis 2026-10-29, caso Adrián).
     { label: "Perfil",       href: "/estudiante/perfil",        icon: "userCircle",     priority: 8 },
+    // Tour guiado bajo demanda (Gelfis 2026-10-24).
+    { label: "¿Cómo funciona?", href: "/estudiante?tour=1",     icon: "star",           priority: 9 },
   ],
   closer: closerItems(),
   setter: setterItems(),
