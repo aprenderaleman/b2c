@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 /**
  * GET /api/cron/student-inactivity — reactivación automática de alumnos
- * sin clases (Gelfis 2026-10-30). Diario 08:00 UTC (vercel.json).
+ * sin clases (Gelfis 2026-10-30). Semanal, lunes 08:00 UTC (vercel.json).
  * `?dry=1` devuelve los candidatos sin enviar nada.
  */
 function authorised(req: Request): boolean {

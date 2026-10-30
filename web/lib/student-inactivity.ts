@@ -9,7 +9,7 @@ import { ACADEMY_CHAT_EMAIL } from "./chat-display";
 /**
  * Reactivación automática de alumnos sin clases (Gelfis 2026-10-30).
  *
- * Cada día (cron /api/cron/student-inactivity) revisa los alumnos con
+ * Cada lunes (cron /api/cron/student-inactivity) revisa los alumnos con
  * suscripción activa, sin ninguna clase futura agendada y con clases
  * disponibles (o plan mensual):
  *   - never_started_7: convirtió hace >= 7 días y nunca tuvo clase.
