@@ -14,7 +14,7 @@ import { useRouter } from "next/navigation";
 
 type Accion = {
   id:      string;
-  tipo:    "agendar" | "reagendar" | "cancelar";
+  tipo:    "agendar" | "reagendar" | "cancelar" | "mover" | "bloquear" | "mensaje";
   titulo:  string;
   lineas:  string[];
   nota:    string | null;
@@ -28,17 +28,58 @@ type Msg = { id: string; role: "user" | "assistant"; text: string; acciones?: Ac
 
 type Rol = "student" | "teacher" | "admin";
 
-const SUGERENCIAS: Record<Rol, string[]> = {
-  student: ["¿Cuándo es mi próxima clase?", "¿Cuántas clases me quedan?", "Quiero agendar una clase esta semana"],
-  teacher: ["¿Qué clases tengo mañana?", "Agéndame una clase con…", "Cambia mi serie con…"],
-  admin:   ["¿Qué clases hay hoy?", "Huecos libres de un profesor mañana", "Agenda una clase de… con…"],
+type Lang = "es" | "de";
+
+const SUGERENCIAS: Record<Lang, Record<Rol, string[]>> = {
+  es: {
+    student: ["¿Cuándo es mi próxima clase?", "¿Qué vimos en la última clase?", "Corrige esta frase: …", "¿Tengo tareas pendientes?"],
+    teacher: ["¿Qué clases tengo mañana?", "Prepárame la clase con…", "Bloquea el viernes de 17 a 19", "Cambia el horario de…"],
+    admin:   ["¿Qué clases hay hoy?", "Huecos libres de un profesor mañana", "Agenda una clase de… con…"],
+  },
+  de: {
+    student: ["Wann ist meine nächste Stunde?", "Was haben wir letzte Stunde gemacht?", "Korrigiere diesen Satz: …", "Habe ich offene Aufgaben?"],
+    teacher: ["Welche Stunden habe ich morgen?", "Bereite die Stunde mit … vor", "Blockiere Freitag von 17 bis 19 Uhr"],
+    admin:   ["Welche Stunden gibt es heute?", "Freie Zeiten einer Lehrkraft morgen"],
+  },
 };
 
-const HECHO: Record<Accion["tipo"], string> = {
-  agendar:   "Clase agendada",
-  reagendar: "Clase reagendada",
-  cancelar:  "Clase cancelada",
+const T: Record<Lang, Record<string, string>> = {
+  es: {
+    sub: "Nada se ejecuta sin tu confirmación", nueva: "Nueva", hola: "Hola", intro: "Puedo consultar tus clases, ayudarte con el alemán y prepararte cambios; tú los confirmas.",
+    pensando: "Pensando…", consultando: "Consultando…", escribe: "Escribe aquí…", enviar: "Enviar", confirmar: "Confirmar", reintentar: "Reintentar", descartar: "Descartar", descartada: "Descartada", momento: "Un momento…",
+    errRespuesta: "No he podido responder. Inténtalo de nuevo.", errConexion: "Sin conexión. Inténtalo de nuevo.", errAccion: "No se pudo completar. Inténtalo de nuevo.",
+    agendar: "Clase agendada", reagendar: "Clase reagendada", cancelar: "Clase cancelada", mover: "Clase movida", bloquear: "Hecho", mensaje: "Mensaje enviado",
+  },
+  de: {
+    sub: "Nichts passiert ohne deine Bestätigung", nueva: "Neu", hola: "Hallo", intro: "Ich kann deine Stunden abfragen, dir bei Deutsch helfen und Änderungen vorbereiten; du bestätigst sie.",
+    pensando: "Einen Moment…", consultando: "Ich schaue nach…", escribe: "Schreib hier…", enviar: "Senden", confirmar: "Bestätigen", reintentar: "Erneut versuchen", descartar: "Verwerfen", descartada: "Verworfen", momento: "Einen Moment…",
+    errRespuesta: "Ich konnte nicht antworten. Versuch es noch einmal.", errConexion: "Keine Verbindung. Versuch es noch einmal.", errAccion: "Das hat nicht geklappt. Versuch es noch einmal.",
+    agendar: "Stunde gebucht", reagendar: "Stunde verschoben", cancelar: "Stunde abgesagt", mover: "Stunde verschoben", bloquear: "Erledigt", mensaje: "Nachricht gesendet",
+  },
 };
+
+const STORE_TTL_MS = 7 * 24 * 3600_000;
+const STORE_MAX = 30;
+
+/** Conversación en este navegador (7 días), por usuario. localStorage puede fallar: nunca rompe el chat. */
+function loadStored(key: string): Msg[] {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const { at, msgs } = JSON.parse(raw) as { at: number; msgs: Msg[] };
+    if (Date.now() - at > STORE_TTL_MS || !Array.isArray(msgs)) return [];
+    return msgs.map(m => ({
+      ...m,
+      acciones: m.acciones?.map(a => a.estado === "ejecutando" ? { ...a, estado: "pendiente" as const } : a),
+    }));
+  } catch { return []; }
+}
+function saveStored(key: string, msgs: Msg[]) {
+  try {
+    if (msgs.length === 0) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, JSON.stringify({ at: Date.now(), msgs: msgs.slice(-STORE_MAX) }));
+  } catch { /* sin almacenamiento: la conversación dura lo que la página */ }
+}
 
 /** Lo que el modelo ve de un mensaje pasado: texto + estado de sus tarjetas. */
 function historyContent(m: Msg): string {
@@ -66,16 +107,30 @@ function RichText({ text }: { text: string }) {
   );
 }
 
-export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
+export function AsistenteWidget({ rol, nombre, userId, lang = "es" }: { rol: Rol; nombre: string; userId: string; lang?: Lang }) {
   const router = useRouter();
+  const t = T[lang];
+  const storeKey = `asistente:v1:${userId}`;
   const [open,    setOpen]    = useState(false);
   const [msgs,    setMsgs]    = useState<Msg[]>([]);
   const [input,   setInput]   = useState("");
   const [loading, setLoading] = useState(false);
+  const [parcial, setParcial] = useState("");
+  const [buscando, setBuscando] = useState(false);
+  const [avisos,  setAvisos]  = useState<Array<{ texto: string; pregunta: string }>>([]);
+  const cargado = useRef(false);
   const endRef   = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [msgs, loading, open]);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [msgs, loading, open, parcial]);
+  useEffect(() => {
+    setMsgs(loadStored(storeKey));
+    cargado.current = true;
+    if (rol !== "admin") {
+      fetch("/api/asistente/avisos").then(r => r.json()).then(d => setAvisos(d.avisos ?? [])).catch(() => {});
+    }
+  }, [storeKey, rol]);
+  useEffect(() => { if (cargado.current) saveStored(storeKey, msgs); }, [msgs, storeKey]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
 
   const send = async (text: string) => {
@@ -97,18 +152,40 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
           messages: next.slice(-30).map(m => ({ role: m.role, content: historyContent(m).slice(0, 6000) })),
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      const reply: string = res.ok
-        ? (data.reply ?? "")
-        : (data.message ?? "No he podido responder. Inténtalo de nuevo.");
-      const acciones: AccionUI[] = res.ok
-        ? ((data.acciones ?? []) as Accion[]).map(a => ({ ...a, estado: "pendiente" as const }))
-        : [];
-      setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", text: reply, acciones }]);
+      if (!res.ok || !res.body) {
+        const data = await res.json().catch(() => ({}));
+        setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", text: data.message ?? t.errRespuesta }]);
+        return;
+      }
+      // Streaming: una línea JSON por evento (ver /api/asistente).
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "", acumulado = "", terminado = false;
+      const onEvent = (ev: { type: string; delta?: string; reply?: string; acciones?: Accion[]; message?: string }) => {
+        if (ev.type === "text") { acumulado += ev.delta ?? ""; setParcial(acumulado); setBuscando(false); }
+        else if (ev.type === "reset") { acumulado = ""; setParcial(""); }
+        else if (ev.type === "tool") setBuscando(true);
+        else if (ev.type === "done" || ev.type === "error") {
+          terminado = true;
+          const acciones: AccionUI[] = (ev.acciones ?? []).map(a => ({ ...a, estado: "pendiente" as const }));
+          setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", text: ev.reply ?? ev.message ?? t.errRespuesta, acciones }]);
+        }
+      };
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) if (line.trim()) onEvent(JSON.parse(line));
+      }
+      if (!terminado) setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", text: acumulado || t.errRespuesta }]);
     } catch {
-      setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", text: "Sin conexión. Inténtalo de nuevo." }]);
+      setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", text: t.errConexion }]);
     } finally {
       setLoading(false);
+      setParcial("");
+      setBuscando(false);
     }
   };
 
@@ -129,13 +206,13 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        patchAccion(msgId, a.id, { estado: "error", error: data?.message ?? "No se pudo completar. Inténtalo de nuevo." });
+        patchAccion(msgId, a.id, { estado: "error", error: data?.message ?? t.errAccion });
         return;
       }
       patchAccion(msgId, a.id, { estado: "hecha" });
       router.refresh();
     } catch {
-      patchAccion(msgId, a.id, { estado: "error", error: "Sin conexión. Inténtalo de nuevo." });
+      patchAccion(msgId, a.id, { estado: "error", error: t.errConexion });
     }
   };
 
@@ -152,6 +229,9 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
           data-tour="asistente"
         >
           <span aria-hidden>✨</span> Asistente
+          {avisos.length > 0 && msgs.length === 0 && (
+            <span className="h-2.5 w-2.5 rounded-full bg-amber-300" aria-label={`${avisos.length} avisos`} />
+          )}
         </button>
       )}
 
@@ -166,7 +246,7 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
             <span aria-hidden>✨</span>
             <div className="min-w-0 flex-1">
               <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">Asistente</h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">Nada se ejecuta sin tu confirmación</p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">{t.sub}</p>
             </div>
             {msgs.length > 0 && (
               <button
@@ -174,7 +254,7 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
                 onClick={() => setMsgs([])}
                 className="text-xs text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400"
               >
-                Nueva
+                {t.nueva}
               </button>
             )}
             <button
@@ -191,10 +271,25 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
             {msgs.length === 0 && (
               <div className="px-1 py-2">
                 <p className="text-sm text-slate-700 dark:text-slate-200">
-                  Hola{nombre ? `, ${nombre}` : ""}. Puedo consultar tus clases y prepararte cambios; tú los confirmas.
+                  {t.hola}{nombre ? `, ${nombre}` : ""}. {t.intro}
                 </p>
+                {avisos.length > 0 && (
+                  <div className="mt-3 flex flex-col gap-2">
+                    {avisos.map(a => (
+                      <button
+                        key={a.texto}
+                        type="button"
+                        onClick={() => send(a.pregunta)}
+                        className="text-left text-sm rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10
+                          px-3 py-2 text-amber-900 dark:text-amber-200 hover:border-amber-400 transition-colors"
+                      >
+                        {a.texto}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="mt-3 flex flex-col gap-2">
-                  {SUGERENCIAS[rol].map(s => (
+                  {SUGERENCIAS[lang][rol].map(s => (
                     <button
                       key={s}
                       type="button"
@@ -236,10 +331,10 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
                     {a.nota && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{a.nota}</p>}
 
                     {a.estado === "hecha" && (
-                      <p className="mt-3 text-sm font-semibold text-emerald-600 dark:text-emerald-400">✓ {a.hecho ?? HECHO[a.tipo]}</p>
+                      <p className="mt-3 text-sm font-semibold text-emerald-600 dark:text-emerald-400">✓ {a.hecho ?? t[a.tipo]}</p>
                     )}
                     {a.estado === "descartada" && (
-                      <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">Descartada</p>
+                      <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{t.descartada}</p>
                     )}
                     {a.estado === "error" && (
                       <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{a.error}</p>
@@ -253,7 +348,7 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
                           className={`flex-1 rounded-xl px-3 py-2 text-sm font-semibold text-white disabled:opacity-60
                             ${a.tipo === "cancelar" ? "bg-rose-600 hover:bg-rose-700" : "bg-brand-500 hover:bg-brand-600"}`}
                         >
-                          {a.estado === "ejecutando" ? "Un momento…" : a.estado === "error" ? "Reintentar" : "Confirmar"}
+                          {a.estado === "ejecutando" ? t.momento : a.estado === "error" ? t.reintentar : t.confirmar}
                         </button>
                         <button
                           type="button"
@@ -261,7 +356,7 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
                           onClick={() => patchAccion(m.id, a.id, { estado: "descartada" })}
                           className="rounded-xl px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-60"
                         >
-                          Descartar
+                          {t.descartar}
                         </button>
                       </div>
                     )}
@@ -272,8 +367,9 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
 
             {loading && (
               <div className="flex items-start">
-                <div className="rounded-2xl rounded-bl-md px-3 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500">
-                  Pensando…
+                <div className={`max-w-[88%] rounded-2xl rounded-bl-md px-3 py-2 text-sm whitespace-pre-wrap break-words bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800
+                  ${parcial ? "text-slate-800 dark:text-slate-100" : "text-slate-500"}`}>
+                  {parcial ? <RichText text={parcial} /> : buscando ? t.consultando : t.pensando}
                 </div>
               </div>
             )}
@@ -294,7 +390,7 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
               }}
               rows={1}
               maxLength={2000}
-              placeholder="Escribe aquí…"
+              placeholder={t.escribe}
               className="flex-1 resize-none max-h-32 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950
                 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-brand-500"
             />
@@ -303,7 +399,7 @@ export function AsistenteWidget({ rol, nombre }: { rol: Rol; nombre: string }) {
               disabled={loading || !input.trim()}
               className="rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white px-4 py-2 text-sm font-semibold"
             >
-              Enviar
+              {t.enviar}
             </button>
           </form>
         </section>

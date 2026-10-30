@@ -85,6 +85,8 @@ type SlotOpts = {
   durationMinutes?: number;
   /** Antelación mínima en horas. Default: MIN_LEAD_TIME_HOURS (4). */
   minLeadHours?:    number;
+  /** Clases que no cuentan como ocupado (las que se están moviendo). */
+  excludeClassIds?: string[];
 };
 
 /**
@@ -107,13 +109,18 @@ export async function listTrialSlots(
  * − bloqueos puntuales − Google Calendar, con pausa de 10 min y
  * antelación mínima de 12 h (regla confirmada).
  */
-export async function listTeacherClassSlots(teacherId: string): Promise<TrialSlot[]> {
-  return listTrialSlots({
+export async function listTeacherClassSlots(
+  teacherId: string,
+  extra: { excludeClassIds?: string[]; horizonDays?: number } = {},
+): Promise<TrialSlot[]> {
+  const opts: SlotOpts = {
     onlyTeacherId:   teacherId,
     anyTeacher:      true,
     durationMinutes: 50,
     minLeadHours:    12,
-  });
+    excludeClassIds: extra.excludeClassIds,
+  };
+  return extra.horizonDays ? computeSlots(extra.horizonDays, opts) : listTrialSlots(opts);
 }
 
 async function computeSlots(
@@ -202,7 +209,7 @@ async function computeSlots(
       .in("teacher_id", teacherIds)
       .eq("available", true),
     sb.from("classes")
-      .select("teacher_id, scheduled_at, duration_minutes")
+      .select("id, teacher_id, scheduled_at, duration_minutes")
       .is("deleted_at", null) // soft-delete guard 2026-07-10
       .in("teacher_id", teacherIds)
       .in("status", ["scheduled", "live"])
@@ -224,7 +231,9 @@ async function computeSlots(
 
   type Busy = { startMs: number; endMs: number };
   const busyByTeacher = new Map<string, Busy[]>();
-  for (const r of (existing ?? []) as Array<{ teacher_id: string; scheduled_at: string; duration_minutes: number }>) {
+  const skipIds = new Set(opts.excludeClassIds ?? []);
+  for (const r of (existing ?? []) as Array<{ id: string; teacher_id: string; scheduled_at: string; duration_minutes: number }>) {
+    if (skipIds.has(r.id)) continue;
     const startMs = new Date(r.scheduled_at).getTime();
     const list = busyByTeacher.get(r.teacher_id) ?? [];
     list.push({ startMs, endMs: startMs + r.duration_minutes * 60_000 });

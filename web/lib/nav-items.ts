@@ -118,6 +118,7 @@ function adminItems(): NavItem[] {
     { label: "Reseñas",     href: "/admin/resenas",     icon: "star",          priority: 8.5 },
     { label: "Referidos",   href: "/admin/referidos",   icon: "heart",         priority: 8.7 },
     { label: "Comunicados", href: "/admin/comunicados", icon: "messageCircle", priority: 9 },
+    { label: "Asistente IA", href: "/admin/asistente",  icon: "messageCircle", priority: 9.2 },
     { label: "Closers",     href: "/admin/closers",     icon: "userCheck",     priority: 9.5 },
     // Restaurado 2026-10-26: el primer setter empieza a trabajar y
     // Gelfis necesita gestionarlos desde el menú (alta + métricas).

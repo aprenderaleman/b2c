@@ -2,7 +2,7 @@ import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import { syncTeacherCalendarAfterReschedule } from "@/lib/teacher-calendar-sync";
+import { syncTeacherCalendarAfterReschedule, removeTeacherCalendarEvents } from "@/lib/teacher-calendar-sync";
 import { createNotification } from "@/lib/notifications";
 import {
   resolveStudentTeacher,
@@ -116,4 +116,73 @@ export async function POST(
   ]));
 
   return NextResponse.json({ ok: true, classId, scheduledAt: startIso });
+}
+
+/**
+ * DELETE /api/student/schedule/[id]
+ *
+ * El alumno cancela UNA clase individual suya (Gelfis 2026-10-30). Misma
+ * regla que reagendar: hasta 24 h antes; después, solo el profe. La clase
+ * deja de contar como agendada, así que vuelve sola al saldo.
+ */
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  if ((session.user as { role?: string }).role !== "student") {
+    return NextResponse.json({ error: "solo_estudiantes" }, { status: 403 });
+  }
+  const userId = (session.user as { id: string }).id;
+  const { id: classId } = await params;
+
+  const sb = supabaseAdmin();
+  const { data: stu } = await sb.from("students").select("id").eq("user_id", userId).maybeSingle();
+  if (!stu) return NextResponse.json({ error: "no_student_profile" }, { status: 403 });
+  const studentId = (stu as { id: string }).id;
+
+  const { data: cls } = await sb
+    .from("classes")
+    .select("id, type, status, is_trial, scheduled_at, title, class_participants!inner(student_id)")
+    .eq("id", classId)
+    .eq("class_participants.student_id", studentId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!cls) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const c = cls as { type: string; status: string; is_trial: boolean; scheduled_at: string; title: string };
+
+  if (c.is_trial) return NextResponse.json({ error: "trial_no_self_service" }, { status: 400 });
+  if (c.type !== "individual") {
+    return NextResponse.json({ error: "solo_individuales", message: "Las clases grupales las gestiona tu profesor." }, { status: 400 });
+  }
+  if (c.status !== "scheduled") {
+    return NextResponse.json({ error: "bad_status", message: "Esta clase ya no se puede cancelar." }, { status: 400 });
+  }
+  const hoursToClass = (new Date(c.scheduled_at).getTime() - Date.now()) / 3_600_000;
+  if (hoursToClass < RESCHEDULE_CUTOFF_HOURS) {
+    return NextResponse.json(
+      { error: "too_late", message: `Solo puedes cancelar hasta ${RESCHEDULE_CUTOFF_HOURS} h antes de la clase. Escríbele a tu profesor por Mensajes.` },
+      { status: 400 },
+    );
+  }
+
+  const { error } = await sb.from("classes").update({ status: "cancelled" }).eq("id", classId).eq("status", "scheduled");
+  if (error) return NextResponse.json({ error: "cancel_failed", message: error.message }, { status: 500 });
+
+  const teacher = await resolveStudentTeacher(studentId);
+  const whenEs = `${formatClassDateEs(c.scheduled_at)} ${formatClassTimeEs(c.scheduled_at)}`;
+  after(() => Promise.allSettled([
+    removeTeacherCalendarEvents([classId]),
+    teacher ? createNotification({
+      user_id:  teacher.teacherUserId,
+      type:     "class_cancelled",
+      title:    "Clase cancelada por el alumno",
+      body:     `${c.title} — ${whenEs} (Berlín).`,
+      link:     `/profesor/clases/${classId}`,
+      class_id: classId,
+    }) : Promise.resolve(null),
+  ]));
+
+  return NextResponse.json({ ok: true, classId });
 }

@@ -48,7 +48,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <SystemHealthBanner />
         {children}
       </AppShell>
-      {asistenteVisible("admin") && <AsistenteWidget rol="admin" nombre={display.split(/\s+/)[0] ?? ""} />}
+      {asistenteVisible("admin") && <AsistenteWidget rol="admin" nombre={display.split(/\s+/)[0] ?? ""} userId={(session.user as { id: string }).id} />}
     </>
   );
 }

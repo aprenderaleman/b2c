@@ -1,3 +1,4 @@
+import { StudentCancelButton } from "./StudentCancelButton";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
@@ -127,6 +128,12 @@ export default async function StudentClassDetail({
                   >
                     📅 Reagendar esta clase
                   </Link>
+                )}
+                {cls.type === "individual"
+                  && !cls.is_trial
+                  && cls.status === "scheduled"
+                  && start.getTime() - Date.now() > 24 * 3600_000 && (
+                  <StudentCancelButton classId={cls.id} />
                 )}
               </>
             ) : (

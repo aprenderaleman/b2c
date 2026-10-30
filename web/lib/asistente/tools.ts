@@ -15,6 +15,13 @@ import { listTeacherClassSlots, berlinClockToUtcMs, type TrialSlot } from "../tr
 import { resolveStudentTeacher, RESCHEDULE_CUTOFF_HOURS, STUDENT_CLASS_MINUTES } from "../student-schedule";
 import { findTeacherConflicts } from "../teacher-conflicts";
 import { getStudents } from "../academy";
+import { getStudentHomework } from "../homework";
+import { getStudentRecordings, getTeacherRecordings } from "../recordings";
+import { getTeacherEarningsSummary } from "../finance";
+import { listEpisodes } from "../serie";
+import { listSharedMaterials } from "../shared-materials";
+import { listMaterialsVisibleToStudent } from "../materials";
+import { planMover, MAX_MOVER, type Actor } from "./mover";
 
 /**
  * Herramientas del Asistente IA (MVP — Gelfis 2026-10-07).
@@ -28,13 +35,15 @@ import { getStudents } from "../academy";
  */
 
 export type AsistenteCtx =
-  | { role: "student"; userId: string; name: string; studentId: string }
-  | { role: "teacher"; userId: string; name: string; teacherId: string }
-  | { role: "admin";   userId: string; name: string };
+  | { role: "student"; userId: string; name: string; lang: Lang; studentId: string; nivel: string | null; meta: string | null }
+  | { role: "teacher"; userId: string; name: string; lang: Lang; teacherId: string }
+  | { role: "admin";   userId: string; name: string; lang: Lang };
+
+export type Lang = "es" | "de";
 
 export type AccionPropuesta = {
   id:      string;
-  tipo:    "agendar" | "reagendar" | "cancelar";
+  tipo:    "agendar" | "reagendar" | "cancelar" | "mover" | "bloquear" | "mensaje";
   titulo:  string;
   lineas:  string[];
   nota:    string | null;
@@ -174,7 +183,7 @@ async function loadClase(id: string): Promise<ClaseLite | null> {
 /** Estudiantes ACTIVOS del profe: en un grupo activo suyo, con usuario activo y
  *  suscripción activa/pausa (Gelfis 2026-10-14: el profe solo ve a sus alumnos
  *  actuales en todas partes; antes bastaba con haber tenido una clase). */
-async function teacherStudents(teacherId: string): Promise<Array<{ id: string; name: string }>> {
+export async function teacherStudents(teacherId: string): Promise<Array<{ id: string; name: string }>> {
   const sb = supabaseAdmin();
   const { data: groups } = await sb.from("student_group_members")
     .select("student_id, group:student_groups!inner(teacher_id, active)")
@@ -267,6 +276,138 @@ function propuesta(acciones: AccionPropuesta[], a: Omit<AccionPropuesta, "id">):
   };
 }
 
+/** Herramienta común: lo que el asistente no pudo resolver (lo intercepta la ruta). */
+const NO_RESUELTO_SPEC: ToolDef = {
+  spec: {
+    name: "registrar_no_resuelto",
+    description: "Anota para la academia una petición que NO has podido resolver porque no tienes herramienta o información para ello. Úsala una vez, además de responder al usuario. No la uses para preguntas de alemán ni cuando solo falte un dato que puedes preguntar.",
+    input_schema: { type: "object", properties: { motivo: { type: "string", description: "Qué pedía el usuario y por qué no se pudo, en una frase." } }, required: ["motivo"] },
+  },
+  input: z.object({ motivo: z.string() }),
+  run: async () => ({ ok: true }),
+};
+
+/** Tarjeta para mover varias clases a la vez: mismo plan que revalidará el endpoint. */
+async function propuestaMover(
+  actor: Actor,
+  i: { clase_ids: string[]; hora: string; desplazar_dias?: number },
+  acciones: AccionPropuesta[],
+  nota: string,
+  lang: Lang = "es",
+): Promise<ToolResult> {
+  const plan = await planMover(actor, { classIds: i.clase_ids, hora: i.hora, desplazarDias: i.desplazar_dias });
+  if (!plan.ok) return fail(plan.motivo);
+  const m = plan.moves;
+  const n = m.length;
+  const de = lang === "de";
+  return propuesta(acciones, {
+    tipo:   "mover",
+    titulo: n > 1 ? (de ? `${n} Stunden verschieben` : `Mover ${n} clases`) : (de ? "Stunde verschieben" : "Mover clase"),
+    lineas: [
+      `${de ? "Erste" : "Primera"}: ${fmt(m[0].from)} → ${fmt(m[0].to)}`,
+      ...(n > 1 ? [`${de ? "Letzte" : "Última"}: ${fmt(m[n - 1].from)} → ${fmt(m[n - 1].to)}`] : []),
+    ],
+    nota,
+    hecho:  n > 1 ? (de ? `${n} Stunden verschoben` : `${n} clases movidas`) : undefined,
+    request: { method: "POST", url: "/api/asistente/mover-clases", body: { classIds: i.clase_ids, hora: i.hora, ...(i.desplazar_dias ? { desplazarDias: i.desplazar_dias } : {}) } },
+  });
+}
+
+const moverSpec = (descripcion: string): Anthropic.Tool => ({
+  name: "proponer_mover_varias",
+  description: `Prepara (sin ejecutar) UNA sola tarjeta que mueve varias clases sueltas (hasta ${MAX_MOVER}) a una hora nueva, con un solo aviso. ${descripcion} Si cambian de día de la semana, usa desplazar_dias y una tarjeta por cada día de la semana de origen. No mezcles aquí las dos clases de una doble: quedarían pisadas.`,
+  input_schema: {
+    type: "object",
+    properties: {
+      clase_ids: { type: "array", items: { type: "string" }, description: "clase_id de cada clase a mover." },
+      hora: { type: "string", description: "Nueva hora de inicio en Berlín, HH:MM." },
+      desplazar_dias: { type: "integer", description: "Días a sumar o restar a cada clase (-6 a 6). Por defecto 0: mismo día." },
+    },
+    required: ["clase_ids", "hora"],
+  },
+});
+const MoverInput = z.object({ clase_ids: z.array(Uuid).min(1).max(MAX_MOVER), hora: Hora, desplazar_dias: z.number().int().min(-6).max(6).optional() });
+
+/** Chat directo ya existente entre dos usuarios (no crea nada). */
+async function directChat(a: string, b: string): Promise<string | null> {
+  const sb = supabaseAdmin();
+  const { data } = await sb.from("chat_participants").select("chat_id, user_id, chats!inner(type)").in("user_id", [a, b]).eq("chats.type", "direct");
+  const seen = new Map<string, Set<string>>();
+  for (const r of (data ?? []) as Array<{ chat_id: string; user_id: string }>) {
+    const set = seen.get(r.chat_id) ?? new Set<string>();
+    set.add(r.user_id);
+    seen.set(r.chat_id, set);
+  }
+  for (const [id, set] of seen) if (set.has(a) && set.has(b)) return id;
+  return null;
+}
+
+function propuestaMensaje(acciones: AccionPropuesta[], chatId: string, destinatario: string, texto: string, lang: Lang = "es"): ToolResult {
+  const de = lang === "de";
+  return propuesta(acciones, {
+    tipo:   "mensaje",
+    titulo: `${de ? "Nachricht an" : "Mensaje para"} ${destinatario}`,
+    lineas: [`«${texto}»`],
+    nota:   de ? "Wird in deinem Namen im Chat gesendet." : "Se envía en tu nombre por el chat de la plataforma.",
+    hecho:  de ? "Nachricht gesendet" : "Mensaje enviado",
+    request: { method: "POST", url: `/api/chat/${chatId}/messages`, body: { content: texto } },
+  });
+}
+
+/** Busca material de estudio por palabras (vídeos de la serie y lecciones oficiales). */
+async function buscarMaterial(texto: string, studentId: string | null) {
+  const q = norm(texto);
+  const hit = (...v: Array<string | null | undefined>) => !q || v.some(x => x && norm(x).includes(q));
+  const [eps, shared, propios] = await Promise.all([
+    listEpisodes(studentId),
+    listSharedMaterials(),
+    studentId ? listMaterialsVisibleToStudent(studentId) : Promise.resolve([]),
+  ]);
+  return {
+    videos: eps.filter(e => hit(e.title_es, e.title_de, e.topic, ...e.keywords.flatMap(k => [k.de, k.es]))).slice(0, 5)
+      .map(e => ({ titulo: e.title_es, nivel: e.level, tema: e.topic, enlace: `/estudiante/videos/${e.slug}` })),
+    lecciones: shared.filter(m => hit(m.title, m.subtitle, m.module_name, m.level)).slice(0, 8)
+      .map(m => ({ titulo: m.title, nivel: m.level, modulo: m.module_name, enlace: m.gamma_url })),
+    del_profesor: propios.filter(m => hit(m.title, m.description, ...m.tags)).slice(0, 5)
+      .map(m => ({ titulo: m.title, profesor: m.teacher_name, enlace: m.file_url })),
+  };
+}
+
+type ClasePasada = { fecha: string; titulo: string; tema: string | null; notas: string | null };
+
+/** Últimas clases dadas. `soloCompartidas`: el alumno solo ve notas que el profe compartió. */
+async function clasesPasadas(studentId: string, opts: { soloCompartidas: boolean; teacherId?: string; limite?: number }): Promise<ClasePasada[]> {
+  const sb = supabaseAdmin();
+  let q = sb
+    .from("classes")
+    .select("id, title, topic, scheduled_at, teacher_notes, notes_shared_with_student, class_participants!inner(student_id)")
+    .eq("class_participants.student_id", studentId)
+    .eq("status", "completed")
+    .eq("is_trial", false)
+    .is("deleted_at", null)
+    .order("scheduled_at", { ascending: false })
+    .limit(opts.limite ?? 5);
+  if (opts.teacherId) q = q.eq("teacher_id", opts.teacherId);
+  const { data } = await q;
+  return ((data ?? []) as Array<{ title: string; topic: string | null; scheduled_at: string; teacher_notes: string | null; notes_shared_with_student: boolean }>).map(c => ({
+    fecha:  berlinDate(c.scheduled_at),
+    titulo: c.title,
+    tema:   c.topic,
+    notas:  !opts.soloCompartidas || c.notes_shared_with_student ? c.teacher_notes : null,
+  }));
+}
+
+function tareasDto(items: Awaited<ReturnType<typeof getStudentHomework>>) {
+  return items.slice(0, 15).map(h => ({
+    titulo:      h.title,
+    descripcion: h.description,
+    entrega:     h.due_date,
+    estado:      !h.submission ? "pendiente" : h.submission.status === "needs_revision" ? "a corregir" : h.submission.status === "submitted" ? "en revisión" : "revisada",
+    nota:        h.submission?.grade ?? null,
+    comentario:  h.submission?.teacher_feedback ?? null,
+  }));
+}
+
 /** Validación común de una clase que se quiere mover/cancelar. */
 function claseNoEditable(c: ClaseLite): string | null {
   if (c.is_trial) return "Es una clase de prueba: se gestiona desde la sección «Clases de prueba», no desde el asistente.";
@@ -285,7 +426,102 @@ function studentTools(ctx: Extract<AsistenteCtx, { role: "student" }>): ToolDef[
         input_schema: { type: "object", properties: {} },
       },
       input: z.object({}),
-      run: async () => ({ clases: (await getStudentUpcomingClasses(ctx.studentId)).map(claseDto) }),
+      run: async () => ({ clases: (await getStudentUpcomingClasses(ctx.studentId, new Date(), 120)).map(claseDto) }),
+    },
+    NO_RESUELTO_SPEC,
+    {
+      spec: {
+        name: "repaso_clases",
+        description: "Últimas clases dadas del estudiante: fecha, tema y las notas que su profesor compartió. Para «¿qué vimos la última clase?». También indica si tiene documento de apuntes.",
+        input_schema: { type: "object", properties: {} },
+      },
+      input: z.object({}),
+      run: async () => {
+        const { data } = await supabaseAdmin().from("students").select("document_url").eq("id", ctx.studentId).maybeSingle();
+        return {
+          clases: await clasesPasadas(ctx.studentId, { soloCompartidas: true }),
+          documento_de_apuntes: (data as { document_url: string | null } | null)?.document_url ?? null,
+        };
+      },
+    },
+    {
+      spec: {
+        name: "mis_tareas",
+        description: "Tareas del estudiante: pendientes, en revisión y revisadas, con fecha de entrega y comentario del profesor.",
+        input_schema: { type: "object", properties: {} },
+      },
+      input: z.object({}),
+      run: async () => ({ tareas: tareasDto(await getStudentHomework(ctx.studentId)), seccion: "/estudiante/tareas" }),
+    },
+    {
+      spec: {
+        name: "mis_grabaciones",
+        description: "Grabaciones listas de las clases del estudiante, las más recientes primero, con enlace. Opcionalmente de una fecha.",
+        input_schema: { type: "object", properties: { fecha: fechaProp } },
+      },
+      input: z.object({ fecha: Fecha.optional() }),
+      run: async (i: { fecha?: string }) => {
+        const recs = (await getStudentRecordings(ctx.studentId)).filter(r => r.status === "ready" && (!i.fecha || berlinDate(r.scheduled_at) === i.fecha));
+        return { grabaciones: recs.slice(0, 8).map(r => ({ clase: r.class_title, cuando: fmt(r.scheduled_at), enlace: `/grabacion/${r.id}` })) };
+      },
+    },
+    {
+      spec: {
+        name: "buscar_material",
+        description: "Busca material de estudio por palabra: vídeos de la serie, lecciones oficiales por nivel y material de su profesor. Devuelve enlaces. Busca una sola palabra o tema, y prueba en alemán y en español si no aparece.",
+        input_schema: { type: "object", properties: { texto: { type: "string" } }, required: ["texto"] },
+      },
+      input: z.object({ texto: z.string().trim().max(80) }),
+      run: async (i: { texto: string }) => buscarMaterial(i.texto, ctx.studentId),
+    },
+    {
+      spec: {
+        name: "proponer_cancelar",
+        description: "Prepara (sin ejecutar) cancelar UNA clase individual del estudiante. Solo hasta 24 h antes; la clase vuelve a su saldo.",
+        input_schema: { type: "object", properties: { clase_id: { type: "string", description: "clase_id obtenido de mis_clases." } }, required: ["clase_id"] },
+      },
+      input: z.object({ clase_id: Uuid }),
+      run: async (i: { clase_id: string }, acciones) => {
+        const c = await loadClase(i.clase_id);
+        if (!c || !c.students.some(s => s.id === ctx.studentId)) return fail("No encuentro esa clase entre las del estudiante.");
+        const bad = claseNoEditable(c);
+        if (bad) return fail(bad);
+        if (c.type !== "individual") return fail("Las clases grupales las gestiona el profesor.");
+        if ((new Date(c.scheduled_at).getTime() - Date.now()) / 3_600_000 < RESCHEDULE_CUTOFF_HOURS) {
+          return fail(`Solo se puede cancelar hasta ${RESCHEDULE_CUTOFF_HOURS} h antes de la clase. Sugiere escribir al profesor por Mensajes.`);
+        }
+        const de = ctx.lang === "de";
+        return propuesta(acciones, {
+          tipo:   "cancelar",
+          titulo: de ? "Stunde absagen" : "Cancelar clase",
+          lineas: [fmt(c.scheduled_at), c.title],
+          nota:   de ? "Die Stunde geht zurück auf dein Guthaben. Deine Lehrkraft wird benachrichtigt." : "La clase vuelve a tu saldo. Tu profesor recibirá una notificación.",
+          request: { method: "DELETE", url: `/api/student/schedule/${c.id}`, body: null },
+        });
+      },
+    },
+    {
+      spec: moverSpec("Para cambiar el horario fijo del estudiante. Reglas: solo clases individuales suyas, con más de 24 h de margen, y a huecos libres de su profesor."),
+      input: MoverInput,
+      run: async (i: z.infer<typeof MoverInput>, acciones) => propuestaMover(
+        { role: "student", studentId: ctx.studentId }, i, acciones,
+        ctx.lang === "de" ? "Deine Lehrkraft wird einmal benachrichtigt." : "Tu profesor recibirá una sola notificación.", ctx.lang,
+      ),
+    },
+    {
+      spec: {
+        name: "proponer_mensaje",
+        description: "Prepara (sin enviar) un mensaje al profesor del estudiante por el chat de la plataforma. Muestra el texto exacto en la tarjeta. Si el usuario no dictó el texto, redáctalo breve y fiel a lo que pidió.",
+        input_schema: { type: "object", properties: { texto: { type: "string" } }, required: ["texto"] },
+      },
+      input: z.object({ texto: z.string().trim().min(1).max(2000) }),
+      run: async (i: { texto: string }, acciones) => {
+        const teacher = await resolveStudentTeacher(ctx.studentId);
+        if (!teacher) return fail("El estudiante aún no tiene profesor asignado.");
+        const chatId = await directChat(ctx.userId, teacher.teacherUserId);
+        if (!chatId) return fail("Aún no hay un chat abierto con su profesor. Se abre al agendar la primera clase; mientras, que escriba a la academia.");
+        return propuestaMensaje(acciones, chatId, teacher.teacherName, i.texto, ctx.lang);
+      },
     },
     {
       spec: {
@@ -522,7 +758,151 @@ function staffTools(ctx: Extract<AsistenteCtx, { role: "teacher" | "admin" }>): 
     return name ? { id: studentId, name } : "No encuentro ese estudiante.";
   };
 
+  const actor: Actor = ctx.role === "teacher" ? { role: "teacher", teacherId: ctx.teacherId } : { role: "admin" };
+
+  if (ctx.role === "teacher") {
+    const teacherId = ctx.teacherId;
+    tools.push(
+      {
+        spec: {
+          name: "mis_ganancias",
+          description: "Ganancias del profesor por mes (últimos 6): clases, horas, importe y si está pagado. Es lo mismo que ve en «Ganancias»; ajustes de nómina pueden no estar reflejados.",
+          input_schema: { type: "object", properties: {} },
+        },
+        input: z.object({}),
+        run: async () => ({
+          meses: (await getTeacherEarningsSummary(teacherId, 6)).map(m => ({
+            mes: m.month.slice(0, 7), clases: m.classes_count, horas: Math.round(m.total_minutes / 6) / 10,
+            importe: `${(m.amount_cents / 100).toFixed(2)} ${m.currency}`, pagado: m.paid,
+          })),
+          seccion: "/profesor/ganancias",
+        }),
+      },
+      {
+        spec: {
+          name: "mis_grabaciones",
+          description: "Grabaciones listas de las clases del profesor (sin clases de prueba), las más recientes primero, con enlace.",
+          input_schema: { type: "object", properties: {} },
+        },
+        input: z.object({}),
+        run: async () => {
+          const recs = (await getTeacherRecordings(teacherId)).filter(r => r.status === "ready" && !r.is_trial);
+          return { grabaciones: recs.slice(0, 8).map(r => ({ clase: r.class_title, cuando: fmt(r.scheduled_at), enlace: `/grabacion/${r.id}` })) };
+        },
+      },
+      {
+        spec: {
+          name: "proponer_mensaje",
+          description: "Prepara (sin enviar) un mensaje a un estudiante del profesor por el chat de la plataforma. Muestra el texto exacto en la tarjeta. Si el usuario no dictó el texto, redáctalo breve y fiel a lo que pidió.",
+          input_schema: { type: "object", properties: { estudiante_id: estudianteProp, texto: { type: "string" } }, required: ["estudiante_id", "texto"] },
+        },
+        input: z.object({ estudiante_id: Uuid, texto: z.string().trim().min(1).max(2000) }),
+        run: async (i: { estudiante_id: string; texto: string }, acciones) => {
+          const s = (await teacherStudents(teacherId)).find(x => x.id === i.estudiante_id);
+          if (!s) return fail("Ese estudiante no está entre los del profesor.");
+          const { data } = await sb.from("students").select("user_id").eq("id", s.id).maybeSingle();
+          const chatId = await directChat(ctx.userId, (data as { user_id: string }).user_id);
+          if (!chatId) return fail("Aún no hay un chat directo con ese estudiante: se abre al agendar una clase individual. Puede escribirle desde «Mensajes» si es por grupo.");
+          return propuestaMensaje(acciones, chatId, s.name, i.texto);
+        },
+      },
+    );
+  }
+
   tools.push(
+    NO_RESUELTO_SPEC,
+    {
+      spec: {
+        name: "preparar_clase",
+        description: "Resumen para preparar la clase con un estudiante: nivel y meta, últimas clases con tema y notas, tareas, saldo y próxima clase.",
+        input_schema: { type: "object", properties: { estudiante_id: estudianteProp }, required: ["estudiante_id"] },
+      },
+      input: z.object({ estudiante_id: Uuid }),
+      run: async (i: { estudiante_id: string }) => {
+        const s = await resolveStudent(i.estudiante_id);
+        if (typeof s === "string") return fail(s);
+        const teacherId = ctx.role === "teacher" ? ctx.teacherId : undefined;
+        const [perfil, pasadas, tareas, saldo, proximas] = await Promise.all([
+          sb.from("students").select("current_level, goal, document_url").eq("id", s.id).maybeSingle(),
+          clasesPasadas(s.id, { soloCompartidas: false, teacherId }),
+          getStudentHomework(s.id),
+          saldoDto(s.id),
+          getStudentUpcomingClasses(s.id),
+        ]);
+        const p = perfil.data as { current_level: string | null; goal: string | null; document_url: string | null } | null;
+        const prox = proximas.find(c => !teacherId || c.teacher_id === teacherId);
+        return {
+          estudiante: s.name, nivel: p?.current_level ?? null, meta: p?.goal ?? null, documento_de_apuntes: p?.document_url ?? null,
+          ultimas_clases: pasadas, tareas: tareasDto(tareas), saldo, proxima_clase: prox ? fmt(prox.scheduled_at) : null,
+        };
+      },
+    },
+    {
+      spec: {
+        name: "buscar_material",
+        description: "Busca material oficial de la academia por palabra: vídeos de la serie y lecciones por nivel. Devuelve enlaces. Busca una sola palabra o tema.",
+        input_schema: { type: "object", properties: { texto: { type: "string" } }, required: ["texto"] },
+      },
+      input: z.object({ texto: z.string().trim().max(80) }),
+      run: async (i: { texto: string }) => {
+        const r = await buscarMaterial(i.texto, null);
+        return { videos: r.videos.map(v => ({ ...v, enlace: v.enlace.replace("/estudiante/", isAdmin ? "/admin/" : "/profesor/") })), lecciones: r.lecciones };
+      },
+    },
+    {
+      spec: moverSpec("Para cambiar el horario de muchas clases sueltas de un estudiante. Comprueba solapes con otras clases del profesor."),
+      input: MoverInput,
+      run: async (i: z.infer<typeof MoverInput>, acciones) => propuestaMover(actor, i, acciones,
+        isAdmin ? "Desde el panel de admin este cambio NO avisa al estudiante ni al profesor." : "El estudiante recibirá un solo email y notificación con el resumen."),
+    },
+    {
+      spec: {
+        name: "proponer_bloqueo",
+        description: "Prepara (sin ejecutar) una excepción puntual de disponibilidad: «bloqueo» (esa franja no está disponible esa fecha) o «apertura» (abrirla solo esa fecha). No cancela clases ya agendadas: si hay alguna en esa franja, se avisa.",
+        input_schema: {
+          type: "object",
+          properties: {
+            ...(isAdmin ? { profesor_id: profesorProp } : {}),
+            fecha: fechaProp,
+            hora_inicio: { type: "string", description: "HH:MM en Berlín." },
+            hora_fin: { type: "string", description: "HH:MM en Berlín." },
+            tipo: { type: "string", enum: ["bloqueo", "apertura"], description: "Por defecto «bloqueo»." },
+            motivo: { type: "string" },
+          },
+          required: [...(isAdmin ? ["profesor_id"] : []), "fecha", "hora_inicio", "hora_fin"],
+        },
+      },
+      input: z.object({
+        profesor_id: Uuid.optional(), fecha: Fecha, hora_inicio: Hora, hora_fin: Hora,
+        tipo: z.enum(["bloqueo", "apertura"]).optional(), motivo: z.string().trim().max(200).optional(),
+      }),
+      run: async (i: { profesor_id?: string; fecha: string; hora_inicio: string; hora_fin: string; tipo?: "bloqueo" | "apertura"; motivo?: string }, acciones) => {
+        const t = await resolveTeacher(i.profesor_id);
+        if (typeof t === "string") return fail(t);
+        if (i.hora_fin <= i.hora_inicio) return fail("La hora de fin debe ser posterior a la de inicio.");
+        if (i.fecha < berlinDate(new Date())) return fail("Esa fecha ya pasó.");
+        const kind = i.tipo ?? "bloqueo";
+        const startIso = berlinToIso(i.fecha, i.hora_inicio);
+        const minutes = Math.round((new Date(berlinToIso(i.fecha, i.hora_fin)).getTime() - new Date(startIso).getTime()) / 60_000);
+        const pisadas = kind === "bloqueo"
+          ? await findTeacherConflicts(sb, { teacherId: t.id, startIso, durationMinutes: minutes, breakMinutes: 0 })
+          : [];
+        return propuesta(acciones, {
+          tipo:   "bloquear",
+          titulo: kind === "bloqueo" ? "Bloquear disponibilidad" : "Abrir disponibilidad",
+          lineas: [`${formatClassDateEs(`${i.fecha}T12:00:00Z`)} · ${i.hora_inicio}–${i.hora_fin} (hora de Berlín)`, ...(isAdmin ? [`Prof. ${t.name}`] : []), ...(i.motivo ? [i.motivo] : [])],
+          nota:   pisadas.length > 0
+            ? `Ojo: hay ${pisadas.length} ${pisadas.length === 1 ? "clase agendada" : "clases agendadas"} en esa franja (${fmt(pisadas[0].scheduled_at)}) y NO se cancelan.`
+            : "Solo afecta a los huecos nuevos que se ofrecen; nadie recibe aviso.",
+          hecho:  kind === "bloqueo" ? "Franja bloqueada" : "Franja abierta",
+          request: {
+            method: "POST",
+            url: `/api/teacher/availability/exceptions${isAdmin ? `?teacherId=${t.id}` : ""}`,
+            body: { date: i.fecha, start_time: i.hora_inicio, end_time: i.hora_fin, kind, ...(i.motivo ? { reason: i.motivo } : {}) },
+          },
+        });
+      },
+    },
     {
       spec: {
         name: "saldo_estudiante",

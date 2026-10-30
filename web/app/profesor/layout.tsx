@@ -6,7 +6,7 @@ import { ImminentClassBannerLoader } from "@/components/classes/ImminentClassBan
 import { NAV_BY_ROLE } from "@/lib/nav-items";
 import { getImpersonation } from "@/lib/impersonation";
 import { AsistenteWidget } from "@/components/asistente/AsistenteWidget";
-import { asistenteVisible } from "@/lib/asistente/config";
+import { asistenteLang, asistenteVisible } from "@/lib/asistente/config";
 
 export const metadata = { title: "Profesor · Aprender-Aleman.de" };
 
@@ -45,7 +45,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
       </AppShell>
       {/* Asistente IA: solo para la sesión real del rol (no en "Ver como"). */}
       {!imp && session.user.role === "teacher" && asistenteVisible("teacher") && (
-        <AsistenteWidget rol="teacher" nombre={display.split(/\s+/)[0] ?? ""} />
+        <AsistenteWidget rol="teacher" nombre={display.split(/\s+/)[0] ?? ""} userId={session.user.id} lang={await asistenteLang(session.user.id)} />
       )}
     </>
   );

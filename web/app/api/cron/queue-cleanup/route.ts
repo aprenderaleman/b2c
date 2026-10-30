@@ -57,6 +57,10 @@ async function run(req: Request) {
       .lt("created_at", cutoff30d),
   ]);
 
+  // Registro del Asistente IA: retención de 90 días (migración 149).
+  await sb.from("asistente_logs").delete()
+    .lt("created_at", new Date(now - 90 * 24 * 3600_000).toISOString());
+
   return NextResponse.json({
     ok: true,
     failed_permanent_deleted: r1.count ?? 0,
