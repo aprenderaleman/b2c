@@ -46,8 +46,11 @@ export function AppShell({
   const hasChatItem = items.some(it => CHAT_HREFS.has(it.href));
   const chatUnread  = useChatUnread(hasChatItem);
 
+  // Lienzo del modo claro #E9EDF4 (Gelfis 2026-10-31): el blanco casi
+  // puro deslumbraba y las tarjetas blancas no se separaban. Gris
+  // azulado frío alineado con el navy de marca; modo oscuro intacto.
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex">
+    <div className="app-canvas min-h-screen bg-[#E9EDF4] dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex">
       <SidebarDesktop
         items={items}
         role={role}
@@ -58,7 +61,7 @@ export function AppShell({
 
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top header — minimal on desktop, compact on mobile */}
-        <header className="sticky top-0 z-30 h-14 border-b border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur flex items-center px-4 sm:px-6 gap-2">
+        <header className="sticky top-0 z-30 h-14 border-b border-slate-200 dark:border-slate-800 bg-[#E9EDF4]/90 dark:bg-slate-900/90 backdrop-blur flex items-center px-4 sm:px-6 gap-2">
           <div className="lg:hidden">
             <Logo variant="compact" href={defaultHome(role)} size={32} />
           </div>

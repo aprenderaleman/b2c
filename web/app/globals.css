@@ -332,3 +332,13 @@
     font-size: 16px !important;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Modo claro del área logueada (Gelfis 2026-10-31): el texto
+   secundario slate-500 sube un punto de contraste sobre el nuevo
+   lienzo #E9EDF4. Solo en light (html sin .dark) y solo dentro
+   del AppShell (.app-canvas) — landings públicas intactas.
+   ───────────────────────────────────────────────────────────── */
+html:not(.dark) .app-canvas .text-slate-500 {
+  color: #55617a;
+}
