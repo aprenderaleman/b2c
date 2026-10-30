@@ -913,3 +913,16 @@ export async function sendRankChangeEmail(
   const { subject, html, text } = renderRankChange(vars);
   return sendRaw(to, subject, html, text);
 }
+
+import { renderChatMessage, type ChatMessageEmailVars } from "./templates/chat-message";
+/**
+ * Aviso de mensaje nuevo en el chat (Gelfis 2026-10-30). Lo dispara
+ * lib/chat-email-notify.ts con debounce de 30 min por chat y destinatario.
+ */
+export async function sendChatMessageEmail(
+  to: string,
+  vars: ChatMessageEmailVars,
+): Promise<SendResult> {
+  const { subject, html, text } = renderChatMessage(vars);
+  return sendRaw(to, subject, html, text);
+}

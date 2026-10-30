@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { chatDisplayName, type ChatViewerRole } from "./chat-display";
+import { notifyChatMessageByEmail } from "./chat-email-notify";
 
 // =============================================================================
 // Types
@@ -473,6 +474,8 @@ export async function sendMessage(args: {
   content:   string;
   attachments?: MessageRow["attachments"];
   replyTo?:  string | null;
+  /** Aviso por email a los demás participantes (Gelfis 2026-10-30). Default true; los scripts masivos pueden apagarlo. */
+  notifyEmail?: boolean;
 }): Promise<MessageRow | null> {
   if (!args.content.trim() && (!args.attachments || args.attachments.length === 0)) {
     return null;
@@ -497,6 +500,15 @@ export async function sendMessage(args: {
     .update({ last_read_at: (data as { sent_at: string }).sent_at })
     .eq("chat_id", args.chatId)
     .eq("user_id", args.authorId);
+
+  // Email breve a los demás participantes (máx. 1 cada 30 min por chat).
+  // Nunca bloquea ni rompe el envío del mensaje.
+  if (args.notifyEmail !== false) {
+    await notifyChatMessageByEmail({
+      chatId: args.chatId, messageId: (data as { id: string }).id, authorId: args.authorId,
+      content: args.content, attachments: args.attachments ?? [],
+    }).catch(e => console.error("[chat] email notify failed:", e));
+  }
 
   return {
     ...(data as Omit<MessageRow, "author_name" | "author_email" | "attachments"> & {
