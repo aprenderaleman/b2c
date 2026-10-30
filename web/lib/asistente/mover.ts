@@ -109,7 +109,9 @@ export async function planMover(
     const free = new Set(slots.map(s => new Date(s.startIso).getTime()));
     for (const m of moves) {
       if (!free.has(new Date(m.to).getTime())) {
-        return { ok: false, motivo: `El ${fmt(m.to)} no es un hueco libre de tu profesor.` };
+        const dia = berlinYmd(m.to);
+        const horas = slots.filter(x => berlinYmd(x.startIso) === dia).map(x => formatClassTimeEs(x.startIso));
+        return { ok: false, motivo: `El ${fmt(m.to)} no es un hueco libre de tu profesor. Huecos de ese día: ${horas.join(", ") || "ninguno"}. Las demás fechas pueden fallar igual: prueba con una de esas horas.` };
       }
     }
   }
