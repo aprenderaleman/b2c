@@ -32,7 +32,7 @@ export async function GET(
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const messages = await listChatMessages(id);
+  const messages = await listChatMessages(id, 100, caller.role)
   return NextResponse.json({ messages });
 }
 

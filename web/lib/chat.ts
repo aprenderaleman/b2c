@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { chatDisplayName, type ChatViewerRole } from "./chat-display";
 
 // =============================================================================
 // Types
@@ -259,7 +260,7 @@ export async function canAccessChat(chatId: string, userId: string): Promise<boo
   return others.length > 0 && others.every(id => allowed.has(id));
 }
 
-export async function listChatsForUser(userId: string): Promise<ChatListItem[]> {
+export async function listChatsForUser(userId: string, viewerRole?: ChatViewerRole): Promise<ChatListItem[]> {
   const sb = supabaseAdmin();
   const allowed = await allowedChatCounterparts(userId);
 
@@ -339,7 +340,7 @@ export async function listChatsForUser(userId: string): Promise<ChatListItem[]> 
     const parts = byChat[r.chat_id] ?? [];
     const others = parts.filter(p => p.user_id !== userId);
     const title = chat.type === "direct"
-      ? (others[0]?.full_name ?? others[0]?.email ?? "Conversación")
+      ? ((others[0] ? chatDisplayName(others[0], viewerRole) : null) ?? others[0]?.email ?? "Conversación")
       : (chat.title ?? "Grupo");
     const lm = lastByChat[r.chat_id];
     return {
@@ -425,7 +426,7 @@ export async function isChatParticipant(chatId: string, userId: string): Promise
   return Boolean(data);
 }
 
-export async function listChatMessages(chatId: string, limit = 100): Promise<MessageRow[]> {
+export async function listChatMessages(chatId: string, limit = 100, viewerRole?: ChatViewerRole): Promise<MessageRow[]> {
   const sb = supabaseAdmin();
   const { data, error } = await sb
     .from("messages")
@@ -452,7 +453,7 @@ export async function listChatMessages(chatId: string, limit = 100): Promise<Mes
       id:                   m.id,
       chat_id:              m.chat_id,
       author_id:            m.author_id,
-      author_name:          a?.full_name ?? null,
+      author_name:          a ? chatDisplayName(a, viewerRole) : null,
       author_email:         a?.email ?? "",
       content:              m.content,
       attachments:          Array.isArray(m.attachments) ? (m.attachments as MessageRow["attachments"]) : [],

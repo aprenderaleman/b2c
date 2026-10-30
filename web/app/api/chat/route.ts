@@ -12,7 +12,7 @@ export async function GET() {
   const caller = await resolveChatCaller();
   if (!caller) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const [chats, colleagues] = await Promise.all([
-    listChatsForUser(caller.userId),
+    listChatsForUser(caller.userId, caller.role),
     getColleagueContacts(caller.userId),
   ]);
   return NextResponse.json({ chats, colleagues });
