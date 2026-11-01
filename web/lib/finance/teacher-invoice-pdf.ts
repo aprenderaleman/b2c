@@ -130,7 +130,10 @@ export async function buildTeacherInvoicePdf(args: {
              | { user: { full_name: string | null } | { full_name: string | null }[] | null }[] | null;
     };
     for (const c of (comisionesData ?? []) as unknown as ComRow[]) {
-      if (c.monto_cents <= 0) continue;
+      // Los importes negativos (ajustes de meses anteriores, descuento de
+      // adelantos) SÍ se listan: si no, el total del PDF no cuadra con
+      // teacher_earnings (caso Jonathan −67,20 / Thomas −61, oct 2026).
+      if (c.monto_cents === 0) continue;
       const st = Array.isArray(c.student) ? c.student[0] : c.student;
       const su = Array.isArray(st?.user) ? st?.user[0] : st?.user;
       commDetails.push({
@@ -502,10 +505,12 @@ export async function buildTeacherInvoicePdf(args: {
     };
     const comLabel = (tipo: string, escenario?: string): string => {
       if (tipo === "bono_cierre") {
-        const k = escenario?.startsWith("bono_cierre:") ? escenario.slice("bono_cierre:".length) : null;
+        // El escenario puede llevar una nota detrás ("bono_cierre:pago_unico (diferencia…)").
+        const k = escenario?.startsWith("bono_cierre:") ? escenario.slice("bono_cierre:".length).split(/[\s(]/)[0] : null;
         return k && ritmoLabel[k] ? `Bono de cierre (${ritmoLabel[k]})` : "Bono de cierre";
       }
-      if (tipo === "conversion" && escenario?.startsWith("ajuste")) return "Ajuste de comisión (mes anterior)";
+      // Corto para que quepan alumno y fecha en la columna.
+      if (tipo === "conversion" && escenario?.startsWith("ajuste")) return "Ajuste mes anterior";
       if (escenario?.startsWith("adelanto")) return "Descuento: adelanto de equipo";
       if (tipo === "conversion") return "Comisión por conversión";
       if (tipo === "comision_base") return "Comisión base";
@@ -525,7 +530,8 @@ export async function buildTeacherInvoicePdf(args: {
       doc.font("Helvetica").fontSize(10).fillColor("#0f172a");
       // "Comisión por conversión · Nathaly rojas (09-09)" — alumno y fecha
       // del cierre, para que el profe reconozca cada línea (Gelfis 2026-09-27).
-      const when  = cd.created_at.slice(5, 10).replace("-", "/");
+      // DD/MM, como el resto del recibo (antes salía MM/DD: "10/16").
+      const when  = `${cd.created_at.slice(8, 10)}/${cd.created_at.slice(5, 7)}`;
       // Nombre + primer apellido: los nombres completos no caben en la
       // columna y se partían en dos líneas pisando la fila siguiente.
       const PARTICLES = new Set(["da", "de", "del", "della", "di", "van", "von", "la", "le", "dos", "das", "y"]);
