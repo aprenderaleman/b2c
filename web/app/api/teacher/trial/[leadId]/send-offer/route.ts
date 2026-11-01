@@ -9,6 +9,12 @@ import {
   type RitmoId, type GoalId, type PlanCategory, type PaymentType,
 } from "@/lib/trial-packs";
 import { isCatalogActive, getActiveCatalog, getCatalogRitmos, getCatalogOneTimePacks, getCatalogKidsPack } from "@/lib/catalog";
+import {
+  GROUP_FORMAT_LABELS, GROUP_LEVELS, GROUP_PRICES, GROUP_SESSIONS,
+  buildGroupUrl, renderGroupOfferMessage,
+  type GroupFormat, type GroupLevelId, type GroupRitmo,
+} from "@/lib/group-packs";
+import { sendWhatsappText } from "@/lib/whatsapp";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -55,6 +61,87 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   const kidsPayment = body.kidsPayment as "single" | "flexible" | undefined;
 
   if (!category) return NextResponse.json({ error: "missing_category" }, { status: 400 });
+
+  // ── Dúo / Trío (Gelfis 2026-10-31) ──────────────────────────────────
+  // Rama propia: el enlace es la URL /g/ del sitio raíz (no Stripe-
+  // checkout de esta app) y el mensaje viene del preview editable del
+  // profesor. El lead paga su parte y reenvía el MISMO enlace a sus
+  // compañeros (grp compartido → emparejados en Stripe metadata).
+  if ((category as string) === "grupo") {
+    const format = body.format as GroupFormat | undefined;
+    const lvl    = body.lvl as GroupLevelId | undefined;
+    const r      = Number(body.r) as GroupRitmo;
+    const rawMsg = typeof body.message === "string" ? body.message.trim() : "";
+
+    if (format !== "duo" && format !== "trio") return NextResponse.json({ error: "invalid_format" }, { status: 400 });
+    if (!lvl || !GROUP_LEVELS.some(l => l.id === lvl)) return NextResponse.json({ error: "invalid_lvl" }, { status: 400 });
+    if (r !== 2 && r !== 3 && r !== 4) return NextResponse.json({ error: "invalid_ritmo" }, { status: 400 });
+
+    const url = buildGroupUrl(format, lvl, r, leadId);
+    // El profesor puede editar el mensaje, pero el enlace /g/ debe
+    // sobrevivir a la edición — sin él el lead no puede pagar.
+    const message = rawMsg.includes("aprender-aleman.de/g/") ? rawMsg : null;
+    if (!message) return NextResponse.json({ error: "message_missing_link", url }, { status: 400 });
+
+    const sbG = supabaseAdmin();
+    const { data: tRow } = await sbG.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
+    if (!tRow) return NextResponse.json({ error: "teacher_not_found" }, { status: 404 });
+    const { data: lRow } = await sbG
+      .from("leads").select("name, whatsapp_normalized, meta").eq("id", leadId).maybeSingle();
+    if (!lRow) return NextResponse.json({ error: "lead_not_found" }, { status: 404 });
+    const lead = lRow as { name: string | null; whatsapp_normalized: string | null; meta: unknown };
+
+    const priceMonth = GROUP_PRICES[format][lvl][r];
+    const sessions   = GROUP_SESSIONS[lvl];
+    const label      = `${GROUP_FORMAT_LABELS[format]} ${GROUP_LEVELS.find(l => l.id === lvl)!.label} · ${r}/sem`;
+
+    await sbG.from("ofertas_enviadas").insert({
+      lead_id:        leadId,
+      teacher_id:     (tRow as { id: string }).id,
+      meta:           lvl,
+      ritmo:          `${format}_${r}sem`,
+      tipo_pago:      "suscripcion",
+      clases_totales: sessions,
+      clases_por_mes: r * 4,
+      importe_cents:  priceMonth * 100,
+    });
+
+    // WhatsApp al lead — mismo kind whitelisted que la oferta individual.
+    const wa = await sendWhatsappText(lead.whatsapp_normalized, message, { kind: "trial_inscription_initial" });
+
+    // Lead a trial_attended + awaiting payment (espejo reducido de
+    // markTrialAttendedAwaitingConversion, sin sus mensajes automáticos).
+    const existingMeta = (lead.meta && typeof lead.meta === "object") ? lead.meta as Record<string, unknown> : {};
+    await sbG.from("leads").update({
+      status:            "trial_attended",
+      trial_attended_at: new Date().toISOString(),
+      next_contact_date: new Date(Date.now() + 3 * 24 * 3600_000).toISOString(),
+      meta: {
+        ...existingMeta,
+        awaiting_payment_confirmation_since: new Date().toISOString(),
+        last_offered_pack:    `${format}_${lvl}`,
+        last_offered_payment: "flexible",
+      },
+    }).eq("id", leadId);
+
+    await sbG.from("lead_timeline").insert({
+      lead_id: leadId,
+      type: "agent_note",
+      author: "system",
+      content: `👥 Oferta ${label} enviada: ${priceMonth} €/mes/persona · ${sessions} sesiones de 90 min${wa.ok ? "" : ` · ⚠️ WhatsApp NO salió (${wa.reason ?? "error"})`}`,
+      metadata: { kind: "offer_sent", category: "grupo", format, lvl, ritmo: r, url, wa_ok: wa.ok },
+    });
+
+    await registerContact({
+      leadId,
+      actor: await actorFromPanelUser(user),
+      actionType: "enviar_enlace",
+      channel: "whatsapp",
+      note: `Oferta ${label} · ${priceMonth} €/mes/persona`,
+    });
+
+    return NextResponse.json({ ok: true, url, waSent: wa.ok, waReason: wa.ok ? null : (wa.reason ?? "error") });
+  }
 
   let meta: string;
   let ritmo: string | null = null;

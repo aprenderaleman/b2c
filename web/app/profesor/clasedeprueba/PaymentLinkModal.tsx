@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   RITMOS,
@@ -8,8 +8,13 @@ import {
   type RitmoId,
   type GoalId,
 } from "@/lib/trial-packs";
+import {
+  GROUP_FORMAT_LABELS, GROUP_LEVELS, GROUP_PRICES, GROUP_SESSIONS,
+  buildGroupUrl, renderGroupOfferMessage,
+  type GroupFormat, type GroupLevelId, type GroupRitmo,
+} from "@/lib/group-packs";
 
-type PaymentMode = "flexible" | "unico";
+type PaymentMode = "flexible" | "unico" | "duo" | "trio";
 
 const GOALS: { id: GoalId; label: string; emoji: string }[] = [
   { id: "a1_a2",         label: "A1-A2",         emoji: "🇩🇪" },
@@ -40,6 +45,27 @@ export function PaymentLinkModal({
   const [ritmoId, setRitmoId] = useState<RitmoId>("viajero");
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("flexible");
 
+  // Dúo / Trío (Gelfis 2026-10-31): nivel y ritmo SIN preselección — el
+  // botón Enviar queda deshabilitado hasta elegir ambos. El mensaje se
+  // genera de plantilla y es editable (preview obligatoria).
+  const isGroup = paymentMode === "duo" || paymentMode === "trio";
+  const [groupLvl, setGroupLvl]     = useState<GroupLevelId | null>(null);
+  const [groupRitmo, setGroupRitmo] = useState<GroupRitmo | null>(null);
+  const [groupMsg, setGroupMsg]     = useState("");
+
+  useEffect(() => {
+    if (!isGroup || !groupLvl || !groupRitmo) { setGroupMsg(""); return; }
+    setGroupMsg(renderGroupOfferMessage({
+      leadName: leadName,
+      format:   paymentMode as GroupFormat,
+      lvl:      groupLvl,
+      r:        groupRitmo,
+      url:      buildGroupUrl(paymentMode as GroupFormat, groupLvl, groupRitmo, leadId),
+    }));
+    // Regenera al cambiar formato/nivel/ritmo (pisa ediciones a propósito:
+    // el precio y el enlace deben corresponder SIEMPRE a la selección).
+  }, [isGroup, paymentMode, groupLvl, groupRitmo, leadId, leadName]);
+
   const selectedRitmo = RITMOS.find(r => r.id === ritmoId)!;
   const selectedGoal = selectedRitmo.goals.find(g => g.id === goalId)!;
   const selectedOneTime = ONE_TIME_PACKS.find(p => p.id === goalId);
@@ -64,7 +90,9 @@ export function PaymentLinkModal({
     setError(null);
     startTransition(async () => {
       try {
-        const body = paymentMode === "flexible"
+        const body = isGroup
+          ? { category: "grupo", format: paymentMode, lvl: groupLvl, r: groupRitmo, message: groupMsg }
+          : paymentMode === "flexible"
           ? { category: "subscription", ritmoId, goalId }
           : { category: "one_time", goalId };
 
@@ -132,7 +160,8 @@ export function PaymentLinkModal({
         </header>
 
         <div className="p-6 space-y-5">
-          {/* 1. Meta / Goal */}
+          {/* 1. Meta / Goal — no aplica a Dúo/Trío (tienen su propio nivel) */}
+          {!isGroup && (
           <div>
             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
               Meta
@@ -154,16 +183,19 @@ export function PaymentLinkModal({
               ))}
             </div>
           </div>
+          )}
 
-          {/* 2. Tipo de pago */}
+          {/* 2. Tipo de pago / formato */}
           <div>
             <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-              Tipo de pago
+              Tipo
             </span>
             <div className="mt-2 flex flex-wrap gap-2">
               {([
                 { id: "flexible" as const, label: "Suscripcion mensual", emoji: "📅" },
                 { id: "unico" as const,    label: "Pago unico",         emoji: "💳" },
+                { id: "duo" as const,      label: "Dúo",                emoji: "👥" },
+                { id: "trio" as const,     label: "Trío",               emoji: "👨‍👩‍👧" },
               ]).map(({ id, label, emoji }) => (
                 <button
                   key={id}
@@ -207,6 +239,75 @@ export function PaymentLinkModal({
             </div>
           )}
 
+          {/* Dúo / Trío: nivel + ritmo + preview editable */}
+          {isGroup && (
+            <div className="space-y-4 rounded-xl border border-violet-200 dark:border-violet-500/30 bg-violet-50/50 dark:bg-violet-500/5 p-4">
+              <p className="text-xs text-violet-700 dark:text-violet-300">
+                {paymentMode === "duo" ? "2 alumnos" : "3 alumnos"} · un profesor fijo · sesiones de 90 min.
+                El lead paga su parte y reenvía el mismo enlace a {paymentMode === "duo" ? "su pareja o compañero/a" : "sus compañeros/as"} — quedan emparejados automáticamente.
+              </p>
+              <div>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Nivel</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {GROUP_LEVELS.map(({ id, label }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setGroupLvl(id)}
+                      className={`text-sm font-semibold rounded-xl border px-3 py-1.5 transition-colors ${
+                        groupLvl === id
+                          ? "border-violet-400 bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-200"
+                          : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Ritmo</span>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {([2, 3, 4] as const).map(r => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setGroupRitmo(r)}
+                      className={`text-sm font-semibold rounded-xl border px-4 py-1.5 transition-colors ${
+                        groupRitmo === r
+                          ? "border-violet-400 bg-violet-100 dark:bg-violet-500/20 text-violet-800 dark:text-violet-200"
+                          : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700"
+                      }`}
+                    >
+                      {r}/sem
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {groupLvl && groupRitmo && (
+                <>
+                  <div className="text-xs text-violet-700 dark:text-violet-300 font-semibold">
+                    {GROUP_PRICES[paymentMode as GroupFormat][groupLvl][groupRitmo]} €/mes/persona · {GROUP_SESSIONS[groupLvl]} sesiones de 90 min
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                      Mensaje que recibirá {leadName} (puedes editarlo)
+                    </span>
+                    <textarea
+                      value={groupMsg}
+                      onChange={e => setGroupMsg(e.target.value)}
+                      rows={11}
+                      className="mt-1 w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-xs text-slate-800 dark:text-slate-100 font-mono leading-relaxed"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                      El enlace se genera solo y debe permanecer en el mensaje. Si cambias nivel o ritmo, el texto se regenera.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Pago unico summary */}
           {paymentMode === "unico" && summary && (
             <div className="rounded-xl border border-blue-200 dark:border-blue-500/30 bg-blue-50/50 dark:bg-blue-500/5 p-4">
@@ -235,9 +336,9 @@ export function PaymentLinkModal({
           </button>
           <button
             type="button"
-            className="btn-primary"
+            className="btn-primary disabled:opacity-50"
             onClick={submit}
-            disabled={pending}
+            disabled={pending || (isGroup && (!groupLvl || !groupRitmo || !groupMsg.includes("aprender-aleman.de/g/")))}
           >
             {pending ? "Enviando…" : "Enviar enlace"}
           </button>
