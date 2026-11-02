@@ -30,14 +30,14 @@ export default async function SetterDetailPage({
   const sb = supabaseAdmin();
   const { data: setterRow } = await sb
     .from("users")
-    .select("id, full_name, email, phone, active, created_at")
+    .select("id, full_name, email, phone, iban, active, created_at")
     .eq("id", id)
     .eq("role", "setter")
     .maybeSingle();
   if (!setterRow) notFound();
   const setter = setterRow as {
     id: string; full_name: string | null; email: string; phone: string | null;
-    active: boolean; created_at: string;
+    iban: string | null; active: boolean; created_at: string;
   };
 
   const metrics = await getSetterMetrics(days, setter.id);
@@ -55,6 +55,12 @@ export default async function SetterDetailPage({
             </h1>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               {setter.email}{setter.phone ? ` · ${setter.phone}` : ""} · {setter.active ? "Activo" : "Inactivo"}
+            </p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              IBAN:{" "}
+              {setter.iban
+                ? <span className="font-mono text-slate-700 dark:text-slate-200">{setter.iban}</span>
+                : <span className="text-amber-600 dark:text-amber-400">pendiente — se le pide al iniciar sesión en su panel</span>}
             </p>
           </div>
           {setter.active && (
