@@ -67,12 +67,21 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
     // /admin/classes/[id]/permanent quedan con deleted_at seteado y no
     // deben aparecer en /admin/clasedeprueba ni en /profesor/clasedeprueba.
     .is("deleted_at", null)
-    .order("scheduled_at", { ascending: true });
+    // DESCENDENTE a propósito (Gelfis 2026-11-03): PostgREST devuelve
+    // máximo 1.000 filas y la academia pasó de 1.000 trials — con orden
+    // ascendente el tope cortaba justo las clases FUTURAS (el final de
+    // la lista) y "Siguientes" salía vacío. En descendente el corte se
+    // come solo el historial más antiguo. Abajo se re-invierte a
+    // ascendente para que el resto del código no cambie.
+    .order("scheduled_at", { ascending: false })
+    .limit(1000);
 
   if (teacherId) q = q.eq("teacher_id", teacherId);
 
   const { data, error } = await q;
   if (error) throw error;
+  // Re-invertir a ascendente (ver comentario del order de arriba).
+  (data ?? []).reverse();
 
   type Raw = {
     id: string;
