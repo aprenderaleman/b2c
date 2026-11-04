@@ -66,13 +66,19 @@ export type MotivoBreakdownRow = {
  */
 export type TrialAttendance = {
   scheduled: number;   // total trials agendados en la ventana
-  attended:  number;   // de esos, cuántos asistieron
-  absent:    number;   // de esos, cuántos no asistieron
-  pending:   number;   // de esos, cuántos no se han marcado todavía (clase aún por venir o sin marcar)
-  /** Tasa de asistencia REAL = attended / (attended + absent). Excluye
-   * los pending del denominador — solo considera trials ya resueltos.
+  attended:  number;   // de esos, cuántos asistieron (marcado explícito)
+  absent:    number;   // de esos, cuántos no asistieron (marcado explícito)
+  unmarked:  number;   // trials pasados sin marcar (ni attended ni absent)
+  pending:   number;   // trials futuros (clase aún por venir)
+  /** Tasa de asistencia REAL = attended / (attended + absent).
+   * Solo marks explícitos — los sin marcar no se asumen ausentes.
    * null si no hay trials resueltos en la ventana. */
   attendance_rate: number | null;
+  /** Leads que asistieron al trial Y convirtieron (status=converted). */
+  converted_from_attended: number;
+  /** Tasa de conversión real = converted_from_attended / attended.
+   * null si no hay attended. */
+  conversion_rate: number | null;
 };
 
 export type FunnelAdsData = {
@@ -364,6 +370,7 @@ export async function getFunnelAdsData(
     trial_scheduled_at: string | null;
     trial_attended_at:  string | null;
     trial_absent_at:    string | null;
+    status:             string;
   };
   const now = new Date();
   const trialLeads = (leadsRows ?? []).filter(
@@ -373,21 +380,31 @@ export async function getFunnelAdsData(
   const explicitAbsent = trialLeads.filter(
     (l: LeadRow) => l.trial_absent_at !== null && l.trial_attended_at === null,
   ).length;
-  // Trials pasados sin marcar (ni attended ni absent) = ausentes de facto.
-  const implicitAbsent = trialLeads.filter(
+  const unmarkedPast = trialLeads.filter(
     (l: LeadRow) =>
       l.trial_attended_at === null &&
       l.trial_absent_at === null &&
       new Date(l.trial_scheduled_at!) < now,
   ).length;
-  const absentCount = explicitAbsent + implicitAbsent;
-  const resolved = attendedCount + absentCount;
+  const futurePending = trialLeads.filter(
+    (l: LeadRow) =>
+      l.trial_attended_at === null &&
+      l.trial_absent_at === null &&
+      new Date(l.trial_scheduled_at!) >= now,
+  ).length;
+  const resolved = attendedCount + explicitAbsent;
+  const convertedFromAttended = trialLeads.filter(
+    (l: LeadRow) => l.trial_attended_at !== null && l.status === "converted",
+  ).length;
   const trialAttendance: TrialAttendance = {
     scheduled: trialLeads.length,
     attended:  attendedCount,
-    absent:    absentCount,
-    pending:   Math.max(0, trialLeads.length - attendedCount - absentCount),
+    absent:    explicitAbsent,
+    unmarked:  unmarkedPast,
+    pending:   futurePending,
     attendance_rate: resolved > 0 ? attendedCount / resolved : null,
+    converted_from_attended: convertedFromAttended,
+    conversion_rate: attendedCount > 0 ? convertedFromAttended / attendedCount : null,
   };
 
   // ── 4. Micro-embudo del paso 3 (form) ──────────────────────────

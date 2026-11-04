@@ -368,7 +368,7 @@ export default async function FunnelControlPage({
   const formVsEntry    = entry         > 0 ? (100 * formCompleted / entry)        : 0;
   const trialVsForm    = formCompleted > 0 ? (100 * trialBooked   / formCompleted): 0;
   const attendanceRatePct = ta.attendance_rate !== null ? 100 * ta.attendance_rate : null;
-  const convertedVsAttended = trialAttended > 0 ? (100 * data.totalConverted / trialAttended) : 0;
+  const conversionRatePct = ta.conversion_rate !== null ? 100 * ta.conversion_rate : null;
 
   return (
     <div className="px-4 md:px-8 py-6 md:py-8 max-w-6xl mx-auto">
@@ -488,20 +488,22 @@ export default async function FunnelControlPage({
           label="Tasa asistencia"
           value={attendanceRatePct !== null ? `${attendanceRatePct.toFixed(1)}%` : "—"}
           subtitle={attendanceRatePct !== null
-            ? `${ta.attended}/${ta.attended + ta.absent} resueltos${ta.pending > 0 ? ` · ${ta.pending} pend.` : ""}`
-            : ta.pending > 0 ? `${ta.pending} pend.` : "—"}
+            ? `${ta.attended}/${ta.attended + ta.absent} marcados${ta.unmarked > 0 ? ` · ${ta.unmarked} sin marcar` : ""}${ta.pending > 0 ? ` · ${ta.pending} futuras` : ""}`
+            : ta.pending > 0 ? `${ta.pending} futuras` : "—"}
           accent={attendanceRatePct === null
             ? "text-white"
             : attendanceRatePct >= 70 ? "text-emerald-300"
               : attendanceRatePct >= 50 ? "text-amber-300" : "text-red-300"}
         />
         <KpiCard
-          label="Convirtieron"
-          value={data.totalConverted.toLocaleString()}
-          subtitle={trialAttended > 0 ? `${convertedVsAttended.toFixed(1)}% de Trial asistido` : "—"}
-          accent={data.totalConverted === 0 ? "text-white"
-            : convertedVsAttended >= 30 ? "text-emerald-300"
-              : convertedVsAttended >= 15 ? "text-amber-300" : "text-red-300"}
+          label="Conversión real"
+          value={conversionRatePct !== null ? `${conversionRatePct.toFixed(1)}%` : "—"}
+          subtitle={trialAttended > 0
+            ? `${ta.converted_from_attended}/${ta.attended} asistieron y pagaron`
+            : "—"}
+          accent={conversionRatePct === null ? "text-white"
+            : conversionRatePct >= 30 ? "text-emerald-300"
+              : conversionRatePct >= 15 ? "text-amber-300" : "text-red-300"}
         />
       </section>
 
