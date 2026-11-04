@@ -504,6 +504,16 @@ export async function advanceChain(chain: ChainRow): Promise<{
     const currentMetaForPrelude = (chain.metadata ?? {}) as Record<string, unknown>;
     const preludeAlreadySent = currentMetaForPrelude[preludeFlagKey] === true;
 
+    // Gelfis 2026-11-04: los mensajes de "Asistió" (chain1_attended) y los
+    // de "Inscripción/link pago" (chain2_link_sent) son los de más valor
+    // comercial — van por el número CALENTADO (wa_setter_instance) para
+    // que no los coma un ban del número v5. El canal "setter" ya existe
+    // en lib/whatsapp.ts y enruta automáticamente. El resto de chains
+    // (chain4, chain6, welcome, recordatorios) sigue por el número v5.
+    const SETTER_CHAIN_TYPES = new Set(["chain1_attended", "chain2_link_sent"]);
+    const useSetterChannel = SETTER_CHAIN_TYPES.has(chain.chain_type);
+    const channelOpt: "setter" | undefined = useSetterChannel ? "setter" : undefined;
+
     if (step.preludeTestimonial && !preludeAlreadySent) {
       try {
         const t = await pickTestimonial(chain.lead_id);
@@ -518,6 +528,7 @@ export async function advanceChain(chain: ChainRow): Promise<{
           const introRes = await sendWhatsappText(phone, introText, {
             kind: "testimonial_chain2",
             dedupKey: introDedupKey,
+            channel: channelOpt,
           });
 
           if (introRes.ok) {
@@ -526,6 +537,7 @@ export async function advanceChain(chain: ChainRow): Promise<{
               const audioRes = await sendWhatsappAudio(phone, fetched.buffer, {
                 kind: "testimonial_chain2",
                 dedupKey: audioDedupKey,
+                channel: channelOpt,
               });
               if (audioRes.ok) {
                 await markTestimonialSent(t.id, chain.lead_id, chain.chain_type, stepIndex);
@@ -607,6 +619,7 @@ export async function advanceChain(chain: ChainRow): Promise<{
       res = await sendWhatsappText(phone, text, {
         kind: templateKind,
         bypassNightGate: bypassWindow,
+        channel: channelOpt,
       });
     }
 

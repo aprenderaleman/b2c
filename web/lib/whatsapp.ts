@@ -853,20 +853,29 @@ export async function sendWhatsappAudio(
   const evoKey = process.env.EVOLUTION_API_KEY;
   if (!evoUrl || !evoKey) return { ok: false, reason: "missing_evolution_env" };
 
+  // Canal del setter también aplica a audio (Gelfis 2026-11-04): los
+  // testimoniales en audio de chain2_link_sent deben salir por la MISMA
+  // instancia que el texto que les acompaña, no por el v5 castigado.
+  const audioSetterInstance = opts.channel === "setter" ? await getSetterInstance() : null;
+
   let instance: string;
-  try {
-    const { supabaseAdmin } = await import("./supabase");
-    const sb = supabaseAdmin();
-    const { data } = await sb
-      .from("system_config")
-      .select("value")
-      .eq("key", "active_whatsapp_instance")
-      .maybeSingle();
-    instance = ((data as { value?: string } | null)?.value)
-      ?? process.env.EVOLUTION_INSTANCE_MAIN
-      ?? "aprender-aleman-main";
-  } catch {
-    instance = process.env.EVOLUTION_INSTANCE_MAIN ?? "aprender-aleman-main";
+  if (audioSetterInstance) {
+    instance = audioSetterInstance;
+  } else {
+    try {
+      const { supabaseAdmin } = await import("./supabase");
+      const sb = supabaseAdmin();
+      const { data } = await sb
+        .from("system_config")
+        .select("value")
+        .eq("key", "active_whatsapp_instance")
+        .maybeSingle();
+      instance = ((data as { value?: string } | null)?.value)
+        ?? process.env.EVOLUTION_INSTANCE_MAIN
+        ?? "aprender-aleman-main";
+    } catch {
+      instance = process.env.EVOLUTION_INSTANCE_MAIN ?? "aprender-aleman-main";
+    }
   }
 
   const digits = phoneE164.replace(/^\+/, "").replace(/\D/g, "");
