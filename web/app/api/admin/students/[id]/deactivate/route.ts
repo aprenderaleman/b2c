@@ -54,7 +54,7 @@ export async function POST(
     if (te) return NextResponse.json({ error: "students_update_failed", message: te.message }, { status: 500 });
     await sb.from("admin_notes").insert({
       target_type: "student", target_id: id, author_id: actorId,
-      body: `Estudiante REACTIVADO${reason ? ` — ${reason}` : ""}.`,
+      content: `Estudiante REACTIVADO${reason ? ` — ${reason}` : ""}.`,
     }).then(() => {}, () => {});
     return NextResponse.json({ ok: true, reactivated: true });
   }
