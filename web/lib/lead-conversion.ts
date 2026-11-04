@@ -368,7 +368,14 @@ export async function convertLeadToStudent(
       const bodyTpl = (tpl as { body?: string } | null)?.body;
       if (bodyTpl) {
         const waText = renderTemplate(bodyTpl, vars);
-        const waResult = await sendWhatsappText(waPhone, waText, { kind: "welcome_week_t0" });
+        // Gelfis 2026-11-04 (Fase 1 migración v6): el mensaje de bienvenida
+        // sincrónico al convertir sale por el número setter calentado (v6),
+        // no por el v5 castigado. Los siguientes pasos de welcome_week ya
+        // iban por chat interno (channels=["chat"] en chain-definitions).
+        const waResult = await sendWhatsappText(waPhone, waText, {
+          kind: "welcome_week_t0",
+          channel: "setter",
+        });
         if (!waResult.ok) {
           await sb.from("lead_timeline").insert({
             lead_id: lead.id, type: "agent_note", author: "system",

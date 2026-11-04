@@ -201,7 +201,12 @@ async function run(req: Request) {
       // Fix Gelfis 2026-08-06: eliminada frase "Wir sehen uns endlich
       // heute 😊" del copy ES — residuo del cleanup DE que salía a todos
       // los leads matutinos. Idioma unificado a ES (task #36).
-      const waText = `¡Buenos días ${leadFirst}! Hoy es el día 😊\n\nTu clase de alemán es a las ${timeLabel}.\n\nTe recomiendo:\n- Computador con cámara y micrófono\n- Lugar tranquilo\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}`;
+      // Gelfis 2026-11-04 (prep migración v6): el link_aula ya va en la
+      // confirmación de agendamiento, en el reminder 24h y en el reminder
+      // 15m. Mandarlo también en el morning = 4 veces el mismo URL en
+      // 24-30h → spam-signal para WhatsApp. Morning queda solo humano
+      // (saludo + hora + tips de preparación).
+      const waText = `¡Buenos días ${leadFirst}! Hoy es el día 😊\n\nTu clase de alemán es a las ${timeLabel}.\n\nTe recomiendo:\n- Computador con cámara y micrófono\n- Lugar tranquilo\n\n¡Nos vemos en un rato! ✨`;
       const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, {
         kind: "trial_reminder_morning",
         dedupKey: `trial_reminder_morning:${r.id}`,
