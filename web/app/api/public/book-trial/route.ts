@@ -15,7 +15,7 @@ import { sanitizeE164, validateWhatsappE164 } from "@/lib/phone";
 // (para adjuntar el .ics al email de confirmación 5min después).
 import { notifyTeacherOfTrial } from "@/lib/teacher-trial-notification";
 import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
-import { createTeacherTrialEvent } from "@/lib/google-calendar-oauth";
+import { createTeacherTrialEvent, deleteTeacherCalendarEvent, patchTeacherCalendarEvent } from "@/lib/google-calendar-oauth";
 import { sendRaw } from "@/lib/email/send";
 import { attributeReferral } from "@/lib/referrals";
 import { resolveProfe } from "@/lib/profes";
@@ -456,7 +456,7 @@ export async function POST(req: Request) {
   {
     const { data: existingTrials } = await sb
       .from("classes")
-      .select("id, scheduled_at, short_code, google_calendar_event_id, duration_minutes, teacher_id, title, notes_admin, notified_at, notify_after_at")
+      .select("id, scheduled_at, short_code, google_calendar_event_id, teacher_gcal_event_id, duration_minutes, teacher_id, title, notes_admin, notified_at, notify_after_at")
       .eq("lead_id", leadId)
       .eq("is_trial", true)
       .in("status", ["scheduled", "live"])
@@ -464,7 +464,8 @@ export async function POST(req: Request) {
       .order("scheduled_at", { ascending: true });
     type ExistingTrial = {
       id: string; scheduled_at: string; short_code: string;
-      google_calendar_event_id: string | null; duration_minutes: number | null;
+      google_calendar_event_id: string | null; teacher_gcal_event_id: string | null;
+      duration_minutes: number | null;
       teacher_id: string; title: string | null; notes_admin: string | null;
       notified_at: string | null; notify_after_at: string | null;
     };
@@ -598,6 +599,21 @@ export async function POST(req: Request) {
       // Bug Johann 2026-08-30 (rama reagenda): cerrar chains de rescate
       // — el lead reagendó, ya no necesita mensajes de "¿reagendamos?".
       await closeRescueChainsForRebook(sb, leadId, "trial");
+
+      // Espejo en el GCal personal del profe (teacher_gcal_event_id). Caso
+      // Verónica 2026-11-04 (Dennitza): al reasignar, el evento del profe
+      // ANTERIOR no se borraba (se sobrescribía su id) y quedaba huérfano;
+      // y sin cambio de profe el evento se quedaba en la hora vieja.
+      if (ex.teacher_gcal_event_id && ex.teacher_id) {
+        if (teacherChanged) {
+          const ok = await deleteTeacherCalendarEvent(ex.teacher_id, ex.teacher_gcal_event_id).catch(() => false);
+          if (ok) await sb.from("classes").update({ teacher_gcal_event_id: null }).eq("id", ex.id);
+          else console.error(`[book-trial] no se pudo borrar el evento ${ex.teacher_gcal_event_id} del profe anterior (clase ${ex.id})`);
+        } else {
+          await patchTeacherCalendarEvent(ex.teacher_id, ex.teacher_gcal_event_id, requestedSlotIso, ex.duration_minutes ?? TRIAL_DURATION_MIN)
+            .catch(e => console.error("[book-trial] reschedule teacher gcal patch failed:", e));
+        }
+      }
 
       if (teacherChanged) {
         await notifyTeacherOfTrial({
