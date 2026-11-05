@@ -10,8 +10,8 @@ import type { ChecklistItem } from "@/lib/onboarding";
  * días o si el usuario la cierra. Genérica para alumnos y profes.
  */
 const T = {
-  es: { title: "Primeros pasos", sub: (d: number, n: number) => `${d} de ${n} completados`, close: "Ocultar", tour: "Ver el tour otra vez", allDone: "¡Todo listo! 🎉" },
-  de: { title: "Erste Schritte", sub: (d: number, n: number) => `${d} von ${n} erledigt`, close: "Ausblenden", tour: "Tour noch einmal ansehen", allDone: "Alles erledigt! 🎉" },
+  es: { title: "Primeros pasos", sub: (d: number, n: number) => `${d} de ${n} completados`, close: "Ocultar", tour: "Ver el vídeo o el tour otra vez", allDone: "¡Todo listo! 🎉" },
+  de: { title: "Erste Schritte", sub: (d: number, n: number) => `${d} von ${n} erledigt`, close: "Ausblenden", tour: "Video oder Tour noch einmal ansehen", allDone: "Alles erledigt! 🎉" },
 };
 
 export function FirstStepsCard({ items, lang, tourHref }: { items: ChecklistItem[]; lang: "es" | "de"; tourHref: string }) {

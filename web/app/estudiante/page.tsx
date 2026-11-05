@@ -107,9 +107,10 @@ export default async function StudentHome() {
       <LiveClassCta initial={live} />
 
       {isRealStudent && onboarding.showChecklist && (
-        <FirstStepsCard items={onboarding.checklist} lang={onboarding.lang} tourHref="/estudiante?tour=1" />
+        <FirstStepsCard items={onboarding.checklist} lang={onboarding.lang} tourHref="/estudiante?ayuda=1" />
       )}
-      <OnboardingMount showTour={isRealStudent && onboarding.showTour} steps={onboarding.tourSteps} lang={onboarding.lang} />
+      <OnboardingMount showTour={isRealStudent && onboarding.showTour} steps={onboarding.tourSteps} lang={onboarding.lang}
+                       video={{ src: "/tutorial/estudiantes.mp4", poster: "/tutorial/estudiantes.jpg", minutes: "4 min" }} />
 
       {/* Post-class review prompt — esquina inferior derecha, no intrusivo.
           Solo aparece si hay una clase atendida en los últimos 7 días sin

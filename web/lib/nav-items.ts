@@ -88,7 +88,7 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     // Perfil con cambio de contraseña (Gelfis 2026-10-29, caso Adrián).
     { label: "Perfil",       href: "/estudiante/perfil",        icon: "userCircle",     priority: 8 },
     // Tour guiado bajo demanda (Gelfis 2026-10-24).
-    { label: "¿Cómo funciona?", href: "/estudiante?tour=1",     icon: "star",           priority: 9 },
+    { label: "¿Cómo funciona?", href: "/estudiante?ayuda=1",    icon: "star",           priority: 9 },  // vídeo o paso a paso (2026-11-05)
   ],
   closer: closerItems(),
   setter: setterItems(),
