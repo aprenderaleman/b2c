@@ -235,8 +235,14 @@ export async function markTrialAttendedAwaitingConversion(
     text = `¡Hola ${firstName}! 😊\n\n¡Gracias por asistir a tu clase de prueba de alemán!\n\n¿Qué te pareció? Si te interesa avanzar, te preparo un plan personalizado con horarios y precio exacto — dime cuando quieras seguir.\n\nStiv, Aprender-Aleman.de`;
   }
 
+  // Gelfis 2026-11-05 (Fase 1.5 migración v6): el follow-up post-clase
+  // lleva el enlace de inscripción y es el disparador de chain2_link_sent.
+  // Sale por el número setter calentado (v6) — bypassa el kill switch del
+  // v5 castigado y mantiene la conversación en el mismo hilo en el que ya
+  // le llegó la confirmación / recordatorios del trial.
   const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
     kind: opts ? "trial_inscription_initial" : "trial_attended_initial",
+    channel: "setter",
   });
   if (res.ok) {
     await sb.from("lead_timeline").insert({
@@ -416,8 +422,12 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
         `Stiv | Aprender-Aleman.de`,
       ].join("\n");
 
+  // Gelfis 2026-11-05 (Fase 1.5 migración v6): mismo criterio que el
+  // follow-up con link — sale por el número setter (v6) para bypassar el
+  // kill switch del v5 y mantener la conversación en un solo hilo.
   const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
     kind: "trial_attended_initial",
+    channel: "setter",
   });
   if (res.ok) {
     await sb.from("lead_timeline").insert({
