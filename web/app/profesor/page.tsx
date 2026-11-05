@@ -76,9 +76,10 @@ export default async function TeacherHome() {
       </header>
 
       {isRealTeacher && onboarding.showChecklist && (
-        <FirstStepsCard items={onboarding.checklist} lang={onboarding.lang} tourHref="/profesor?tour=1" />
+        <FirstStepsCard items={onboarding.checklist} lang={onboarding.lang} tourHref="/profesor?ayuda=1" />
       )}
-      <OnboardingMount showTour={isRealTeacher && onboarding.showTour} steps={onboarding.tourSteps} lang={onboarding.lang} />
+      <OnboardingMount showTour={isRealTeacher && onboarding.showTour} steps={onboarding.tourSteps} lang={onboarding.lang}
+                       video={{ src: "/tutorial/profesores.mp4", poster: "/tutorial/profesores.jpg", minutes: "3 min" }} />
 
       {next ? (
         <NextClassCard
