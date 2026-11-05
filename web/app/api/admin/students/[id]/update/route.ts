@@ -123,7 +123,7 @@ export async function POST(
     target_type: "student",
     target_id:   id,
     author_id:   (session.user as { id?: string }).id ?? null,
-    body:        `Edición manual:\n${Object.entries(diff).map(([k,v]) => `${k}: ${JSON.stringify(v.from)} → ${JSON.stringify(v.to)}`).join("\n")}`,
+    content:     `Edición manual:\n${Object.entries(diff).map(([k,v]) => `${k}: ${JSON.stringify(v.from)} → ${JSON.stringify(v.to)}`).join("\n")}`,
   }).then(() => {}, () => {});  // best-effort
 
   return NextResponse.json({ ok: true, changed: true, diff });
