@@ -382,7 +382,7 @@ export async function getColleagueContacts(userId: string): Promise<ColleagueCon
     .eq("active", true)
     .eq("users.active", true);
 
-  const ALLOWED_NAMES = ["sabine", "simon", "veronica", "ana"];
+  const ALLOWED_NAMES = ["sabine", "simon", "veronica", "sina"];
   const colleagues = ((others ?? []) as Array<{
     user_id: string; users: { full_name: string | null; active: boolean } | Array<{ full_name: string | null; active: boolean }>;
   }>).filter(t => {

@@ -162,10 +162,12 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<Lea
 
   const { data: teachers } = await sb
     .from("teachers")
-    .select("id, users(full_name, role)")
-    .neq("id", myTeacherId);
+    .select("id, users!inner(full_name, role, active)")
+    .neq("id", myTeacherId)
+    .eq("active", true)
+    .eq("users.active", true);
 
-  const ALLOWED_NAMES = ["sabine", "simon", "veronica", "ana"];
+  const ALLOWED_NAMES = ["sabine", "simon", "veronica", "sina"];
   const otherTeacherIds = ((teachers ?? []) as Array<{
     id: string; users: { full_name: string; role: string } | Array<{ full_name: string; role: string }> | null;
   }>)
