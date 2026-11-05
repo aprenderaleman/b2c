@@ -127,6 +127,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/acuerdo-unlock",
+      "schedule": "0 6 5 * *"
+    },
+    {
       "path": "/api/cron/docs-backfill",
       "schedule": "15 5 * * *"
     },
