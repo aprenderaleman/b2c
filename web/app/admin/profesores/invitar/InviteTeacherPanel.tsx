@@ -20,7 +20,7 @@ type Inv = {
 
 const RANGOS = [
   { value: "starter", label: "Starter (5%)" },
-  { value: "pro",     label: "Pro (8%)" },
+  { value: "pro",     label: "Pro (10%)" },
   { value: "elite",   label: "Elite (12%)" },
   { value: "master",  label: "Master (15%)" },
 ];

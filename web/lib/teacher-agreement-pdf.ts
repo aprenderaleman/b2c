@@ -31,7 +31,7 @@ const COUNTRY_ES: Record<string, string> = {
   BR: "Brasil", HR: "Croacia", NL: "Países Bajos", BE: "Bélgica", PL: "Polonia", CZ: "Chequia", RO: "Rumanía", HU: "Hungría",
   GR: "Grecia", TR: "Turquía", IE: "Irlanda", SE: "Suecia", DK: "Dinamarca", NO: "Noruega", CA: "Canadá",
 };
-const RANGO_ES: Record<string, string> = { starter: "Starter (5 %)", pro: "Pro (8 %)", elite: "Elite (12 %)", master: "Master (15 %)" };
+const RANGO_ES: Record<string, string> = { starter: "Starter (5 %)", pro: "Pro (10 %)", elite: "Elite (12 %)", master: "Master (15 %)" };
 
 /** "País / Ciudad" legible: dirección del registro + país; nunca un código suelto tipo "XX". */
 export function agreementLocation(country: string | null, address: string | null): string | null {
