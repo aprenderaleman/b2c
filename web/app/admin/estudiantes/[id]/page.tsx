@@ -102,6 +102,18 @@ export default async function StudentDetailPage({
                   </span>
                 </>
               )}
+              {student.acuerdo_cierre && (
+                <>
+                  <span>·</span>
+                  <span
+                    className="inline-flex items-center rounded-full border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300"
+                    title="Fuera de flujos automáticos: sin hitos de pack, sin baja por saldo 0, sin avisos de inactividad. Solo expira por fecha."
+                  >
+                    {student.acuerdo_cierre_nota ?? "Acuerdo de cierre — no facturar"}
+                    {student.access_until ? ` · acceso hasta ${new Date(student.access_until + "T00:00:00").toLocaleDateString("es-ES")}` : ""}
+                  </span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">

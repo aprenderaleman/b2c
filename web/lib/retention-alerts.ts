@@ -19,7 +19,7 @@ export async function computeTeacherRetentionAlerts(): Promise<RetentionAlert[]>
   const { data: students } = await sb
     .from("students")
     .select(`
-      id, user_id, classes_remaining, classes_per_month, subscription_status,
+      id, user_id, classes_remaining, classes_per_month, subscription_status, acuerdo_cierre,
       users!inner(full_name, email, last_sign_in_at, active)
     `)
     .eq("subscription_status", "active");
@@ -65,12 +65,13 @@ export async function computeTeacherRetentionAlerts(): Promise<RetentionAlert[]>
   for (const raw of students) {
     const s = raw as {
       id: string; user_id: string; classes_remaining: number | null;
-      classes_per_month: number | null; subscription_status: string;
+      classes_per_month: number | null; subscription_status: string; acuerdo_cierre?: boolean | null;
       users: { full_name: string | null; email: string; last_sign_in_at: string | null; active: boolean }
         | Array<{ full_name: string | null; email: string; last_sign_in_at: string | null; active: boolean }>;
     };
     const u = Array.isArray(s.users) ? s.users[0] : s.users;
     if (!u?.active) continue;
+    if (s.acuerdo_cierre) continue;   // acuerdo especial: sin alertas de retención
 
     const teacherId = studentTeacher[s.id];
     if (!teacherId || !teacherInfo[teacherId]) continue;

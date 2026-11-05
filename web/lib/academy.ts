@@ -36,6 +36,12 @@ export type StudentRow = {
   attendance_rate:       number | null;
   schule_completion_pct: number | null;
   garantia_status:       string;
+
+  /** Acuerdo especial: fuera de todo flujo automático (migración 151). */
+  acuerdo_cierre:        boolean;
+  acuerdo_cierre_nota:   string | null;
+  /** Fecha fija de expiración del acceso (YYYY-MM-DD) o null. */
+  access_until:          string | null;
 };
 
 export type TeacherRow = {
@@ -132,6 +138,7 @@ export async function getStudentByUserId(userId: string): Promise<StudentRow | n
       classes_per_month, monthly_price_cents, currency,
       schule_access, hans_access, notes, converted_at, document_url,
       attendance_rate, schule_completion_pct, garantia_status,
+      acuerdo_cierre, acuerdo_cierre_nota, access_until,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("user_id", userId)
@@ -170,6 +177,9 @@ export async function getStudentByUserId(userId: string): Promise<StudentRow | n
     attendance_rate:      (data.attendance_rate as number | null) ?? null,
     schule_completion_pct:(data.schule_completion_pct as number | null) ?? null,
     garantia_status:      (data.garantia_status as string) ?? "not_applicable",
+    acuerdo_cierre:       Boolean(data.acuerdo_cierre),
+    acuerdo_cierre_nota:  (data.acuerdo_cierre_nota as string | null) ?? null,
+    access_until:         (data.access_until as string | null) ?? null,
   };
 }
 
@@ -204,6 +214,7 @@ export async function getStudents(
         classes_per_month, monthly_price_cents, currency,
         schule_access, hans_access, notes, converted_at, document_url,
         attendance_rate, schule_completion_pct, garantia_status,
+      acuerdo_cierre, acuerdo_cierre_nota, access_until,
         users!inner(email, full_name, phone, language_preference, active)
       `,
       { count: "exact" },
@@ -269,6 +280,9 @@ export async function getStudents(
       attendance_rate:      (r.attendance_rate as number | null) ?? null,
       schule_completion_pct:(r.schule_completion_pct as number | null) ?? null,
       garantia_status:      (r.garantia_status as string) ?? "not_applicable",
+      acuerdo_cierre:       Boolean(r.acuerdo_cierre),
+      acuerdo_cierre_nota:  (r.acuerdo_cierre_nota as string | null) ?? null,
+      access_until:         (r.access_until as string | null) ?? null,
     };
   });
 
@@ -290,6 +304,7 @@ export async function getStudentById(id: string): Promise<StudentRow | null> {
       classes_per_month, monthly_price_cents, currency,
       schule_access, hans_access, notes, converted_at, document_url,
       attendance_rate, schule_completion_pct, garantia_status,
+      acuerdo_cierre, acuerdo_cierre_nota, access_until,
       users!inner(email, full_name, phone, language_preference, active)
     `)
     .eq("id", id)
@@ -328,6 +343,9 @@ export async function getStudentById(id: string): Promise<StudentRow | null> {
     attendance_rate:      (data.attendance_rate as number | null) ?? null,
     schule_completion_pct:(data.schule_completion_pct as number | null) ?? null,
     garantia_status:      (data.garantia_status as string) ?? "not_applicable",
+    acuerdo_cierre:       Boolean(data.acuerdo_cierre),
+    acuerdo_cierre_nota:  (data.acuerdo_cierre_nota as string | null) ?? null,
+    access_until:         (data.access_until as string | null) ?? null,
   };
 }
 

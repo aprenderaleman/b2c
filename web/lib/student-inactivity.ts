@@ -72,12 +72,14 @@ export type InactivityCandidate = {
 export async function findInactivityCandidates(now = new Date()): Promise<InactivityCandidate[]> {
   const sb = supabaseAdmin();
   const { data: students } = await sb.from("students")
-    .select("id, user_id, created_at, classes_remaining, subscription_type, subscription_status, users!inner(full_name, email, active, role, language_preference)")
+    .select("id, user_id, created_at, classes_remaining, subscription_type, subscription_status, acuerdo_cierre, users!inner(full_name, email, active, role, language_preference)")
     .eq("subscription_status", "active");
   const out: InactivityCandidate[] = [];
-  for (const raw of (students ?? []) as Array<{ id: string; user_id: string; created_at: string; classes_remaining: number | null; subscription_type: string | null; users: unknown }>) {
+  for (const raw of (students ?? []) as Array<{ id: string; user_id: string; created_at: string; classes_remaining: number | null; subscription_type: string | null; acuerdo_cierre?: boolean | null; users: unknown }>) {
     const u = (Array.isArray(raw.users) ? raw.users[0] : raw.users) as { full_name: string | null; email: string; active: boolean; role: string; language_preference: "es" | "de" | null };
     if (!u?.active || u.role !== "student") continue;
+    // Acuerdos especiales (Lydia 2026-11-05): sin avisos automáticos.
+    if (raw.acuerdo_cierre) continue;
 
     const { data: parts } = await sb.from("class_participants")
       .select("class:classes!inner(status, scheduled_at, is_trial)")
