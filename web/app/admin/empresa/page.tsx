@@ -216,6 +216,28 @@ export default async function EmpresaPage({
               <p className="mt-2 text-sm text-slate-400">Sin datos</p>
             )}
           </div>
+
+          {/* Ingresos comprometidos */}
+          <div className="rounded-2xl border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
+              Ingresos comprometidos
+            </p>
+            {m.committed_revenue ? (
+              <>
+                <p className="mt-1 text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-300">
+                  {moneyFromCents(m.committed_revenue.total_cents)}
+                </p>
+                <p className="mt-0.5 text-[11px] text-emerald-600/80 dark:text-emerald-400/70">
+                  Cobros futuros si completan la formación
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  {m.committed_revenue.students} estudiantes · ~{m.committed_revenue.total_months} meses restantes
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-slate-400">Sin datos</p>
+            )}
+          </div>
         </div>
       </Panel>
 

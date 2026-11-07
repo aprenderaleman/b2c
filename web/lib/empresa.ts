@@ -89,6 +89,7 @@ export type EmpresaMetrics = {
   active_students: number;
   cost_per_class: CostPerClass | null;
   service_liability: ServiceLiability | null;
+  committed_revenue: CommittedRevenue | null;
   stripe_health: StripeHealth | null;
 };
 
@@ -101,6 +102,12 @@ export type CostPerClass = {
 export type ServiceLiability = {
   total_cents: number;
   total_classes: number;
+};
+
+export type CommittedRevenue = {
+  total_cents: number;
+  total_months: number;
+  students: number;
 };
 
 export type StripeHealth = {
@@ -206,6 +213,7 @@ export async function getEmpresaMetrics(
     newClients,
     costPerClass,
     serviceLiability,
+    committedRevenue,
     stripeHealth,
   ] = await Promise.all([
     getTotalRevenue(from, to),
@@ -226,6 +234,7 @@ export async function getEmpresaMetrics(
     getNewClientsMetrics(sb, from, to),
     getCostPerClass(sb, from, to),
     getServiceLiability(sb),
+    getCommittedRevenue(sb),
     getStripeHealth(from, to).catch(() => null),
   ]);
 
@@ -298,6 +307,7 @@ export async function getEmpresaMetrics(
     active_students: newClients.total_unique_clients || activeStudents,
     cost_per_class: costPerClass,
     service_liability: serviceLiability,
+    committed_revenue: committedRevenue,
     stripe_health: stripeHealth,
   };
 }
@@ -555,6 +565,41 @@ async function getServiceLiability(sb: SB): Promise<ServiceLiability | null> {
   }
 
   return { total_cents: totalCents, total_classes: totalClasses };
+}
+
+async function getCommittedRevenue(sb: SB): Promise<CommittedRevenue | null> {
+  const { data: students } = await sb
+    .from("students")
+    .select("classes_remaining, classes_per_month, monthly_price_cents, subscription_type")
+    .eq("subscription_status", "active")
+    .gt("classes_remaining", 0);
+
+  if (!students || students.length === 0) return null;
+
+  let totalCents = 0;
+  let totalMonths = 0;
+  let count = 0;
+
+  for (const s of students as any[]) {
+    const remaining = Number(s.classes_remaining ?? 0);
+    const perMonth = Number(s.classes_per_month ?? 0);
+    const price = Number(s.monthly_price_cents ?? 0);
+
+    if (remaining <= 0 || price <= 0) continue;
+
+    if (perMonth > 0) {
+      const months = Math.ceil(remaining / perMonth);
+      totalCents += months * price;
+      totalMonths += months;
+    } else {
+      totalCents += price;
+      totalMonths += 1;
+    }
+    count++;
+  }
+
+  if (count === 0) return null;
+  return { total_cents: totalCents, total_months: totalMonths, students: count };
 }
 
 async function getAverageLTV(sb: SB): Promise<number> {
@@ -1008,7 +1053,7 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
     const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
     const label = `${monthNames[from.getUTCMonth()]} ${from.getUTCFullYear().toString().slice(2)}`;
 
-    const [revenue, payroll, fixed, googleAds, metaAds, leadsRes, convRes] = await Promise.all([
+    const [revenue, payroll, fixed, googleAds, metaAds, otherExp, leadsRes, convRes] = await Promise.all([
       sb.from("payments")
         .select("amount_cents, student_id, type, paid_at, student:students!inner(users!inner(full_name))")
         .not("status", "eq", "refunded")
@@ -1031,6 +1076,11 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
       sb.from("business_expenses")
         .select("amount_cents")
         .eq("category", "ads")
+        .gte("incurred_at", fromDate)
+        .lte("incurred_at", toDate),
+      sb.from("business_expenses")
+        .select("amount_cents")
+        .neq("category", "ads")
         .gte("incurred_at", fromDate)
         .lte("incurred_at", toDate),
       sb.from("leads")
@@ -1058,12 +1108,16 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
       paymentsList.push({ student_name: name, amount_cents: Number(r.amount_cents), type: r.type, paid_at: r.paid_at });
     }
     const payrollCents = (payroll.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
-    const fixedCents = (fixed.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
+    const fixedRaw = (fixed.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
+    const daysInRange = Math.ceil((to.getTime() - from.getTime()) / 86_400_000);
+    const daysInMonth = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 0)).getUTCDate();
+    const fixedCents = i === 0 ? Math.round(fixedRaw * daysInRange / daysInMonth) : fixedRaw;
     const googleAdsMicros = (googleAds.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0);
     const metaAdsCents = (metaAds.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
     const adsCents = Math.round(googleAdsMicros / 10000) + metaAdsCents;
+    const otherExpCents = (otherExp.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
 
-    const netoCents = revenueCents - payrollCents - fixedCents - adsCents;
+    const netoCents = revenueCents - payrollCents - fixedCents - adsCents - otherExpCents;
     const margenPct = revenueCents > 0 ? (netoCents / revenueCents) * 100 : 0;
 
     rows.push({
