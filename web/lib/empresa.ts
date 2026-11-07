@@ -1,6 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { getTotalRevenue, getTotalExpenses, moneyFromCents } from "./finance";
-import { stripeDE } from "./stripe";
+import { stripeUS } from "./stripe";
 
 // =============================================================================
 // Types
@@ -1204,8 +1204,8 @@ export async function getPulseData(
 // =============================================================================
 
 export async function getStripeHealth(from: Date, to: Date): Promise<StripeHealth | null> {
-  let stripe: ReturnType<typeof stripeDE> | null = null;
-  try { stripe = stripeDE(); } catch { return null; }
+  let stripe: ReturnType<typeof stripeUS> | null = null;
+  try { stripe = stripeUS(); } catch { return null; }
 
   const timeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
     Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
@@ -1214,7 +1214,7 @@ export async function getStripeHealth(from: Date, to: Date): Promise<StripeHealt
 }
 
 async function _getStripeHealthInner(
-  stripe: ReturnType<typeof stripeDE>, from: Date, to: Date,
+  stripe: ReturnType<typeof stripeUS>, from: Date, to: Date,
 ): Promise<StripeHealth> {
   const sb = supabaseAdmin();
   const fromTs = Math.floor(from.getTime() / 1000);
@@ -1224,18 +1224,25 @@ async function _getStripeHealthInner(
   let mrrCents = 0;
   let activeCount = 0;
 
-  const activePage = await stripe.subscriptions.list({ status: "active", limit: 100 });
-  for (const sub of activePage.data) {
-    activeCount++;
-    for (const item of sub.items.data) {
-      const price = item.price;
-      const unitAmount = price.unit_amount ?? 0;
-      const qty = item.quantity ?? 1;
-      let monthly = unitAmount * qty;
-      if (price.recurring?.interval === "year") monthly = Math.round(monthly / 12);
-      else if (price.recurring?.interval === "week") monthly = Math.round(monthly * 4.33);
-      mrrCents += monthly;
+  let startingAfter: string | undefined;
+  for (let page = 0; page < 5; page++) {
+    const params: Record<string, unknown> = { status: "active", limit: 100 };
+    if (startingAfter) params.starting_after = startingAfter;
+    const activePage = await stripe.subscriptions.list(params as any);
+    for (const sub of activePage.data) {
+      activeCount++;
+      for (const item of sub.items.data) {
+        const price = item.price;
+        const unitAmount = price.unit_amount ?? 0;
+        const qty = item.quantity ?? 1;
+        let monthly = unitAmount * qty;
+        if (price.recurring?.interval === "year") monthly = Math.round(monthly / 12);
+        else if (price.recurring?.interval === "week") monthly = Math.round(monthly * 4.33);
+        mrrCents += monthly;
+      }
     }
+    if (!activePage.has_more || activePage.data.length === 0) break;
+    startingAfter = activePage.data[activePage.data.length - 1].id;
   }
 
   // --- Churn: subscriptions canceled within the period ---
@@ -1323,8 +1330,8 @@ export type LtvSummary = {
 
 export async function getLtvWithProjections(cacCents: number): Promise<LtvSummary> {
   const sb = supabaseAdmin();
-  let stripe: ReturnType<typeof stripeDE> | null = null;
-  try { stripe = stripeDE(); } catch { /* env var missing */ }
+  let stripe: ReturnType<typeof stripeUS> | null = null;
+  try { stripe = stripeUS(); } catch { /* env var missing */ }
 
   // 1. Get all paid amounts from DB grouped by student
   const { data: payments } = await sb
