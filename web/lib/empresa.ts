@@ -297,13 +297,16 @@ export async function getEmpresaMetrics(
 type SB = ReturnType<typeof supabaseAdmin>;
 
 async function getTeacherPayrollForRange(sb: SB, from: Date, to: Date): Promise<number> {
-  const fromDate = from.toISOString().slice(0, 10);
-  const toDate = to.toISOString().slice(0, 10);
+  // teacher_earnings.month is always the 1st of the month (e.g. 2026-10-01).
+  // Expand the range to full months so a "last 30 days" query (Oct 8–Nov 7)
+  // correctly includes both October and November earnings.
+  const monthFrom = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
+  const monthTo   = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
   const { data } = await sb
     .from("teacher_earnings")
     .select("amount_cents")
-    .gte("month", fromDate)
-    .lte("month", toDate);
+    .gte("month", monthFrom.toISOString().slice(0, 10))
+    .lte("month", monthTo.toISOString().slice(0, 10));
   return (data ?? []).reduce((s, r) => s + Number((r as { amount_cents: number }).amount_cents), 0);
 }
 
