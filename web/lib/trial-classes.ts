@@ -191,7 +191,11 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       const isGroup = /^(duo|trio)_/.test(o.ritmo ?? "");
       const url = o.checkout_url ?? (isGroup ? null : buildPagoUrl(o.id));
       if (!url) continue;
-      const eur = o.importe_cents != null ? `${Math.round(o.importe_cents / 100)} €${o.tipo_pago === "suscripcion" ? "/mes" : ""}` : "";
+      // importe_cents: TOTAL del plan en ofertas individuales (también
+      // suscripciones), pero €/mes/persona en Dúo/Trío.
+      const eur = o.importe_cents != null
+        ? `${Math.round(o.importe_cents / 100).toLocaleString("es-ES")} €${isGroup ? "/mes/persona" : " total"}`
+        : "";
       const plan = isGroup
         ? `${o.ritmo!.startsWith("duo") ? "Dúo" : "Trío"} ${String(o.meta ?? "").toUpperCase()} ${o.ritmo!.split("_")[1] ?? ""}`
         : `${o.tipo_pago === "suscripcion" ? `Suscripción${o.ritmo ? ` ${o.ritmo}` : ""}` : "Pago único"} · Meta ${String(o.meta ?? "").toUpperCase()}`;
