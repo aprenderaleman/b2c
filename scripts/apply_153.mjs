@@ -8,7 +8,7 @@ config({ path: resolve(process.cwd(), ".env") });
 const client = new pg.Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 await client.connect();
 
-const sql = readFileSync(resolve(process.cwd(), "db/migrations/153_students_acuerdo_cierre.sql"), "utf8");
+const sql = readFileSync(resolve(process.cwd(), "db/migrations/153_catalog_plans_stripe_link_flexible.sql"), "utf8");
 try {
   await client.query(sql);
   console.log("Migration 153 applied OK");
