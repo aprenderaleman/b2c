@@ -1207,6 +1207,15 @@ export async function getStripeHealth(from: Date, to: Date): Promise<StripeHealt
   let stripe: ReturnType<typeof stripeDE> | null = null;
   try { stripe = stripeDE(); } catch { return null; }
 
+  const timeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
+    Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+
+  return timeout(_getStripeHealthInner(stripe, from, to), 8000);
+}
+
+async function _getStripeHealthInner(
+  stripe: ReturnType<typeof stripeDE>, from: Date, to: Date,
+): Promise<StripeHealth> {
   const sb = supabaseAdmin();
   const fromTs = Math.floor(from.getTime() / 1000);
   const toTs = Math.floor(to.getTime() / 1000);
@@ -1214,11 +1223,10 @@ export async function getStripeHealth(from: Date, to: Date): Promise<StripeHealt
   // --- MRR: sum of unit_amount * quantity for all active subscriptions NOW ---
   let mrrCents = 0;
   let activeCount = 0;
-  const activeSubs: string[] = [];
 
-  for await (const sub of stripe.subscriptions.list({ status: "active", limit: 100 })) {
+  const activePage = await stripe.subscriptions.list({ status: "active", limit: 100 });
+  for (const sub of activePage.data) {
     activeCount++;
-    activeSubs.push(sub.id);
     for (const item of sub.items.data) {
       const price = item.price;
       const unitAmount = price.unit_amount ?? 0;
@@ -1231,8 +1239,14 @@ export async function getStripeHealth(from: Date, to: Date): Promise<StripeHealt
   }
 
   // --- Churn: subscriptions canceled within the period ---
+  // Use created filter to avoid iterating all historical cancellations.
+  // A subscription canceled in the period was necessarily created before toTs.
   let churnedCount = 0;
-  for await (const sub of stripe.subscriptions.list({ status: "canceled", limit: 100 })) {
+  const canceledPage = await stripe.subscriptions.list({
+    status: "canceled", limit: 100,
+    created: { lte: toTs },
+  });
+  for (const sub of canceledPage.data) {
     const canceledAt = sub.canceled_at ?? sub.ended_at;
     if (canceledAt && canceledAt >= fromTs && canceledAt <= toTs) {
       churnedCount++;
