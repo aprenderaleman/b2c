@@ -46,7 +46,6 @@ export default async function EmpresaPage({
     ? Math.floor((new Date(today).getTime() - new Date(adsLastSync).getTime()) / 86_400_000)
     : null;
 
-  const adsEfficiency = computeAdsScore(m.marketing.roas, m.funnel.rate_lead_to_sale);
   const ltv = await getLtvWithProjections(m.marketing.cac_cents).catch(() => ({
     ltv_real_cents: 0,
     ltv_projected_cents: 0,
@@ -123,21 +122,11 @@ export default async function EmpresaPage({
         </div>
 
         {/* KPIs en fila */}
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <MiniKpi
             label="Beneficio Neto"
             value={moneyFromCents(m.beneficio_neto_cents)}
             tone={m.beneficio_neto_cents >= 0 ? "pos" : "neg"}
-          />
-          <MiniKpi
-            label="Eficiencia Ads"
-            value={`${adsEfficiency}/10`}
-            tone={adsEfficiency >= 7 ? "pos" : adsEfficiency >= 4 ? "neutral" : "neg"}
-          />
-          <MiniKpi
-            label="Conversion Real"
-            value={`${m.funnel.rate_real.toFixed(1)}%`}
-            tone={m.funnel.rate_real >= 5 ? "pos" : m.funnel.rate_real >= 2 ? "neutral" : "neg"}
           />
           <MiniKpi
             label="Margen Neto"
@@ -145,10 +134,17 @@ export default async function EmpresaPage({
             tone={m.margen_neto_pct >= 30 ? "pos" : m.margen_neto_pct >= 10 ? "neutral" : "neg"}
           />
           <MiniKpi
-            label="ROAS"
-            value={`${m.marketing.roas.toFixed(1)}x`}
-            tone={m.marketing.roas >= 3 ? "pos" : m.marketing.roas >= 1.5 ? "neutral" : "neg"}
+            label="Trial → Venta"
+            value={`${m.funnel.rate_attended_to_sale.toFixed(1)}%`}
+            tone={m.funnel.rate_attended_to_sale >= 40 ? "pos" : m.funnel.rate_attended_to_sale >= 20 ? "neutral" : "neg"}
           />
+          {m.marketing.has_ads_data && (
+            <MiniKpi
+              label="ROAS"
+              value={`${m.marketing.roas.toFixed(1)}x`}
+              tone={m.marketing.roas >= 3 ? "pos" : m.marketing.roas >= 1.5 ? "neutral" : "neg"}
+            />
+          )}
         </div>
       </Panel>
 
@@ -506,12 +502,13 @@ function CostLine({ label, cents }: { label: string; cents: number }) {
 function FunnelSection({ funnel }: { funnel: FunnelMetrics }) {
   const hasAdsData = funnel.ads_conversions > 0;
   const topOfFunnel = hasAdsData ? funnel.ads_conversions : funnel.leads_total;
+  const pendingTrials = funnel.trials_scheduled - funnel.trials_scheduled_past;
   const steps = [
-    { label: hasAdsData ? "Contactos Ads (Google)" : "Leads CRM", value: topOfFunnel, rate: null },
-    { label: "Leads CRM", value: funnel.leads_total, rate: null, hidden: !hasAdsData },
-    { label: "Prueba agendada", value: funnel.trials_scheduled, rate: funnel.rate_lead_to_trial },
-    { label: "Asistio", value: funnel.trials_attended, rate: funnel.rate_trial_attendance },
-    { label: "Pagaron", value: funnel.conversions_real, rate: null },
+    { label: hasAdsData ? "Contactos Ads (Google)" : "Leads CRM", value: topOfFunnel, rate: null, note: null },
+    { label: "Leads CRM", value: funnel.leads_total, rate: null, hidden: !hasAdsData, note: null },
+    { label: "Prueba agendada", value: funnel.trials_scheduled, rate: funnel.rate_lead_to_trial, note: pendingTrials > 0 ? `${pendingTrials} futuras` : null },
+    { label: "Asistio", value: funnel.trials_attended, rate: funnel.rate_trial_attendance, note: null },
+    { label: "Convirtieron", value: funnel.conversions, rate: funnel.rate_attended_to_sale, note: null },
   ].filter(s => !s.hidden);
   const max = Math.max(topOfFunnel, 1);
 
@@ -526,12 +523,15 @@ function FunnelSection({ funnel }: { funnel: FunnelMetrics }) {
               {s.rate !== null && (
                 <span className="ml-1 text-slate-400">({s.rate.toFixed(0)}%)</span>
               )}
+              {s.note && (
+                <span className="ml-1 text-slate-400 text-[10px]">({s.note})</span>
+              )}
             </span>
           </div>
           <div className="h-5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
             <div
               className={`h-full rounded-full transition-all ${
-                s.label === "Pagaron" ? "bg-emerald-500 dark:bg-emerald-400" : "bg-brand-500 dark:bg-brand-400"
+                s.label === "Convirtieron" ? "bg-emerald-500 dark:bg-emerald-400" : "bg-brand-500 dark:bg-brand-400"
               }`}
               style={{ width: `${Math.max((s.value / max) * 100, 2)}%` }}
             />
@@ -541,10 +541,10 @@ function FunnelSection({ funnel }: { funnel: FunnelMetrics }) {
       <div className="pt-3 mt-1 border-t border-slate-200 dark:border-slate-700 text-xs">
         <div className="flex items-center gap-4">
           <div className="text-slate-500">
-            <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-sm">{funnel.rate_real.toFixed(1)}%</span>
-            {" "}tasa de conversión real
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400 text-sm">{funnel.rate_lead_to_sale.toFixed(1)}%</span>
+            {" "}lead → venta
             <span className="ml-1 text-slate-400">
-              ({funnel.conversions_real} ventas / {hasAdsData ? `${funnel.ads_conversions} contactos ads` : `${funnel.leads_total} leads`})
+              ({funnel.conversions} conversiones / {funnel.leads_total} leads)
             </span>
           </div>
         </div>
@@ -603,9 +603,3 @@ function humanType(type: string): string {
   } as Record<string, string>)[type] ?? type;
 }
 
-function computeAdsScore(roas: number, conversionRate: number): number {
-  // Scale 1-10: combines ROAS (weight 60%) and conversion rate (weight 40%)
-  const roasScore = Math.min(roas / 5, 1) * 6; // ROAS 5x = max 6 points
-  const convScore = Math.min(conversionRate / 10, 1) * 4; // 10% conv = max 4 points
-  return Math.max(1, Math.min(10, Math.round(roasScore + convScore)));
-}

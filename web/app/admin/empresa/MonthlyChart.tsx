@@ -3,7 +3,6 @@
 import { useState } from "react";
 import {
   Bar,
-  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -32,12 +31,11 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
     fijos: Math.round(r.fixed_cents / 100),
     neto: Math.round(r.neto_cents / 100),
     margen: Math.round(r.margen_neto_pct),
-    roas: Math.round(r.roas * 10) / 10,
   }));
 
   return (
     <div className="space-y-6">
-      {/* Chart: Margen neto % y ROAS */}
+      {/* Chart: Margen neto % */}
       <div>
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
@@ -49,40 +47,17 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
               axisLine={false}
               tickFormatter={(v) => `${v}%`}
             />
-            <YAxis
-              yAxisId="right"
-              orientation="right"
-              tick={{ fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => `${v}x`}
-            />
             <Tooltip
-              formatter={(value, name) => [
-                String(name) === "margen" ? `${value}%` : `${value}x`,
-                String(name) === "margen" ? "Margen neto" : "ROAS",
-              ]}
+              formatter={(value) => [`${value}%`, "Margen neto"]}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
             />
-            <Bar dataKey="roas" yAxisId="right" fill="#f59e0b" radius={[3, 3, 0, 0]} barSize={24} opacity={0.7} />
-            <Line
-              type="monotone"
-              dataKey="margen"
-              yAxisId="left"
-              stroke="#8b5cf6"
-              strokeWidth={2.5}
-              dot={{ r: 4, strokeWidth: 0 }}
-            />
+            <Bar dataKey="margen" yAxisId="left" fill="#8b5cf6" radius={[3, 3, 0, 0]} barSize={24} opacity={0.7} />
             <ReferenceLine yAxisId="left" y={30} stroke="#ef4444" strokeDasharray="4 4" label={{ value: "Obj 30%", fontSize: 10, fill: "#ef4444" }} />
-            <ReferenceLine yAxisId="right" y={1} stroke="#10b981" strokeDasharray="4 4" />
           </ComposedChart>
         </ResponsiveContainer>
         <div className="flex flex-wrap gap-4 mt-1 text-xs text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-violet-500" /> Margen neto %
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-amber-500 opacity-70" /> ROAS
+            <span className="w-2.5 h-2.5 rounded-sm bg-violet-500 opacity-70" /> Margen neto %
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-6 border-t-2 border-dashed border-red-500" /> Objetivo 30%
@@ -119,18 +94,10 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
                       {Math.round(row.neto_cents / 100).toLocaleString("es-ES")}€
                     </span>
                   </div>
-                  <div className="flex gap-3">
-                    <span>
-                      <span className="text-slate-400 mr-1">Margen:</span>
-                      <span className={row.margen_neto_pct >= 30 ? "text-emerald-600 dark:text-emerald-400" : row.margen_neto_pct >= 0 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}>
-                        {row.margen_neto_pct.toFixed(0)}%
-                      </span>
-                    </span>
-                    <span>
-                      <span className="text-slate-400 mr-1">ROAS:</span>
-                      <span className={row.roas >= 3 ? "text-emerald-600 dark:text-emerald-400" : row.roas >= 1 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}>
-                        {row.roas.toFixed(1)}x
-                      </span>
+                  <div>
+                    <span className="text-slate-400 mr-1">Margen:</span>
+                    <span className={row.margen_neto_pct >= 30 ? "text-emerald-600 dark:text-emerald-400" : row.margen_neto_pct >= 0 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}>
+                      {row.margen_neto_pct.toFixed(0)}%
                     </span>
                   </div>
                 </div>
@@ -145,11 +112,10 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
                     <MiniCard label="Costes fijos" value={money(row.fixed_cents)} />
                   </div>
 
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                     <MiniCard label="Beneficio neto" value={money(row.neto_cents)} color={row.neto_cents >= 0 ? "green" : "red"} />
                     <MiniCard label="Margen neto" value={`${row.margen_neto_pct.toFixed(1)}%`} color={row.margen_neto_pct >= 30 ? "green" : row.margen_neto_pct >= 0 ? "amber" : "red"} />
                     <MiniCard label="Leads" value={String(row.leads)} sub={`${row.conversions} conversiones`} />
-                    <MiniCard label="ROAS" value={`${row.roas.toFixed(2)}x`} color={row.roas >= 3 ? "green" : row.roas >= 1 ? "amber" : "red"} />
                   </div>
 
                   {/* Revenue by type */}
@@ -229,13 +195,10 @@ export function MonthlyChart({ data }: { data: MonthlyRow[] }) {
               {(() => {
                 const rev = data.reduce((s, r) => s + r.revenue_cents, 0);
                 const net = data.reduce((s, r) => s + r.neto_cents, 0);
-                const ads = data.reduce((s, r) => s + r.ads_cents, 0);
                 return (
                   <>
                     <span className="text-slate-400 mr-1">Margen:</span>
                     <span>{rev > 0 ? (net / rev * 100).toFixed(0) : 0}%</span>
-                    <span className="text-slate-400 mx-2">ROAS:</span>
-                    <span>{ads > 0 ? (rev / ads).toFixed(1) : "—"}x</span>
                   </>
                 );
               })()}

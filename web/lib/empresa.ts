@@ -17,14 +17,13 @@ export type FunnelMetrics = {
   leads_total: number;
   ads_conversions: number;
   trials_scheduled: number;
+  trials_scheduled_past: number;
   trials_attended: number;
   conversions: number;
-  conversions_real: number;
   rate_lead_to_trial: number;
   rate_trial_attendance: number;
   rate_attended_to_sale: number;
   rate_lead_to_sale: number;
-  rate_real: number;
 };
 
 export type MarketingMetrics = {
@@ -216,10 +215,8 @@ export async function getEmpresaMetrics(
     getServiceLiability(sb),
   ]);
 
-  // Inject Google Ads conversions into funnel for real conversion rate
   if (googleAdsConversions > 0) {
     funnel.ads_conversions = googleAdsConversions;
-    funnel.rate_real = (funnel.conversions_real / googleAdsConversions) * 100;
   }
 
   const teacherPayrollCents = earnings;
@@ -238,19 +235,17 @@ export async function getEmpresaMetrics(
     ? (beneficioNetoCents / revenue.revenue_cents) * 100
     : 0;
 
-  // CPL = cost per deposit (Google Ads "conversions" are €10 deposits, not pack sales)
-  const cplRealCents = googleAdsConversions > 0
-    ? Math.round(adsSpendCents / googleAdsConversions)
-    : (funnel.leads_total > 0 ? Math.round(adsSpendCents / funnel.leads_total) : 0);
+  // CPL = ads / leads (coste real por lead registrado en CRM)
+  const cplRealCents = funnel.leads_total > 0
+    ? Math.round(adsSpendCents / funnel.leads_total)
+    : 0;
   // CAC = ads / new clients acquired (first Stripe payment in period)
   const cacCents = newClients.new_clients > 0
     ? Math.round(adsSpendCents / newClients.new_clients)
     : 0;
-  // LTV = revenue from new clients / number of new clients
-  const ltvFromNewClients = newClients.new_clients > 0
-    ? Math.round(newClients.new_client_revenue_cents / newClients.new_clients)
-    : ltv;
-  const ltvCacRatio = cacCents > 0 ? ltvFromNewClients / cacCents : 0;
+  // LTV = promedio histórico de todos los pagos por estudiante (all-time)
+  const ltvAllTime = ltv;
+  const ltvCacRatio = cacCents > 0 ? ltvAllTime / cacCents : 0;
   // ROAS = new client revenue / ads spend (excludes recurring pre-existing clients)
   const roas = adsSpendCents > 0 ? newClients.new_client_revenue_cents / adsSpendCents : 0;
 
@@ -258,7 +253,7 @@ export async function getEmpresaMetrics(
     ads_spend_cents: adsSpendCents,
     cpl_real_cents: cplRealCents,
     cac_cents: cacCents,
-    ltv_cents: ltvFromNewClients,
+    ltv_cents: ltvAllTime,
     ltv_cac_ratio: ltvCacRatio,
     roas,
     has_ads_data: adsSpendCents > 0,
@@ -268,7 +263,7 @@ export async function getEmpresaMetrics(
 
   const daily = mergeDailyData(dailyLeads, dailyPayments, from, to);
 
-  const alerts = computeAlerts(margenNetoPct, cacCents, ltvFromNewClients, roas, funnel);
+  const alerts = computeAlerts(margenNetoPct, cacCents, ltvAllTime, roas, funnel);
 
   return {
     revenue_cents: revenue.revenue_cents,
@@ -335,8 +330,9 @@ async function getFixedCostsForRange(sb: SB, from: Date, to: Date): Promise<numb
 async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMetrics> {
   const fromISO = from.toISOString();
   const toISO = to.toISOString();
+  const nowISO = new Date().toISOString();
 
-  const [leadsRes, trialsRes, attendedRes, convertedRes, realPayersRes] = await Promise.all([
+  const [leadsRes, trialsRes, trialsScheduledPastRes, attendedRes, convertedRes] = await Promise.all([
     sb.from("leads")
       .select("id", { count: "exact", head: true })
       .gte("created_at", fromISO)
@@ -350,39 +346,37 @@ async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMet
       .select("id", { count: "exact", head: true })
       .gte("created_at", fromISO)
       .lte("created_at", toISO)
+      .not("trial_scheduled_at", "is", null)
+      .lt("trial_scheduled_at", nowISO),
+    sb.from("leads")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", fromISO)
+      .lte("created_at", toISO)
       .not("trial_attended_at", "is", null),
     sb.from("leads")
       .select("id", { count: "exact", head: true })
       .gte("created_at", fromISO)
       .lte("created_at", toISO)
       .or(`status.eq.converted,converted_at.not.is.null`),
-    sb.from("payments")
-      .select("student_id")
-      .not("status", "eq", "refunded")
-      .gte("paid_at", fromISO)
-      .lte("paid_at", toISO),
   ]);
 
   const leadsTotal = leadsRes.count ?? 0;
   const trialsScheduled = trialsRes.count ?? 0;
+  const trialsScheduledPast = trialsScheduledPastRes.count ?? 0;
   const trialsAttended = attendedRes.count ?? 0;
   const conversions = convertedRes.count ?? 0;
-  const conversionsReal = new Set(
-    (realPayersRes.data ?? []).map((r: { student_id: string }) => r.student_id),
-  ).size;
 
   return {
     leads_total: leadsTotal,
     ads_conversions: 0,
     trials_scheduled: trialsScheduled,
+    trials_scheduled_past: trialsScheduledPast,
     trials_attended: trialsAttended,
     conversions,
-    conversions_real: conversionsReal,
     rate_lead_to_trial: leadsTotal > 0 ? (trialsScheduled / leadsTotal) * 100 : 0,
-    rate_trial_attendance: trialsScheduled > 0 ? (trialsAttended / trialsScheduled) * 100 : 0,
-    rate_attended_to_sale: trialsAttended > 0 ? (conversionsReal / trialsAttended) * 100 : 0,
-    rate_lead_to_sale: leadsTotal > 0 ? (conversionsReal / leadsTotal) * 100 : 0,
-    rate_real: leadsTotal > 0 ? (conversionsReal / leadsTotal) * 100 : 0,
+    rate_trial_attendance: trialsScheduledPast > 0 ? (trialsAttended / trialsScheduledPast) * 100 : 0,
+    rate_attended_to_sale: trialsAttended > 0 ? (conversions / trialsAttended) * 100 : 0,
+    rate_lead_to_sale: leadsTotal > 0 ? (conversions / leadsTotal) * 100 : 0,
   };
 }
 
@@ -964,7 +958,6 @@ export type MonthlyRow = {
   ads_cents: number;
   neto_cents: number;
   margen_neto_pct: number;
-  roas: number;
   leads: number;
   conversions: number;
   payments_count: number;
@@ -1046,7 +1039,6 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
 
     const netoCents = revenueCents - payrollCents - fixedCents - adsCents;
     const margenPct = revenueCents > 0 ? (netoCents / revenueCents) * 100 : 0;
-    const roas = adsCents > 0 ? revenueCents / adsCents : 0;
 
     rows.push({
       label,
@@ -1059,7 +1051,6 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
       ads_cents: adsCents,
       neto_cents: netoCents,
       margen_neto_pct: margenPct,
-      roas,
       leads: leadsRes.count ?? 0,
       conversions: convRes.count ?? 0,
       payments_count: paymentsCount,
@@ -1089,8 +1080,6 @@ export type PulseData = {
   students_prev_month: number;
   students_retained: number;
   at_risk: AtRiskStudent[];
-  roas_current: number;
-  roas_prev: number;
   ads_spend_cents: number;
   revenue_projected_cents: number;
   cpl_cents: number;
@@ -1110,7 +1099,7 @@ export async function getPulseData(
   const prevFromISO = prevFrom.toISOString();
   const prevToISO = prevTo.toISOString();
 
-  const [leadsRes, convRes, currPayments, prevPayments, adsRes, prevAdsRes] = await Promise.all([
+  const [leadsRes, convRes, currPayments, prevPayments, adsRes] = await Promise.all([
     sb.from("leads").select("id", { count: "exact", head: true })
       .gte("created_at", currFromISO).lte("created_at", currToISO),
     sb.from("leads").select("id", { count: "exact", head: true })
@@ -1126,8 +1115,6 @@ export async function getPulseData(
       .gte("paid_at", prevFromISO).lte("paid_at", prevToISO),
     sb.from("google_ads_daily").select("cost_micros")
       .gte("date", currFromISO.slice(0, 10)).lte("date", currToISO.slice(0, 10)),
-    sb.from("google_ads_daily").select("cost_micros")
-      .gte("date", prevFromISO.slice(0, 10)).lte("date", prevToISO.slice(0, 10)),
   ]);
 
   const leads = leadsRes.count ?? 0;
@@ -1167,13 +1154,7 @@ export async function getPulseData(
   const adsCents = Math.round(
     (adsRes.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0) / 10000
   );
-  const prevAdsCents = Math.round(
-    (prevAdsRes.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0) / 10000
-  );
   const currRevenue = currRows.reduce((s, r) => s + Number(r.amount_cents), 0);
-  const prevRevenue = prevRows.reduce((s, r) => s + Number(r.amount_cents), 0);
-  const roasCurr = adsCents > 0 ? currRevenue / adsCents : 0;
-  const roasPrev = prevAdsCents > 0 ? prevRevenue / prevAdsCents : 0;
 
   const projectedRevenue = periodDays > 0 ? Math.round(currRevenue / periodDays * 30) : 0;
   const cplCents = leads > 0 ? Math.round(adsCents / leads) : 0;
@@ -1186,8 +1167,6 @@ export async function getPulseData(
     students_prev_month: prevStudentIds.size,
     students_retained: retained.length,
     at_risk: atRisk,
-    roas_current: roasCurr,
-    roas_prev: roasPrev,
     ads_spend_cents: adsCents,
     revenue_projected_cents: projectedRevenue,
     cpl_cents: cplCents,
