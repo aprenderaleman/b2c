@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { buildPagoUrl } from "./enrollment-checkout";
 
 /**
  * Shared loader for the trial-class lists shown to admin
@@ -44,6 +45,9 @@ export type TrialClassRow = {
   trialAttendedAt:    string | null;
   trialAbsentAt:      string | null;
   closerNotes:        Array<{ author: string; content: string; created_at: string }>;
+  /** Última oferta enviada al lead (Jonathan 2026-11-07): el profe puede
+   *  copiar el MISMO enlace que recibió el lead y reenviárselo. */
+  lastOffer: { sentAt: string; label: string; url: string } | null;
 };
 
 /**
@@ -156,6 +160,34 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
     ),
   );
   const firstNoteByLead = new Map<string, { content: string; timestamp: string; author: string | null }>();
+  // Última oferta enviada por lead → URL para el botón "Copiar enlace".
+  // Individuales: si la fila es vieja (sin checkout_url, pre-migración
+  // 152) la URL se reconstruye (/pago/<ofertaId>, determinista). Dúo y
+  // Trío sin URL guardada se omiten: regenerar el /g/ cambiaría el grp.
+  const lastOfferByLead = new Map<string, { sentAt: string; label: string; url: string }>();
+  if (leadIds.length > 0) {
+    const { data: ofertas } = await sb
+      .from("ofertas_enviadas")
+      .select("id, lead_id, meta, ritmo, tipo_pago, importe_cents, created_at, checkout_url")
+      .in("lead_id", leadIds)
+      .order("created_at", { ascending: false });
+    for (const o of (ofertas ?? []) as Array<{
+      id: string; lead_id: string; meta: string | null; ritmo: string | null;
+      tipo_pago: string | null; importe_cents: number | null; created_at: string;
+      checkout_url: string | null;
+    }>) {
+      if (lastOfferByLead.has(o.lead_id)) continue; // ya tenemos la más reciente
+      const isGroup = /^(duo|trio)_/.test(o.ritmo ?? "");
+      const url = o.checkout_url ?? (isGroup ? null : buildPagoUrl(o.id));
+      if (!url) continue;
+      const eur = o.importe_cents != null ? `${Math.round(o.importe_cents / 100)} €${o.tipo_pago === "suscripcion" ? "/mes" : ""}` : "";
+      const plan = isGroup
+        ? `${o.ritmo!.startsWith("duo") ? "Dúo" : "Trío"} ${String(o.meta ?? "").toUpperCase()} ${o.ritmo!.split("_")[1] ?? ""}`
+        : `${o.tipo_pago === "suscripcion" ? `Suscripción${o.ritmo ? ` ${o.ritmo}` : ""}` : "Pago único"} · Meta ${String(o.meta ?? "").toUpperCase()}`;
+      lastOfferByLead.set(o.lead_id, { sentAt: o.created_at, label: `${plan}${eur ? ` · ${eur}` : ""}`, url });
+    }
+  }
+
   const closerNotesByLead = new Map<string, Array<{ author: string; content: string; created_at: string }>>();
   if (leadIds.length > 0) {
     const [{ data: notes }, { data: cNotes }] = await Promise.all([
@@ -233,6 +265,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       qualificationAnswers: lead?.qualification_answers ?? null,
       landingIntent:       lead?.landing_intent ?? null,
       closerNotes:         lead?.id ? closerNotesByLead.get(lead.id) ?? [] : [],
+      lastOffer:           lead?.id ? lastOfferByLead.get(lead.id) ?? null : null,
     };
   });
 }

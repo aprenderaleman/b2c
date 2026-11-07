@@ -457,6 +457,18 @@ export function TrialHubCard({
               )}
             </div>
 
+            {/* Última oferta enviada → Copiar enlace (Jonathan 2026-11-07):
+                el MISMO enlace que recibió el lead, para reenviárselo
+                directo cuando lo pide días después sin regenerar nada. */}
+            {row.lastOffer && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-500/5 px-3 py-2">
+                <span className="text-xs text-emerald-800 dark:text-emerald-200">
+                  🔗 Enlace de inscripción enviado el {formatBerlinDate(row.lastOffer.sentAt)} · {row.lastOffer.label}
+                </span>
+                <CopyLinkButton url={row.lastOffer.url} />
+              </div>
+            )}
+
             {/* Objection chips */}
             {objectionOpen && row.leadId && !isProcessed && (
               <div className="mt-3 rounded-lg border border-violet-200 dark:border-violet-500/30 bg-violet-50/50 dark:bg-violet-500/5 p-3">
@@ -675,4 +687,27 @@ function normalizeLevel(level: string | null | undefined): string | undefined {
   if (level.startsWith("A2")) return "A2";
   if (level.startsWith("B2")) return "B2";
   return level;
+}
+
+/** Botón "Copiar enlace" de la última oferta enviada (Jonathan 2026-11-07). */
+function CopyLinkButton({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(url);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch {
+          // Safari viejo / permisos: fallback con prompt para copiar a mano.
+          window.prompt("Copia el enlace:", url);
+        }
+      }}
+      className="text-xs font-semibold rounded-full border border-emerald-300 dark:border-emerald-500/40 bg-emerald-100 dark:bg-emerald-500/15 px-3 py-1 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-200 dark:hover:bg-emerald-500/25"
+    >
+      {copied ? "✅ ¡Copiado!" : "📋 Copiar enlace"}
+    </button>
+  );
 }

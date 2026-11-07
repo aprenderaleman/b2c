@@ -104,6 +104,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
       clases_totales: sessions,
       clases_por_mes: r * 4,
       importe_cents:  priceMonth * 100,
+      // URL exacta enviada — el grp lleva el mes, regenerarla otro mes
+      // crearía un grupo distinto (migración 152, botón Copiar enlace).
+      checkout_url:   url,
     });
 
     // WhatsApp al lead — mismo kind whitelisted que la oferta individual.
@@ -266,6 +269,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
   // Link corto en nuestro dominio — la Checkout Session real se crea
   // cuando el lead visita el link (ver lib/enrollment-checkout.ts).
   const checkoutUrl = buildPagoUrl(ofertaId);
+
+  // Guardar la URL en la oferta (migración 152) — alimenta el botón
+  // "Copiar enlace" de la ficha del trial (petición Jonathan 2026-11-07).
+  await sb.from("ofertas_enviadas").update({ checkout_url: checkoutUrl }).eq("id", ofertaId);
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
