@@ -159,6 +159,15 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
         .filter((x): x is string => !!x),
     ),
   );
+  // OJO (2026-11-07): .in() con ~1.000 ids revienta el límite de URL de
+  // PostgREST ("Bad Request") y el error se tragaba en silencio. Todas
+  // las consultas por leadIds van ahora en lotes de 150.
+  const chunks = <T,>(arr: T[], size = 150): T[][] => {
+    const out: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+    return out;
+  };
+
   const firstNoteByLead = new Map<string, { content: string; timestamp: string; author: string | null }>();
   // Última oferta enviada por lead → URL para el botón "Copiar enlace".
   // Individuales: si la fila es vieja (sin checkout_url, pre-migración
@@ -166,11 +175,13 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
   // Trío sin URL guardada se omiten: regenerar el /g/ cambiaría el grp.
   const lastOfferByLead = new Map<string, { sentAt: string; label: string; url: string }>();
   if (leadIds.length > 0) {
-    const { data: ofertas } = await sb
-      .from("ofertas_enviadas")
-      .select("id, lead_id, meta, ritmo, tipo_pago, importe_cents, created_at, checkout_url")
-      .in("lead_id", leadIds)
-      .order("created_at", { ascending: false });
+    const ofertas = (await Promise.all(chunks(leadIds).map(ids =>
+      sb.from("ofertas_enviadas")
+        .select("id, lead_id, meta, ritmo, tipo_pago, importe_cents, created_at, checkout_url")
+        .in("lead_id", ids)
+        .order("created_at", { ascending: false }),
+    ))).flatMap(r => r.data ?? [])
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
     for (const o of (ofertas ?? []) as Array<{
       id: string; lead_id: string; meta: string | null; ritmo: string | null;
       tipo_pago: string | null; importe_cents: number | null; created_at: string;
@@ -190,19 +201,27 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
 
   const closerNotesByLead = new Map<string, Array<{ author: string; content: string; created_at: string }>>();
   if (leadIds.length > 0) {
-    const [{ data: notes }, { data: cNotes }] = await Promise.all([
-      sb.from("lead_timeline")
-        .select("lead_id, content, timestamp, author")
-        .eq("type", "agent_note")
-        .in("lead_id", leadIds)
-        .order("timestamp", { ascending: true }),
-      sb.from("acciones_closer")
-        .select("lead_id, contenido, created_at, closer_id")
-        .eq("tipo", "nota")
-        .not("contenido", "is", null)
-        .in("lead_id", leadIds)
-        .order("created_at", { ascending: false }),
+    const [notesParts, cNotesParts] = await Promise.all([
+      Promise.all(chunks(leadIds).map(ids =>
+        sb.from("lead_timeline")
+          .select("lead_id, content, timestamp, author")
+          .eq("type", "agent_note")
+          .in("lead_id", ids)
+          .order("timestamp", { ascending: true }),
+      )),
+      Promise.all(chunks(leadIds).map(ids =>
+        sb.from("acciones_closer")
+          .select("lead_id, contenido, created_at, closer_id")
+          .eq("tipo", "nota")
+          .not("contenido", "is", null)
+          .in("lead_id", ids)
+          .order("created_at", { ascending: false }),
+      )),
     ]);
+    const notes  = notesParts.flatMap(r => r.data ?? [])
+      .sort((a, b) => ((a as { timestamp: string }).timestamp > (b as { timestamp: string }).timestamp ? 1 : -1));
+    const cNotes = cNotesParts.flatMap(r => r.data ?? [])
+      .sort((a, b) => ((a as { created_at: string }).created_at < (b as { created_at: string }).created_at ? 1 : -1));
     for (const n of (notes ?? []) as Array<{ lead_id: string; content: string; timestamp: string; author: string | null }>) {
       if (!firstNoteByLead.has(n.lead_id)) {
         firstNoteByLead.set(n.lead_id, { content: n.content, timestamp: n.timestamp, author: n.author });
