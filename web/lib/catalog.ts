@@ -26,6 +26,8 @@ export type CatalogPlan = {
   classes_total: number | null;
   classes_per_month: number | null;
   stripe_link: string | null;
+  /** Link de pago fraccionado (migración 153); null = usar stripe_link. */
+  stripe_link_flexible?: string | null;
   surcharge_pct: number;
   sort_order: number;
 };
@@ -267,7 +269,7 @@ export async function isCatalogActive(): Promise<boolean> {
 
 // ── Bridge: same shape as trial-packs.ts but from catalog ───────────
 
-import { GOAL_CLASSES, GOAL_LABELS, type RitmoId, type GoalId, type GoalDetail, type Ritmo, type OneTimePack } from "./trial-packs";
+import { GOAL_CLASSES, GOAL_LABELS, type RitmoId, type GoalId, type GoalDetail, type Ritmo, type OneTimePack, KIDS_PACK } from "./trial-packs";
 
 const RITMO_EMOJI: Record<string, string> = {
   viajero: "🌍", estandar: "⭐", intensivo: "🚀", vip_express: "👑",
@@ -338,10 +340,11 @@ export async function getCatalogKidsPack(catalog?: FullCatalog) {
     classes: kids.classes_total ?? 24,
     priceCents: kids.price_cents,
     urlSingle: kids.stripe_link ?? "",
-    urlFlexible: kids.stripe_link ?? "",
+    urlFlexible: kids.stripe_link_flexible ?? kids.stripe_link ?? "",
     labels: {
       single: `Pago único (${(kids.price_cents / 100).toLocaleString("es-ES")} €)`,
-      flexible: `Paga durante tu formación`,
+      // Mismo texto que lib/trial-packs.ts mientras el precio no cambie (305 € × 3 no se deriva del precio).
+      flexible: kids.price_cents === KIDS_PACK.priceCents ? KIDS_PACK.labels.flexible : `Paga durante tu formación`,
     },
   };
 }
