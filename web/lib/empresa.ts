@@ -347,6 +347,11 @@ async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMet
   const toISO = to.toISOString();
   const nowISO = new Date().toISOString();
 
+  // Each event is filtered by its OWN timestamp, not lead creation date.
+  // leads_total = leads created in period (top of funnel)
+  // trials_scheduled = trials scheduled within the period
+  // trials_attended = trials attended within the period
+  // conversions = leads converted within the period
   const [leadsRes, trialsRes, trialsScheduledPastRes, attendedRes, convertedRes] = await Promise.all([
     sb.from("leads")
       .select("id", { count: "exact", head: true })
@@ -354,25 +359,22 @@ async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMet
       .lte("created_at", toISO),
     sb.from("leads")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", fromISO)
-      .lte("created_at", toISO)
-      .not("trial_scheduled_at", "is", null),
+      .gte("trial_scheduled_at", fromISO)
+      .lte("trial_scheduled_at", toISO),
     sb.from("leads")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", fromISO)
-      .lte("created_at", toISO)
       .not("trial_scheduled_at", "is", null)
-      .lt("trial_scheduled_at", nowISO),
+      .lt("trial_scheduled_at", nowISO)
+      .gte("trial_scheduled_at", fromISO)
+      .lte("trial_scheduled_at", toISO),
     sb.from("leads")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", fromISO)
-      .lte("created_at", toISO)
-      .not("trial_attended_at", "is", null),
+      .gte("trial_attended_at", fromISO)
+      .lte("trial_attended_at", toISO),
     sb.from("leads")
       .select("id", { count: "exact", head: true })
-      .gte("created_at", fromISO)
-      .lte("created_at", toISO)
-      .or(`status.eq.converted,converted_at.not.is.null`),
+      .gte("converted_at", fromISO)
+      .lte("converted_at", toISO),
   ]);
 
   const leadsTotal = leadsRes.count ?? 0;
