@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { isCatalogActive, getActiveCatalog, getBonoCents as catalogBonoCents, getBonusMultiplier } from "./catalog";
+import { isCatalogActive, getActiveCatalog, getBonoCents as catalogBonoCents, getEffectiveBonusLadder } from "./catalog";
 
 type RegisterOpts = {
   teacherId: string;
@@ -146,20 +146,22 @@ export async function registerBonoCierre(opts: {
   let { cents: bonoCents, key: bonoKey } = await resolveBonoCierreCents(sb, opts.ritmo, opts.tipoPago);
   if (bonoCents <= 0) return 0;
 
-  // Bonus ladder: when catalog v2+ is active, multiply bono if threshold met
-  if (await isCatalogActive()) {
-    const cat = await getActiveCatalog();
-    if (cat.ladder) {
-      const mes = opts.mes ?? new Date().toISOString().slice(0, 7) + "-01";
-      const { count } = await sb
-        .from("comisiones")
-        .select("id", { count: "exact", head: true })
-        .eq("usuario_id", teacherUserId)
-        .eq("tipo", "bono_cierre")
-        .eq("mes", mes);
-      const salesThisMonth = (count ?? 0) + 1;
-      const mult = getBonusMultiplier(cat, salesThisMonth);
-      if (mult > 1) bonoCents = Math.round(bonoCents * mult);
+  // Escalera de bonos (Gelfis, desde nov 2026): a partir de la N.ª venta del
+  // mes (threshold, hoy 4) el bono se multiplica (multiplier, hoy ×2). Se usa
+  // la ladder de la versión de catálogo vigente por fecha, no el flag.
+  const ladder = await getEffectiveBonusLadder();
+  if (ladder) {
+    const mes = opts.mes ?? new Date().toISOString().slice(0, 7) + "-01";
+    const { count } = await sb
+      .from("comisiones")
+      .select("id", { count: "exact", head: true })
+      .eq("usuario_id", teacherUserId)
+      .eq("tipo", "bono_cierre")
+      .eq("mes", mes);
+    const salesThisMonth = (count ?? 0) + 1;
+    if (salesThisMonth >= ladder.threshold && Number(ladder.multiplier) > 1) {
+      bonoCents = Math.round(bonoCents * Number(ladder.multiplier));
+      console.log(`[commission-engine] bono ladder: venta ${salesThisMonth} del mes → ×${ladder.multiplier}`);
     }
   }
 

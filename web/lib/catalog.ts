@@ -233,6 +233,32 @@ export function getBonusMultiplier(catalog: FullCatalog, salesCount: number): nu
   return 1;
 }
 
+/**
+ * Escalera de bonos VIGENTE por fecha (Gelfis 2026-11-08): la ladder de la
+ * versión cuya effective_at ya pasó, aunque el flag `catalog_active_version`
+ * siga en v1 (el catálogo v2 aún no tiene links de Stripe ni packs de pago
+ * único, así que no se puede activar entero). Null si ninguna versión
+ * vigente define ladder.
+ */
+export async function getEffectiveBonusLadder(now: Date = new Date()): Promise<CatalogBonusLadder | null> {
+  const sb = supabaseAdmin();
+  const { data: ver } = await sb
+    .from("catalog_versions")
+    .select("id")
+    .lte("effective_at", now.toISOString())
+    .order("effective_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!ver) return null;
+  const { data: ladder } = await sb
+    .from("catalog_bonus_ladder")
+    .select("*")
+    .eq("version_id", (ver as { id: string }).id)
+    .limit(1)
+    .maybeSingle();
+  return (ladder as CatalogBonusLadder | null) ?? null;
+}
+
 /** Whether the catalog flag is active (i.e. switched to v2+). */
 export async function isCatalogActive(): Promise<boolean> {
   const tag = await getActiveVersionTag();
