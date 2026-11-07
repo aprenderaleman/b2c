@@ -89,6 +89,7 @@ export type EmpresaMetrics = {
   active_students: number;
   cost_per_class: CostPerClass | null;
   service_liability: ServiceLiability | null;
+  stripe_health: StripeHealth | null;
 };
 
 export type CostPerClass = {
@@ -100,6 +101,16 @@ export type CostPerClass = {
 export type ServiceLiability = {
   total_cents: number;
   total_classes: number;
+};
+
+export type StripeHealth = {
+  mrr_cents: number;
+  active_subscriptions: number;
+  churned_subscriptions: number;
+  churn_rate_pct: number;
+  cash_in_cents: number;
+  cash_out_cents: number;
+  cash_flow_cents: number;
 };
 
 // =============================================================================
@@ -140,7 +151,8 @@ export function resolvePeriod(
       break;
     case "month":
       from = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), 1));
-      to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth() + 1, 0, 23, 59, 59));
+      // Cap to today — showing future days inflates prorated costs
+      to = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth(), berlin.getDate(), 23, 59, 59));
       break;
     case "prev_month":
       from = new Date(Date.UTC(berlin.getFullYear(), berlin.getMonth() - 1, 1));
@@ -194,6 +206,7 @@ export async function getEmpresaMetrics(
     newClients,
     costPerClass,
     serviceLiability,
+    stripeHealth,
   ] = await Promise.all([
     getTotalRevenue(from, to),
     getTotalRevenue(prevFrom, prevTo),
@@ -213,6 +226,7 @@ export async function getEmpresaMetrics(
     getNewClientsMetrics(sb, from, to),
     getCostPerClass(sb, from, to),
     getServiceLiability(sb),
+    getStripeHealth(from, to).catch(() => null),
   ]);
 
   if (googleAdsConversions > 0) {
@@ -284,6 +298,7 @@ export async function getEmpresaMetrics(
     active_students: newClients.total_unique_clients || activeStudents,
     cost_per_class: costPerClass,
     service_liability: serviceLiability,
+    stripe_health: stripeHealth,
   };
 }
 
@@ -1179,6 +1194,93 @@ export async function getPulseData(
     ads_spend_cents: adsCents,
     revenue_projected_cents: projectedRevenue,
     cpl_cents: cplCents,
+  };
+}
+
+// =============================================================================
+// Stripe Health: MRR, Churn, Cash Flow
+// =============================================================================
+
+export async function getStripeHealth(from: Date, to: Date): Promise<StripeHealth | null> {
+  let stripe: ReturnType<typeof stripeDE> | null = null;
+  try { stripe = stripeDE(); } catch { return null; }
+
+  const sb = supabaseAdmin();
+  const fromTs = Math.floor(from.getTime() / 1000);
+  const toTs = Math.floor(to.getTime() / 1000);
+
+  // --- MRR: sum of unit_amount * quantity for all active subscriptions NOW ---
+  let mrrCents = 0;
+  let activeCount = 0;
+  const activeSubs: string[] = [];
+
+  for await (const sub of stripe.subscriptions.list({ status: "active", limit: 100 })) {
+    activeCount++;
+    activeSubs.push(sub.id);
+    for (const item of sub.items.data) {
+      const price = item.price;
+      const unitAmount = price.unit_amount ?? 0;
+      const qty = item.quantity ?? 1;
+      let monthly = unitAmount * qty;
+      if (price.recurring?.interval === "year") monthly = Math.round(monthly / 12);
+      else if (price.recurring?.interval === "week") monthly = Math.round(monthly * 4.33);
+      mrrCents += monthly;
+    }
+  }
+
+  // --- Churn: subscriptions canceled within the period ---
+  let churnedCount = 0;
+  for await (const sub of stripe.subscriptions.list({ status: "canceled", limit: 100 })) {
+    const canceledAt = sub.canceled_at ?? sub.ended_at;
+    if (canceledAt && canceledAt >= fromTs && canceledAt <= toTs) {
+      churnedCount++;
+    }
+  }
+
+  // Churn rate = churned / (active at start of period + churned)
+  const startBase = activeCount + churnedCount;
+  const churnPct = startBase > 0 ? (churnedCount / startBase) * 100 : 0;
+
+  // --- Cash Flow: real money in vs money out in the period ---
+  // Cash in: payments received (from DB — source of truth for received cash)
+  const { data: paymentsIn } = await sb
+    .from("payments")
+    .select("amount_cents")
+    .eq("status", "paid")
+    .gte("paid_at", from.toISOString())
+    .lte("paid_at", to.toISOString());
+  const cashInCents = (paymentsIn ?? []).reduce((s, r) => s + Number((r as any).amount_cents), 0);
+
+  // Cash out: teacher earnings paid + business expenses in period
+  const monthFrom = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
+  const monthTo = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
+
+  const { data: earningsPaid } = await sb
+    .from("teacher_earnings")
+    .select("amount_cents")
+    .eq("paid", true)
+    .gte("month", monthFrom.toISOString().slice(0, 10))
+    .lte("month", monthTo.toISOString().slice(0, 10));
+  const teacherOutCents = (earningsPaid ?? []).reduce((s, r) => s + Number((r as any).amount_cents), 0);
+
+  const { data: expenses } = await sb
+    .from("business_expenses")
+    .select("amount_cents")
+    .gte("incurred_at", monthFrom.toISOString().slice(0, 10))
+    .lte("incurred_at", to.toISOString().slice(0, 10));
+  const expensesOutCents = (expenses ?? []).reduce((s, r) => s + Number((r as any).amount_cents), 0);
+
+  const fixedCostsCents = await getFixedCostsForRange(sb, from, to);
+  const cashOutCents = teacherOutCents + expensesOutCents + fixedCostsCents;
+
+  return {
+    mrr_cents: mrrCents,
+    active_subscriptions: activeCount,
+    churned_subscriptions: churnedCount,
+    churn_rate_pct: churnPct,
+    cash_in_cents: cashInCents,
+    cash_out_cents: cashOutCents,
+    cash_flow_cents: cashInCents - cashOutCents,
   };
 }
 

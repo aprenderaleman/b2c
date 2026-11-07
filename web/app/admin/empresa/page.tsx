@@ -12,7 +12,7 @@ import {
   resolvePeriod,
   moneyFromCents,
 } from "@/lib/empresa";
-import type { PeriodPreset, StudentRevenue, TeacherPayrollRow, FunnelMetrics, EmpresaAlert, LtvSummary, LtvClientRow } from "@/lib/empresa";
+import type { PeriodPreset, StudentRevenue, TeacherPayrollRow, FunnelMetrics, EmpresaAlert, LtvSummary, LtvClientRow, StripeHealth } from "@/lib/empresa";
 import { PeriodSelector } from "./PeriodSelector";
 import { AlertBanner } from "./AlertBanner";
 import { MonthlyChart } from "./MonthlyChart";
@@ -74,6 +74,30 @@ export default async function EmpresaPage({
       <Suspense fallback={null}>
         <PeriodSelector current={preset} />
       </Suspense>
+
+      {/* ============ DATOS PRINCIPALES: MRR, Churn, Cash Flow ============ */}
+      {m.stripe_health && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <BigKpi
+            label="MRR"
+            value={moneyFromCents(m.stripe_health.mrr_cents)}
+            sub={`${m.stripe_health.active_subscriptions} suscripciones activas`}
+            tone="neutral"
+          />
+          <BigKpi
+            label="Churn"
+            value={`${m.stripe_health.churn_rate_pct.toFixed(1)}%`}
+            sub={`${m.stripe_health.churned_subscriptions} baja${m.stripe_health.churned_subscriptions !== 1 ? "s" : ""} en el periodo`}
+            tone={m.stripe_health.churn_rate_pct <= 3 ? "pos" : m.stripe_health.churn_rate_pct <= 7 ? "neutral" : "neg"}
+          />
+          <BigKpi
+            label="Cash Flow real"
+            value={moneyFromCents(m.stripe_health.cash_flow_cents)}
+            sub={`${moneyFromCents(m.stripe_health.cash_in_cents)} entrada · ${moneyFromCents(m.stripe_health.cash_out_cents)} salida`}
+            tone={m.stripe_health.cash_flow_cents >= 0 ? "pos" : "neg"}
+          />
+        </div>
+      )}
 
       {/* ============ SECCION 1: Resumen ejecutivo ============ */}
       <Panel title="Resumen del periodo">
@@ -455,6 +479,29 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
       </h2>
       {children}
     </section>
+  );
+}
+
+function BigKpi({ label, value, sub, tone }: {
+  label: string;
+  value: string;
+  sub: string;
+  tone: "pos" | "neg" | "neutral";
+}) {
+  const border =
+    tone === "pos" ? "border-emerald-300 dark:border-emerald-500/40" :
+    tone === "neg" ? "border-red-300 dark:border-red-500/40" :
+                     "border-slate-300 dark:border-slate-600";
+  const valueCls =
+    tone === "pos" ? "text-emerald-700 dark:text-emerald-300" :
+    tone === "neg" ? "text-red-700 dark:text-red-300" :
+                     "text-slate-900 dark:text-slate-50";
+  return (
+    <div className={`rounded-2xl border-2 ${border} bg-white dark:bg-slate-900 p-5`}>
+      <div className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 dark:text-slate-400">{label}</div>
+      <div className={`mt-1 text-2xl font-bold font-mono ${valueCls}`}>{value}</div>
+      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">{sub}</div>
+    </div>
   );
 }
 
