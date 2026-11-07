@@ -278,11 +278,14 @@ export async function getTotalExpenses(fromDate: Date, toDate: Date): Promise<{
   expense_count:   number;
 }> {
   const sb = supabaseAdmin();
+  // Expand from to month-start: ads expenses may be stored on the 1st of the month,
+  // so "30d" (Oct 8–Nov 7) must still include Oct 1. Use lte (not lt) for the end.
+  const monthFrom = new Date(Date.UTC(fromDate.getUTCFullYear(), fromDate.getUTCMonth(), 1));
   const { data, error } = await sb
     .from("business_expenses")
     .select("amount_cents, category")
-    .gte("incurred_at", fromDate.toISOString().slice(0, 10))
-    .lt("incurred_at",  toDate.toISOString().slice(0, 10));
+    .gte("incurred_at", monthFrom.toISOString().slice(0, 10))
+    .lte("incurred_at", toDate.toISOString().slice(0, 10));
   if (error) return { total_cents: 0, by_category: {}, expense_count: 0 };
 
   type Row = { amount_cents: number; category: string };

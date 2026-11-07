@@ -85,7 +85,7 @@ export type EmpresaMetrics = {
   recent_payments: RecentPayment[];
   period: { from: string; to: string };
   prev_revenue_cents: number;
-  prev_neto_cents: number;
+
   active_students: number;
   cost_per_class: CostPerClass | null;
   service_liability: ServiceLiability | null;
@@ -259,8 +259,6 @@ export async function getEmpresaMetrics(
     has_ads_data: adsSpendCents > 0,
   };
 
-  const prevNetoCents = prevRevenue.revenue_cents - earnings - variableExpensesCents - fixedCostsCents - adsSpendCents;
-
   const daily = mergeDailyData(dailyLeads, dailyPayments, from, to);
 
   const alerts = computeAlerts(margenNetoPct, cacCents, ltvAllTime, roas, funnel);
@@ -283,7 +281,6 @@ export async function getEmpresaMetrics(
     recent_payments: recentPayments,
     period: { from: from.toISOString(), to: to.toISOString() },
     prev_revenue_cents: prevRevenue.revenue_cents,
-    prev_neto_cents: prevNetoCents,
     active_students: newClients.total_unique_clients || activeStudents,
     cost_per_class: costPerClass,
     service_liability: serviceLiability,
@@ -457,14 +454,14 @@ async function countActiveStudents(sb: SB): Promise<number> {
 }
 
 async function getCostPerClass(sb: SB, from: Date, to: Date): Promise<CostPerClass | null> {
-  const fromDate = from.toISOString().slice(0, 10);
-  const toDate = to.toISOString().slice(0, 10);
+  const monthFrom = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
+  const monthTo   = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
 
   const { data: earnings } = await sb
     .from("teacher_earnings")
     .select("amount_cents, classes_count")
-    .gte("month", fromDate)
-    .lte("month", toDate);
+    .gte("month", monthFrom.toISOString().slice(0, 10))
+    .lte("month", monthTo.toISOString().slice(0, 10));
 
   if (!earnings || earnings.length === 0) return null;
 
@@ -619,12 +616,15 @@ async function getNewClientsMetrics(sb: SB, from: Date, to: Date): Promise<{
 }
 
 async function getAdsSpendFromExpenses(sb: SB, from: Date, to: Date): Promise<number> {
+  // Ads expenses may be stored with incurred_at on the 1st of the month.
+  // Expand from to month-start so "30d" (Oct 8–Nov 7) includes Oct 1.
+  const monthFrom = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
   const { data } = await sb
     .from("business_expenses")
     .select("amount_cents")
     .eq("category", "ads")
-    .gte("incurred_at", from.toISOString().slice(0, 10))
-    .lt("incurred_at", to.toISOString().slice(0, 10));
+    .gte("incurred_at", monthFrom.toISOString().slice(0, 10))
+    .lte("incurred_at", to.toISOString().slice(0, 10));
 
   return (data ?? []).reduce(
     (s, r) => s + Number((r as { amount_cents: number }).amount_cents), 0,
@@ -676,14 +676,14 @@ export async function getRevenueByStudent(from: Date, to: Date): Promise<Student
 
 export async function getTeacherPayrollBreakdown(from: Date, to: Date): Promise<TeacherPayrollRow[]> {
   const sb = supabaseAdmin();
-  const fromDate = from.toISOString().slice(0, 10);
-  const toDate = to.toISOString().slice(0, 10);
+  const monthFrom = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
+  const monthTo   = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
 
   const [earningsRes, classTypesRes] = await Promise.all([
     sb.from("teacher_earnings")
       .select("teacher_id, amount_cents, classes_count, paid, teacher:teachers!inner(users!inner(full_name))")
-      .gte("month", fromDate)
-      .lte("month", toDate),
+      .gte("month", monthFrom.toISOString().slice(0, 10))
+      .lte("month", monthTo.toISOString().slice(0, 10)),
     sb.from("classes")
       .select("teacher_id, type, teacher:teachers!classes_teacher_id_fkey!inner(user_id)")
       .eq("status", "completed")
@@ -991,7 +991,7 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
     const monthNames = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
     const label = `${monthNames[from.getUTCMonth()]} ${from.getUTCFullYear().toString().slice(2)}`;
 
-    const [revenue, payroll, fixed, ads, leadsRes, convRes] = await Promise.all([
+    const [revenue, payroll, fixed, googleAds, metaAds, leadsRes, convRes] = await Promise.all([
       sb.from("payments")
         .select("amount_cents, student_id, type, paid_at, student:students!inner(users!inner(full_name))")
         .not("status", "eq", "refunded")
@@ -1011,6 +1011,11 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
         .select("cost_micros")
         .gte("date", fromDate)
         .lte("date", toDate),
+      sb.from("business_expenses")
+        .select("amount_cents")
+        .eq("category", "ads")
+        .gte("incurred_at", fromDate)
+        .lte("incurred_at", toDate),
       sb.from("leads")
         .select("id", { count: "exact", head: true })
         .gte("created_at", fromISO)
@@ -1037,8 +1042,9 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
     }
     const payrollCents = (payroll.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
     const fixedCents = (fixed.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
-    const adsMicros = (ads.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0);
-    const adsCents = Math.round(adsMicros / 10000);
+    const googleAdsMicros = (googleAds.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0);
+    const metaAdsCents = (metaAds.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
+    const adsCents = Math.round(googleAdsMicros / 10000) + metaAdsCents;
 
     const netoCents = revenueCents - payrollCents - fixedCents - adsCents;
     const margenPct = revenueCents > 0 ? (netoCents / revenueCents) * 100 : 0;
