@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
-import { GUIA_NIVELES, guiaDisponible, guiaNivelPara, type GuiaNivel } from "@/lib/guias/primeras-frases";
+import { GUIA_NIVELES, guiaNivelPara, type GuiaNivel } from "@/lib/guias/primeras-frases";
+import { alumnoTieneGuia } from "@/lib/guias/guia-acceso";
 import { renderGuiaPrimerasFrases } from "@/lib/guias/primeras-frases-pdf";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 /**
  * Guía «Tus primeras 30 frases en alemán» en PDF.
  * - Alumno (o admin viéndolo como alumno): la de su nivel, solo si se
- *   inscribió dentro de la ventana de la promoción.
+ *   inscribió en las 48 h siguientes a su clase de prueba.
  * - Admin sin suplantar: cualquier nivel con ?nivel=A1…C1, para revisarlas.
  */
 export async function GET(req: Request) {
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
 
   if (session.user.role === "student") {
     const student = await getStudentByUserId(session.user.id);
-    if (!student || !guiaDisponible(student.converted_at)) {
+    if (!student || !(await alumnoTieneGuia(student.id))) {
       return NextResponse.json({ error: "not_available" }, { status: 403 });
     }
     nivel  = guiaNivelPara(student.current_level);

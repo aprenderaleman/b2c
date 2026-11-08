@@ -1,6 +1,7 @@
 // Guía de bienvenida «Tus primeras 30 frases en alemán», una por nivel.
-// Regalo para quien se inscribe dentro de la ventana de la promoción
-// (students.converted_at); se descarga desde /estudiante/certificados.
+// Regalo para quien se inscribe en las 48 h siguientes a su clase de
+// prueba (misma regla que el bono de conversación); se descarga desde
+// /estudiante/certificados. Quien la gana la conserva para siempre.
 
 export type GuiaNivel = "A1" | "A2" | "B1" | "B2" | "C1";
 
@@ -8,16 +9,33 @@ export type Frase = { de: string; es: string };
 export type Seccion = { titulo: string; consejo: string; frases: Frase[] };
 export type Guia = { nivel: GuiaNivel; subtitulo: string; intro: string; secciones: Seccion[] };
 
-// 48 h desde el anuncio (8 nov 2026, 21:00 hora de España). Se pueden
-// mover sin tocar código con GUIA_30_FRASES_DESDE / GUIA_30_FRASES_HASTA.
-const DESDE = process.env.GUIA_30_FRASES_DESDE || "2026-11-08T20:00:00Z";
-const HASTA = process.env.GUIA_30_FRASES_HASTA || "2026-11-10T20:00:00Z";
+const H = 3_600_000;
 
-/** ¿Se inscribió dentro de la ventana? Quien entra en ella la conserva para siempre. */
-export function guiaDisponible(convertedAt: string | null | undefined): boolean {
-  if (!convertedAt) return false;
-  const t = new Date(convertedAt).getTime();
-  return t >= new Date(DESDE).getTime() && t < new Date(HASTA).getTime();
+/**
+ * ¿Se inscribió dentro de las 48 h posteriores a la clase de prueba?
+ * - bono_conversacion_at: convertLeadToStudent ya lo comprobó con trial_attended_at.
+ * - Si el profe no marcó la asistencia (cobró directamente en la clase),
+ *   se mide desde la hora programada de la prueba (+1 h que dura la clase).
+ * - Si marcó la asistencia después de convertir, también cuenta.
+ */
+export function guiaDisponible(a: {
+  convertedAt:  string | null | undefined;
+  bonoAt?:      string | null;
+  attendedAt?:  string | null;
+  scheduledAt?: string | null;
+}): boolean {
+  if (a.bonoAt) return true;
+  if (!a.convertedAt) return false;
+  const conv = new Date(a.convertedAt).getTime();
+  if (a.attendedAt) {
+    const d = conv - new Date(a.attendedAt).getTime();
+    return d >= -24 * H && d <= 48 * H;
+  }
+  if (a.scheduledAt) {
+    const d = conv - new Date(a.scheduledAt).getTime();
+    return d >= 0 && d <= 49 * H;
+  }
+  return false;
 }
 
 /** A0 recibe la de A1 y C2 la de C1. */

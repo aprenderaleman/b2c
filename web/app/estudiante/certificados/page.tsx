@@ -1,7 +1,8 @@
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { listStudentCertificates } from "@/lib/certificates";
-import { guiaDisponible, guiaNivelPara } from "@/lib/guias/primeras-frases";
+import { guiaNivelPara } from "@/lib/guias/primeras-frases";
+import { alumnoTieneGuia } from "@/lib/guias/guia-acceso";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Certificados · Estudiante" };
@@ -25,7 +26,7 @@ export default async function StudentCertificatesPage() {
   }
 
   const certs = await listStudentCertificates(student.id);
-  const guiaNivel = guiaDisponible(student.converted_at) ? guiaNivelPara(student.current_level) : null;
+  const guiaNivel = (await alumnoTieneGuia(student.id)) ? guiaNivelPara(student.current_level) : null;
 
   return (
     <main className="space-y-5">
