@@ -318,18 +318,27 @@ export async function getEmpresaMetrics(
 
 type SB = ReturnType<typeof supabaseAdmin>;
 
-async function getTeacherPayrollForRange(sb: SB, from: Date, to: Date): Promise<number> {
-  // teacher_earnings.month is always the 1st of the month (e.g. 2026-10-01).
-  // Expand the range to full months so a "last 30 days" query (Oct 8–Nov 7)
-  // correctly includes both October and November earnings.
+async function getTeacherPayrollForRange(sb: SB, from: Date, to: Date, onlyPaid = false): Promise<number> {
   const monthFrom = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
   const monthTo   = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
-  const { data } = await sb
+  let q = sb
     .from("teacher_earnings")
-    .select("amount_cents")
+    .select("amount_cents, month")
     .gte("month", monthFrom.toISOString().slice(0, 10))
     .lte("month", monthTo.toISOString().slice(0, 10));
-  return (data ?? []).reduce((s, r) => s + Number((r as { amount_cents: number }).amount_cents), 0);
+  if (onlyPaid) q = q.eq("paid", true);
+  const { data } = await q;
+  if (!data || data.length === 0) return 0;
+  let total = 0;
+  for (const r of data as Array<{ amount_cents: number; month: string }>) {
+    const md = new Date(r.month + "T00:00:00Z");
+    const y = md.getUTCFullYear(), m = md.getUTCMonth();
+    const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+    const startDay = (y === from.getUTCFullYear() && m === from.getUTCMonth()) ? from.getUTCDate() : 1;
+    const endDay = (y === to.getUTCFullYear() && m === to.getUTCMonth()) ? to.getUTCDate() : dim;
+    total += Math.round(Number(r.amount_cents) * (endDay - startDay + 1) / dim);
+  }
+  return total;
 }
 
 async function getFixedCostsForRange(sb: SB, from: Date, to: Date): Promise<number> {
@@ -621,7 +630,8 @@ async function getAverageLTV(sb: SB): Promise<number> {
   const { data } = await sb
     .from("payments")
     .select("student_id, amount_cents")
-    .not("status", "eq", "refunded");
+    .not("status", "eq", "refunded")
+    .limit(5000);
 
   if (!data || data.length === 0) return 0;
 
@@ -649,7 +659,8 @@ async function getNewClientsMetrics(sb: SB, from: Date, to: Date): Promise<{
     .from("payments")
     .select("student_id, amount_cents, paid_at")
     .not("status", "eq", "refunded")
-    .order("paid_at", { ascending: true });
+    .order("paid_at", { ascending: true })
+    .limit(5000);
 
   if (!data || data.length === 0) return { new_clients: 0, new_client_revenue_cents: 0, total_unique_clients: 0 };
 
@@ -693,14 +704,11 @@ async function getNewClientsMetrics(sb: SB, from: Date, to: Date): Promise<{
 }
 
 async function getAdsSpendFromExpenses(sb: SB, from: Date, to: Date): Promise<number> {
-  // Ads expenses may be stored with incurred_at on the 1st of the month.
-  // Expand from to month-start so "30d" (Oct 8–Nov 7) includes Oct 1.
-  const monthFrom = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
   const { data } = await sb
     .from("business_expenses")
     .select("amount_cents")
     .eq("category", "ads")
-    .gte("incurred_at", monthFrom.toISOString().slice(0, 10))
+    .gte("incurred_at", from.toISOString().slice(0, 10))
     .lte("incurred_at", to.toISOString().slice(0, 10));
 
   return (data ?? []).reduce(
@@ -1308,18 +1316,22 @@ async function _getStripeHealthInner(
   }
 
   // --- Churn: subscriptions canceled within the period ---
-  // Use created filter to avoid iterating all historical cancellations.
-  // A subscription canceled in the period was necessarily created before toTs.
   let churnedCount = 0;
-  const canceledPage = await stripe.subscriptions.list({
-    status: "canceled", limit: 100,
-    created: { lte: toTs },
-  });
-  for (const sub of canceledPage.data) {
-    const canceledAt = sub.canceled_at ?? sub.ended_at;
-    if (canceledAt && canceledAt >= fromTs && canceledAt <= toTs) {
-      churnedCount++;
+  let cancelAfter: string | undefined;
+  for (let page = 0; page < 10; page++) {
+    const canceledPage = await stripe.subscriptions.list({
+      status: "canceled", limit: 100,
+      created: { lte: toTs },
+      ...(cancelAfter ? { starting_after: cancelAfter } : {}),
+    });
+    for (const sub of canceledPage.data) {
+      const canceledAt = sub.canceled_at ?? sub.ended_at;
+      if (canceledAt && canceledAt >= fromTs && canceledAt <= toTs) {
+        churnedCount++;
+      }
     }
+    if (!canceledPage.has_more || canceledPage.data.length === 0) break;
+    cancelAfter = canceledPage.data[canceledPage.data.length - 1].id;
   }
 
   // Churn rate = churned / (active at start of period + churned)
@@ -1336,22 +1348,13 @@ async function _getStripeHealthInner(
     .lte("paid_at", to.toISOString());
   const cashInCents = (paymentsIn ?? []).reduce((s, r) => s + Number((r as any).amount_cents), 0);
 
-  // Cash out: teacher earnings paid + business expenses in period
-  const monthFrom = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), 1));
-  const monthTo = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
-
-  const { data: earningsPaid } = await sb
-    .from("teacher_earnings")
-    .select("amount_cents")
-    .eq("paid", true)
-    .gte("month", monthFrom.toISOString().slice(0, 10))
-    .lte("month", monthTo.toISOString().slice(0, 10));
-  const teacherOutCents = (earningsPaid ?? []).reduce((s, r) => s + Number((r as any).amount_cents), 0);
+  // Cash out: teacher earnings paid (prorated) + business expenses in period
+  const teacherOutCents = await getTeacherPayrollForRange(sb, from, to, true);
 
   const { data: expenses } = await sb
     .from("business_expenses")
     .select("amount_cents")
-    .gte("incurred_at", monthFrom.toISOString().slice(0, 10))
+    .gte("incurred_at", from.toISOString().slice(0, 10))
     .lte("incurred_at", to.toISOString().slice(0, 10));
   const expensesOutCents = (expenses ?? []).reduce((s, r) => s + Number((r as any).amount_cents), 0);
 
@@ -1395,11 +1398,11 @@ export async function getLtvWithProjections(cacCents: number): Promise<LtvSummar
   let stripe: ReturnType<typeof stripeUS> | null = null;
   try { stripe = stripeUS(); } catch { /* env var missing */ }
 
-  // 1. Get all paid amounts from DB grouped by student
   const { data: payments } = await sb
     .from("payments")
     .select("student_id, amount_cents, student:students(users(full_name, email))")
-    .not("status", "eq", "refunded");
+    .not("status", "eq", "refunded")
+    .limit(5000);
 
   const byStudent = new Map<string, { name: string; email: string; paid: number }>();
   for (const r of (payments ?? []) as any[]) {
