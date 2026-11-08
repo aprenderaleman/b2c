@@ -174,7 +174,7 @@ export default async function EmpresaPage({
 
       {/* ============ SECCION 1b: Metricas operativas ============ */}
       <Panel title="Metricas operativas">
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {/* Coste por clase impartida */}
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
@@ -191,6 +191,55 @@ export default async function EmpresaPage({
                 </p>
               </>
             ) : (
+              <p className="mt-2 text-sm text-slate-400">Sin datos para este periodo</p>
+            )}
+          </div>
+
+          {/* Precio de venta por clase */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Precio de venta por clase
+            </p>
+            {m.cost_per_class && m.revenue_cents > 0 ? (() => {
+              const sellPrice = Math.round(m.revenue_cents / m.cost_per_class.classes_taught);
+              return (
+                <>
+                  <p className="mt-1 text-2xl font-bold font-mono text-slate-900 dark:text-slate-50">
+                    {moneyFromCents(sellPrice)}{" "}
+                    <span className="text-sm font-normal text-slate-400">/ clase</span>
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    {moneyFromCents(m.revenue_cents)} ingresos · {m.cost_per_class.classes_taught} clases
+                  </p>
+                </>
+              );
+            })() : (
+              <p className="mt-2 text-sm text-slate-400">Sin datos para este periodo</p>
+            )}
+          </div>
+
+          {/* Margen neto por clase */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Margen neto por clase
+            </p>
+            {m.cost_per_class && m.revenue_cents > 0 ? (() => {
+              const totalCosts = m.teacher_payroll_cents + m.ads_spend_cents + m.fixed_costs_cents;
+              const netProfit = m.revenue_cents - totalCosts;
+              const marginPerClass = Math.round(netProfit / m.cost_per_class.classes_taught);
+              const marginPct = (netProfit / m.revenue_cents) * 100;
+              return (
+                <>
+                  <p className={`mt-1 text-2xl font-bold font-mono ${marginPerClass >= 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300"}`}>
+                    {moneyFromCents(marginPerClass)}{" "}
+                    <span className="text-sm font-normal text-slate-400">/ clase</span>
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    {marginPct.toFixed(1)}% margen · {moneyFromCents(netProfit)} beneficio neto
+                  </p>
+                </>
+              );
+            })() : (
               <p className="mt-2 text-sm text-slate-400">Sin datos para este periodo</p>
             )}
           </div>
