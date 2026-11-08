@@ -284,7 +284,12 @@ function buildConfirmationWa(a: { leadFirst: string; startDate: string; joinUrl:
   // "sin tu respuesta en 12h tu slot se libera". Ver
   // docs/no-auto-cancel-policy.md — el sistema NO libera slots
   // por falta de confirmación.
-  return `¡Hola ${a.leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\nTu clase de alemán está agendada para\n${a.startDate}.\n\n🔗 Aquí entras el día de la clase:\n${a.joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
+  // Gelfis 2026-11-08 (Hormozi #1): trial_confirmation pasa de puramente
+  // logístico a pre-venta encubierta. Añade Dream Outcome ("llegar a tu
+  // meta sin perder meses"), explica QUÉ pasa en la clase (reduce
+  // ansiedad = menos no-shows) y pide un commitment pequeño (papel y
+  // lápiz). Trial son 40 minutos (no 30).
+  return `¡Hola ${a.leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\nTu clase de prueba quedó agendada para el ${a.startDate} 🗓️\n\nTe cuento qué va a pasar: 40 minutos uno a uno con un profe nativo que habla español. Vais a ver dónde estás hoy en alemán y qué camino te conviene para llegar a tu meta sin perder meses dando vueltas.\n\n🔗 Aquí entras el día de la clase: ${a.joinUrl}\n\nUn consejo que marca la diferencia: ten papel y lápiz a mano para anotar el plan que te preparen 😊\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema.\n\n— Stiv · Aprender-Aleman.de`;
 }
 
 /**

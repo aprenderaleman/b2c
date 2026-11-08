@@ -199,37 +199,61 @@ export async function markTrialAttendedAwaitingConversion(
     const packLink = opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType);
     const metaLabel = opts.metaLabel || opts.packLabel || opts.packId;
 
+    // Gelfis 2026-11-08 (Hormozi #3 — post_trial_followup): pasamos de
+    // enviar "aquí tu enlace + Garantía" a enviar el stack enumerado
+    // Grand Slam. El riesgo se asume por escrito y se hace visible al
+    // lado del CTA. Baja el perceived effort del pago y sube la
+    // likelihood of achievement.
     if (opts.isOneTime) {
       text = [
-        `¡Hola ${firstName}! 😊`,
+        `¡Hola ${firstName}! 🎉`,
         ``,
-        `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} (pago único: todas tus clases desbloqueadas desde el día 1) — a tu ritmo: con 2 clases por semana, tu ${metaLabel} llega en ${opts.fechaLlegada} 📅`,
-        `Y con tu inscripción queda activada tu Garantía de Nivel por escrito.`,
-        `👉 ${packLink || "(Te paso el enlace en breve.)"}`,
+        `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} (pago único, todas tus clases desbloqueadas desde el día 1) — a tu ritmo, llegas en ${opts.fechaLlegada} 📅`,
         ``,
-        `Son 5 minutos. Cualquier duda durante el proceso, aquí estoy 😊`,
+        `Lo que incluye tu inscripción:`,
+        `✅ Tus clases 1 a 1 con profes nativos que hablan español`,
+        `✅ Hans — tu tutor IA 24/7 para dudas entre clases`,
+        `✅ SCHULE — tu plataforma de práctica guiada`,
+        `✅ Garantía de Nivel POR ESCRITO: si cumples el ritmo y no llegas, sigues gratis hasta lograrlo`,
+        ``,
+        `👉 Aquí tu inscripción (5 min): ${packLink || "(Te paso el enlace en breve.)"}`,
+        ``,
+        `El riesgo lo asumimos nosotros — por eso lo firmamos por escrito. Cualquier duda durante el proceso, aquí estoy 😊`,
       ].join("\n");
     } else {
       text = [
-        `¡Hola ${firstName}! 😊`,
+        `¡Hola ${firstName}! 🎉`,
         ``,
-        `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} con ritmo ${opts.ritmoLabel || ""} — empezando esta semana, tu ${metaLabel} llega en ${opts.fechaLlegada} 📅`,
-        `Y con tu inscripción queda activada tu Garantía de Nivel por escrito.`,
-        `👉 ${packLink || "(Te paso el enlace en breve.)"}`,
+        `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} con ritmo ${opts.ritmoLabel || ""} — empezando esta semana, llegas en ${opts.fechaLlegada} 📅`,
         ``,
-        `Son 5 minutos. Cualquier duda durante el proceso, aquí estoy 😊`,
+        `Lo que incluye tu inscripción:`,
+        `✅ Tus clases 1 a 1 con profes nativos que hablan español`,
+        `✅ Hans — tu tutor IA 24/7 para dudas entre clases`,
+        `✅ SCHULE — tu plataforma de práctica guiada`,
+        `✅ Garantía de Nivel POR ESCRITO: si cumples el ritmo y no llegas, sigues gratis hasta lograrlo`,
+        ``,
+        `👉 Aquí tu inscripción (5 min): ${packLink || "(Te paso el enlace en breve.)"}`,
+        ``,
+        `El riesgo lo asumimos nosotros — por eso lo firmamos por escrito. Cualquier duda durante el proceso, aquí estoy 😊`,
       ].join("\n");
     }
   } else if (opts) {
     const packLink = opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType);
     const packName = opts.packLabel || getPack(opts.packId)?.name || opts.packId;
     text = [
-      `¡Hola ${firstName}! 😊`,
+      `¡Hola ${firstName}! 🎉`,
       ``,
       `Me alegra que hayas decidido dar el paso. Aquí tienes el enlace para formalizar tu inscripción en el ${packName}:`,
-      `👉 ${packLink || "(Te paso el enlace en breve.)"}`,
       ``,
-      `Son 5 minutos. Cualquier duda durante el proceso, aquí estoy 😊`,
+      `Lo que incluye:`,
+      `✅ Tus clases 1 a 1 con profes nativos que hablan español`,
+      `✅ Hans — tu tutor IA 24/7`,
+      `✅ SCHULE — tu plataforma de práctica guiada`,
+      `✅ Garantía de Nivel POR ESCRITO: si cumples y no llegas, sigues gratis hasta lograrlo`,
+      ``,
+      `👉 Aquí tu inscripción (5 min): ${packLink || "(Te paso el enlace en breve.)"}`,
+      ``,
+      `El riesgo lo asumimos nosotros — por eso lo firmamos por escrito. Cualquier duda durante el proceso, aquí estoy 😊`,
     ].join("\n");
   } else {
     text = `¡Hola ${firstName}! 😊\n\n¡Gracias por asistir a tu clase de prueba de alemán!\n\n¿Qué te pareció? Si te interesa avanzar, te preparo un plan personalizado con horarios y precio exacto — dime cuando quieras seguir.\n\nStiv, Aprender-Aleman.de`;
