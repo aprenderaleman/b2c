@@ -1,6 +1,7 @@
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { listStudentCertificates } from "@/lib/certificates";
+import { guiaDisponible, guiaNivelPara } from "@/lib/guias/primeras-frases";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Certificados · Estudiante" };
@@ -24,6 +25,7 @@ export default async function StudentCertificatesPage() {
   }
 
   const certs = await listStudentCertificates(student.id);
+  const guiaNivel = guiaDisponible(student.converted_at) ? guiaNivelPara(student.current_level) : null;
 
   return (
     <main className="space-y-5">
@@ -34,6 +36,33 @@ export default async function StudentCertificatesPage() {
           y manualmente cuando apruebas un examen oficial.
         </p>
       </header>
+
+      {guiaNivel && (
+        <section className="rounded-3xl border border-orange-200 dark:border-orange-500/30 bg-gradient-to-br from-orange-50 to-white dark:from-orange-500/10 dark:to-slate-900 p-6">
+          <div className="flex items-start gap-4">
+            <div className="text-4xl" aria-hidden>🎁</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold uppercase tracking-wide text-orange-600 dark:text-orange-400">
+                Regalo de bienvenida
+              </p>
+              <h2 className="mt-1 text-lg font-bold text-slate-900 dark:text-slate-50">
+                Tus primeras 30 frases en alemán · {guiaNivel}
+              </h2>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Una guía adaptada a tu nivel con las frases que más vas a usar, su traducción y consejos.
+              </p>
+            </div>
+          </div>
+          <a
+            href="/api/certificates/guia-30-frases"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary text-sm mt-4 inline-flex"
+          >
+            Descargar PDF
+          </a>
+        </section>
+      )}
 
       {certs.length === 0 ? (
         <section className="rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-8 text-center">
