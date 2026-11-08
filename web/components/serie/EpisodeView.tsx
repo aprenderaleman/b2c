@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { fmtDuration, type Comment, type getEpisode } from "@/lib/serie";
 import { EpisodeInteractions } from "./EpisodeInteractions";
+import { TrackedVideo } from "./TrackedVideo";
 
 type EpisodeFull = NonNullable<Awaited<ReturnType<typeof getEpisode>>>;
 
@@ -19,7 +20,8 @@ export function EpisodeView({ ep, comments, canInteract, basePath }: { ep: Episo
 
       {ep.video_signed ? (
         <div className="overflow-hidden rounded-2xl bg-black ring-1 ring-slate-800">
-          <video src={ep.video_signed} poster={ep.poster_signed ?? undefined} controls playsInline preload="metadata" className="h-auto max-h-[80vh] w-full bg-black" />
+          {/* Player con registro de reproducciones (Gelfis 2026-11-08). */}
+          <TrackedVideo slug={ep.slug} src={ep.video_signed} poster={ep.poster_signed ?? undefined} />
         </div>
       ) : (
         <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center text-sm text-slate-500">Este capítulo se está publicando. Vuelve en unos días.</div>
