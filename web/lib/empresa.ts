@@ -338,18 +338,33 @@ async function getFixedCostsForRange(sb: SB, from: Date, to: Date): Promise<numb
 
   const { data } = await sb
     .from("costes_fijos")
-    .select("amount_cents")
+    .select("amount_cents, starts_at")
     .eq("active", true)
     .lte("starts_at", toDate)
     .or(`ends_at.is.null,ends_at.gte.${fromDate}`);
 
   if (!data || data.length === 0) return 0;
 
-  const daysInRange = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / 86_400_000));
-  const totalMonthly = (data as Array<{ amount_cents: number }>).reduce(
-    (s, r) => s + r.amount_cents, 0,
-  );
-  return Math.round(totalMonthly * (daysInRange / 30));
+  let totalCents = 0;
+  for (const r of data as Array<{ amount_cents: number; starts_at: string }>) {
+    const costStart = new Date(r.starts_at + "T00:00:00Z");
+    const effectiveFrom = costStart > from ? costStart : from;
+    let months = 0;
+    let y = effectiveFrom.getUTCFullYear();
+    let m = effectiveFrom.getUTCMonth();
+    while (y < to.getUTCFullYear() || (y === to.getUTCFullYear() && m <= to.getUTCMonth())) {
+      const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+      const startDay = (y === effectiveFrom.getUTCFullYear() && m === effectiveFrom.getUTCMonth())
+        ? effectiveFrom.getUTCDate() : 1;
+      const endDay = (y === to.getUTCFullYear() && m === to.getUTCMonth())
+        ? to.getUTCDate() : dim;
+      months += (endDay - startDay + 1) / dim;
+      m++;
+      if (m > 11) { m = 0; y++; }
+    }
+    totalCents += Math.round(r.amount_cents * months);
+  }
+  return totalCents;
 }
 
 async function getFunnelMetrics(sb: SB, from: Date, to: Date): Promise<FunnelMetrics> {
@@ -1064,11 +1079,7 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
         .select("amount_cents")
         .gte("month", fromDate)
         .lte("month", toDate),
-      sb.from("costes_fijos")
-        .select("amount_cents")
-        .eq("active", true)
-        .lte("starts_at", toDate)
-        .or(`ends_at.is.null,ends_at.gte.${fromDate}`),
+      getFixedCostsForRange(sb, from, to),
       sb.from("google_ads_daily")
         .select("cost_micros")
         .gte("date", fromDate)
@@ -1108,10 +1119,7 @@ export async function getMonthlyReport(monthsBack = 8): Promise<MonthlyRow[]> {
       paymentsList.push({ student_name: name, amount_cents: Number(r.amount_cents), type: r.type, paid_at: r.paid_at });
     }
     const payrollCents = (payroll.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
-    const fixedRaw = (fixed.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
-    const daysInRange = Math.ceil((to.getTime() - from.getTime()) / 86_400_000);
-    const daysInMonth = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 0)).getUTCDate();
-    const fixedCents = i === 0 ? Math.round(fixedRaw * daysInRange / daysInMonth) : fixedRaw;
+    const fixedCents = fixed;
     const googleAdsMicros = (googleAds.data ?? []).reduce((s, r: any) => s + Number(r.cost_micros), 0);
     const metaAdsCents = (metaAds.data ?? []).reduce((s, r: any) => s + Number(r.amount_cents), 0);
     const adsCents = Math.round(googleAdsMicros / 10000) + metaAdsCents;
