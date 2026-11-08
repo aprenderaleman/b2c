@@ -509,8 +509,24 @@ export async function advanceChain(chain: ChainRow): Promise<{
     // comercial — van por el número CALENTADO (wa_setter_instance) para
     // que no los coma un ban del número v5. El canal "setter" ya existe
     // en lib/whatsapp.ts y enruta automáticamente. El resto de chains
-    // (chain4, chain6, welcome, recordatorios) sigue por el número v5.
-    const SETTER_CHAIN_TYPES = new Set(["chain1_attended", "chain2_link_sent"]);
+    // (chain6, welcome steps 1-4, recordatorios) sigue por el número v5
+    // (que mientras esté castigado, los lead solo verá por email — cuando
+    // levantemos el kill v5 volverán a salir por WA).
+    //
+    // Gelfis 2026-11-08 (Fase 2a — Hormozi guardrails): añadimos
+    // chain3_obj_precio, chain4_absent y chain7_reactivation al routing
+    // setter. Son cadenas de rescate / conversión donde el lead ya está
+    // en conversación activa; el riesgo de que sean marcadas como spam
+    // es bajo y el impacto de que fallen por kill v5 es muy alto.
+    // Volumen estimado añadido: chain4 ~5/día, chain3 ~1/día, chain7
+    // 0-30/día (gated por system_config.chain7_reactivation_enabled).
+    const SETTER_CHAIN_TYPES = new Set([
+      "chain1_attended",
+      "chain2_link_sent",
+      "chain3_obj_precio",
+      "chain4_absent",
+      "chain7_reactivation",
+    ]);
     const useSetterChannel = SETTER_CHAIN_TYPES.has(chain.chain_type);
     const channelOpt: "setter" | undefined = useSetterChannel ? "setter" : undefined;
 
