@@ -90,6 +90,7 @@ function keyFromFileUrl(fileUrl: string): { bucket: string; key: string } | null
 export async function signRecordingUrl(
   fileUrl: string,
   expiresIn: number = DEFAULT_EXPIRES_SECONDS,
+  downloadAs?: string,
 ): Promise<string> {
   const c = client();
   if (!c) {
@@ -101,6 +102,11 @@ export async function signRecordingUrl(
   const cmd = new GetObjectCommand({
     Bucket: process.env.R2_BUCKET || parts.bucket || DEFAULT_BUCKET,
     Key:    parts.key,
+    // Con downloadAs la URL firmada fuerza descarga con ese nombre en
+    // lugar de abrir el PDF en el navegador (materiales de cursos).
+    ...(downloadAs
+      ? { ResponseContentDisposition: `attachment; filename="${downloadAs.replace(/["\\\r\n]/g, "")}"` }
+      : {}),
   });
   try {
     const signed = await getSignedUrl(c, cmd, { expiresIn });

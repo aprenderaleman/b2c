@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
  * no tienen acceso a la biblioteca de recursos para profesores.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
@@ -35,7 +35,7 @@ export async function GET(
   const sb = supabaseAdmin();
   const { data, error } = await sb
     .from("teacher_resources")
-    .select("id, kind, file_url, external_url, student_visible")
+    .select("id, kind, file_url, file_name, external_url, student_visible")
     .eq("id", id)
     .maybeSingle();
 
@@ -44,7 +44,8 @@ export async function GET(
   }
   const r = data as {
     id: string; kind: string;
-    file_url: string | null; external_url: string | null;
+    file_url: string | null; file_name: string | null;
+    external_url: string | null;
     student_visible: boolean;
   };
   // Los alumnos solo pueden abrir recursos marcados visible-para-alumnos.
@@ -52,12 +53,20 @@ export async function GET(
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
+  // ?download=1 → la URL firmada lleva Content-Disposition: attachment,
+  // así el navegador descarga el PDF con su nombre en vez de abrirlo.
+  const asDownload = req.nextUrl.searchParams.get("download") === "1";
+
   let openUrl: string | null = null;
   if (r.kind === "pdf" || r.kind === "doc") {
     if (!r.file_url) {
       return NextResponse.json({ error: "no_file" }, { status: 404 });
     }
-    openUrl = await signRecordingUrl(r.file_url);
+    openUrl = await signRecordingUrl(
+      r.file_url,
+      undefined,
+      asDownload ? (r.file_name ?? "material.pdf") : undefined,
+    );
   } else {
     openUrl = r.external_url;
   }
