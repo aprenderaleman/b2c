@@ -186,7 +186,11 @@ async function run(req: Request) {
     if (lead.whatsapp_normalized) {
       const waText = buildConfirmationWa({ leadFirst, startDate, joinUrl, vip: isMetaAdsPaid && paid, goalLabel });
 
-      const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
+      // Gelfis 2026-11-10 (Fase 2b migración v6): trial_confirmation
+      // sale por el número setter calentado. Es el PRIMER WA que recibe
+      // el lead — mientras v5 siga bloqueado por kill switch, pasar
+      // por v6 evita que todos los nuevos leads pierdan la confirmación.
+      const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation", channel: "setter" });
       waOk = r?.ok ?? false;
       // Fix Gelfis 2026-10-24 (caso Tatiane + 8 leads): si el email salió
       // pero el WA falló por algo pasajero (instancia caída, kill switch,
@@ -338,7 +342,8 @@ async function retryPendingWhatsappConfirmations(sb: ReturnType<typeof supabaseA
       goalLabel: qualificationGoalLabel((lead.qualification_answers ?? {}).goal),
     });
 
-    const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
+    // Fase 2b: retry también por setter v6.
+    const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation", channel: "setter" });
     if (r.ok) {
       sent++;
       await dropTag();

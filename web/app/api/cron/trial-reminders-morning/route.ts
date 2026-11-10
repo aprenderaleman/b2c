@@ -206,10 +206,17 @@ async function run(req: Request) {
       // 15m. Mandarlo también en el morning = 4 veces el mismo URL en
       // 24-30h → spam-signal para WhatsApp. Morning queda solo humano
       // (saludo + hora + tips de preparación).
-      const waText = `¡Buenos días ${leadFirst}! Hoy es el día 😊\n\nTu clase de alemán es a las ${timeLabel}.\n\nTe recomiendo:\n- Computador con cámara y micrófono\n- Lugar tranquilo\n\n¡Nos vemos en un rato! ✨`;
+      //
+      // Gelfis 2026-11-10 (Fase 2b migración v6 + Hormozi): morning sale
+      // por número setter calentado. Copy actualizado con Reason Why
+      // ("marca el resto del año") + commitment pequeño (papel+lápiz).
+      // 40 min, no 30. Reduce no-shows al activar Dream Outcome + reducir
+      // ansiedad previa.
+      const waText = `¡Buenos días ${leadFirst}! Hoy es el día 😊\n\nTu clase es a las ${timeLabel} (Berlín) — 40 minutos para ver tu nivel y tu camino hasta tu meta.\n\nPara que te cunda:\n- Computador con cámara y micrófono (mejor que móvil esta primera vez)\n- Lugar tranquilo donde puedas hablar\n- Papel y lápiz para anotar el plan\n\nLo que pase en estos 40 min te marca el resto del año — vale darle 100% 💪`;
       const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, {
         kind: "trial_reminder_morning",
         dedupKey: `trial_reminder_morning:${r.id}`,
+        channel: "setter",
       });
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
       else {
