@@ -97,11 +97,15 @@ export function SetterActions({
   leadId,
   citaTipo,
   citaFutura,
+  tieneCitas = true,
 }: {
   leadId: string;
   citaTipo: "trial" | "sesion";
   /** true si la cita aún no pasó — habilita los envíos de acceso. */
   citaFutura: boolean;
+  /** false para leads sin ninguna cita (buscador global): se ocultan
+   *  las acciones que dependen de una cita. */
+  tieneCitas?: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode | null>(null);
@@ -209,13 +213,15 @@ export function SetterActions({
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => open("confirmado")}
-          className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold transition-colors"
-        >
-          ✅ Confirmado
-        </button>
+        {tieneCitas && (
+          <button
+            type="button"
+            onClick={() => open("confirmado")}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold transition-colors"
+          >
+            ✅ Confirmado
+          </button>
+        )}
         {citaFutura && (
           <button
             type="button"
@@ -225,13 +231,15 @@ export function SetterActions({
             🎓 Enlace de clase
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => open("reagendar")}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/20 px-4 py-2 text-sm font-medium transition-colors"
-        >
-          🔗 Reagendar
-        </button>
+        {tieneCitas && (
+          <button
+            type="button"
+            onClick={() => open("reagendar")}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/20 px-4 py-2 text-sm font-medium transition-colors"
+          >
+            🔗 Reagendar
+          </button>
+        )}
         <button
           type="button"
           onClick={() => open("no_contesto")}

@@ -155,6 +155,9 @@ function setterItems(): NavItem[] {
     // Respondió" para los que contestan después de un "no contestó"
     // (Gelfis 2026-10-27).
     { label: "Atendidos", href: "/setter/atendidos", icon: "userCheck",  priority: 1.5 },
+    // Buscador global: TODOS los leads, teléfono por subcadena
+    // (Gelfis 2026-11-10).
+    { label: "Buscar",    href: "/setter/buscar",    icon: "barChart3",  priority: 1.7 },
     { label: "Perfil",    href: "/setter/perfil",    icon: "userCircle", priority: 2 },
   ];
 }

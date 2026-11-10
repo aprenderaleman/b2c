@@ -50,11 +50,8 @@ export async function POST(
       lead.status === "lost" || lead.estado_cierre === "perdido") {
     return NextResponse.json({ ok: false, error: "lead_fuera_de_alcance" }, { status: 409 });
   }
-  const { data: cita } = await sb
-    .from("classes").select("id").eq("lead_id", leadId).is("deleted_at", null).limit(1);
-  if (!cita || cita.length === 0) {
-    return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
-  }
+  // (Scope ampliado 2026-11-10: cualquier lead — el propio envío exige
+  // cita futura y falla limpio si no la hay.)
 
   // El envío exige cita futura; si falla, no registramos contacto
   // (no hubo toque real al lead).

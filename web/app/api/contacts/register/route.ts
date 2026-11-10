@@ -75,15 +75,11 @@ export async function POST(req: Request) {
     if (!(SETTER_ACTION_TYPES as readonly string[]).includes(actionType)) {
       return NextResponse.json({ error: "invalid_action_type" }, { status: 400 });
     }
-    // Ownership: cualquier lead con cita (trial o sesión) — su universo
-    // entero son las citas agendadas; no hay asignación por setter.
-    const { data: cita } = await sb
-      .from("classes")
-      .select("id")
-      .eq("lead_id", leadId)
-      .is("deleted_at", null)
-      .limit(1);
-    if (!cita || cita.length === 0) {
+    // Scope ampliado 2026-11-10 (buscador global): el setter puede
+    // registrar contactos sobre CUALQUIER lead existente.
+    const { data: leadRow } = await sb
+      .from("leads").select("id").eq("id", leadId).maybeSingle();
+    if (!leadRow) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
     actor = { type: "setter", id: setter.id, name: setter.name };

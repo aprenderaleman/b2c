@@ -61,11 +61,7 @@ export async function POST(
   if (lead.status === "converted" || lead.estado_cierre === "convertido") {
     return NextResponse.json({ ok: false, error: "lead_fuera_de_alcance" }, { status: 409 });
   }
-  const { data: citaScope } = await sb
-    .from("classes").select("id").eq("lead_id", leadId).is("deleted_at", null).limit(1);
-  if (!citaScope || citaScope.length === 0) {
-    return NextResponse.json({ ok: false, error: "forbidden" }, { status: 403 });
-  }
+  // (Scope ampliado 2026-11-10: cualquier lead, con o sin cita.)
 
   const nowIso = new Date().toISOString();
   const actorLabel = `${setter.name} (setter)`;

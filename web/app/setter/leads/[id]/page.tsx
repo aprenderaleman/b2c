@@ -42,7 +42,8 @@ export default async function SetterLeadPage({ params }: { params: Promise<{ id:
     trial_absent_at: string | null; sesion_plan_at: string | null;
   };
 
-  // Scope del setter: el lead debe tener al menos una cita.
+  // Desde 2026-11-10 el setter ve CUALQUIER lead (buscador global) —
+  // también los que aún no tienen cita.
   const { data: classesData } = await sb
     .from("classes")
     .select("id, scheduled_at, duration_minutes, status, is_trial, sesion_closer_id, teacher_id")
@@ -55,13 +56,12 @@ export default async function SetterLeadPage({ params }: { params: Promise<{ id:
     id: string; scheduled_at: string; duration_minutes: number | null; status: string;
     is_trial: boolean; sesion_closer_id: string | null; teacher_id: string | null;
   }>;
-  if (citas.length === 0) notFound();
 
   const phone = lead.whatsapp_normalized ?? lead.whatsapp_raw;
-  const citaPrincipal = citas.find(c => c.status === "scheduled") ?? citas[0];
-  const citaTipo: "trial" | "sesion" = citaPrincipal.sesion_closer_id ? "sesion" : "trial";
+  const citaPrincipal = citas.find(c => c.status === "scheduled") ?? citas[0] ?? null;
+  const citaTipo: "trial" | "sesion" = citaPrincipal?.sesion_closer_id ? "sesion" : "trial";
   const now = Date.now();
-  const citaFutura = citaPrincipal.status === "scheduled" &&
+  const citaFutura = !!citaPrincipal && citaPrincipal.status === "scheduled" &&
     new Date(citaPrincipal.scheduled_at).getTime() > now;
 
   return (
@@ -91,6 +91,9 @@ export default async function SetterLeadPage({ params }: { params: Promise<{ id:
               {lead.motivo_inicial ? ` · Motivo: ${lead.motivo_inicial}` : ""}
               {lead.german_level ? ` · Nivel: ${lead.german_level}` : ""}
             </p>
+            {lead.email && (
+              <p>✉️ <a href={`mailto:${lead.email}`} className="hover:text-brand-600 dark:hover:text-brand-400">{lead.email}</a></p>
+            )}
           </div>
         </div>
       </div>
@@ -98,6 +101,11 @@ export default async function SetterLeadPage({ params }: { params: Promise<{ id:
       <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-2">Citas</h2>
+          {citas.length === 0 && (
+            <p className="text-sm text-slate-400 dark:text-slate-500">
+              Este lead aún no tiene ninguna cita agendada.
+            </p>
+          )}
           <ul className="space-y-2">
             {citas.map((c) => {
               const pasada = new Date(c.scheduled_at).getTime() < now;
@@ -126,7 +134,12 @@ export default async function SetterLeadPage({ params }: { params: Promise<{ id:
         </div>
 
         <div className="border-t border-slate-100 dark:border-slate-800 pt-4">
-          <SetterActions leadId={leadId} citaTipo={citaTipo} citaFutura={citaFutura} />
+          <SetterActions
+            leadId={leadId}
+            citaTipo={citaTipo}
+            citaFutura={citaFutura}
+            tieneCitas={citas.length > 0}
+          />
         </div>
       </section>
 
