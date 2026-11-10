@@ -393,12 +393,22 @@ function ActiveChat({ chat, currentUserId, chats, onChange, onBack }: {
           </p>
         )}
         {messages.map((m, i) => (
-          <MessageBubble
-            key={m.id}
-            message={m}
-            mine={m.author_id === currentUserId}
-            showAuthor={chat.type === "group" && (i === 0 || messages[i - 1].author_id !== m.author_id)}
-          />
+          <div key={m.id}>
+            {/* Separador de fecha entre mensajes de días distintos
+                (Gelfis 2026-11-10: solo se veía la hora, no la fecha). */}
+            {(i === 0 || dayKey(messages[i - 1].sent_at) !== dayKey(m.sent_at)) && (
+              <div className="flex items-center justify-center py-2">
+                <span className="rounded-full bg-slate-200/80 dark:bg-slate-800 px-3 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                  {formatDayLabel(m.sent_at)}
+                </span>
+              </div>
+            )}
+            <MessageBubble
+              message={m}
+              mine={m.author_id === currentUserId}
+              showAuthor={chat.type === "group" && (i === 0 || messages[i - 1].author_id !== m.author_id)}
+            />
+          </div>
         ))}
       </div>
 
@@ -697,6 +707,27 @@ function formatTime(iso: string): string {
     hour: "2-digit", minute: "2-digit",
     timeZone: "Europe/Berlin",
   });
+}
+
+/** Día (YYYY-MM-DD) en hora alemana, para agrupar mensajes por fecha. */
+function dayKey(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" });
+}
+
+/** "Hoy", "Ayer" o "viernes, 7 de noviembre" (con año si no es el actual). */
+function formatDayLabel(iso: string): string {
+  const key = dayKey(iso);
+  const now = new Date();
+  if (key === dayKey(now.toISOString())) return "Hoy";
+  if (key === dayKey(new Date(now.getTime() - 86_400_000).toISOString())) return "Ayer";
+  const d = new Date(iso);
+  const sameYear = key.slice(0, 4) === dayKey(now.toISOString()).slice(0, 4);
+  const label = d.toLocaleDateString("es-ES", {
+    weekday: "long", day: "numeric", month: "long",
+    ...(sameYear ? {} : { year: "numeric" }),
+    timeZone: "Europe/Berlin",
+  });
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 /**
