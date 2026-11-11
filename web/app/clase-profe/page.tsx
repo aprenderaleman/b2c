@@ -63,10 +63,10 @@ export default async function Page({ searchParams }: { searchParams: SP }) {
       bulletsMode="replace"
       bullets={[
         { icon: "⏱", text: <><strong>40 minutos gratis</strong>, sin tarjeta, sin compromiso</> },
-        { icon: "🗣", text: <>Profesor <strong>nativo bilingüe</strong> — te explica en español cuando te trabas</> },
+        { icon: "🗣", text: <>{profe?.female ? "Profesora" : "Profesor"} <strong>{profe?.female ? "nativa bilingüe" : "nativo bilingüe"}</strong> — te explica en español cuando te trabas</> },
         { icon: "👤", text: <><strong>1 a 1</strong> — toda la clase es solo para ti</> },
         { icon: "📖", text: <><strong>Sin examen previo</strong>, sin necesidad de hablar alemán todavía</> },
-        { icon: "🏠", text: <><strong>100% online</strong> desde tu casa, con el profe en directo</> },
+        { icon: "🏠", text: <><strong>100% online</strong> desde tu casa, con {profe?.female ? "la profe" : "el profe"} en directo</> },
       ]}
       afterBullets={<SocialProof />}
       ctaLabel={profe ? `Reservar mi clase con ${profe.firstName}` : "Reservar mi clase gratis"}
