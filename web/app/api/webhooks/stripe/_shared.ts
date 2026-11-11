@@ -7,6 +7,7 @@ import { sendRaw } from "@/lib/email/send";
 import { handleFirstPayment } from "@/lib/auto-conversion";
 import { registerCommission, isInCommissionWindow } from "@/lib/commission-engine";
 import { findPendingOfertaByEmail, convertLeadFromStripePayment } from "@/lib/lead-payment-match";
+import { invoiceDedupWindow, paymentIntentSucceededAt } from "@/lib/stripe-payment-dedup";
 
 export async function processStripeEvent(
   event: Stripe.Event,
@@ -32,7 +33,7 @@ export async function processStripeEvent(
   if (event.type === "checkout.session.completed") {
     await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session, account);
   } else if (event.type === "payment_intent.succeeded") {
-    await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent, account);
+    await handlePaymentIntentSucceeded(event.data.object as Stripe.PaymentIntent, account, event.created);
   } else if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
     await handleInvoicePaid(event.data.object as Stripe.Invoice, account);
   } else if (
@@ -220,6 +221,7 @@ async function handleCheckoutCompleted(
 async function handlePaymentIntentSucceeded(
   pi: Stripe.PaymentIntent,
   account: "us" | "de",
+  eventCreated?: number,
 ): Promise<void> {
   const sb = supabaseAdmin();
 
@@ -307,13 +309,27 @@ async function handlePaymentIntentSucceeded(
     ? latestCharge
     : (latestCharge as Stripe.Charge | null)?.id ?? null;
 
+  // paid_at = momento del cobro REAL, no pi.created. En un invoice con
+  // reintentos (dunning) el PI se crea al finalizar el invoice y se
+  // reutiliza en cada intento: pi.created quedaba días antes del cobro y
+  // el dedup heurístico del invoice handler no cruzaba la fila (caso
+  // Valentina 2026-11-10: 5.º intento, 9 días después → cobro duplicado).
+  let chargeCreated: number | null =
+    latestCharge && typeof latestCharge === "object" ? latestCharge.created ?? null : null;
+  if (chargeCreated == null && chargeId) {
+    try {
+      chargeCreated = (await getStripeClient(account).charges.retrieve(chargeId)).created;
+    } catch { /* cae al created del evento */ }
+  }
+  const paidAt = paymentIntentSucceededAt({ chargeCreated, eventCreated });
+
   await sb.from("payments").insert({
     student_id: (student as { id: string }).id,
     amount_cents: eurCents,
     currency: "EUR",
     type: "other",
     status: "paid",
-    paid_at: new Date(pi.created * 1000).toISOString(),
+    paid_at: paidAt.toISOString(),
     stripe_payment_intent_id: pi.id,
     stripe_account: account,
     original_currency: currency,
@@ -399,21 +415,30 @@ async function handleInvoicePaid(
 
   // Dedup 3 (heurístico): el payment_intent.succeeded del mismo cobro
   // pudo insertar ya una fila (sin invoice id y, en API nuevas, sin
-  // forma de cruzarlos). Mismo student + mismo importe original a ±1h
-  // del paid_at del invoice = mismo cobro. Los renewals legítimos van
-  // con ~1 mes de separación, así que la ventana es segura. Se ancla
-  // al paid_at del INVOICE (no a "ahora") para que también funcione
-  // cuando el evento llega tarde vía el cron stripe-reconcile.
-  const invoicePaidMs = invoice.status_transitions?.paid_at
-    ? invoice.status_transitions.paid_at * 1000
-    : Date.now();
+  // forma de cruzarlos). Mismo student + mismo importe original, sin
+  // stripe_invoice_id, con paid_at entre (finalización − 1h) y
+  // (paid_at + 1h) del invoice = mismo cobro. El límite inferior baja
+  // hasta la finalización porque en un invoice con reintentos la fila
+  // del PI puede estar fechada ahí, días antes del cobro (caso
+  // Valentina 2026-11-10). La renovación anterior queda fuera: es ~1
+  // mes anterior y ya lleva su invoice id. Se ancla a los timestamps
+  // del INVOICE (no a "ahora") para que también funcione cuando el
+  // evento llega tarde vía el cron stripe-reconcile.
+  // En el tramo ampliado (antes de paid_at − 1h) solo casan filas con
+  // stripe_payment_intent_id: un pago registrado a mano durante el
+  // dunning (transferencia) es otro pago real y no debe fusionarse.
+  // Misma regla que isSameChargeCandidate() en lib/stripe-payment-dedup.
+  const dedupWindow = invoiceDedupWindow(invoice.status_transitions);
   const { data: recentSameAmount } = await sb
     .from("payments")
     .select("id")
     .eq("student_id", (student as { id: string }).id)
     .eq("original_amount_cents", amountPaid)
-    .gte("paid_at", new Date(invoicePaidMs - 3600_000).toISOString())
-    .lte("paid_at", new Date(invoicePaidMs + 3600_000).toISOString())
+    .is("stripe_invoice_id", null)
+    .gte("paid_at", dedupWindow.fromIso)
+    .lte("paid_at", dedupWindow.toIso)
+    .or(`paid_at.gte."${dedupWindow.nearFromIso}",stripe_payment_intent_id.not.is.null`)
+    .order("paid_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (recentSameAmount) {
