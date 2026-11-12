@@ -323,22 +323,15 @@ async function getTeacherPayrollForRange(sb: SB, from: Date, to: Date, onlyPaid 
   const monthTo   = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
   let q = sb
     .from("teacher_earnings")
-    .select("amount_cents, month")
+    .select("amount_cents")
     .gte("month", monthFrom.toISOString().slice(0, 10))
     .lte("month", monthTo.toISOString().slice(0, 10));
   if (onlyPaid) q = q.eq("paid", true);
   const { data } = await q;
   if (!data || data.length === 0) return 0;
-  let total = 0;
-  for (const r of data as Array<{ amount_cents: number; month: string }>) {
-    const md = new Date(r.month + "T00:00:00Z");
-    const y = md.getUTCFullYear(), m = md.getUTCMonth();
-    const dim = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-    const startDay = (y === from.getUTCFullYear() && m === from.getUTCMonth()) ? from.getUTCDate() : 1;
-    const endDay = (y === to.getUTCFullYear() && m === to.getUTCMonth()) ? to.getUTCDate() : dim;
-    total += Math.round(Number(r.amount_cents) * (endDay - startDay + 1) / dim);
-  }
-  return total;
+  return (data as Array<{ amount_cents: number }>).reduce(
+    (sum, r) => sum + Number(r.amount_cents), 0,
+  );
 }
 
 async function getFixedCostsForRange(sb: SB, from: Date, to: Date): Promise<number> {
