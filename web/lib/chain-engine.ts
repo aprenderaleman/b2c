@@ -515,17 +515,17 @@ export async function advanceChain(chain: ChainRow): Promise<{
     //
     // Gelfis 2026-11-08 (Fase 2a — Hormozi guardrails): añadimos
     // chain3_obj_precio, chain4_absent y chain7_reactivation al routing
-    // setter. Son cadenas de rescate / conversión donde el lead ya está
-    // en conversación activa; el riesgo de que sean marcadas como spam
-    // es bajo y el impacto de que fallen por kill v5 es muy alto.
-    // Volumen estimado añadido: chain4 ~5/día, chain3 ~1/día, chain7
-    // 0-30/día (gated por system_config.chain7_reactivation_enabled).
+    // setter.
+    //
+    // Gelfis 2026-11-12 (reversión tras ban v6 11.11): tras un ban del
+    // v6 por sobre-volumen (35+ msgs/día en día warm 5), revertimos al
+    // set original. chain3, chain4 y chain7 vuelven a caer bajo kill
+    // switch global (= no se envían auto por WA). El equipo las maneja
+    // manualmente mientras v6 se re-calienta de día 1. Objetivo:
+    // mantener cap ≤10/día en v6 durante 2 semanas antes de reconsiderar.
     const SETTER_CHAIN_TYPES = new Set([
       "chain1_attended",
       "chain2_link_sent",
-      "chain3_obj_precio",
-      "chain4_absent",
-      "chain7_reactivation",
     ]);
     const useSetterChannel = SETTER_CHAIN_TYPES.has(chain.chain_type);
     const channelOpt: "setter" | undefined = useSetterChannel ? "setter" : undefined;

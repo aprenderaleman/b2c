@@ -190,7 +190,12 @@ async function run(req: Request) {
       // sale por el número setter calentado. Es el PRIMER WA que recibe
       // el lead — mientras v5 siga bloqueado por kill switch, pasar
       // por v6 evita que todos los nuevos leads pierdan la confirmación.
-      const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation", channel: "setter" });
+      //
+      // Gelfis 2026-11-12 (reversión tras ban v6): volvemos a v5 default.
+      // trial_confirmation tiene demasiado volumen (~15/día) para un
+      // número recién reconectado de día warm-up 1. Se envía manual
+      // hasta que v6 esté sólido (día warm 14+).
+      const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
       waOk = r?.ok ?? false;
       // Fix Gelfis 2026-10-24 (caso Tatiane + 8 leads): si el email salió
       // pero el WA falló por algo pasajero (instancia caída, kill switch,
@@ -343,7 +348,8 @@ async function retryPendingWhatsappConfirmations(sb: ReturnType<typeof supabaseA
     });
 
     // Fase 2b: retry también por setter v6.
-    const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation", channel: "setter" });
+    // Gelfis 2026-11-12: revertido tras ban v6 — vuelve a v5 default.
+    const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
     if (r.ok) {
       sent++;
       await dropTag();

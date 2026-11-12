@@ -212,11 +212,14 @@ async function run(req: Request) {
       // ("marca el resto del año") + commitment pequeño (papel+lápiz).
       // 40 min, no 30. Reduce no-shows al activar Dream Outcome + reducir
       // ansiedad previa.
+      //
+      // Gelfis 2026-11-12 (reversión tras ban v6): routing vuelve a v5
+      // default. Copy Hormozi se mantiene — cuando v6 esté sólido (día
+      // warm 14+) reactivamos routing.
       const waText = `¡Buenos días ${leadFirst}! Hoy es el día 😊\n\nTu clase es a las ${timeLabel} (Berlín) — 40 minutos para ver tu nivel y tu camino hasta tu meta.\n\nPara que te cunda:\n- Computador con cámara y micrófono (mejor que móvil esta primera vez)\n- Lugar tranquilo donde puedas hablar\n- Papel y lápiz para anotar el plan\n\nLo que pase en estos 40 min te marca el resto del año — vale darle 100% 💪`;
       const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, {
         kind: "trial_reminder_morning",
         dedupKey: `trial_reminder_morning:${r.id}`,
-        channel: "setter",
       });
       if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
       else {
