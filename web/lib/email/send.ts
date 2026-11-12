@@ -842,9 +842,12 @@ export async function sendLeadNewUrgentEmail(
 export async function sendTrialAssignedTeacherEmail(
   to: string,
   vars: TrialAssignedTeacherVars,
+  opts?: { bypassOptOut?: boolean },
 ): Promise<SendResult> {
   const { subject, html, text } = renderTrialAssignedTeacher(vars);
-  return sendRaw(to, subject, html, text);
+  // bypassOptOut: para profes con users.trial_email_optin=true (Sabine
+  // 2026-11-12) este correo pasa aunque tengan el opt-out global.
+  return sendRaw(to, subject, html, text, undefined, opts?.bypassOptOut ? { critical: true } : undefined);
 }
 
 import {
