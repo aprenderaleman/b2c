@@ -176,53 +176,26 @@ async function run(req: Request) {
       });
     }
 
-    // WhatsApp T+0 — SIEMPRE sin mención al depósito (Gelfis 2026-07-04
-    // + reafirmado 2026-08-05: Stiv no habla del depósito en ningún canal).
-    // Antes había una variante `isMetaAdsPaid && !paid` que mandaba
-    // upsell inline "activar tu Agenda Prioritaria por 10€" — violaba
-    // la regla. Eliminada. Ahora todos los flows usan el copy estándar
-    // aprobado, salvo los VIP que ya pagaron (variante paid).
-    let waOk: boolean | null = null;
-    if (lead.whatsapp_normalized) {
-      const waText = buildConfirmationWa({ leadFirst, startDate, joinUrl, vip: isMetaAdsPaid && paid, goalLabel });
-
-      // Gelfis 2026-11-10 (Fase 2b migración v6): trial_confirmation
-      // sale por el número setter calentado. Es el PRIMER WA que recibe
-      // el lead — mientras v5 siga bloqueado por kill switch, pasar
-      // por v6 evita que todos los nuevos leads pierdan la confirmación.
-      //
-      // Gelfis 2026-11-12 (reversión tras ban v6): volvemos a v5 default.
-      // trial_confirmation tiene demasiado volumen (~15/día) para un
-      // número recién reconectado de día warm-up 1. Se envía manual
-      // hasta que v6 esté sólido (día warm 14+).
-      const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
-      waOk = r?.ok ?? false;
-      // Fix Gelfis 2026-10-24 (caso Tatiane + 8 leads): si el email salió
-      // pero el WA falló por algo pasajero (instancia caída, kill switch,
-      // night gate), el lock de abajo se queda y el WA no se reintentaba
-      // NUNCA. Marcamos la clase para que retryPendingWhatsappConfirmations
-      // reintente SOLO el WA (sin reenviar el email).
-      if (!waOk && emailOk && !isPermanentWaFailure((r as { reason?: string } | null)?.reason)) {
-        await sb.from("classes")
-          .update({ notes_admin: `${c.notes_admin ?? ""}\n${WA_PENDING_TAG}`.trim() })
-          .eq("id", c.id);
-      }
-      await sb.from("lead_timeline").insert({
-        lead_id: lead.id,
-        type:    waOk ? "system_message_sent" : "send_failed",
-        author:  "system",
-        content: waOk
-          ? waText
-          : `💬 Falló el WhatsApp: ${(r as { reason?: string } | null)?.reason ?? "unknown"}`,
-        metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: c.id, sent_to: lead.whatsapp_normalized },
-      });
-    }
+    // Gelfis 2026-11-14 (email-first post-bans v5+v6): el WhatsApp
+    // automático de trial_confirmation se desactiva. Solo email (free,
+    // sin riesgo de ban). Si el equipo quiere refuerzo por WA, lo manda
+    // manual desde el panel admin o desde la cola del setter.
+    //
+    // El flujo histórico queda comentado abajo por si se reactiva
+    // cuando v6 esté sólido (14+ días warm-up sin fails).
+    const waOk: boolean | null = null;
+    // if (lead.whatsapp_normalized) {
+    //   const waText = buildConfirmationWa({ leadFirst, startDate, joinUrl, vip: isMetaAdsPaid && paid, goalLabel });
+    //   const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
+    //   ...
+    // }
 
     // Rollback del lock si TODO falló. Fix 2026-08-11 tras 15+
     // trial_confirmation perdidos por night_gate: si tanto email como
     // WA fallaron, dejar notified_at=NULL para que el próximo tick
     // reintente. Si al menos uno OK, mantenemos el lock (no queremos
     // reenviar el que sí funcionó).
+    // Post 2026-11-14: con WA desactivado, solo depende del email.
     const bothFailed = emailOk === false && waOk === false;
     const noneAttempted = !lead.email && !lead.whatsapp_normalized;
     if (bothFailed || (waOk === false && !lead.email) || (emailOk === false && !lead.whatsapp_normalized)) {
@@ -309,6 +282,14 @@ function buildConfirmationWa(a: { leadFirst: string; startDate: string; joinUrl:
  * para la clase: ahí ya cubren los recordatorios.
  */
 async function retryPendingWhatsappConfirmations(sb: ReturnType<typeof supabaseAdmin>): Promise<number> {
+  // Gelfis 2026-11-14 (email-first): la vía WA de trial_confirmation
+  // quedó desactivada. Este retry también se apaga — nada nuevo entra
+  // a la cola. Dejar la función por compat (se llama desde el handler
+  // principal), pero devuelve 0 siempre.
+  return 0;
+
+  // ─── Legacy (reactivar si volvemos a enviar trial_confirmation por WA) ───
+  // eslint-disable-next-line no-unreachable
   if (new Date().getUTCMinutes() % 10 !== 0) return 0;
   // trial_confirmation está exento del night gate (el lead acaba de
   // reservar); un REINTENTO no lo está: solo 09-21 Berlín.

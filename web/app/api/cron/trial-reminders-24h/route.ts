@@ -148,28 +148,19 @@ async function run(req: Request) {
         lead.language === "de" ? "de-DE" : "es-ES",
         { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" },
       );
-      // Copy 2026-06-17 (Gelfis): minimalista — sin pedir confirmacion
-      // ya hubo CONFIRMO/CAMBIAR/CANCELAR en T+0, sin mencionar al profesor
-      // (politica Gelfis 2026-04-30). Solo recordatorio + link.
-      const waText = lead.language === "de"
-        ? `RECORDATORIO:\n\nHallo ${leadFirst}!\nMorgen ${dayLabel} um ${timeLabel} ist deine Deutsch-Stunde.\n\n🔗 Hier kommst du rein:\n${leadJoinUrl}`
-        : `RECORDATORIO:\n\n¡Hola ${leadFirst}!\nMañana ${dayLabel} a las ${timeLabel} es tu clase de alemán.\n\n🔗 Aquí entras a la clase:\n${leadJoinUrl}`;
-      const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, {
-        kind: "trial_reminder_24h",
-        dedupKey: `trial_reminder_24h:${r.id}`,
-      });
-      if (wa.ok) { sentLeadWa++; leadWaDelivered = true; }
-      else {
-        // Visible en timeline del lead + desactivar número si exists:false.
-        const { handleWaPermanentFail } = await import("@/lib/wa-permanent-fail");
-        await handleWaPermanentFail(sb, {
-          leadId:  lead.id,
-          phone:   lead.whatsapp_normalized,
-          kind:    "trial_reminder_24h",
-          reason:  wa.reason,
-          context: "trial-reminders-24h",
-        });
-      }
+      // Gelfis 2026-11-14 (email-first post-bans v5+v6): el WhatsApp
+      // automático de trial_reminder_24h se desactiva. Solo email. Si
+      // el equipo quiere refuerzo, lo manda manual desde el panel admin
+      // / cola del setter. Legacy (reactivar si v6 sólido 14+ días):
+      //
+      //   const waText = lead.language === "de"
+      //     ? `RECORDATORIO:\n\nHallo ${leadFirst}!\nMorgen...`
+      //     : `RECORDATORIO:\n\n¡Hola ${leadFirst}!\nMañana...`;
+      //   const wa = await sendWhatsappText(lead.whatsapp_normalized, waText, {
+      //     kind: "trial_reminder_24h",
+      //     dedupKey: `trial_reminder_24h:${r.id}`,
+      //   });
+      void leadFirst; void dayLabel; void timeLabel; void leadJoinUrl;
     }
 
     // ── Teacher email (only if we have one)

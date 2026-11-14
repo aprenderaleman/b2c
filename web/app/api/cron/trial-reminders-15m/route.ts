@@ -101,30 +101,17 @@ async function run(req: Request) {
     ) + (lead.language === "de" ? " (Berlin)" : " (Berlín)");
 
     // ── WhatsApp ──
-    let waDelivered = false;
-    if (lead.whatsapp_normalized) {
-      const waText = lead.language === "de"
-        ? `⏰ 15 Minuten bis zu deiner Stunde.\n\nJetzt beitreten: ${joinUrl}`
-        : `⏰ 15 minutos para tu clase.\n\nÚnete ahora: ${joinUrl}`;
-      const res = await sendWhatsappText(lead.whatsapp_normalized, waText, {
-        kind: "trial_reminder_15m",
-        // dedupKey por clase → mismo lead con 2 trials misma hora NO choca.
-        dedupKey: `trial_reminder_15m:${r.id}`,
-      });
-      if (res.ok) { sentWa++; waDelivered = true; }
-      else {
-        failed++;
-        // Visible en timeline del lead + desactivar número si exists:false.
-        const { handleWaPermanentFail } = await import("@/lib/wa-permanent-fail");
-        await handleWaPermanentFail(sb, {
-          leadId:  lead.id,
-          phone:   lead.whatsapp_normalized,
-          kind:    "trial_reminder_15m",
-          reason:  res.reason,
-          context: "trial-reminders-15m",
-        });
-      }
-    }
+    // Gelfis 2026-11-14 (email-first post-bans v5+v6): el WhatsApp
+    // automático de 15m se desactiva. Solo email ("⏰ En 15 min empieza
+    // tu clase" ya está en el template email, tono imminent_15m). Si
+    // alguien necesita WA de último momento, se manda manual desde la
+    // cola del setter. Legacy:
+    //
+    //   const waText = lead.language === "de"
+    //     ? `⏰ 15 Minuten bis zu deiner Stunde...`
+    //     : `⏰ 15 minutos para tu clase...`;
+    //   const res = await sendWhatsappText(lead.whatsapp_normalized, waText, {...});
+    const waDelivered = false;
 
     // ── Email ──
     let emailDelivered = false;
