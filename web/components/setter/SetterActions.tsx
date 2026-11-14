@@ -133,6 +133,14 @@ export function SetterActions({
   // por defecto; el modal se abre YA en modo "éxito + caja ámbar" — un clic
   // menos para Sheila.
   const openAndRun = (m: Mode) => {
+    // Reagendar cancela la clase y libera el hueco del profe — confirm
+    // obligatorio (Gelfis 2026-11-14). Los demás no tocan la clase.
+    if (m === "reagendar") {
+      const ok = window.confirm(
+        "⚠️ Esto CANCELA la clase del lead y libera el hueco del profe (no se puede deshacer).\n\n¿Enviar el enlace de reagenda?"
+      );
+      if (!ok) return;
+    }
     setMode(m);
     setNote(MODE_CONFIG[m].defaultNote);
     setError(null);
