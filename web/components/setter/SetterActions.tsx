@@ -127,6 +127,19 @@ export function SetterActions({
     setManualWa(null);
   };
 
+  // Refactor 2026-11-14: para las 3 acciones WA (confirmado, enlace_clase,
+  // no_contesto) el click del botón dispara DIRECTO el backend con la nota
+  // por defecto; el modal se abre YA en modo "éxito + caja ámbar" — un clic
+  // menos para Sheila.
+  const openAndRun = (m: Mode) => {
+    setMode(m);
+    setNote(MODE_CONFIG[m].defaultNote);
+    setError(null);
+    setOkMsg(null);
+    setManualWa(null);
+    runSubmit(m, MODE_CONFIG[m].defaultNote);
+  };
+
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -137,42 +150,46 @@ export function SetterActions({
 
   const submit = () => {
     if (!mode) return;
+    runSubmit(mode, note);
+  };
+
+  const runSubmit = (currentMode: Mode, currentNote: string) => {
     setError(null);
-    if (note.trim().length < 5) {
+    if (currentNote.trim().length < 5) {
       setError("La nota es obligatoria (mínimo 5 caracteres).");
       return;
     }
     start(async () => {
       let res: Response;
-      if (mode === "confirmado") {
+      if (currentMode === "confirmado") {
         res = await fetch(`/api/setter/leads/${leadId}/confirm`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ note: note.trim() }),
+          body: JSON.stringify({ note: currentNote.trim() }),
         });
-      } else if (mode === "enlace_clase") {
+      } else if (currentMode === "enlace_clase") {
         res = await fetch(`/api/setter/leads/${leadId}/send-class-link`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ note: note.trim() }),
+          body: JSON.stringify({ note: currentNote.trim() }),
         });
-      } else if (mode === "reagendar") {
+      } else if (currentMode === "reagendar") {
         res = await fetch(`/api/setter/leads/${leadId}/send-reschedule-link`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tipo: citaTipo, note: note.trim() }),
+          body: JSON.stringify({ tipo: citaTipo, note: currentNote.trim() }),
         });
-      } else if (mode === "no_contesto") {
+      } else if (currentMode === "no_contesto") {
         res = await fetch(`/api/setter/leads/${leadId}/no-contesto`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ note: note.trim() }),
+          body: JSON.stringify({ note: currentNote.trim() }),
         });
-      } else if (mode === "descartar") {
+      } else if (currentMode === "descartar") {
         res = await fetch(`/api/setter/leads/${leadId}/descartar`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ motivo, note: note.trim() }),
+          body: JSON.stringify({ motivo, note: currentNote.trim() }),
         });
       } else {
         res = await fetch("/api/contacts/register", {
@@ -182,7 +199,7 @@ export function SetterActions({
             leadId,
             actionType: "nota_libre",
             channel: "otro",
-            note: note.trim(),
+            note: currentNote.trim(),
           }),
         });
       }
@@ -244,7 +261,7 @@ export function SetterActions({
         {tieneCitas && (
           <button
             type="button"
-            onClick={() => open("confirmado")}
+            onClick={() => openAndRun("confirmado")}
             className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-sm font-semibold transition-colors"
           >
             ✅ Confirmado
@@ -253,7 +270,7 @@ export function SetterActions({
         {citaFutura && (
           <button
             type="button"
-            onClick={() => open("enlace_clase")}
+            onClick={() => openAndRun("enlace_clase")}
             className="inline-flex items-center gap-1.5 rounded-xl border border-violet-300 dark:border-violet-500/40 bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-500/20 px-4 py-2 text-sm font-medium transition-colors"
           >
             🎓 Enlace de clase
@@ -270,7 +287,7 @@ export function SetterActions({
         )}
         <button
           type="button"
-          onClick={() => open("no_contesto")}
+          onClick={() => openAndRun("no_contesto")}
           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-slate-400 px-4 py-2 text-sm font-medium transition-colors"
         >
           📵 No contestó
@@ -296,7 +313,12 @@ export function SetterActions({
           <div className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-5 space-y-4">
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{cfg.title}</h3>
 
-            {okMsg ? (
+            {pending && !okMsg && !error ? (
+              <div className="py-6 flex flex-col items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                <div className="h-6 w-6 rounded-full border-2 border-slate-300 border-t-emerald-600 animate-spin" />
+                <span>Preparando…</span>
+              </div>
+            ) : okMsg ? (
               <>
                 <p className="text-sm text-emerald-700 dark:text-emerald-300">{okMsg}</p>
 
