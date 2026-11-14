@@ -603,8 +603,12 @@ export async function sendRescheduleLinkMessage(
     /** "setter": copy "como hablamos, aquí te envío el enlace…" — el
      *  setter acaba de hablar con el lead por teléfono (Gelfis 2026-10-24). */
     copy?: "setter";
+    /** Si true: no enviar por Evolution. Devolver waText + waLink para
+     *  que el setter lo mande manualmente desde su WhatsApp Web (post-bans
+     *  v5/v6, Gelfis 2026-11-14). El email fallback sigue activo. */
+    manualWa?: boolean;
   },
-): Promise<{ ok: boolean; reason?: string; waSent?: boolean; emailSent?: boolean }> {
+): Promise<{ ok: boolean; reason?: string; waSent?: boolean; emailSent?: boolean; pendingManual?: boolean; waText?: string; waLink?: string }> {
   const actorName = opts?.actorName ?? "teacher";
   const sb = supabaseAdmin();
   const { data: leadInfo } = await sb
@@ -717,7 +721,21 @@ export async function sendRescheduleLinkMessage(
 
   let waOk = false;
   let waReason: string | null = null;
-  if (linfo.whatsapp_normalized) {
+  // Manual-WA (Gelfis 2026-11-14): el setter copia el texto y lo manda
+  // desde su propio WhatsApp Web. No llamamos a Evolution.
+  const manualWa = opts?.manualWa === true;
+  let waLink: string | null = null;
+  if (manualWa && linfo.whatsapp_normalized) {
+    const phone = linfo.whatsapp_normalized.replace(/^\+/, "");
+    waLink = `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(waText)}`;
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    "agent_note",
+      author:  opts?.actorName ?? "setter",
+      content: `✍️ Reagendamiento preparado para enviar manualmente por WhatsApp a ${linfo.whatsapp_normalized}`,
+      metadata: { kind: "setter_wa_pending_manual", channel: "whatsapp" },
+    });
+  } else if (linfo.whatsapp_normalized) {
     const waRes = await sendWhatsappText(linfo.whatsapp_normalized, waText, {
       kind: "trial_reschedule_link",
       // El setter envía por su propio canal (número en warm-up).
@@ -739,8 +757,10 @@ export async function sendRescheduleLinkMessage(
   // Fallback a email si el WA falló o no hay número (caso 2026-09-09:
   // número sin cuenta de WhatsApp — la clase ya está cancelada y el
   // lead en 'rescheduling', así que el link TIENE que llegarle).
+  // En flujo manual: el email SIEMPRE se envía automático (respaldo
+  // por si el setter no llega a mandar el WA).
   let emailOk = false;
-  if (!waOk && linfo.email) {
+  if ((!waOk || manualWa) && linfo.email) {
     try {
       const { sendTrialCancelledEmail } = await import("./email/send");
       const res = await sendTrialCancelledEmail(linfo.email, {
@@ -767,6 +787,16 @@ export async function sendRescheduleLinkMessage(
   await cancelActiveChain(leadId, "reschedule")
     .catch(err => console.warn("[sendRescheduleLinkMessage] cancelActiveChain error:", err));
 
+  if (manualWa) {
+    return {
+      ok: true,
+      waSent: false,
+      emailSent: emailOk,
+      pendingManual: !!waLink,
+      waText,
+      waLink: waLink ?? undefined,
+    };
+  }
   if (waOk || emailOk) return { ok: true, waSent: waOk, emailSent: emailOk };
   const noWa = !linfo.whatsapp_normalized;
   const waMsg = /exists.*false|http_400/i.test(waReason ?? "")

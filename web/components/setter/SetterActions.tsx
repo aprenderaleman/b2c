@@ -54,11 +54,12 @@ const MODE_CONFIG: Record<Mode, {
   },
   reagendar: {
     title: "🔗 Enviar enlace de reagenda",
-    noteLabel: "Nota (obligatoria) — qué pasó en la llamada",
-    defaultNote: "",
+    noteLabel: "Nota (opcional) — qué pasó en la llamada",
+    defaultNote: "Lead pidió reagendar (1-click)",
     placeholder: "Ej: No puede a esa hora, quedamos en que elige nuevo horario con el enlace.",
-    cta: "Enviar por WhatsApp (Stiv)",
-    pendingCta: "Enviando…",
+    cta: "Registrar y preparar WhatsApp",
+    pendingCta: "Preparando…",
+    preview: "Se cancela la cita actual y se libera el hueco del profe. El correo con el enlace de reagenda sale solo, y arriba te aparecerá el mensaje de WhatsApp listo para enviar tú manual.",
   },
   no_contesto: {
     title: "📵 No contestó",
@@ -226,10 +227,10 @@ export function SetterActions({
           ? `🎓 Enlace listo abajo — ábrelo en WhatsApp y pulsa Enviar.${email ? " (El correo ya salió.)" : ""}`
           : `🎓 Enlace de acceso enviado.`);
       } else if (mode === "reagendar") {
-        const canales = fmtCanales(body as { wa_sent?: boolean; email_sent?: boolean });
-        setOkMsg(canales.includes("WhatsApp")
-          ? `🔗 Enlace enviado por ${canales}. Cuando el lead elija su nuevo horario, la cita aparecerá agendada.`
-          : `🔗 El WhatsApp no salió — el enlace se envió por ${canales || "ningún canal"}. Avísale al lead que lo busque en su correo.`);
+        const email = (body as { email_sent?: boolean }).email_sent;
+        setOkMsg(bodyManual.pending_manual
+          ? `🔗 Reagenda preparada. El mensaje de WhatsApp quedó listo abajo — ábrelo y pulsa Enviar.${email ? " (El correo con el enlace ya salió.)" : ""}`
+          : `🔗 Enlace de reagenda enviado${email ? " por correo" : ""}.`);
       } else if (mode === "no_contesto") {
         const b2 = body as { wa_sent?: boolean; variant?: string; send_reason?: string; pending_manual?: boolean };
         if (b2.pending_manual) {
@@ -279,7 +280,7 @@ export function SetterActions({
         {tieneCitas && (
           <button
             type="button"
-            onClick={() => open("reagendar")}
+            onClick={() => openAndRun("reagendar")}
             className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-500/20 px-4 py-2 text-sm font-medium transition-colors"
           >
             🔗 Reagendar

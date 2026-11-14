@@ -27,7 +27,9 @@ export const dynamic = "force-dynamic";
 
 const Body = z.object({
   tipo: z.enum(["trial", "sesion"]),
-  note: z.string().trim().min(5).max(2000),
+  // Nota opcional (Gelfis 2026-11-14): el flujo 1-click no pide motivo,
+  // registra "Lead pidió reagendar" por defecto.
+  note: z.string().trim().max(2000).optional(),
 });
 
 export async function POST(
@@ -69,34 +71,45 @@ export async function POST(
   // maneja por sí solo el caso sin cita futura con el copy de "agendar".)
 
   const actorName = `${setter.name} (setter)`;
-  let result: { ok: boolean; reason?: string; waSent?: boolean; emailSent?: boolean };
+  const noteText = (b.note && b.note.length >= 5) ? b.note : "Lead pidió reagendar (1-click)";
+  let result: {
+    ok: boolean; reason?: string;
+    waSent?: boolean; emailSent?: boolean;
+    pendingManual?: boolean; waText?: string; waLink?: string;
+  };
   if (b.tipo === "sesion") {
     const { sendSesionRescheduleLinkMessage } = await import("@/lib/admin-actions");
     result = await sendSesionRescheduleLinkMessage(leadId, { actorName, copy: "setter" });
   } else {
     const { sendRescheduleLinkMessage } = await import("@/lib/admin-actions");
-    result = await sendRescheduleLinkMessage(leadId, { actorName, copy: "setter" });
+    // Manual-WA (Gelfis 2026-11-14): setter copia el texto; email automático.
+    result = await sendRescheduleLinkMessage(leadId, { actorName, copy: "setter", manualWa: true });
   }
 
   if (!result.ok) {
     return NextResponse.json({ ok: false, error: "send_failed", message: result.reason }, { status: 502 });
   }
 
-  // Registrar el contacto del setter (nota obligatoria). De aquí salen
-  // las métricas; el rebooking real se detecta cuando el lead usa el link.
-  const canales = [result.waSent ? "WA" : null, result.emailSent ? "email" : null]
-    .filter(Boolean).join(" + ") || "—";
+  // Registrar el contacto del setter. De aquí salen las métricas; el
+  // rebooking real se detecta cuando el lead usa el link.
+  const canales = [
+    result.pendingManual ? "WA manual" : (result.waSent ? "WA" : null),
+    result.emailSent ? "email" : null,
+  ].filter(Boolean).join(" + ") || "—";
   await registerContact({
     leadId,
     actor: { type: "setter", id: setter.id, name: setter.name },
     actionType: "agendar_prueba",
     channel: result.waSent ? "whatsapp" : "email",
-    note: `🔗 Stiv envió el enlace de reagenda (${canales}) — ${b.note}`,
+    note: `🔗 Stiv preparó el enlace de reagenda (${canales}) — ${noteText}`,
   });
 
   return NextResponse.json({
     ok: true,
     wa_sent: result.waSent ?? false,
     email_sent: result.emailSent ?? false,
+    pending_manual: result.pendingManual ?? false,
+    wa_text: result.waText ?? null,
+    wa_link: result.waLink ?? null,
   });
 }
