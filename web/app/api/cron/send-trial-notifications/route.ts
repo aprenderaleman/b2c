@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTrialConfirmationEmail } from "@/lib/email/send";
-import { sendWhatsappText } from "@/lib/whatsapp";
+// Gelfis 2026-11-14 (email-first): sendWhatsappText retirado — WA auto desactivado en este cron.
 import { buildEmailActionUrl } from "@/lib/email-action-token";
 import { buildLeadJoinUrl } from "@/lib/trial-token";
 import { buildTrialIcs } from "@/lib/ics";
@@ -281,75 +281,15 @@ function buildConfirmationWa(a: { leadFirst: string; startDate: string; joinUrl:
  * (sería una entrada por minuto). Deja de intentar cuando faltan <30 min
  * para la clase: ahí ya cubren los recordatorios.
  */
-async function retryPendingWhatsappConfirmations(sb: ReturnType<typeof supabaseAdmin>): Promise<number> {
+async function retryPendingWhatsappConfirmations(_sb: ReturnType<typeof supabaseAdmin>): Promise<number> {
   // Gelfis 2026-11-14 (email-first): la vía WA de trial_confirmation
   // quedó desactivada. Este retry también se apaga — nada nuevo entra
   // a la cola. Dejar la función por compat (se llama desde el handler
   // principal), pero devuelve 0 siempre.
+  //
+  // Para reactivar: ver histórico pre commit e58c79a (retry con cap/night-gate
+  // y reintento por sendWhatsappText(kind=trial_confirmation)).
   return 0;
-
-  // ─── Legacy (reactivar si volvemos a enviar trial_confirmation por WA) ───
-  // eslint-disable-next-line no-unreachable
-  if (new Date().getUTCMinutes() % 10 !== 0) return 0;
-  // trial_confirmation está exento del night gate (el lead acaba de
-  // reservar); un REINTENTO no lo está: solo 09-21 Berlín.
-  const berlinHour = Number(new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Berlin", hour: "2-digit", hour12: false,
-  }).format(new Date()));
-  if (berlinHour < 9 || berlinHour >= 21) return 0;
-  const { data } = await sb
-    .from("classes")
-    .select(CLASS_SELECT)
-    .eq("is_trial", true)
-    .eq("status", "scheduled")
-    .gte("scheduled_at", new Date(Date.now() + 30 * 60_000).toISOString())
-    .ilike("notes_admin", `%${WA_PENDING_TAG}%`)
-    .limit(5);
-
-  let sent = 0;
-  for (const c of (data ?? []) as ClassRow[]) {
-    const lead = flat(c.lead);
-    const dropTag = () => sb.from("classes")
-      .update({ notes_admin: (c.notes_admin ?? "").replace(`\n${WA_PENDING_TAG}`, "").replace(WA_PENDING_TAG, "").trim() })
-      .eq("id", c.id);
-    if (!lead?.whatsapp_normalized) { await dropTag(); continue; }
-
-    const language: "es" | "de" = lead.language === "de" ? "de" : "es";
-    const leadFirst = (lead.name ?? "").trim().split(/\s+/)[0] || (lead.name ?? "");
-    const startDate = new Date(c.scheduled_at).toLocaleString(language === "de" ? "de-DE" : "es-ES", {
-      timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "long",
-      hour: "2-digit", minute: "2-digit",
-    }) + (language === "de" ? " (Berlin)" : " (Berlín)");
-    const joinUrl = buildLeadJoinUrl({ classId: c.id, leadId: lead.id, shortCode: c.short_code, baseUrl: PLATFORM_URL });
-    const paid = !!c.deposit_paid_at || lead.reserva_prioritaria === true;
-    const waText = buildConfirmationWa({
-      leadFirst, startDate, joinUrl,
-      vip: lead.landing_intent === "meta-ads-paid" && paid,
-      goalLabel: qualificationGoalLabel((lead.qualification_answers ?? {}).goal),
-    });
-
-    // Fase 2b: retry también por setter v6.
-    // Gelfis 2026-11-12: revertido tras ban v6 — vuelve a v5 default.
-    const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
-    if (r.ok) {
-      sent++;
-      await dropTag();
-      await sb.from("lead_timeline").insert({
-        lead_id: lead.id, type: "system_message_sent", author: "system", content: waText,
-        metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: c.id, sent_to: lead.whatsapp_normalized, retry: true },
-      });
-    } else if (isPermanentWaFailure(r.reason)) {
-      await dropTag();
-      await sb.from("lead_timeline").insert({
-        lead_id: lead.id, type: "send_failed", author: "system",
-        content: `💬 Reintento de confirmación WA abandonado: ${r.reason}`,
-        metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: c.id, retry: true },
-      });
-    } else {
-      console.warn(`[send-trial-notifications] WA retry ${c.id} sigue fallando: ${r.reason}`);
-    }
-  }
-  return sent;
 }
 
 /**
