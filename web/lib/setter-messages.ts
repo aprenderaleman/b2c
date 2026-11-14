@@ -1,19 +1,18 @@
 /**
- * Envíos del setter al lead (Gelfis 2026-10-26) — breves y directos,
- * por WhatsApp (Stiv) + correo, justo después de hablar por teléfono:
+ * Envíos del setter al lead (Gelfis 2026-10-26 / refactor 2026-11-14) —
+ * brevísimos y directos, por WhatsApp + correo.
  *
- *   variant "link":      enlace de acceso al aula + instrucciones mínimas.
- *   variant "confirmed": "gracias por confirmar" + enlace + "Wir sehen
- *                        uns am {fecha}".
+ * REFACTOR 2026-11-14 (post-bans v5+v6): para bajar el riesgo de ban, el
+ * WhatsApp YA NO lo envía Evolution automáticamente. La función devuelve
+ * `waText` + `waLink` (wa.me con texto pre-rellenado) y la UI del setter
+ * abre WhatsApp Web con el mensaje listo — la setter sólo pulsa Enviar.
  *
- * Reglas: ambos canales best-effort (se intentan los dos; con que llegue
- * uno, ok). El envío se anota en lead_timeline con author='setter' —
- * autor humano, así que el trigger espejo de lead_contacts NO lo duplica
- * (el contacto del setter lo registra la route llamante).
+ * Copies Hormozi: cada mensaje tiene UN ángulo único (sin repetir "40 min
+ * uno a uno con profe nativo" en todos). Firmados por la setter que acaba
+ * de llamar.
  */
 
 import { supabaseAdmin } from "./supabase";
-import { sendWhatsappText } from "./whatsapp";
 import { sendSetterTrialAccessEmail } from "./email/send";
 import { buildLeadJoinUrl } from "./trial-token";
 import { formatBerlinFull } from "./time";
@@ -22,11 +21,26 @@ const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.d
 
 export type SetterSendResult = {
   ok: boolean;
+  /** Siempre false ahora — se queda listo para envío manual. */
   waSent: boolean;
   emailSent: boolean;
   startLabel: string | null;
+  /** Nuevo (2026-11-14): texto del mensaje a enviar manualmente por WA. */
+  waText?: string;
+  /** Nuevo (2026-11-14): wa.me link con el texto pre-rellenado — 1 clic abre
+   *  WhatsApp Web con el chat del lead y el mensaje listo. */
+  waLink?: string;
+  /** Nuevo (2026-11-14): true indica a la UI que debe mostrar la caja de
+   *  "copiar y enviar" en vez de un mensaje de éxito de envío auto. */
+  pendingManual?: boolean;
   reason?: string;
 };
+
+/** Construye el wa.me link con el texto pre-rellenado. Phone sin "+". */
+function buildWaLink(phoneE164: string, text: string): string {
+  const phone = phoneE164.replace(/^\+/, "");
+  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+}
 
 export async function sendSetterAccessMessage(
   leadId: string,
@@ -71,6 +85,7 @@ export async function sendSetterAccessMessage(
   const lang = (lead.language === "de" ? "de" : "es") as "es" | "de";
   const citaTipo: "trial" | "sesion" = cls.sesion_closer_id ? "sesion" : "trial";
   const firstName = (lead.name ?? "").trim().split(/\s+/)[0] || "";
+  const setterFirst = setterName.trim().split(/\s+/)[0] || setterName;
   const startLabel = formatBerlinFull(cls.scheduled_at, lang);
   const joinUrl = buildLeadJoinUrl({
     classId: cls.id,
@@ -79,27 +94,22 @@ export async function sendSetterAccessMessage(
     baseUrl: PLATFORM_URL,
   });
 
-  const claseES = citaTipo === "sesion" ? "sesión de plan" : "clase de prueba";
-  const claseDE = citaTipo === "sesion" ? "Plan-Session" : "Probestunde";
-
-  const waText = variant === "confirmed"
-    ? (lang === "de"
-      ? `Danke für deine Bestätigung, ${firstName}! 🙌\n\n👉 Dein Link zur ${claseDE}: ${joinUrl}\n\nWir sehen uns am ${startLabel}! 🇩🇪\n\n— Aprender-Aleman.de`
-      : `¡Gracias por confirmar, ${firstName}! 🙌\n\n👉 Tu enlace para unirte a la ${claseES}: ${joinUrl}\n\nWir sehen uns am ${startLabel}! 🇩🇪\n\n— Aprender-Aleman.de`)
-    : (lang === "de"
-      ? `Hallo ${firstName}! 👋\n\nHier ist dein Link zu deiner Deutsch-${claseDE}:\n\n👉 ${joinUrl}\n\n📅 ${startLabel}\n\nKlick einfach 2-3 Minuten vorher auf den Link — Handy oder Computer, ohne Installation.\n\n— Aprender-Aleman.de`
-      : `¡Hola ${firstName}! 👋\n\nAquí tienes el enlace para entrar a tu ${claseES} de alemán:\n\n👉 ${joinUrl}\n\n📅 ${startLabel}\n\nEntra 2-3 minutos antes, desde el móvil o el ordenador — solo haz clic en el enlace, sin instalar nada.\n\n— Aprender-Aleman.de`);
-
-  const waKind = variant === "confirmed" ? "setter_confirm_ack" : "setter_class_link";
-
-  let waSent = false;
-  let emailSent = false;
-
-  if (lead.whatsapp_normalized) {
-    const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: waKind, channel: "setter" })
-      .catch(() => ({ ok: false as const }));
-    waSent = res.ok === true;
+  // Copies Hormozi 2026-11-14:
+  //   confirmed → agradecer + logística + micro-commitment (papel y lápiz)
+  //   link      → entrega + tip concreto (computador/cámara/lugar)
+  let waText: string;
+  if (variant === "confirmed") {
+    waText = lang === "de"
+      ? `Super ${firstName}, danke für die Bestätigung! 🙌\n\nWir sehen uns am ${startLabel} hier:\n🔗 ${joinUrl}\n\nEin kleiner Tipp: Papier und Stift bereithalten, um den Plan zu notieren, den dir dein Lehrer vorbereitet.\n\n— ${setterFirst} · Aprender-Aleman.de`
+      : `¡Perfecto ${firstName}, gracias por confirmar! 🙌\n\nNos vemos el ${startLabel} aquí:\n🔗 ${joinUrl}\n\nUn tip que marca la diferencia: ten papel y lápiz a mano para anotar el plan que te preparen.\n\n— ${setterFirst} · Aprender-Aleman.de`;
+  } else {
+    waText = lang === "de"
+      ? `Hallo ${firstName}! Ich bin ${setterFirst} von Aprender-Aleman.de 👋\n\nHier dein Link zur Deutsch-Probestunde am ${startLabel}:\n🔗 ${joinUrl}\n\nAm besten vom Computer mit Kamera und Mikro, an einem ruhigen Ort. So nutzt ihr die 40 Minuten gut und du bekommst einen klaren Plan.\n\n— ${setterFirst} · Aprender-Aleman.de`
+      : `¡Hola ${firstName}! Soy ${setterFirst} de Aprender-Alemán 👋\n\nAquí tu enlace para la clase del ${startLabel}:\n🔗 ${joinUrl}\n\nMejor desde un computador con cámara y micrófono + un lugar tranquilo. Así os cunden los 40 minutos y sales con un plan claro.\n\n— ${setterFirst} · Aprender-Aleman.de`;
   }
+
+  // Email sí sale automático (no hay riesgo de ban).
+  let emailSent = false;
   if (lead.email) {
     const res = await sendSetterTrialAccessEmail(lead.email, {
       variant,
@@ -112,35 +122,40 @@ export async function sendSetterAccessMessage(
     emailSent = res.ok === true;
   }
 
-  // Timeline para la ficha admin. Author humano → el trigger espejo de
-  // lead_contacts lo ignora (no duplica el contacto del setter).
+  // WA link listo para envío manual por la setter.
+  const waLink = lead.whatsapp_normalized ? buildWaLink(lead.whatsapp_normalized, waText) : undefined;
+
+  // Timeline: dejamos constancia de que el mensaje quedó PREPARADO (no se
+  // registra como enviado hasta que la setter confirme con el botón de la
+  // UI). Author humano → el trigger espejo de lead_contacts lo ignora.
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
-    type: waSent || emailSent ? "system_message_sent" : "send_failed",
+    type: "agent_note",
     author: "setter",
     content: variant === "confirmed"
-      ? `✅ Gracias-por-confirmar + enlace enviados por ${setterName} (setter) — WA: ${waSent ? "✓" : "✗"} · email: ${emailSent ? "✓" : "✗"}`
-      : `🎓 Enlace de acceso al aula enviado por ${setterName} (setter) — WA: ${waSent ? "✓" : "✗"} · email: ${emailSent ? "✓" : "✗"}`,
-    metadata: { kind: `setter_${variant}`, class_id: cls.id, wa_sent: waSent, email_sent: emailSent },
+      ? `✅ Gracias-por-confirmar preparado para ${setterName} — WA pendiente de envío manual · email: ${emailSent ? "✓" : "✗"}`
+      : `🎓 Enlace de aula preparado para ${setterName} — WA pendiente de envío manual · email: ${emailSent ? "✓" : "✗"}`,
+    metadata: { kind: "setter_wa_pending_manual", variant: `setter_${variant}`, class_id: cls.id, email_sent: emailSent },
   }).then(() => {}, () => {});
 
-  if (!waSent && !emailSent) {
-    return { ok: false, waSent, emailSent, startLabel, reason: "No se pudo enviar ni por WhatsApp ni por email." };
-  }
-  return { ok: true, waSent, emailSent, startLabel };
+  return {
+    ok: true,
+    waSent: false,
+    emailSent,
+    startLabel,
+    waText: waLink ? waText : undefined,
+    waLink,
+    pendingManual: !!waLink,
+  };
 }
 
 /**
- * Mensaje tras "No contestó" (Gelfis 2026-10-26/27): Stiv le escribe al
- * lead de parte del setter. Solo WhatsApp (acaba de no contestar una
- * llamada — el mensaje es el canal natural). Dos variantes:
+ * Mensaje tras "No contestó" (Gelfis 2026-10-26/27, refactor 2026-11-14).
+ * Devuelve el texto + waLink para envío manual. Dos variantes:
  *
  *   - CON cita futura  → pedir el confirmo ("tu clase es el {fecha},
- *                        ¿me confirmas?").
- *   - SIN cita futura  → es un no-show: enviarle el enlace de reagenda
- *                        ("intenté llamarte… elige un nuevo horario
- *                        aquí"). Antes estos no recibían nada (Gelfis
- *                        2026-10-27: "varios en cola" sin mensaje).
+ *                        ¿me confirmas con un Sí?").
+ *   - SIN cita futura  → no-show: enviar enlace de reagenda.
  */
 export async function sendSetterNoContestoMessage(
   leadId: string,
@@ -191,56 +206,49 @@ export async function sendSetterNoContestoMessage(
   let classId: string;
 
   if (futura) {
+    // Variante "confirmo" — Hormozi: pedir el "Sí" + qué va a pasar.
     variant = "confirmo";
     classId = futura.id;
     startLabel = formatBerlinFull(futura.scheduled_at, lang);
     const claseES = futura.sesion_closer_id ? "sesión de plan" : "clase de prueba";
     const claseDE = futura.sesion_closer_id ? "Plan-Session" : "Probestunde";
     waText = lang === "de"
-      ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nDeine Deutsch-${claseDE} ist am ${startLabel}.\n\nKannst du mir bitte mit einem "Ja" bestätigen, dass du dabei bist? 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`
-      : `¡Hola ${firstName}! 👋 Soy ${setterFirst}, de la academia Aprender-Aleman.de — acabo de intentar llamarte 😊\n\nTu ${claseES} de alemán es el ${startLabel}.\n\n¿Me confirmas con un "Sí" que podrás conectarte? 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`;
+      ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nDeine Deutsch-${claseDE} ist am ${startLabel} — 40 Minuten 1:1 mit einem muttersprachlichen Lehrer, der Spanisch spricht. Ihr seht zusammen, wo du stehst und welcher Weg dich zu deinem Ziel führt.\n\nKannst du mir bitte mit einem "Ja" bestätigen, dass du dabei bist? So reserviere ich den Slot mit dem Lehrer. 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`
+      : `¡Hola ${firstName}! 👋 Soy ${setterFirst} de Aprender-Alemán — acabo de intentar llamarte 😊\n\nTu ${claseES} de alemán es el ${startLabel} — 40 minutos uno a uno con un profe nativo que habla español. Van a ver dónde estás y qué camino te toca hasta tu meta.\n\n¿Me confirmas con un "Sí" que te vas a conectar? Así lo aseguro con el profe 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`;
   } else {
-    // No-show: rescate con enlace de reagenda (nada se cancela — no hay
-    // cita futura que tocar).
+    // Variante "rescate" — Hormozi: empatía + reagenda rápida.
     variant = "rescate";
     classId = ultima!.id;
     const esSesion = !!ultima!.sesion_closer_id;
     const rescheduleUrl = esSesion
       ? `${PLATFORM_URL}/sesion-plan/funnel`
       : `${PLATFORM_URL}/agendar/cuando?lead=${leadId}&from=setter_reschedule`;
-    const claseES = esSesion ? "sesión de plan" : "clase de prueba";
-    const claseDE = esSesion ? "Plan-Session" : "Probestunde";
     waText = lang === "de"
-      ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nDeine Deutsch-${claseDE} hat leider nicht geklappt. Möchtest du einen neuen Termin? Hier kannst du ihn in 3 Minuten wählen:\n\n👉 ${rescheduleUrl}\n\n— ${setterFirst} · Aprender-Aleman.de`
-      : `¡Hola ${firstName}! 👋 Soy ${setterFirst}, de la academia Aprender-Aleman.de — acabo de intentar llamarte 😊\n\nTuvimos tu ${claseES} de alemán agendada y no pudiste conectarte. ¿Te busco un nuevo horario? Elígelo aquí en 3 minutos:\n\n👉 ${rescheduleUrl}\n\n— ${setterFirst} · Aprender-Aleman.de`;
+      ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nWir haben dich vermisst und es hat nicht geklappt — kein Problem, das passiert den Besten. Dein Lehrer hat deine Stunde vorbereitet und hält sie für dich bereit.\n\nSuchen wir einen neuen Termin? In 3 Minuten hast du ihn:\n👉 ${rescheduleUrl}\n\n— ${setterFirst} · Aprender-Aleman.de`
+      : `¡Hola ${firstName}! 👋 Soy ${setterFirst} de Aprender-Alemán — acabo de intentar llamarte 😊\n\nTe esperábamos y no coincidimos, pasa en las mejores familias. Tu profe tenía la clase preparada y te la guarda.\n\n¿Elegimos nuevo horario? En 3 minutos lo tienes:\n👉 ${rescheduleUrl}\n\n— ${setterFirst} · Aprender-Aleman.de`;
   }
 
-  const res = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "setter_no_contesto", channel: "setter" })
-    .catch(() => ({ ok: false as const, reason: "error" }));
-  const waSent = res.ok === true;
-  const waReason = waSent ? undefined : fmtWaReason((res as { reason?: string }).reason);
+  const waLink = buildWaLink(lead.whatsapp_normalized, waText);
 
+  // Timeline: constancia de que el mensaje quedó PREPARADO para envío manual.
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
-    type: waSent ? "system_message_sent" : "send_failed",
+    type: "agent_note",
     author: "setter",
-    content: waSent
-      ? (variant === "confirmo"
-        ? `📵→💬 No contestó la llamada de ${setterName} (setter) — Stiv le pidió el confirmo por WA`
-        : `📵→🔗 No contestó la llamada de ${setterName} (setter) — Stiv le envió el enlace de reagenda por WA`)
-      : `📵 No contestó y el WA de seguimiento falló`,
-    metadata: { kind: "setter_no_contesto", variant, class_id: classId, wa_sent: waSent },
+    content: variant === "confirmo"
+      ? `📵→📋 No contestó la llamada de ${setterName} — WA de confirmo preparado para envío manual`
+      : `📵→📋 No contestó la llamada de ${setterName} — WA de reagenda preparado para envío manual`,
+    metadata: { kind: "setter_wa_pending_manual", variant: "setter_no_contesto", sub_variant: variant, class_id: classId },
   }).then(() => {}, () => {});
 
-  return { ok: waSent, waSent, emailSent: false, startLabel, variant, reason: waReason };
-}
-
-/** Razones técnicas de sendWhatsappText → texto claro para el setter. */
-function fmtWaReason(reason?: string): string {
-  if (!reason) return "el WhatsApp no se pudo enviar";
-  if (reason === "blocklisted") return "este número está en la lista de bloqueo — avisa a Gelfis";
-  if (reason === "setter_daily_cap") return "tope diario de WhatsApp del número nuevo alcanzado — mañana se reinicia";
-  if (reason.startsWith("recent_duplicate")) return "mensaje idéntico enviado a este lead hace menos de 24h";
-  if (reason.startsWith("http_400") && reason.includes("exists")) return "este número no tiene cuenta de WhatsApp";
-  return `el WhatsApp no se pudo enviar (${reason.slice(0, 60)})`;
+  return {
+    ok: true,
+    waSent: false,
+    emailSent: false,
+    startLabel,
+    waText,
+    waLink,
+    pendingManual: true,
+    variant,
+  };
 }

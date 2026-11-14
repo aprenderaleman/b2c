@@ -126,5 +126,9 @@ export async function POST(
     email_sent: send.emailSent,
     start_label: send.startLabel,
     send_reason: send.ok ? null : send.reason ?? null,
+    // Refactor 2026-11-14: WA listo para envío manual (reduce riesgo ban v6).
+    pending_manual: send.pendingManual ?? false,
+    wa_text: send.waText ?? null,
+    wa_link: send.waLink ?? null,
   });
 }

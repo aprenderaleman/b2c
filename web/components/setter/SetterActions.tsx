@@ -114,12 +114,25 @@ export function SetterActions({
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [motivo, setMotivo] = useState<"no_agendo" | "numero_equivocado">("no_agendo");
+  // Refactor 2026-11-14 (post-bans v5+v6): el WA queda PREPARADO y la
+  // setter lo envía manual. Esto guarda el texto y el wa.me link.
+  const [manualWa, setManualWa] = useState<{ text: string; link: string } | null>(null);
+  const [copyFlash, setCopyFlash] = useState(false);
 
   const open = (m: Mode) => {
     setMode(m);
     setNote(MODE_CONFIG[m].defaultNote);
     setError(null);
     setOkMsg(null);
+    setManualWa(null);
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFlash(true);
+      setTimeout(() => setCopyFlash(false), 2000);
+    } catch { /* ignorar: wa.me ya lleva el texto */ }
   };
 
   const submit = () => {
@@ -178,26 +191,41 @@ export function SetterActions({
         setError((body?.message as string) ?? (body?.error as string) ?? "No se pudo registrar.");
         return;
       }
+      // Refactor 2026-11-14 (post-bans v5+v6): si el backend devuelve
+      // pending_manual + wa_link, abrir la caja de envío manual.
+      const bodyManual = body as { pending_manual?: boolean; wa_text?: string | null; wa_link?: string | null };
+      if (bodyManual.pending_manual && bodyManual.wa_link && bodyManual.wa_text) {
+        setManualWa({ text: bodyManual.wa_text, link: bodyManual.wa_link });
+      }
+
       if (mode === "confirmado") {
-        const canales = fmtCanales(body as { wa_sent?: boolean; email_sent?: boolean });
-        setOkMsg(canales
-          ? `✅ Confirmo registrado y mensaje de gracias + enlace enviado por ${canales}. El profe de la cita lo verá como confirmado. El lead sale de tu lista.`
-          : `✅ Confirmo registrado y el profe lo verá — pero el mensaje NO se pudo enviar (${(body as { send_reason?: string }).send_reason ?? "sin canales"}). Avísale tú el enlace.`);
+        const email = (body as { email_sent?: boolean }).email_sent;
+        setOkMsg(bodyManual.pending_manual
+          ? `✅ Confirmo registrado. El mensaje de WhatsApp quedó listo abajo — ábrelo y pulsa Enviar.${email ? " (El correo ya salió.)" : ""}`
+          : `✅ Confirmo registrado. El profe lo verá como confirmado. El lead sale de tu lista.`);
       } else if (mode === "enlace_clase") {
-        const canales = fmtCanales(body as { wa_sent?: boolean; email_sent?: boolean });
-        setOkMsg(`🎓 Enlace de acceso enviado por ${canales || "—"}.`);
+        const email = (body as { email_sent?: boolean }).email_sent;
+        setOkMsg(bodyManual.pending_manual
+          ? `🎓 Enlace listo abajo — ábrelo en WhatsApp y pulsa Enviar.${email ? " (El correo ya salió.)" : ""}`
+          : `🎓 Enlace de acceso enviado.`);
       } else if (mode === "reagendar") {
         const canales = fmtCanales(body as { wa_sent?: boolean; email_sent?: boolean });
         setOkMsg(canales.includes("WhatsApp")
           ? `🔗 Enlace enviado por ${canales}. Cuando el lead elija su nuevo horario, la cita aparecerá agendada.`
           : `🔗 El WhatsApp no salió — el enlace se envió por ${canales || "ningún canal"}. Avísale al lead que lo busque en su correo.`);
       } else if (mode === "no_contesto") {
-        const b2 = body as { wa_sent?: boolean; variant?: string; send_reason?: string };
-        setOkMsg(b2.wa_sent
-          ? (b2.variant === "rescate"
-            ? "📵 Registrado y Stiv le envió el enlace de reagenda por WhatsApp. El lead vuelve a tu lista en 24 horas."
-            : "📵 Registrado y Stiv le pidió el confirmo por WhatsApp. El lead vuelve a tu lista en 24 horas (o 2 horas antes de su clase).")
-          : `📵 Registrado. El lead vuelve a tu lista en 24 horas (o 2 horas antes de su clase). Sin mensaje de WhatsApp (${b2.send_reason ?? "no aplica"}).`);
+        const b2 = body as { wa_sent?: boolean; variant?: string; send_reason?: string; pending_manual?: boolean };
+        if (b2.pending_manual) {
+          setOkMsg(b2.variant === "rescate"
+            ? "📵 Registrado. El mensaje de reagenda quedó listo abajo — ábrelo y pulsa Enviar. El lead vuelve a tu lista en 24 horas."
+            : "📵 Registrado. El mensaje de confirmación quedó listo abajo — ábrelo y pulsa Enviar. El lead vuelve a tu lista en 24h (o 2h antes de su clase).");
+        } else {
+          setOkMsg(b2.wa_sent
+            ? (b2.variant === "rescate"
+              ? "📵 Registrado y el enlace de reagenda salió por WhatsApp. El lead vuelve a tu lista en 24 horas."
+              : "📵 Registrado y el confirmo salió por WhatsApp. El lead vuelve a tu lista en 24h.")
+            : `📵 Registrado. El lead vuelve a tu lista en 24h. Sin mensaje de WhatsApp (${b2.send_reason ?? "no aplica"}).`);
+        }
       } else if (mode === "descartar") {
         const n = (body as { citas_canceladas?: number }).citas_canceladas ?? 0;
         setOkMsg(`❌ Lead descartado — fuera de todas las listas${n > 0 ? ` y ${n} cita${n > 1 ? "s" : ""} cancelada${n > 1 ? "s" : ""} (hueco liberado)` : ""}. No recibirá más mensajes.`);
@@ -271,6 +299,42 @@ export function SetterActions({
             {okMsg ? (
               <>
                 <p className="text-sm text-emerald-700 dark:text-emerald-300">{okMsg}</p>
+
+                {manualWa && (
+                  <div className="rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/40 p-3 space-y-3">
+                    <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                      💬 WhatsApp pendiente de tu envío manual
+                    </p>
+                    <textarea
+                      readOnly
+                      value={manualWa.text}
+                      rows={7}
+                      className="w-full text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 p-2 font-mono leading-snug"
+                      onFocus={(e) => e.currentTarget.select()}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(manualWa.text)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 px-3 py-1.5 text-xs font-medium transition-colors"
+                      >
+                        {copyFlash ? "✓ Copiado" : "📋 Copiar mensaje"}
+                      </button>
+                      <a
+                        href={manualWa.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 text-xs font-semibold transition-colors"
+                      >
+                        💬 Abrir WhatsApp con mensaje listo
+                      </a>
+                    </div>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-200/80">
+                      Abre WhatsApp Web (o el móvil) con el chat del lead y el texto ya pegado. Solo tienes que pulsar Enviar.
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex justify-end">
                   <button type="button" onClick={() => setMode(null)} className="btn-primary text-sm">Listo</button>
                 </div>

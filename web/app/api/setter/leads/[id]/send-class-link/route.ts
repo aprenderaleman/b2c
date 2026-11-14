@@ -60,12 +60,13 @@ export async function POST(
     return NextResponse.json({ ok: false, error: "send_failed", message: send.reason }, { status: 502 });
   }
 
+  const canales = [send.waSent ? "WA" : null, send.pendingManual ? "WA manual" : null, send.emailSent ? "email" : null].filter(Boolean).join(" + ") || "—";
   await registerContact({
     leadId,
     actor: { type: "setter", id: setter.id, name: setter.name },
     actionType: "enviar_info",
-    channel: "whatsapp",
-    note: `🎓 Enlace de acceso al aula enviado (${[send.waSent ? "WA" : null, send.emailSent ? "email" : null].filter(Boolean).join(" + ")}) — ${parsed.data.note}`,
+    channel: send.pendingManual ? "whatsapp" : (send.waSent ? "whatsapp" : "email"),
+    note: `🎓 Enlace de acceso al aula preparado (${canales}) — ${parsed.data.note}`,
   });
 
   return NextResponse.json({
@@ -73,5 +74,9 @@ export async function POST(
     wa_sent: send.waSent,
     email_sent: send.emailSent,
     start_label: send.startLabel,
+    // Refactor 2026-11-14: WA listo para envío manual (reduce riesgo ban v6).
+    pending_manual: send.pendingManual ?? false,
+    wa_text: send.waText ?? null,
+    wa_link: send.waLink ?? null,
   });
 }

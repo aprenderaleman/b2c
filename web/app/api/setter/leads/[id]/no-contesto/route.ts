@@ -62,8 +62,10 @@ export async function POST(
     return NextResponse.json({ ok: false, error: contact.error }, { status });
   }
 
-  // 2) Stiv le escribe por WA: pide el confirmo (cita futura) o le
-  //    envía el enlace de reagenda (no-show).
+  // 2) Prepara el WA (Hormozi, variant según cita futura o no-show).
+  //    Refactor 2026-11-14: no envía por Evolution — devuelve waLink
+  //    para que la setter lo mande manual desde WhatsApp Web (reduce
+  //    riesgo de ban del número v6).
   const send = await sendSetterNoContestoMessage(leadId, setter.name);
 
   return NextResponse.json({
@@ -71,5 +73,8 @@ export async function POST(
     wa_sent: send.waSent,
     variant: send.variant ?? null,
     send_reason: send.ok ? null : send.reason ?? null,
+    pending_manual: send.pendingManual ?? false,
+    wa_text: send.waText ?? null,
+    wa_link: send.waLink ?? null,
   });
 }
