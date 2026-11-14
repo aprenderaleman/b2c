@@ -35,6 +35,10 @@ export type TrialClassRow = {
   teacherName:        string;
   teacherEmail:       string;
   trialConfirmedAt:   string | null;
+  /** Confirmación por el lead (Gelfis 2026-11-14) — setter_phone,
+   *  student_web o student_wa_reply. El profe la ve como badge. */
+  studentConfirmedAt:     string | null;
+  studentConfirmedSource: string | null;
   voiceNoteSentAt:    string | null;
   // Meta Ads Paid funnel (2026-07-28)
   reservaPrioritaria: boolean | null;
@@ -61,6 +65,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
     .from("classes")
     .select(`
       id, scheduled_at, duration_minutes, status, short_code, notes_admin,
+      student_confirmed_at, student_confirmed_source,
       teacher_id,
       teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email)),
       lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at, trial_attended_at, trial_absent_at, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent),
@@ -94,6 +99,8 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
     status: string;
     short_code: string | null;
     notes_admin: string | null;
+    student_confirmed_at: string | null;
+    student_confirmed_source: string | null;
     teacher_id: string;
     teacher: { users: { full_name: string | null; email: string } |
                        Array<{ full_name: string | null; email: string }> } |
@@ -279,6 +286,8 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       teacherName:     tu?.full_name ?? tu?.email ?? "—",
       teacherEmail:    tu?.email ?? "",
       trialConfirmedAt: lead?.trial_confirmed_at ?? null,
+      studentConfirmedAt:     r.student_confirmed_at ?? null,
+      studentConfirmedSource: r.student_confirmed_source ?? null,
       trialAttendedAt:  lead?.trial_attended_at ?? null,
       trialAbsentAt:    lead?.trial_absent_at ?? null,
       voiceNoteSentAt:  script?.voice_note_sent_at ?? null,

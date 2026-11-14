@@ -16,6 +16,7 @@ import { supabaseAdmin } from "./supabase";
 import { sendSetterTrialAccessEmail } from "./email/send";
 import { buildLeadJoinUrl } from "./trial-token";
 import { formatBerlinFull } from "./time";
+import { recordStudentConfirmation } from "./student-confirmation";
 
 const PLATFORM_URL = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -97,6 +98,15 @@ export async function sendSetterAccessMessage(
     shortCode: cls.short_code,
     baseUrl: PLATFORM_URL,
   });
+
+  // Confirmación por teléfono: variant="confirmed" significa que el setter
+  // obtuvo el "sí" en la llamada — lo registramos YA para que el profe lo
+  // vea en su panel (Gelfis 2026-11-14). Idempotente.
+  if (variant === "confirmed") {
+    await recordStudentConfirmation({
+      classId: cls.id, leadId, source: "setter_phone", actorName: setterName,
+    }).catch(() => {});
+  }
 
   // Copies Hormozi 2026-11-14:
   //   confirmed → agradecer + logística + micro-commitment (papel y lápiz)
@@ -184,14 +194,14 @@ export async function sendSetterNoContestoMessage(
   // nos dice el TIPO (trial/sesión) para el enlace de reagenda.
   const { data: clsData } = await sb
     .from("classes")
-    .select("id, scheduled_at, status, sesion_closer_id")
+    .select("id, scheduled_at, status, sesion_closer_id, short_code")
     .eq("lead_id", leadId)
     .or("is_trial.eq.true,sesion_closer_id.not.is.null")
     .is("deleted_at", null)
     .order("scheduled_at", { ascending: false })
     .limit(5);
   const citas = (clsData ?? []) as Array<{
-    id: string; scheduled_at: string; status: string; sesion_closer_id: string | null;
+    id: string; scheduled_at: string; status: string; sesion_closer_id: string | null; short_code: string | null;
   }>;
   const nowMs = Date.now();
   const futura = citas.find(c => c.status === "scheduled" && new Date(c.scheduled_at).getTime() > nowMs) ?? null;
@@ -211,14 +221,19 @@ export async function sendSetterNoContestoMessage(
 
   if (futura) {
     // Variante "confirmo" — Hormozi: pedir el "Sí" + qué va a pasar.
+    // Nuevo (Gelfis 2026-11-14): además del "responde Sí", mandamos un
+    // enlace a /c/{code}/confirmar con un botón. 1-click y queda
+    // registrado en la DB (classes.student_confirmed_at) para que el
+    // profe lo vea en su panel.
     variant = "confirmo";
     classId = futura.id;
     startLabel = formatBerlinFull(futura.scheduled_at, lang);
     const claseES = futura.sesion_closer_id ? "sesión de plan" : "clase de prueba";
     const claseDE = futura.sesion_closer_id ? "Plan-Session" : "Probestunde";
+    const confirmUrl = futura.short_code ? `${PLATFORM_URL}/c/${futura.short_code}/confirmar` : null;
     waText = lang === "de"
-      ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nDeine Deutsch-${claseDE} ist am ${startLabel} — 40 Minuten 1:1 mit einem muttersprachlichen Lehrer, der Spanisch spricht. Ihr seht zusammen, wo du stehst und welcher Weg dich zu deinem Ziel führt.\n\nKannst du mir bitte mit einem "Ja" bestätigen, dass du dabei bist? So reserviere ich den Slot mit dem Lehrer. 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`
-      : `¡Hola ${firstName}! 👋 Soy ${setterFirst} de Aprender-Alemán — acabo de intentar llamarte 😊\n\nTu ${claseES} de alemán es el ${startLabel} — 40 minutos uno a uno con un profe nativo que habla español. Van a ver dónde estás y qué camino te toca hasta tu meta.\n\n¿Me confirmas con un "Sí" que te vas a conectar? Así lo aseguro con el profe 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`;
+      ? `Hallo ${firstName}! 👋 Ich bin ${setterFirst} von Aprender-Aleman.de — ich habe gerade versucht, dich anzurufen 😊\n\nDeine Deutsch-${claseDE} ist am ${startLabel} — 40 Minuten 1:1 mit einem muttersprachlichen Lehrer, der Spanisch spricht. Ihr seht zusammen, wo du stehst und welcher Weg dich zu deinem Ziel führt.\n\n${confirmUrl ? `Bestätige deine Teilnahme mit 1 Klick:\n👉 ${confirmUrl}\n\n` : ""}So reserviere ich den Slot mit deinem Lehrer. 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`
+      : `¡Hola ${firstName}! 👋 Soy ${setterFirst} de Aprender-Alemán — acabo de intentar llamarte 😊\n\nTu ${claseES} de alemán es el ${startLabel} — 40 minutos uno a uno con un profe nativo que habla español. Van a ver dónde estás y qué camino te toca hasta tu meta.\n\n${confirmUrl ? `Confirma tu asistencia con 1 clic:\n👉 ${confirmUrl}\n\n` : ""}Así tu profe te prepara los 40 min 🙌\n\n— ${setterFirst} · Aprender-Aleman.de`;
   } else {
     // Variante "rescate" — Hormozi: empatía + reagenda rápida.
     variant = "rescate";

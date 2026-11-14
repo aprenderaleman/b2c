@@ -72,14 +72,23 @@ export function TrialHubCard({
                 <span className="text-sm text-slate-500 dark:text-slate-400">·</span>
                 <span className="text-xs text-slate-500 dark:text-slate-400">{row.durationMinutes} min</span>
                 <StatusPill status={row.status} />
-                {row.trialConfirmedAt && row.status !== "cancelled" && (
-                  <span
-                    className="text-[11px] font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30"
-                    title={`Lead confirmó asistencia el ${new Date(row.trialConfirmedAt).toLocaleString("es-ES")}`}
-                  >
-                    ✅ Confirmado
-                  </span>
-                )}
+                {(row.studentConfirmedAt || row.trialConfirmedAt) && row.status !== "cancelled" && (() => {
+                  const when = row.studentConfirmedAt ?? row.trialConfirmedAt!;
+                  const src  = row.studentConfirmedSource;
+                  const srcLabel =
+                    src === "setter_phone"     ? "por teléfono con el setter" :
+                    src === "student_web"      ? "desde el enlace" :
+                    src === "student_wa_reply" ? "por WhatsApp" :
+                                                 "";
+                  return (
+                    <span
+                      className="text-[11px] font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30"
+                      title={`Lead confirmó asistencia ${srcLabel ? srcLabel + " " : ""}el ${new Date(when).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })}`}
+                    >
+                      ✅ Confirmado{src === "setter_phone" ? " 📞" : src === "student_web" ? " 🖱️" : src === "student_wa_reply" ? " 💬" : ""}
+                    </span>
+                  );
+                })()}
                 {isConverted && (
                   <span className="text-[11px] font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30">
                     Convertido
