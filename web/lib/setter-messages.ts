@@ -36,10 +36,14 @@ export type SetterSendResult = {
   reason?: string;
 };
 
-/** Construye el wa.me link con el texto pre-rellenado. Phone sin "+". */
+/** Construye el link de WhatsApp con el texto pre-rellenado. Phone sin "+".
+ *  Usamos api.whatsapp.com/send (en vez de wa.me) porque wa.me pasa por
+ *  una redirección que a veces recodifica mal los emojis de 4 bytes
+ *  (👋, 😊, 🙌 salían como "?"). Con api.whatsapp.com el UTF-8 se
+ *  preserva íntegro. */
 function buildWaLink(phoneE164: string, text: string): string {
   const phone = phoneE164.replace(/^\+/, "");
-  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+  return `https://api.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(text)}`;
 }
 
 export async function sendSetterAccessMessage(
