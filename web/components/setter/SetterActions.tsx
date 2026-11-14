@@ -133,14 +133,22 @@ export function SetterActions({
   // por defecto; el modal se abre YA en modo "éxito + caja ámbar" — un clic
   // menos para Sheila.
   const openAndRun = (m: Mode) => {
-    // Reagendar cancela la clase y libera el hueco del profe — confirm
-    // obligatorio (Gelfis 2026-11-14). Los demás no tocan la clase.
-    if (m === "reagendar") {
-      const ok = window.confirm(
-        "⚠️ Esto CANCELA la clase del lead y libera el hueco del profe (no se puede deshacer).\n\n¿Enviar el enlace de reagenda?"
-      );
-      if (!ok) return;
-    }
+    // Confirm obligatorio para TODAS las acciones (Gelfis 2026-11-14):
+    // click accidental = acción irreversible para el lead y el profe.
+    const confirmMsg: Record<Mode, string | null> = {
+      confirmado:
+        "✅ Confirmar que el lead te dijo SÍ en la llamada.\n\n• Quedará como '✅ Confirmado 📞' en el panel del profe.\n• Se le envía gracias por WhatsApp + email con el enlace al aula.\n\n¿Continuar?",
+      enlace_clase:
+        "🎓 Enviar al lead el enlace para entrar al aula.\n\n• Correo automático con el enlace.\n• WhatsApp manual listo para que lo envíes tú.\n\n¿Continuar?",
+      reagendar:
+        "⚠️ Esto CANCELA la clase del lead y libera el hueco del profe (no se puede deshacer).\n\n¿Enviar el enlace de reagenda?",
+      no_contesto:
+        "📵 Registrar que no contestó la llamada.\n\n• WhatsApp manual listo para que lo envíes tú (pide confirmo o manda reagenda si fue no-show).\n• El lead vuelve a tu cola en 24h.\n\n¿Continuar?",
+      nota: null,
+      descartar: null,
+    };
+    const msg = confirmMsg[m];
+    if (msg && !window.confirm(msg)) return;
     setMode(m);
     setNote(MODE_CONFIG[m].defaultNote);
     setError(null);
