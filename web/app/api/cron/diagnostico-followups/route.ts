@@ -397,7 +397,9 @@ async function runCron(req: Request) {
       skipped++;
       continue;
     }
-    const forceEmailOnly = waPaused || (isCold && nextN >= 2);
+    // Gelfis 2026-11-15: todo el drip diagnostico pasa a email-only.
+    // Solo 7 mensajes esenciales siguen auto por WA (ver docs/wa-auto-11).
+    const forceEmailOnly = true || waPaused || (isCold && nextN >= 2);
 
     // Wrappers locales que cortocircuitan WhatsApp cuando estamos en
     // modo email-only (pausa global o cold-lead cap). Devuelven el

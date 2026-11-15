@@ -187,6 +187,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/post-trial-followups-24h",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/hours-reconciliation",
       "schedule": "0 5 * * *"
     }

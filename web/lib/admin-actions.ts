@@ -7,6 +7,7 @@ import { sendPostTrialFollowupEmail, sendPostTrialFollowupGenericEmail, sendTria
 import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "./trial-packs";
 import { getLeadTrialTeacher } from "./trial-compensation";
 import { startChain, cancelActiveChain } from "./chain-engine";
+import { schedulePostTrialFollowup } from "./post-trial-followups";
 import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
 
 /**
@@ -293,16 +294,18 @@ export async function markTrialAttendedAwaitingConversion(
     }
   }
 
-  // Iniciar cadena de follow-ups post-enlace (chain2)
-  await startChain(leadId, "chain2_link_sent", {
-    ...(opts ? {
+  // Gelfis 2026-11-15: chain2_link_sent desactivada. En su lugar,
+  // agendamos UN ÚNICO follow-up +24h (post_trial_followups queue)
+  // con dedup por respuesta del lead / conversión / nueva acción.
+  await schedulePostTrialFollowup({
+    leadId,
+    kind: "enviar_enlace",
+    context: opts ? {
       packId: opts.packId,
       paymentType: opts.paymentType,
-      objective: opts.objective,
-      fullUrl: opts.fullUrl,
-      packLabel: opts.packLabel,
-    } : {}),
-  }, { bypassGateOnStart: true }).catch(err => console.warn("[markTrialAttended] startChain error:", err));
+      packLink,
+    } : { packLink },
+  }).catch(err => console.warn("[markTrialAttended] schedule followup error:", err));
 }
 
 /**
@@ -489,34 +492,13 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
     }
   }
 
-  // Fix Gelfis 2026-08-04: pasar metaLabel mínimo desde leads.meta si
-  // existe (setted por markTrialAttendedAwaitingConversion cuando el
-  // profe eligió pack antes). Sin él, {meta} caía al fallback y salía
-  // "aprender alemán" en el copy — sirve pero pierde personalización.
-  const { data: metaRow2 } = await sb
-    .from("leads")
-    .select("meta")
-    .eq("id", leadId)
-    .maybeSingle();
-  const priorMeta = (metaRow2?.meta && typeof metaRow2.meta === "object")
-    ? metaRow2.meta as Record<string, unknown>
-    : {};
-  const chainMetadata: Record<string, unknown> = {};
-  if (typeof priorMeta.last_offered_objective === "string") {
-    chainMetadata.objective = priorMeta.last_offered_objective;
-  }
-  if (typeof priorMeta.last_offered_pack === "string") {
-    chainMetadata.packId = priorMeta.last_offered_pack;
-  }
-
-  // Bono REAL activo (Gelfis 2026-09-30): quien se inscribe dentro de las
-  // 48h gana una clase de conversación gratis — el derecho se registra en
-  // convertLeadToStudent (students.bono_conversacion_at). Con el flag,
-  // el motor sirve las variantes chain1_attended_bonus_vivo y {dia_bonus}
-  // (= started_at + 48h) deja de ser escasez inventada.
-  chainMetadata.bonus_activo = true;
-  await startChain(leadId, "chain1_attended", chainMetadata, { bypassGateOnStart: true })
-    .catch(err => console.warn("[markTrialAttendedNoLink] startChain error:", err));
+  // Gelfis 2026-11-15: chain1_attended desactivada. Reemplazada por
+  // un único follow-up +24h en post_trial_followups.
+  await schedulePostTrialFollowup({
+    leadId,
+    kind: "asistio",
+    context: { planUrl },
+  }).catch(err => console.warn("[markTrialAttendedNoLink] schedule followup error:", err));
 }
 
 /**
@@ -601,9 +583,14 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     });
   }
 
-  // chain4_absent desactivada por Gelfis 2026-11-15: el Msg 1 va
-  // inmediato arriba; el Msg 2 (+24h) se añadirá en fase 2 con cron
-  // dedicado. Mantenemos reserva_prioritaria en meta por métricas.
+  // Gelfis 2026-11-15: chain4_absent desactivada. Follow-up único +24h
+  // via post_trial_followups queue (dedup si lead responde/convierte).
+  const baseUrlForQueue = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+  await schedulePostTrialFollowup({
+    leadId,
+    kind: "no_asistio",
+    context: { rescheduleUrl: `${baseUrlForQueue}/agendar/cuando?lead=${leadId}&from=no_show` },
+  }).catch(err => console.warn("[markTrialAbsent] schedule followup error:", err));
   void lead?.reserva_prioritaria;
 }
 
@@ -817,6 +804,14 @@ export async function sendRescheduleLinkMessage(
   // Cancelar cualquier cadena activa (el lead está reagendando, no necesita más follow-ups)
   await cancelActiveChain(leadId, "reschedule")
     .catch(err => console.warn("[sendRescheduleLinkMessage] cancelActiveChain error:", err));
+
+  // Gelfis 2026-11-15: agendar follow-up +24h "reagendar" en la cola nueva.
+  // Si el lead eligió nueva fecha, el cron detectará reply/booking y cancelará.
+  await schedulePostTrialFollowup({
+    leadId,
+    kind: "reagendar",
+    context: { rescheduleUrl },
+  }).catch(err => console.warn("[sendRescheduleLinkMessage] schedule followup error:", err));
 
   if (manualWa) {
     return {

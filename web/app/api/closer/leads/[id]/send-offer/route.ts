@@ -218,10 +218,15 @@ export async function POST(
     });
   }
 
-  await startChain(leadId, "chain2_link_sent", {
-    fullUrl: checkoutUrl,
-    packLabel,
-  }, { bypassGateOnStart: true });
+  // Gelfis 2026-11-15: chain2_link_sent desactivada. Reemplazada por
+  // un único follow-up +24h en post_trial_followups (dedup inbound/convert).
+  const { schedulePostTrialFollowup } = await import("@/lib/post-trial-followups");
+  await schedulePostTrialFollowup({
+    leadId,
+    kind: "enviar_enlace",
+    context: { planUrl: checkoutUrl, packLabel },
+  }).catch(err => console.warn("[closer send-offer] schedule followup error:", err));
+  void startChain;
 
   return NextResponse.json({ ok: true, ofertaId, checkoutUrl });
 }

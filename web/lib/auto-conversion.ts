@@ -3,6 +3,7 @@ import { ConvertBody, convertLeadToStudent, type ConvertInput } from "./lead-con
 import { registerCommission, registerBonoCierre } from "./commission-engine";
 import { calculateCommissions } from "./closer-commissions";
 import { cancelActiveChain } from "./chain-engine";
+import { cancelPendingFollowups } from "./post-trial-followups";
 import { runPostConversionFlow, detectScenario } from "./post-conversion-flow";
 import { sendMetaPurchaseCapi } from "./meta-capi-server";
 import { applyReferralReward } from "./referrals";
@@ -326,6 +327,7 @@ async function registerConversionExtras({
 
   try {
     await cancelActiveChain(ld.id, "converted_stripe_auto");
+    await cancelPendingFollowups(ld.id, "converted_stripe_auto").catch(() => {});
   } catch (err) {
     console.warn("[auto-conversion] cancelActiveChain failed:", err);
   }

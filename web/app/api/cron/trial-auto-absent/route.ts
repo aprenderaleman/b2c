@@ -122,13 +122,13 @@ async function run(req: Request) {
         status:          "trial_absent",
       }).eq("id", r.id);
 
-      // Arrancar chain4_absent — el motor usará bypassGateOnStart para
-      // que el primer mensaje salga YA aunque sea noche/domingo.
-      const chainId = await startChain(
-        r.id, "chain4_absent",
-        { reserva_prioritaria: false, auto_absent_reason: "teacher_no_mark_48h" },
-        { bypassGateOnStart: true },
-      ).catch(() => null);
+      // Gelfis 2026-11-15: chain4_absent desactivada. Invocamos a
+      // markTrialAbsent que maneja Msg1 inmediato + agenda Msg2 +24h
+      // via post_trial_followups queue.
+      const { markTrialAbsent } = await import("@/lib/admin-actions");
+      await markTrialAbsent(r.id).catch(() => {});
+      const chainId: string | null = null;
+      void startChain; // compat con legacy — ya no se usa aquí
 
       await sb.from("lead_timeline").insert({
         lead_id: r.id,

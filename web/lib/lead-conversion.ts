@@ -12,6 +12,7 @@ import { issueGarantiaCertificate, type GarantiaSource } from "./garantia-cert";
 import { sendWhatsappText } from "./whatsapp";
 import { getLeadTrialTeacher } from "./trial-compensation";
 import { startChain, cancelActiveChain } from "./chain-engine";
+import { cancelPendingFollowups } from "./post-trial-followups";
 import { resolveChainVariables } from "./chain-variables";
 import { renderTemplate } from "./message-stats";
 import { normalizeStudentLevel, resolveStudentPlan } from "./student-plan";
@@ -355,6 +356,7 @@ export async function convertLeadToStudent(
   if (waPhone) {
     try {
       await cancelActiveChain(lead.id, "converted_started_welcome_week");
+      await cancelPendingFollowups(lead.id, "converted_welcome_week").catch(() => {});
       const nowIso = new Date().toISOString();
       const vars = await resolveChainVariables(lead.id, {}, nowIso);
       const { data: tpl } = await sb

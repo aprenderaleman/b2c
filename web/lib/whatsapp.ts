@@ -122,6 +122,13 @@ const ALLOWED_WA_KINDS = new Set([
   "trial_inscription_initial",
   "trial_absent_initial",
   "trial_cancelled",
+  // Follow-ups +24h post-trial (Gelfis 2026-11-15, cola post_trial_followups)
+  "trial_asistio_fu24h",
+  "trial_absent_fu24h",
+  "trial_reagendar_fu24h",
+  "trial_inscription_fu24h",
+  // trial_reminder_2h volvió al whitelist 2026-11-15 (el cron sigue activo)
+  "trial_reminder_2h",
   // ACKs a respuestas del lead al T+0 (CONFIRMO/CAMBIAR/CANCELAR)
   "trial_confirm_ack",
   "trial_reschedule_link",
