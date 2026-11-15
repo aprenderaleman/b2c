@@ -304,7 +304,7 @@ export async function getEmpresaMetrics(
     recent_payments: recentPayments,
     period: { from: from.toISOString(), to: to.toISOString() },
     prev_revenue_cents: prevRevenue.revenue_cents,
-    active_students: newClients.total_unique_clients || activeStudents,
+    active_students: activeStudents,
     cost_per_class: costPerClass,
     service_liability: serviceLiability,
     committed_revenue: committedRevenue,
@@ -492,8 +492,9 @@ async function getRecentPayments(sb: SB, limit: number): Promise<RecentPayment[]
 async function countActiveStudents(sb: SB): Promise<number> {
   const { count } = await sb
     .from("students")
-    .select("id", { count: "exact", head: true })
-    .or("subscription_status.eq.active,classes_remaining.gt.0");
+    .select("id, users!inner(active)", { count: "exact", head: true })
+    .eq("subscription_status", "active")
+    .eq("users.active", true);
   return count ?? 0;
 }
 
@@ -524,7 +525,8 @@ async function getCostPerClass(sb: SB, from: Date, to: Date): Promise<CostPerCla
 async function getServiceLiability(sb: SB): Promise<ServiceLiability | null> {
   const { data: students } = await sb
     .from("students")
-    .select("id, classes_remaining")
+    .select("id, classes_remaining, users!inner(active)")
+    .eq("users.active", true)
     .or("subscription_status.eq.active,classes_remaining.gt.0");
 
   if (!students || students.length === 0) return null;
