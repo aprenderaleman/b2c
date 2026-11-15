@@ -66,7 +66,7 @@ async function run(req: Request) {
 
   const { data: rows, error } = await sb
     .from("post_trial_followups")
-    .select("id, lead_id, kind, reference_at, context")
+    .select("id, lead_id, kind, reference_at, context, attempts")
     .is("cancelled_at", null)
     .is("sent_at", null)
     .lte("due_at", now)
@@ -79,16 +79,23 @@ async function run(req: Request) {
     return NextResponse.json({ ok: true, processed: 0 });
   }
 
+  const MAX_ATTEMPTS = 5;
   let sent = 0, cancelled = 0, failed = 0, skipped = 0;
   for (let i = 0; i < rows.length; i++) {
-    const r = rows[i] as Row;
-    // Lock atómico: reservamos la fila marcando attempts++. Si otro tick
-    // ya la agarró (por ejemplo tras un timeout), nos salimos.
+    const r = rows[i] as Row & { attempts?: number };
+    const currentAttempts = r.attempts ?? 0;
+    if (currentAttempts >= MAX_ATTEMPTS) {
+      await markCancelled(r.id, `max_attempts(${currentAttempts})`);
+      cancelled++; continue;
+    }
+    // Lock atómico por versión: incrementamos attempts a (n+1) solo si
+    // sigue siendo n. Si otro tick ya lo agarró, el UPDATE no retorna.
+    const nextAttempts = currentAttempts + 1;
     const { data: locked } = await sb
       .from("post_trial_followups")
-      .update({ attempts: 1, updated_at: new Date().toISOString() })
+      .update({ attempts: nextAttempts, updated_at: new Date().toISOString() })
       .eq("id", r.id)
-      .eq("attempts", 0)
+      .eq("attempts", currentAttempts)
       .is("cancelled_at", null)
       .is("sent_at", null)
       .select("id")
@@ -157,24 +164,26 @@ async function run(req: Request) {
       });
       sent++;
     } else {
-      await sb.from("post_trial_followups")
-        .update({
-          failed_at: new Date().toISOString(),
-          last_error: res.reason ?? "unknown",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", r.id);
-      // Si el error es "soft" (night_gate, hourly_cap, daily_cap), limpiar
-      // attempts para que el próximo tick lo reintente cuando se abra la
-      // ventana. Dedup tope: no re-insertamos la fila si el lead luego
-      // responde — la verificación corre arriba.
-      const soft = /^(night_gate|hourly_cap|daily_cap|setter_daily_cap|recent_duplicate)/.test(res.reason ?? "");
-      if (soft) {
+      const reason = res.reason ?? "unknown";
+      // Fallo permanente → cancel inmediato, no retry.
+      const permanent = /^(no_whatsapp_on_lead|blocklisted|invalid_phone|exists.*false|whatsapp_disabled)/i.test(reason);
+      if (permanent) {
+        await markCancelled(r.id, `send_failed:${reason}`);
+        cancelled++;
+      } else {
+        // Fallo transient (night_gate, caps, 503, duplicate…).
+        // Mantenemos attempts incrementado (es el counter). El próximo
+        // tick lee attempts=n+1 y vuelve a lockear n+1→n+2 hasta que
+        // attempts >= MAX_ATTEMPTS, caso en el que se cancela arriba.
         await sb.from("post_trial_followups")
-          .update({ attempts: 0, failed_at: null })
+          .update({
+            failed_at: new Date().toISOString(),
+            last_error: reason,
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", r.id);
+        failed++;
       }
-      failed++;
     }
 
     if (i < rows.length - 1) await new Promise(r => setTimeout(r, GAP_MS));

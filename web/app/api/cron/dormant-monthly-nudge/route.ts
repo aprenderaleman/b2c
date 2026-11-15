@@ -125,21 +125,22 @@ async function run(req: Request) {
     const vars = await resolveChainVariables(leadId, {}, now.toISOString());
     const text = renderTemplate(templateBody, vars);
 
-    const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
-      kind: "dormant_monthly_nudge",
-    });
+    // Gelfis 2026-11-15: dormant_monthly_nudge WA desactivado (anti-ban).
+    // El nudge pasa a email-only; si alguien lo quiere por WA lo manda
+    // manual desde el admin.
+    const res = { ok: false, reason: "wa_disabled_2026_11_15", messageId: null };
+    void sendWhatsappText; // referenciado abajo si se reactiva
+    void text; void lead.whatsapp_normalized;
 
     await sb.from("lead_timeline").insert({
       lead_id: leadId,
-      type:    res.ok ? "system_message_sent" : "send_failed",
+      type:    "agent_note",
       author:  "system",
-      content: res.ok
-        ? text
-        : `💬 dormant_monthly_nudge fallo: ${res.reason ?? "unknown"}`,
+      content: `💬 dormant_monthly_nudge WA suprimido (apagado 2026-11-15)`,
       metadata: {
         kind:    "dormant_monthly_nudge",
-        channel: "whatsapp",
-        month:   now.toISOString().slice(0, 7),   // YYYY-MM (auditoría)
+        channel: "disabled",
+        month:   now.toISOString().slice(0, 7),
       },
     });
 

@@ -162,14 +162,10 @@ async function run(req: Request) {
     };
     const optOut = await isNotificationsOptOut(userId);
 
-    // WhatsApp
-    let waOk = false;
-    if (!optOut && phone) {
-      const tpl = await getActiveTemplate("pack_milestone", "whatsapp", milestone);
-      const text = renderTemplate(tpl?.body ?? FALLBACK_WA[milestone], vars);
-      const r = await sendWhatsappText(phone, text, { kind: "pack_milestone" }).catch(() => ({ ok: false }));
-      waOk = !!(r as { ok: boolean }).ok;
-    }
+    // Gelfis 2026-11-15: WA auto de pack_milestone desactivado
+    // (regla "post-conversión por chat interno"). Solo email + chat.
+    const waOk = false;
+    void phone; void FALLBACK_WA; void sendWhatsappText;
 
     // Email
     let emailOk = false;
