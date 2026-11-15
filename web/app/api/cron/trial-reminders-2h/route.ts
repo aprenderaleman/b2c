@@ -100,13 +100,27 @@ async function run(req: Request) {
       classId: r.id, leadId: lead.id, shortCode: r.short_code, baseUrl: PLATFORM_URL,
     });
 
-    // Copy 2026-06-17 (Gelfis): "¿Estás listo/a?" en vez de "¿Me confirmas?"
-    // — ya hubo CONFIRMO en T+0, esto es solo check-in cercano + tips.
+    // Copy 2026-11-15 (Gelfis): "tu clase de alemán", papel y lápiz
+    // para anotar el plan que te dé tu profesor.
     const text = lead.language === "de"
-      ? `In 2 Stunden beginnt deine Deutsch-Stunde.\n\nIch empfehle dir:\n- Computer mit Kamera und Mikrofon bereit\n- Ruhiger Ort\n\nBist du bereit?\n\n🔗 Direktlink: ${joinUrl}`
-      : `En 2 horas inicia tu clase de alemán.\n\nTe recomiendo:\n- Tener computador con cámara y micrófono\n- Lugar tranquilo\n\n¿Estás listo/a?\n\n🔗 Link directo: ${joinUrl}`;
+      ? `Hallo [NAME], deine Deutsch-Stunde beginnt in 2 Stunden ⏰\n\nHier geht's zur Stunde:\n👉 ${joinUrl}\n\nVerbinde dich von einem ruhigen Ort mit Papier und Stift zur Hand, um den Plan deines Lehrers zu notieren.\n\nBei Problemen schreib mir hier.\n\nBis gleich! 👋`
+      : [
+          `Hola ${(lead.name || "").split(/\s+/)[0] || ""}, tu clase de alemán empieza en 2 horas ⏰`,
+          ``,
+          `Entra desde aquí a la hora acordada:`,
+          `👉 ${joinUrl}`,
+          ``,
+          `Conéctate desde un lugar tranquilo, con papel y lápiz a mano para anotar el plan que te dé tu profesor.`,
+          ``,
+          `Si tienes cualquier problema, escríbeme por aquí.`,
+          ``,
+          `¡Nos vemos! 👋`,
+        ].join("\n");
 
-    const res = await sendWhatsappText(lead.whatsapp_normalized, text, { kind: "trial_reminder_2h" });
+    const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
+      kind: "trial_reminder_2h",
+      channel: "setter",
+    });
 
     if (res.ok) {
       sent++;

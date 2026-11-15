@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTrialConfirmationEmail } from "@/lib/email/send";
-// Gelfis 2026-11-14 (email-first): sendWhatsappText retirado — WA auto desactivado en este cron.
+import { sendWhatsappText } from "@/lib/whatsapp";
 import { buildEmailActionUrl } from "@/lib/email-action-token";
 import { buildLeadJoinUrl } from "@/lib/trial-token";
 import { buildTrialIcs } from "@/lib/ics";
@@ -176,19 +176,29 @@ async function run(req: Request) {
       });
     }
 
-    // Gelfis 2026-11-14 (email-first post-bans v5+v6): el WhatsApp
-    // automático de trial_confirmation se desactiva. Solo email (free,
-    // sin riesgo de ban). Si el equipo quiere refuerzo por WA, lo manda
-    // manual desde el panel admin o desde la cola del setter.
-    //
-    // El flujo histórico queda comentado abajo por si se reactiva
-    // cuando v6 esté sólido (14+ días warm-up sin fails).
-    const waOk: boolean | null = null;
-    // if (lead.whatsapp_normalized) {
-    //   const waText = buildConfirmationWa({ leadFirst, startDate, joinUrl, vip: isMetaAdsPaid && paid, goalLabel });
-    //   const r = await sendWhatsappText(lead.whatsapp_normalized, waText, { kind: "trial_confirmation" });
-    //   ...
-    // }
+    // Gelfis 2026-11-15 — reactivamos WhatsApp para los 4 mensajes
+    // auto esenciales (post-bans v5+v6, por canal setter v6 calentado).
+    // Copy nuevo: breve, 40 min, sin enlace (el aula va por email),
+    // pide confirmación. Fuera: la promo pre-venta encubierta anterior.
+    let waOk: boolean | null = null;
+    if (lead.whatsapp_normalized) {
+      void isMetaAdsPaid; void goalLabel; // reservados para variantes futuras
+      const waText = buildConfirmationWa({ leadFirst, startDate });
+      const r = await sendWhatsappText(lead.whatsapp_normalized, waText, {
+        kind: "trial_confirmation",
+        channel: "setter",
+      });
+      waOk = r.ok;
+      await sb.from("lead_timeline").insert({
+        lead_id: lead.id,
+        type:    r.ok ? "system_message_sent" : "send_failed",
+        author:  "system",
+        content: r.ok
+          ? `💬 WA confirmación clase de prueba enviado a ${lead.whatsapp_normalized}`
+          : `💬 Falló WA confirmación: ${r.reason}`,
+        metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: c.id },
+      });
+    }
 
     // Rollback del lock si TODO falló. Fix 2026-08-11 tras 15+
     // trial_confirmation perdidos por night_gate: si tanto email como
@@ -254,24 +264,25 @@ function isPermanentWaFailure(reason: string | undefined): boolean {
     || r.startsWith("recent_duplicate") || /"exists"\s*:\s*false/.test(r);
 }
 
-function buildConfirmationWa(a: { leadFirst: string; startDate: string; joinUrl: string; vip: boolean; goalLabel: string }): string {
-  if (a.vip) {
-    // Lead VIP (ya pagó la Agenda Prioritaria) → confirmación
-    // reconociendo el estado + copy amable estándar.
-    return `¡Hola ${a.leadFirst}! Soy Stiv de la academia Aprender-Aleman.de 👋\n\n🌟 Tu Agenda Prioritaria está confirmada para\n${a.startDate}.\n\nTu profesor ya prepara la clase enfocada en ${a.goalLabel}. 🎯\n\n🔗 Aquí entras el día de la clase:\n${a.joinUrl}\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema 😊\n\n— Stiv · Aprender-Aleman.de`;
-  }
-  // Copy estándar único para todos los demás flows (incluye
-  // meta-ads-paid sin depósito). Copy actualizado 2026-08-02
-  // tras incidente trial-slot-release: eliminada la amenaza
-  // "sin tu respuesta en 12h tu slot se libera". Ver
-  // docs/no-auto-cancel-policy.md — el sistema NO libera slots
-  // por falta de confirmación.
-  // Gelfis 2026-11-08 (Hormozi #1): trial_confirmation pasa de puramente
-  // logístico a pre-venta encubierta. Añade Dream Outcome ("llegar a tu
-  // meta sin perder meses"), explica QUÉ pasa en la clase (reduce
-  // ansiedad = menos no-shows) y pide un commitment pequeño (papel y
-  // lápiz). Trial son 40 minutos (no 30).
-  return `¡Hola ${a.leadFirst}! Soy Stiv de Aprender-Aleman.de 👋\n\nTu clase de prueba quedó agendada para el ${a.startDate} 🗓️\n\nTe cuento qué va a pasar: 40 minutos uno a uno con un profe nativo que habla español. Vais a ver dónde estás hoy en alemán y qué camino te conviene para llegar a tu meta sin perder meses dando vueltas.\n\n🔗 Aquí entras el día de la clase: ${a.joinUrl}\n\nUn consejo que marca la diferencia: ten papel y lápiz a mano para anotar el plan que te preparen 😊\n\nResponde CONFIRMO para asegurar tu plaza — y si no puedes asistir, dímelo y te reagendamos sin problema.\n\n— Stiv · Aprender-Aleman.de`;
+function buildConfirmationWa(a: { leadFirst: string; startDate: string }): string {
+  // Gelfis 2026-11-15: copy minimalista post-bans. Sin enlace (va por
+  // email), sin re-venta. Lead confirma por aquí; detalles al correo.
+  return [
+    `Hola ${a.leadFirst} 👋`,
+    ``,
+    `Soy Stiv de la academia Aprender-Aleman.de`,
+    `Tu clase de prueba quedó agendada:`,
+    ``,
+    `📅 ${a.startDate}`,
+    ``,
+    `Esto es lo que va a pasar:`,
+    ``,
+    `En la clase (40 min): tu profe te hará una prueba de nivel corta y te dará un plan personalizado para que alcances tus objetivos con el alemán — sabrás exactamente cuántas clases necesitas, qué vas a aprender en cada una y en cuánto tiempo.`,
+    ``,
+    `Ahora: revisa tu correo. Ahí tienes el enlace del aula virtual.`,
+    ``,
+    `¿Me confirmas por favor que podrás conectarte a la clase? 🙌`,
+  ].join("\n");
 }
 
 /**

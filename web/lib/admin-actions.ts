@@ -193,71 +193,33 @@ export async function markTrialAttendedAwaitingConversion(
   if (!lead?.whatsapp_normalized) return;
   const firstName = (lead.name || "").split(/\s+/)[0] || "";
 
-  let text: string;
-
-  if (opts && opts.fechaLlegada) {
-    const packLink = opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType);
-    const metaLabel = opts.metaLabel || opts.packLabel || opts.packId;
-
-    // Gelfis 2026-11-08 (Hormozi #3 — post_trial_followup): pasamos de
-    // enviar "aquí tu enlace + Garantía" a enviar el stack enumerado
-    // Grand Slam. El riesgo se asume por escrito y se hace visible al
-    // lado del CTA. Baja el perceived effort del pago y sube la
-    // likelihood of achievement.
-    if (opts.isOneTime) {
-      text = [
-        `¡Hola ${firstName}! 🎉`,
-        ``,
-        `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} (pago único, todas tus clases desbloqueadas desde el día 1) — a tu ritmo, llegas en ${opts.fechaLlegada} 📅`,
-        ``,
-        `Lo que incluye tu inscripción:`,
-        `✅ Tus clases 1 a 1 con profes nativos que hablan español`,
-        `✅ Hans — tu tutor IA 24/7 para dudas entre clases`,
-        `✅ SCHULE — tu plataforma de práctica guiada`,
-        `✅ Garantía de Nivel POR ESCRITO: si cumples el ritmo y no llegas, sigues gratis hasta lograrlo`,
-        ``,
-        `👉 Aquí tu inscripción (5 min): ${packLink || "(Te paso el enlace en breve.)"}`,
-        ``,
-        `El riesgo lo asumimos nosotros — por eso lo firmamos por escrito. Cualquier duda durante el proceso, aquí estoy 😊`,
-      ].join("\n");
-    } else {
-      text = [
-        `¡Hola ${firstName}! 🎉`,
-        ``,
-        `Me alegra que hayas decidido dar el paso. Aquí tienes tu inscripción al programa ${metaLabel} con ritmo ${opts.ritmoLabel || ""} — empezando esta semana, llegas en ${opts.fechaLlegada} 📅`,
-        ``,
-        `Lo que incluye tu inscripción:`,
-        `✅ Tus clases 1 a 1 con profes nativos que hablan español`,
-        `✅ Hans — tu tutor IA 24/7 para dudas entre clases`,
-        `✅ SCHULE — tu plataforma de práctica guiada`,
-        `✅ Garantía de Nivel POR ESCRITO: si cumples el ritmo y no llegas, sigues gratis hasta lograrlo`,
-        ``,
-        `👉 Aquí tu inscripción (5 min): ${packLink || "(Te paso el enlace en breve.)"}`,
-        ``,
-        `El riesgo lo asumimos nosotros — por eso lo firmamos por escrito. Cualquier duda durante el proceso, aquí estoy 😊`,
-      ].join("\n");
-    }
-  } else if (opts) {
-    const packLink = opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType);
-    const packName = opts.packLabel || getPack(opts.packId)?.name || opts.packId;
-    text = [
-      `¡Hola ${firstName}! 🎉`,
-      ``,
-      `Me alegra que hayas decidido dar el paso. Aquí tienes el enlace para formalizar tu inscripción en el ${packName}:`,
-      ``,
-      `Lo que incluye:`,
-      `✅ Tus clases 1 a 1 con profes nativos que hablan español`,
-      `✅ Hans — tu tutor IA 24/7`,
-      `✅ SCHULE — tu plataforma de práctica guiada`,
-      `✅ Garantía de Nivel POR ESCRITO: si cumples y no llegas, sigues gratis hasta lograrlo`,
-      ``,
-      `👉 Aquí tu inscripción (5 min): ${packLink || "(Te paso el enlace en breve.)"}`,
-      ``,
-      `El riesgo lo asumimos nosotros — por eso lo firmamos por escrito. Cualquier duda durante el proceso, aquí estoy 😊`,
-    ].join("\n");
-  } else {
-    text = `¡Hola ${firstName}! 😊\n\n¡Gracias por asistir a tu clase de prueba de alemán!\n\n¿Qué te pareció? Si te interesa avanzar, te preparo un plan personalizado con horarios y precio exacto — dime cuando quieras seguir.\n\nStiv, Aprender-Aleman.de`;
-  }
+  // Copy Gelfis 2026-11-15 — Msg 1 "Enviar enlace de inscripción".
+  // Tono directo (lead ya pidió el link) + bono 134€ como refuerzo.
+  // Unificamos las 3 variantes: el enlace puede venir de opts (pack
+  // específico del profe) o del fallback (/inscripciones?ref=leadId).
+  const packLink = opts
+    ? (opts.fullUrl || getPackUrlWithOverride(opts.packId, opts.paymentType) || `https://aprender-aleman.de/inscripciones?ref=${leadId}`)
+    : `https://aprender-aleman.de/inscripciones?ref=${leadId}`;
+  const text = [
+    `Hola ${firstName} 🙌`,
+    ``,
+    `Aquí tienes el enlace para inscribirte oficialmente`,
+    `en la academia Aprender-Aleman.de:`,
+    `👉 ${packLink}`,
+    ``,
+    `Si te inscribes en las próximas 48 horas,`,
+    `activas tu 🎁 BONUS DE ACCIÓN RÁPIDA (valor 134 €):`,
+    ``,
+    `✅ Clase extra de conversación (40 €)`,
+    `✅ Sesión de planificación con tu profe (40 €)`,
+    `✅ Acceso a la Serie — 10 capítulos exclusivos (29 €)`,
+    `✅ Guía "Tus primeras 30 frases en alemán" (25 €)`,
+    ``,
+    `⏱️ Los que deciden rápido, avanzan rápido.`,
+    ``,
+    `¿Dudas con el pago o alguna opción? Escríbenos`,
+    `por aquí y te ayudamos 😊`,
+  ].join("\n");
 
   // Gelfis 2026-11-05 (Fase 1.5 migración v6): el follow-up post-clase
   // lleva el enlace de inscripción y es el disparador de chain2_link_sent.
@@ -421,29 +383,55 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
   if (!lead?.whatsapp_normalized) return;
   const firstName = (lead.name || "").split(/\s+/)[0] || "";
 
+  // Copy Gelfis 2026-11-15 — Msg 1 "Asistió" (bono acción rápida).
+  // Enlace al plan personalizado + stack Grand Slam + CTA soft.
+  const planUrl = `https://aprender-aleman.de/inscripciones?ref=${leadId}`;
   const text = lead.language === "de"
     ? [
-        `Hallo ${firstName}! 😊`,
+        `Hallo ${firstName} 🎉`,
         ``,
-        `Es war mir eine große Freude, dich heute in der Probestunde dabei zu haben. Du hast heute gezeigt, dass du es kannst. 💪`,
+        `Mir wurde gesagt, dass deine Probestunde ein Erfolg war.`,
         ``,
-        `Ich weiß, wie wichtig es für dich ist, Deutsch zu lernen. Was hält dich davon ab, heute den nächsten Schritt zu machen?`,
+        `Wie versprochen: Du hast 48 Stunden, um deinen`,
+        `🎁 BONUS FÜR SCHNELL ENTSCHLOSSENE zu aktivieren — alles GRATIS,`,
+        `wenn du dich für deinen Plan entscheidest:`,
         ``,
-        `Stiv | Aprender-Aleman.de`,
+        `✅ Zusätzliche Konversationsstunde (Wert 40 €)`,
+        `✅ Planungssitzung mit deinem Lehrer (Wert 40 €)`,
+        `✅ Zugang zur Serie — 10 exklusive Kapitel (Wert 29 €)`,
+        `✅ Leitfaden "Deine ersten 30 Sätze auf Deutsch" (Wert 25 €)`,
+        ``,
+        `Gesamtwert: 134 € — gratis, wenn du innerhalb von 48 h entscheidest.`,
+        ``,
+        `⏱️ Wer schnell entscheidet, kommt schnell voran.`,
+        ``,
+        `Hier siehst du alle Infos, wählst die passende Option und schreibst dich offiziell ein:`,
+        `👉 ${planUrl}`,
+        ``,
+        `Brauchst du Hilfe oder hast Fragen? Schreib uns hier 😊`,
       ].join("\n")
     : [
-        `¡Hola, ${firstName}! 😊`,
+        `Hola ${firstName} 🎉`,
         ``,
-        `Ha sido un placer tenerte hoy en la clase de prueba. ¡Hoy demostraste que puedes! 💪`,
+        `Me cuentan que tu clase de prueba fue un éxito.`,
         ``,
-        `Aquí tienes el enlace para elegir el pack que más te encaje e inscribirte oficialmente:`,
-        `👉 https://aprender-aleman.de/inscripciones?ref=${leadId}`,
+        `Lo prometido: tienes 48 horas para activar tu`,
+        `🎁 BONUS DE ACCIÓN RÁPIDA — todo esto GRATIS si`,
+        `decides continuar con tu plan:`,
         ``,
-        `Desde el momento en que te inscribas recibirás toda la información de tus clases por correo.`,
+        `✅ Clase extra de conversación (valor 40 €)`,
+        `✅ Sesión de planificación con tu profe (valor 40 €)`,
+        `✅ Acceso a la Serie — 10 capítulos exclusivos (valor 29 €)`,
+        `✅ Guía "Tus primeras 30 frases en alemán" (valor 25 €)`,
         ``,
-        `Quedo pendiente por si te surgen dudas 👨‍🏫`,
+        `Valor total: 134 € — gratis si decides en 48 h.`,
         ``,
-        `Stiv | Aprender-Aleman.de`,
+        `⏱️ Los que deciden rápido, avanzan rápido.`,
+        ``,
+        `Aquí puedes ver toda la información, decidir cuál opción te encaja mejor e inscribirte oficialmente:`,
+        `👉 ${planUrl}`,
+        ``,
+        `¿Necesitas ayuda o tienes dudas? Escríbenos por aquí 😊`,
       ].join("\n");
 
   // Gelfis 2026-11-05 (Fase 1.5 migración v6): mismo criterio que el
@@ -549,6 +537,17 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
 export async function markTrialAbsent(leadId: string): Promise<void> {
   const sb = supabaseAdmin();
 
+  const { data: leadRow } = await sb
+    .from("leads")
+    .select("name, language, whatsapp_normalized, email, reserva_prioritaria")
+    .eq("id", leadId)
+    .maybeSingle();
+  const lead = (leadRow ?? null) as {
+    name: string | null; language: "es" | "de" | null;
+    whatsapp_normalized: string | null; email: string | null;
+    reserva_prioritaria: boolean | null;
+  } | null;
+
   await sb
     .from("leads")
     .update({
@@ -566,19 +565,46 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     lead_id: leadId,
     type: "status_change",
     author: "gelfis",
-    content: "Lead did not attend trial — chain4_absent iniciada (T+20min).",
+    content: "Lead did not attend trial — WA inmediato + chain4 desactivada (Gelfis 2026-11-15).",
   });
 
-  // Arrancar chain4_absent con flag reserva_prioritaria en metadata.
-  // El motor resuelve la variante deposit/nodeposit en resolveTemplateKind.
-  const { data: reservaRow } = await sb
-    .from("leads")
-    .select("reserva_prioritaria")
-    .eq("id", leadId)
-    .maybeSingle();
-  const hasReserva = (reservaRow as { reserva_prioritaria?: boolean } | null)?.reserva_prioritaria === true;
-  await startChain(leadId, "chain4_absent", { reserva_prioritaria: hasReserva }, { bypassGateOnStart: true })
-    .catch(err => console.warn("[markTrialAbsent] startChain error:", err));
+  // Copy Gelfis 2026-11-15 — Msg 1 "No asistió" (envío inmediato,
+  // no esperamos los 20 min que usaba chain4). Enlace de reagenda +
+  // puerta de salida educada.
+  if (lead?.whatsapp_normalized) {
+    const firstName = (lead.name || "").split(/\s+/)[0] || "";
+    const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
+    const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=no_show`;
+    const text = [
+      `Hola ${firstName} 👋`,
+      ``,
+      `No pudimos conectarnos contigo hoy en la clase.`,
+      ``,
+      `Sin problema — pasan cosas. Elige otra fecha aquí`,
+      `y te mantenemos el espacio:`,
+      `👉 ${rescheduleUrl}`,
+      ``,
+      `Si prefieres cancelar, dímelo por aquí y lo gestiono.`,
+    ].join("\n");
+    const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
+      kind: "trial_absent_initial",
+      channel: "setter",
+    });
+    await sb.from("lead_timeline").insert({
+      lead_id: leadId,
+      type:    res.ok ? "system_message_sent" : "send_failed",
+      author:  "gelfis",
+      content: res.ok
+        ? `💬 Msg "No asistió" enviado a ${lead.whatsapp_normalized}`
+        : `💬 Falló Msg "No asistió": ${res.reason}`,
+      metadata: { kind: "trial_absent_initial", channel: "whatsapp" },
+    });
+  }
+
+  // chain4_absent desactivada por Gelfis 2026-11-15: el Msg 1 va
+  // inmediato arriba; el Msg 2 (+24h) se añadirá en fase 2 con cron
+  // dedicado. Mantenemos reserva_prioritaria en meta por métricas.
+  void lead?.reserva_prioritaria;
 }
 
 /**
@@ -710,14 +736,19 @@ export async function sendRescheduleLinkMessage(
   const baseUrl = (process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
   const rescheduleUrl = `${baseUrl}/agendar/cuando?lead=${leadId}&from=teacher_reschedule`;
 
-  // Fix auditoría 2026-08-14: "He cancelado tu clase actual" solo es
-  // cierto si HABÍA una clase futura que cancelar. Sin ella (lead
-  // post-trial o de sesión), el copy invita a agendar, no a reagendar.
-  const waText = opts?.copy === "setter"
-    ? `¡Hola ${firstName}! 👋\n\nComo hablamos, aquí te envío el enlace para que reagendes tu clase de prueba de alemán — eliges tu nuevo horario en 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando lo tengas. 😊\n\n— Stiv · Aprender-Aleman.de`
-    : trial
-    ? `¡Hola ${firstName}! 👋\n\nHe cancelado tu clase de prueba actual. Puedes elegir un nuevo horario con este enlace, tardarás solo 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu nuevo horario. 😊\n\n— Stiv · Aprender-Aleman.de`
-    : `¡Hola ${firstName}! 👋\n\nTe comparto el enlace para agendar tu clase de prueba de alemán — eliges tu horario en 3 minutos:\n\n👉 ${rescheduleUrl}\n\nAvísame cuando hayas elegido tu horario. 😊\n\n— Stiv · Aprender-Aleman.de`;
+  // Copy Gelfis 2026-11-15 — Msg 1 "Reagendar" (profe/setter marca).
+  // Tono corto, directo al link + cierre con dream outcome.
+  const waText = [
+    `Hola ${firstName} 👋`,
+    ``,
+    `Tu clase quedó liberada. Elige nueva fecha aquí`,
+    `y te mantenemos el espacio:`,
+    `👉 ${rescheduleUrl}`,
+    ``,
+    `Mientras antes agendes, más pronto sales con`,
+    `tu plan personalizado para alcanzar tus`,
+    `objetivos con el alemán.`,
+  ].join("\n");
 
   let waOk = false;
   let waReason: string | null = null;
