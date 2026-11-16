@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { stripeUS, findOrCreateCustomer } from "@/lib/stripe";
 import { buildTrialToken } from "@/lib/trial-token";
 import { reportError } from "@/lib/error-reporting";
+import { checkEmailTypo } from "@/lib/email-typo-check";
 
 /**
  * POST /api/public/book-trial-metaads-paid
@@ -34,7 +35,17 @@ const NOTIFY_DELAY_MIN = 13; // 12-15 min per spec
 
 const Body = z.object({
   name:          z.string().trim().min(2).max(100),
-  email:         z.string().trim().toLowerCase().email(),
+  email:         z.string().trim().toLowerCase().email()
+    .superRefine((v, ctx) => {
+      const c = checkEmailTypo(v);
+      if (c.ok) return;
+      const suggestion = "suggestion" in c ? c.suggestion : undefined;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: suggestion ? `Revisa el email: ¿quisiste decir ${suggestion}?` : `Revisa el dominio del email (${c.reason})`,
+        params: { suggestion },
+      });
+    }),
   whatsapp_e164: z.string().trim().min(8).nullable().optional(),
   german_level:  z.enum(["A0","A1","A2","B1","B2","C1","C2"]).nullable().optional(),
   slot_iso:      z.string().datetime(),

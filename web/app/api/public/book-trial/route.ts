@@ -18,6 +18,7 @@ import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
 import { createTeacherTrialEvent, deleteTeacherCalendarEvent, patchTeacherCalendarEvent } from "@/lib/google-calendar-oauth";
 import { sendRaw } from "@/lib/email/send";
 import { attributeReferral } from "@/lib/referrals";
+import { checkEmailTypo } from "@/lib/email-typo-check";
 import { resolveProfe } from "@/lib/profes";
 import { findTeacherConflicts, earlierConflicts } from "@/lib/teacher-conflicts";
 import { NIVEL_ESCOLAR, TIEMPO_ALEMANIA, OBJETIVO_MENOR, nombreMenorParaProfe, resumenMenor, type MenorDatos } from "@/lib/menor";
@@ -72,7 +73,19 @@ const TRIAL_DURATION_MIN = 40;
 // puede añadirlo después respondiendo al email de confirmación.
 const Body = z.object({
   name:           z.string().trim().min(2).max(100),
-  email:          z.string().trim().toLowerCase().email(),
+  email:          z.string().trim().toLowerCase().email()
+    .superRefine((v, ctx) => {
+      const c = checkEmailTypo(v);
+      if (c.ok) return;
+      const suggestion = "suggestion" in c ? c.suggestion : undefined;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: suggestion
+          ? `Revisa el email: ¿quisiste decir ${suggestion}?`
+          : `Revisa el dominio del email, parece tener un error (${c.reason})`,
+        params: { suggestion },
+      });
+    }),
   whatsapp_e164:  z.string().trim().min(8).nullable().optional(),
   whatsapp_raw:   z.string().trim().min(4).nullable().optional(),
   // Sincronizado con los 6 niveles del funnel post-2026-05-26

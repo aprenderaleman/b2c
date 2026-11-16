@@ -47,6 +47,7 @@ import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { sanitizeE164, rescueDoublePrefix } from "@/lib/phone";
 import { parsePhoneNumberFromString }    from "libphonenumber-js";
 import { notifyNewLeadUrgent, leadAlertsEnabled } from "@/lib/lead-alerts";
+import { checkEmailTypo } from "@/lib/email-typo-check";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -153,7 +154,17 @@ function inferCountryFromWhatsapp(whatsappE164: string): string {
 
 const BodySchema = z.object({
   name:          z.string().trim().min(2).max(100),
-  email:         z.string().trim().toLowerCase().email(),
+  email:         z.string().trim().toLowerCase().email()
+    .superRefine((v, ctx) => {
+      const c = checkEmailTypo(v);
+      if (c.ok) return;
+      const suggestion = "suggestion" in c ? c.suggestion : undefined;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: suggestion ? `Revisa el email: ¿quisiste decir ${suggestion}?` : `Revisa el dominio del email (${c.reason})`,
+        params: { suggestion },
+      });
+    }),
   // WhatsApp opcional desde 2026-06-01 (form en 2 pasos). Si el lead
   // sólo deja email en el paso 5a, lo creamos sin WA y el drip de
   // followups por email se encarga de la conversión. Cuando el lead

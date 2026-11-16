@@ -6,6 +6,7 @@ import { listSesionSlots, SESION_MINUTES } from "@/lib/sesion-slots";
 import { buildTrialToken, buildLeadJoinUrl } from "@/lib/trial-token";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { pauseAllOutbound } from "@/lib/chain-engine";
+import { checkEmailTypo } from "@/lib/email-typo-check";
 import { sanitizeE164, validateWhatsappE164 } from "@/lib/phone";
 import { createAdminNotification } from "@/lib/admin-notifications";
 import { notifyCloserOnBooking } from "@/lib/sesion-notifications";
@@ -43,7 +44,17 @@ const PLATFORM_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-
 
 const Body = z.object({
   name: z.string().trim().min(2).max(120),
-  email: z.string().trim().toLowerCase().email().max(200),
+  email: z.string().trim().toLowerCase().email().max(200)
+    .superRefine((v, ctx) => {
+      const c = checkEmailTypo(v);
+      if (c.ok) return;
+      const suggestion = "suggestion" in c ? c.suggestion : undefined;
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: suggestion ? `Revisa el email: ¿quisiste decir ${suggestion}?` : `Revisa el dominio del email (${c.reason})`,
+        params: { suggestion },
+      });
+    }),
   whatsapp_e164: z.string().trim().max(25).nullable().optional(),
   slot_iso: z.string().datetime(),
   closer_id: z.string().uuid(),

@@ -9,6 +9,7 @@ import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
 import { useBookingState } from "@/lib/booking-state";
 import { useLang } from "@/lib/lang-context";
 import { normalizePhone, resolvePhone } from "@/lib/phone";
+import { checkEmailTypo } from "@/lib/email-typo-check";
 import { combineE164 } from "@/components/diagnostico/DiagnosticoFunnel";
 import { firePixelLead, firePixelSchedule } from "@/lib/pixels";
 import { detectBrowserTimezone, detectCountryFromBrowser, effectiveLeadTimezone } from "@/lib/timezone-country";
@@ -412,7 +413,14 @@ function StepCuandoInner() {
   };
 
   // Validación form inline (WhatsApp obligatorio desde 2026-06-26).
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const emailFormatOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const emailTypoCheck = useMemo(() => {
+    if (!emailFormatOk) return { ok: true as const };
+    return checkEmailTypo(form.email.trim());
+  }, [form.email, emailFormatOk]);
+  const emailSuggestion = (emailTypoCheck && !emailTypoCheck.ok && "suggestion" in emailTypoCheck)
+    ? emailTypoCheck.suggestion : undefined;
+  const emailValid = emailFormatOk && emailTypoCheck.ok;
   const nameValid  = form.name.trim().length >= 2;
   const phoneInfo  = useMemo(() => {
     const digits = form.whatsapp.replace(/\D/g, "");
@@ -786,6 +794,16 @@ function StepCuandoInner() {
                   className={inputCls(emailValid && form.email.length > 0, form.email.length > 0 && !emailValid)}
                   placeholder="tu@email.com"
                 />
+                {emailSuggestion && (
+                  <button
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, email: emailSuggestion }))}
+                    className="mt-2 flex items-center gap-2 text-left text-[13px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 hover:bg-amber-100 transition"
+                  >
+                    <span>⚠️ ¿Quisiste decir <strong className="font-semibold underline">{emailSuggestion}</strong>?</span>
+                    <span className="ml-auto text-xs text-amber-600 whitespace-nowrap">Usar este</span>
+                  </button>
+                )}
               </Field>
 
               {/* ── Datos del hijo/a (solo ?tipo=menor) ── */}

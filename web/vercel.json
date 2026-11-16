@@ -191,6 +191,10 @@
       "schedule": "*/10 * * * *"
     },
     {
+      "path": "/api/cron/wa-warmup-ramp",
+      "schedule": "15 23 * * *"
+    },
+    {
       "path": "/api/cron/hours-reconciliation",
       "schedule": "0 5 * * *"
     }
