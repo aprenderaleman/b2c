@@ -39,6 +39,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/trial-reminders-2h",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/trial-auto-absent",
       "schedule": "0 * * * *"
     },
