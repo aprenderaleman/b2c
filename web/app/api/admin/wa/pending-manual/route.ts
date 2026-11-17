@@ -37,6 +37,7 @@ export async function GET(req: Request): Promise<Response> {
     .from("lead_timeline")
     .select("id, timestamp, lead_id, metadata")
     .eq("metadata->>kind", "wa_manual_pending")
+    .is("metadata->sent_manual_at", null)
     .gte("timestamp", new Date(Date.now() - 24 * 3600_000).toISOString())
     .order("timestamp", { ascending: false });
 
@@ -55,6 +56,7 @@ export async function GET(req: Request): Promise<Response> {
   const leadMap = Object.fromEntries((leads as Array<{ id: string; name: string }>).map(l => [l.id, l.name]));
 
   const enriched = rows.map(r => ({
+    id: r.id,
     ts: r.timestamp,
     lead_id: r.lead_id,
     lead_name: leadMap[r.lead_id] ?? "(sin nombre)",
@@ -82,7 +84,7 @@ button:hover{background:#16a34a}.wa{background:#25d366}
 <h1>📱 WA pendientes de envío manual</h1>
 <div class="sub">${enriched.length} mensajes bloqueados por cap/night_gate últimas 24h</div>
 ${enriched.map((r,i)=>`
-<div class="card">
+<div class="card" id="card-${r.id}">
   <div class="head">
     <span style="color:#94a3b8">#${i+1}.</span>
     <span class="name">${r.lead_name}</span>
@@ -95,8 +97,20 @@ ${enriched.map((r,i)=>`
   <div class="btns">
     <button onclick="navigator.clipboard.writeText(document.getElementById('t${i}').innerText);this.innerText='✓ Copiado';setTimeout(()=>this.innerText='📋 Copiar',1200)">📋 Copiar</button>
     <button class="wa" onclick="window.open('${r.wa_link}','_blank')">💬 Abrir WhatsApp</button>
+    <button style="background:#64748b" onclick="markSent('${r.id}','${r.lead_id}','${r.kind}')">✓ Marcar enviado</button>
   </div>
 </div>`).join("")}
+<script>
+const SECRET = ${JSON.stringify(provided ?? "")};
+async function markSent(id, leadId, kind) {
+  const r = await fetch('/api/admin/wa/pending-manual/mark-sent?secret='+encodeURIComponent(SECRET), {
+    method: 'POST', headers: {'content-type':'application/json'},
+    body: JSON.stringify({ timeline_id: id, lead_id: leadId, kind }),
+  });
+  if (r.ok) { document.getElementById('card-'+id).style.display='none'; }
+  else { alert('Error marcando como enviado'); }
+}
+</script>
 </body></html>`;
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
   }
