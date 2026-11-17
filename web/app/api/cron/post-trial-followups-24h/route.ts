@@ -182,6 +182,27 @@ async function run(req: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq("id", r.id);
+        // Si es fallo por cap V6, stash el texto+link para envío manual.
+        if (/^(setter_daily_cap|night_gate|hourly_cap|daily_cap)/.test(reason) && lead.whatsapp_normalized) {
+          const phoneNoPlus = lead.whatsapp_normalized.replace(/^\+/, "");
+          const waLink = `https://api.whatsapp.com/send?phone=${phoneNoPlus}&text=${encodeURIComponent(text)}`;
+          await sb.from("lead_timeline").insert({
+            lead_id: r.lead_id,
+            type:    "agent_note",
+            author:  "gelfis",
+            content: `📋 WA +24h ${r.kind} auto bloqueado (${reason}) — preparado para envío manual`,
+            metadata: {
+              kind: "wa_manual_pending",
+              channel: "whatsapp",
+              original_kind: waKindFor(r.kind),
+              phone: lead.whatsapp_normalized,
+              text,
+              wa_link: waLink,
+              reason,
+              followup_id: r.id,
+            },
+          }).then(() => {}, () => {});
+        }
         failed++;
       }
     }

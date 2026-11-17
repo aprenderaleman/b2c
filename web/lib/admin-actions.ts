@@ -19,6 +19,47 @@ import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions
  */
 const AWAITING_PAYMENT_KEY = "awaiting_payment_confirmation_since";
 
+/**
+ * Cuando el envío WA del sistema falla por motivos "recuperables"
+ * (cap diario del setter V6 agotado, night gate, hourly cap), guardamos
+ * el texto exacto + waLink listo en un agent_note tipo "wa_manual_pending".
+ * Gelfis puede ver la cola en /api/admin/wa/pending-manual y enviarlos
+ * desde su WhatsApp Business sin tener que reconstruir nada.
+ *
+ * Gelfis 2026-11-17.
+ */
+function isCapFailure(reason: string | undefined): boolean {
+  if (!reason) return false;
+  return /^(setter_daily_cap|night_gate|hourly_cap_reached|daily_cap_reached)/.test(reason);
+}
+
+async function stashPendingManualWa(args: {
+  sb: ReturnType<typeof supabaseAdmin>;
+  leadId: string;
+  phone: string;
+  text: string;
+  kind: string;
+  reason: string;
+}): Promise<void> {
+  const phoneNoPlus = args.phone.replace(/^\+/, "");
+  const waLink = `https://api.whatsapp.com/send?phone=${phoneNoPlus}&text=${encodeURIComponent(args.text)}`;
+  await args.sb.from("lead_timeline").insert({
+    lead_id: args.leadId,
+    type:    "agent_note",
+    author:  "gelfis",
+    content: `📋 WA auto bloqueado (${args.reason}) — preparado para envío manual desde WhatsApp Business`,
+    metadata: {
+      kind: "wa_manual_pending",
+      channel: "whatsapp",
+      original_kind: args.kind,
+      phone: args.phone,
+      text: args.text,
+      wa_link: waLink,
+      reason: args.reason,
+    },
+  });
+}
+
 export async function addGelfisNote(leadId: string, note: string): Promise<void> {
   const sb = supabaseAdmin();
   const clean = note.trim();
@@ -249,8 +290,15 @@ export async function markTrialAttendedAwaitingConversion(
       type: "send_failed",
       author: "gelfis",
       content: `💬 Falló el follow-up post-clase: ${res.reason}`,
-      metadata: { kind: "post_trial_followup", channel: "whatsapp" },
+      metadata: { kind: "post_trial_followup", channel: "whatsapp", reason: res.reason },
     });
+    if (isCapFailure(res.reason) && lead.whatsapp_normalized) {
+      await stashPendingManualWa({
+        sb, leadId, phone: lead.whatsapp_normalized, text,
+        kind: opts ? "trial_inscription_initial" : "trial_attended_initial",
+        reason: res.reason ?? "unknown",
+      }).catch(() => {});
+    }
   }
 
   // ── Espejo por email ─────────────────────────────────────────────────
@@ -458,8 +506,15 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
       type: "send_failed",
       author: "gelfis",
       content: `💬 Falló el mensaje motivacional post-clase: ${res.reason}`,
-      metadata: { kind: "post_trial_followup", channel: "whatsapp", flow: "no_link" },
+      metadata: { kind: "post_trial_followup", channel: "whatsapp", flow: "no_link", reason: res.reason },
     });
+    if (isCapFailure(res.reason) && lead.whatsapp_normalized) {
+      await stashPendingManualWa({
+        sb, leadId, phone: lead.whatsapp_normalized, text,
+        kind: "trial_attended_initial",
+        reason: res.reason ?? "unknown",
+      }).catch(() => {});
+    }
   }
 
   // Fix Gelfis 2026-06-23: añadir email espejo del WA motivacional. Si
@@ -579,8 +634,15 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
       content: res.ok
         ? `💬 Msg "No asistió" enviado a ${lead.whatsapp_normalized}`
         : `💬 Falló Msg "No asistió": ${res.reason}`,
-      metadata: { kind: "trial_absent_initial", channel: "whatsapp" },
+      metadata: { kind: "trial_absent_initial", channel: "whatsapp", reason: res.ok ? undefined : res.reason },
     });
+    if (!res.ok && isCapFailure(res.reason)) {
+      await stashPendingManualWa({
+        sb, leadId, phone: lead.whatsapp_normalized, text,
+        kind: "trial_absent_initial",
+        reason: res.reason ?? "unknown",
+      }).catch(() => {});
+    }
   }
 
   // Gelfis 2026-11-15: chain4_absent desactivada. Follow-up único +24h
@@ -768,8 +830,15 @@ export async function sendRescheduleLinkMessage(
       content: waRes.ok
         ? `💬 Reagendamiento enviado a ${linfo.whatsapp_normalized} — lead pasa a 'rescheduling'`
         : `💬 Falló envío del link reagendar: ${waReason}`,
-      metadata: { kind: "trial_reschedule_link", channel: "whatsapp" },
+      metadata: { kind: "trial_reschedule_link", channel: "whatsapp", reason: waReason ?? undefined },
     });
+    if (!waRes.ok && isCapFailure(waReason ?? undefined)) {
+      await stashPendingManualWa({
+        sb, leadId, phone: linfo.whatsapp_normalized, text: waText,
+        kind: "trial_reschedule_link",
+        reason: waReason ?? "unknown",
+      }).catch(() => {});
+    }
   }
 
   // Fallback a email si el WA falló o no hay número (caso 2026-09-09:
