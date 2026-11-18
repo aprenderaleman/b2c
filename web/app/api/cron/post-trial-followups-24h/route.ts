@@ -184,6 +184,18 @@ async function run(req: Request) {
           .eq("id", r.id);
         // Si es fallo por cap V6, stash el texto+link para envío manual.
         if (/^(setter_daily_cap|night_gate|hourly_cap|daily_cap)/.test(reason) && lead.whatsapp_normalized) {
+          // Dedupe: si ya hay un wa_manual_pending no enviado para este
+          // lead + kind en las últimas 24h, no crear duplicado.
+          const existing = await sb
+            .from("lead_timeline")
+            .select("id")
+            .eq("lead_id", r.lead_id)
+            .eq("metadata->>kind", "wa_manual_pending")
+            .eq("metadata->>original_kind", waKindFor(r.kind))
+            .is("metadata->sent_manual_at", null)
+            .gte("timestamp", new Date(Date.now() - 24 * 3600_000).toISOString())
+            .limit(1);
+          if ((existing.data?.length ?? 0) > 0) { failed++; continue; }
           const phoneNoPlus = lead.whatsapp_normalized.replace(/^\+/, "");
           const waLink = `https://api.whatsapp.com/send?phone=${phoneNoPlus}&text=${encodeURIComponent(text)}`;
           await sb.from("lead_timeline").insert({

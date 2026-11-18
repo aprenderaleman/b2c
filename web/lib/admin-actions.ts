@@ -41,6 +41,19 @@ async function stashPendingManualWa(args: {
   kind: string;
   reason: string;
 }): Promise<void> {
+  // Dedupe: si ya hay un wa_manual_pending no enviado para este lead +
+  // original_kind en las últimas 24h, no crear otro (evita que el cron
+  // genere 5 duplicados por lead al reintentar).
+  const existing = await args.sb
+    .from("lead_timeline")
+    .select("id")
+    .eq("lead_id", args.leadId)
+    .eq("metadata->>kind", "wa_manual_pending")
+    .eq("metadata->>original_kind", args.kind)
+    .is("metadata->sent_manual_at", null)
+    .gte("timestamp", new Date(Date.now() - 24 * 3600_000).toISOString())
+    .limit(1);
+  if ((existing.data?.length ?? 0) > 0) return;
   const phoneNoPlus = args.phone.replace(/^\+/, "");
   const waLink = `https://api.whatsapp.com/send?phone=${phoneNoPlus}&text=${encodeURIComponent(args.text)}`;
   await args.sb.from("lead_timeline").insert({
