@@ -117,7 +117,7 @@ export function buildFollowupText(kind: FollowupKind, args: {
       return [
         `Hola ${name} 👋`,
         ``,
-        `Tu BONUS DE ACCIÓN RÁPIDA (valor 134 €) vence`,
+        `Tu BONUS DE ACCIÓN RÁPIDA (valor 120 €) vence`,
         `mañana a esta hora.`,
         ``,
         `Si quieres aprovecharlo + empezar con tu plan,`,
@@ -162,7 +162,7 @@ export function buildFollowupText(kind: FollowupKind, args: {
         ``,
         `Vi que aún no has completado tu inscripción.`,
         ``,
-        `Tu 🎁 BONUS DE ACCIÓN RÁPIDA (valor 134 €) sigue`,
+        `Tu 🎁 BONUS DE ACCIÓN RÁPIDA (valor 120 €) sigue`,
         `disponible, pero vence mañana a esta hora.`,
         ``,
         `El enlace sigue activo aquí:`,
