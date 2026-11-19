@@ -80,8 +80,21 @@ async function run(req: Request): Promise<Response> {
     return NextResponse.json({ error: "invalid_warmup_started_at", value: kv.wa_warmup_started_at }, { status: 500 });
   }
 
-  const nowMs = Date.now();
-  const daysElapsed = Math.max(1, Math.floor((nowMs - startedAt.getTime()) / 86_400_000) + 1);
+  // Cuenta días CALENDARIO Berlin (no ventanas 24h) para que el cron
+  // de 00:15 Berlín marque consistentemente "día N" desde la medianoche.
+  // Bug 2026-11-19: con la fórmula anterior (Math.floor(ms/86_400_000)+1),
+  // al ejecutarse a 00:15 Berlín del día 4, calculaba 2.37 días = día 3,
+  // dejando caps atrasados una jornada entera.
+  const berlinDayKey = (d: Date) =>
+    d.toLocaleDateString("en-CA", { timeZone: "Europe/Berlin" }); // YYYY-MM-DD
+  const dayStart = berlinDayKey(startedAt);
+  const dayNow = berlinDayKey(new Date());
+  const daysElapsed = Math.max(
+    1,
+    Math.round(
+      (Date.parse(dayNow + "T12:00:00Z") - Date.parse(dayStart + "T12:00:00Z")) / 86_400_000,
+    ) + 1,
+  );
   const stage = stageFor(daysElapsed);
 
   const current = {
