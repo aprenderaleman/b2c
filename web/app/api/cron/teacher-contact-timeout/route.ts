@@ -118,7 +118,7 @@ export async function GET(req: Request) {
             type: "student_converted",
             title: `Nuevo alumno reasignado: ${studentName}`,
             body: "El profesor anterior no contacto en 48h. CONTACTA HOY para coordinar horarios.",
-            link: "/profesor/alumnos",
+            link: "/profesor/estudiantes",
           }).catch(() => {});
 
           if (newTeacher.phone) {
@@ -160,7 +160,7 @@ export async function GET(req: Request) {
           type: "teacher_contact_reminder",
           title: `Recordatorio: contactar a ${studentName}`,
           body: "Llevas 24h sin contactar a tu nuevo alumno. Si no contactas en las proximas 24h, sera reasignado.",
-          link: "/profesor/alumnos",
+          link: "/profesor/estudiantes",
         }).catch(() => {});
 
         if (teacher.phone) {

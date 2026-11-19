@@ -4,6 +4,7 @@ import { getTeacherById } from "./academy";
 import { createNotification } from "./notifications";
 import { sendWhatsappText } from "./whatsapp";
 import { createStudentNotesDoc, getTeacherEmail } from "./google-docs";
+import { ensureDirectChat } from "./chat";
 
 export type ConversionScenario = "E1" | "E2" | "E3";
 
@@ -142,6 +143,18 @@ async function setupStudentWithTeacher(
     studentUpdate.document_url = documentUrl;
   }
   await sb.from("students").update(studentUpdate).eq("id", studentId);
+
+  // Chat directo profe–alumno desde el momento de la asignación. Antes solo
+  // se creaba al reasignar o al agendar la primera clase, así que el profe
+  // recibía el aviso "CONTACTA HOY" sin tener por dónde escribir (caso
+  // Sina/Doris, 2026-11-19).
+  try {
+    const { data: stu } = await sb.from("students").select("user_id").eq("id", studentId).maybeSingle();
+    const studentUserId = (stu as { user_id?: string } | null)?.user_id;
+    if (teacher?.user_id && studentUserId) await ensureDirectChat(teacher.user_id, studentUserId);
+  } catch (e) {
+    console.error("[post-conversion] chat profe–alumno no creado:", e instanceof Error ? e.message : e);
+  }
 }
 
 async function notifyTeacherOfConversion(
@@ -166,7 +179,7 @@ async function notifyTeacherOfConversion(
     type: "student_converted",
     title,
     body,
-    link: "/profesor/alumnos",
+    link: "/profesor/estudiantes",
   }).catch(e => console.error("[post-conversion] notification failed:", e));
 
   if (teacher.phone) {
