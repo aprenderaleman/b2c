@@ -6,7 +6,6 @@ const row = (over: Partial<FutureClassRow>): FutureClassRow => ({
   groupId: null,
   teacherUserId: "t-simon",
   teacherName: "Simon",
-  teacherPhone: "+491510000000",
   ...over,
 });
 
@@ -58,18 +57,19 @@ describe("partitionFutureClasses (baja de alumno, 2026-11-03)", () => {
     expect(p.groupClassIds).toEqual(["c-x"]);
   });
 
-  it("agrupa avisos por profe y cuenta clases; profe sin teléfono no se avisa", () => {
+  it("agrupa avisos por profe y cuenta clases (aviso in-app: no depende del teléfono)", () => {
     const p = partitionFutureClasses([
       row({ classId: "c1", groupId: "g-indiv" }),
       row({ classId: "c2", groupId: "g-indiv" }),
-      row({ classId: "c3", groupId: "g-duo", teacherUserId: "t-sabine", teacherName: "Sabine", teacherPhone: "+491520000000" }),
-      row({ classId: "c4", groupId: null, teacherUserId: "t-nophone", teacherName: "Sin Tel", teacherPhone: null }),
+      row({ classId: "c3", groupId: "g-duo", teacherUserId: "t-sabine", teacherName: "Sabine" }),
+      row({ classId: "c4", groupId: null, teacherUserId: "t-otro", teacherName: "Otro" }),
     ], groups);
     expect(p.individualIds).toEqual(["c1", "c2", "c4"]);
     expect(p.groupClassIds).toEqual(["c3"]);
-    expect(p.teacherNotifs.size).toBe(2);
-    expect(p.teacherNotifs.get("t-simon")).toEqual({ phone: "+491510000000", teacherName: "Simon", n: 2 });
-    expect(p.teacherNotifs.get("t-sabine")).toEqual({ phone: "+491520000000", teacherName: "Sabine", n: 1 });
+    expect(p.teacherNotifs.size).toBe(3);
+    expect(p.teacherNotifs.get("t-simon")).toEqual({ teacherName: "Simon", n: 2 });
+    expect(p.teacherNotifs.get("t-sabine")).toEqual({ teacherName: "Sabine", n: 1 });
+    expect(p.teacherNotifs.get("t-otro")).toEqual({ teacherName: "Otro", n: 1 });
   });
 
   it("profe sin nombre → 'Profesor'", () => {

@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 import { createNotification } from "./notifications";
-import { sendWhatsappText } from "./whatsapp";
 
 /**
  * Sistema de referidos "Regala una clase — gana 3" (Gelfis 2026-08-14).
@@ -287,10 +286,7 @@ export async function applyReferralReward(leadId: string): Promise<{
     body:    celebration,
     link:    "/estudiante",
   }).catch(() => null);
-  if (rfu?.phone) {
-    await sendWhatsappText(rfu.phone, celebration + "\n\n— Aprender-Aleman.de", { kind: "referral_reward" })
-      .catch(() => null);
-  }
+  // Sin WhatsApp al alumno (Gelfis 2026-11-21): con alumnos y profes, todo in-app.
 
   // (d) Timeline en ambos
   const now = new Date().toISOString();

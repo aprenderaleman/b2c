@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import { sendWhatsappText } from "./whatsapp";
+import { createNotification } from "./notifications";
 
 /**
  * Baja de un estudiante — misma lógica para el botón admin y para la
@@ -8,7 +8,8 @@ import { sendWhatsappText } from "./whatsapp";
  *  - users.active = false                 → bloquea login (auth.ts)
  *  - students.subscription_status         → 'cancelled' (manual) | 'expired' (automático)
  *  - Cancela las clases 1:1 futuras; le saca de las grupales futuras
- *  - Avisa por WA al profe de cada clase afectada (best-effort)
+ *  - Avisa al profe de cada clase afectada con una notificación in-app
+ *    (sin WhatsApp desde 2026-11-21: con profes y alumnos, todo in-app)
  *  - Nota de auditoría en admin_notes
  *
  * Devuelve los ids de las clases 1:1 canceladas para que el caller libere
@@ -40,17 +41,16 @@ export type FutureClassRow = {
   groupId: string | null;
   teacherUserId: string;
   teacherName: string | null;
-  teacherPhone: string | null;
 };
 
-export type TeacherNotif = { phone: string; teacherName: string; n: number };
+export type TeacherNotif = { teacherName: string; n: number };
 
 export type Partition = {
   /** Clases 1:1 (sin grupo o con grupo individual): se cancelan. */
   individualIds: string[];
   /** Clases de grupo real (dúo/trío/grupo): se quita al alumno del roster. */
   groupClassIds: string[];
-  /** Profes con teléfono a avisar, por user_id, con nº de clases afectadas. */
+  /** Profes a avisar, por user_id, con nº de clases afectadas. */
   teacherNotifs: Map<string, TeacherNotif>;
 };
 
@@ -67,11 +67,9 @@ export function partitionFutureClasses(rows: FutureClassRow[], groups: Map<strin
   for (const r of rows) {
     const oneOnOne = !r.groupId || isIndividualGroup(groups.get(r.groupId));
     if (oneOnOne) individualIds.push(r.classId); else groupClassIds.push(r.classId);
-    if (r.teacherPhone) {
-      const slot = teacherNotifs.get(r.teacherUserId) ?? { phone: r.teacherPhone, teacherName: r.teacherName ?? "Profesor", n: 0 };
-      slot.n += 1;
-      teacherNotifs.set(r.teacherUserId, slot);
-    }
+    const slot = teacherNotifs.get(r.teacherUserId) ?? { teacherName: r.teacherName ?? "Profesor", n: 0 };
+    slot.n += 1;
+    teacherNotifs.set(r.teacherUserId, slot);
   }
   return { individualIds, groupClassIds, teacherNotifs };
 }
@@ -102,14 +100,14 @@ export async function deactivateStudent(
       class_id,
       classes!inner(
         id, scheduled_at, status, group_id,
-        teacher:teachers!classes_teacher_id_fkey!inner(id, user_id, users!inner(full_name, phone))
+        teacher:teachers!classes_teacher_id_fkey!inner(id, user_id, users!inner(full_name))
       )
     `)
     .eq("student_id", studentId)
     .eq("classes.status", "scheduled")
     .gte("classes.scheduled_at", nowIso);
 
-  type TU = { full_name: string | null; phone: string | null };
+  type TU = { full_name: string | null };
   type Row = {
     class_id: string;
     classes: { id: string; scheduled_at: string; group_id: string | null;
@@ -125,7 +123,6 @@ export async function deactivateStudent(
       groupId: c.group_id,
       teacherUserId: t.user_id,
       teacherName: tu?.full_name ?? null,
-      teacherPhone: tu?.phone ?? null,
     };
   });
 
@@ -178,14 +175,20 @@ export async function deactivateStudent(
   const studentName = u.full_name ?? u.email;
   const teachersNotified = notify ? teacherNotifs.size : 0;
   if (notify) {
-    for (const [, n] of teacherNotifs) {
-      const msg =
-        `Hola ${n.teacherName}, te aviso: ${studentName} ha sido dado de baja` +
+    for (const [teacherUserId, n] of teacherNotifs) {
+      const body =
+        `${studentName} ha sido dado de baja` +
         `${status === "expired" ? " (completó sus clases)" : " por administración"}. ` +
         `Sus ${n.n} clase${n.n === 1 ? "" : "s"} futura${n.n === 1 ? "" : "s"} ya ` +
         `${n.n === 1 ? "fue cancelada / se quitó del grupo" : "fueron canceladas / se quitó del grupo"} ` +
         `en tu calendario. No necesitas hacer nada.`;
-      sendWhatsappText(n.phone, msg, { kind: "admin_manual" }).catch(() => {});
+      await createNotification({
+        user_id: teacherUserId,
+        type:    "generic",
+        title:   `Baja de alumno: ${studentName}`,
+        body,
+        link:    "/profesor/clases",
+      }).catch(e => console.error("[deactivateStudent] aviso al profe falló:", e instanceof Error ? e.message : e));
     }
   }
 
@@ -197,7 +200,7 @@ export async function deactivateStudent(
     content:     `Estudiante DADO DE BAJA${opts.reason ? ` — ${opts.reason}` : ""}.\n` +
                  `Clases 1:1 canceladas: ${individualIds.length}\n` +
                  `Grupales (removido del roster): ${groupClassIds.length}\n` +
-                 `Profes notificados por WA: ${teachersNotified}`,
+                 `Profes avisados (notificación in-app): ${teachersNotified}`,
   });
   if (nErr) console.error("[deactivateStudent] admin_notes insert failed:", studentId, nErr.message);
 

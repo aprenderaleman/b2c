@@ -102,7 +102,7 @@ export function DeactivateStudentButton({
                   ) : (
                     <li>No tiene clases futuras agendadas.</li>
                   )}
-                  <li>Notifica por WhatsApp al/los profesor(es) afectado(s).</li>
+                  <li>Avisa al/los profesor(es) afectado(s) con una notificación en la plataforma.</li>
                 </ul>
               </>
             )}

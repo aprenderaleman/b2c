@@ -177,7 +177,7 @@ export function CreateClassModal({ open, onClose, mode = "admin", initialDate, i
         <header className="px-6 py-5 border-b border-slate-200 dark:border-slate-800">
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">Agendar clase</h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Se notificará por WhatsApp al profesor y a los estudiantes.
+            Se avisará al profesor y a los estudiantes dentro de la plataforma.
           </p>
         </header>
 
