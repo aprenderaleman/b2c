@@ -2,7 +2,6 @@ import { supabaseAdmin } from "./supabase";
 import { sendAcademyWelcomeChat } from "./welcome-chat";
 import { getTeacherById } from "./academy";
 import { createNotification } from "./notifications";
-import { sendWhatsappText } from "./whatsapp";
 import { createStudentNotesDoc, getTeacherEmail } from "./google-docs";
 import { ensureDirectChat } from "./chat";
 
@@ -182,11 +181,10 @@ async function notifyTeacherOfConversion(
     link: "/profesor/estudiantes",
   }).catch(e => console.error("[post-conversion] notification failed:", e));
 
-  if (teacher.phone) {
-    const waMsg = `${title}\n\n${body}\n\nEntra a tu panel para ver los detalles del nuevo alumno.`;
-    await sendWhatsappText(teacher.phone, waMsg, { kind: "teacher_conversion_notify" })
-      .catch(e => console.error("[post-conversion] WA to teacher failed:", e));
-  }
+  // Sin WhatsApp al profe (Gelfis 2026-11-21): con profes y alumnos la
+  // comunicación es dentro de la plataforma. El aviso por WA salía por el
+  // único número conectado (v6, el del setter, en calentamiento), a
+  // cualquier hora y sin contar en su tope diario.
 }
 
 async function assignBestTeacherToStudent(

@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { createNotification } from "@/lib/notifications";
 import { getTeacherById } from "@/lib/academy";
-import { sendWhatsappText } from "@/lib/whatsapp";
 
 function authorised(req: Request): boolean {
   const expected = process.env.CRON_SECRET;
@@ -120,14 +119,7 @@ export async function GET(req: Request) {
             body: "El profesor anterior no contacto en 48h. CONTACTA HOY para coordinar horarios.",
             link: "/profesor/estudiantes",
           }).catch(() => {});
-
-          if (newTeacher.phone) {
-            await sendWhatsappText(
-              newTeacher.phone,
-              `Nuevo alumno reasignado: ${studentName}\n\nEl profesor anterior no contacto en 48h. Por favor contacta al alumno HOY para coordinar horarios.`,
-              { kind: "teacher_reassignment" },
-            ).catch(() => {});
-          }
+          // Sin WhatsApp al profe (Gelfis 2026-11-21): solo aviso in-app.
         }
 
         // Log the reassignment
@@ -162,14 +154,7 @@ export async function GET(req: Request) {
           body: "Llevas 24h sin contactar a tu nuevo alumno. Si no contactas en las proximas 24h, sera reasignado.",
           link: "/profesor/estudiantes",
         }).catch(() => {});
-
-        if (teacher.phone) {
-          await sendWhatsappText(
-            teacher.phone,
-            `Recordatorio: llevas 24h sin contactar a ${studentName}.\n\nSi no lo contactas en las proximas 24h, sera reasignado a otro profesor.`,
-            { kind: "teacher_contact_reminder" },
-          ).catch(() => {});
-        }
+        // Sin WhatsApp al profe (Gelfis 2026-11-21): solo aviso in-app.
 
         await sb.from("students").update({
           teacher_reminded_at: now.toISOString(),
