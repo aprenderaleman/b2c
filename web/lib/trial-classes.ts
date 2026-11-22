@@ -49,6 +49,9 @@ export type TrialClassRow = {
   trialAttendedAt:    string | null;
   trialAbsentAt:      string | null;
   closerNotes:        Array<{ author: string; content: string; created_at: string }>;
+  /** Notas libres del setter (lead_contacts nota_libre) — visibles al
+   *  profe en su ficha de trial (Gelfis 2026-11-22). */
+  setterNotes:        Array<{ author: string; content: string; created_at: string }>;
   /** Última oferta enviada al lead (Jonathan 2026-11-07): el profe puede
    *  copiar el MISMO enlace que recibió el lead y reenviárselo. */
   lastOffer: { sentAt: string; label: string; url: string } | null;
@@ -211,7 +214,29 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
   }
 
   const closerNotesByLead = new Map<string, Array<{ author: string; content: string; created_at: string }>>();
+  const setterNotesByLead = new Map<string, Array<{ author: string; content: string; created_at: string }>>();
   if (leadIds.length > 0) {
+    const sNotesParts = await Promise.all(chunks(leadIds).map(ids =>
+      sb.from("lead_contacts")
+        .select("lead_id, note, actor_name, occurred_at")
+        .eq("actor_type", "setter")
+        .eq("action_type", "nota_libre")
+        .not("note", "is", null)
+        .in("lead_id", ids)
+        .order("occurred_at", { ascending: true }),
+    ));
+    for (const n of sNotesParts.flatMap(r => r.data ?? [])
+      .sort((a, b) => ((a as { occurred_at: string }).occurred_at > (b as { occurred_at: string }).occurred_at ? 1 : -1)) as Array<{
+        lead_id: string; note: string; actor_name: string | null; occurred_at: string;
+      }>) {
+      const list = setterNotesByLead.get(n.lead_id) ?? [];
+      list.push({
+        author: (n.actor_name ?? "").split(/\s+/)[0] || "Setter",
+        content: n.note,
+        created_at: n.occurred_at,
+      });
+      setterNotesByLead.set(n.lead_id, list);
+    }
     const [notesParts, cNotesParts] = await Promise.all([
       Promise.all(chunks(leadIds).map(ids =>
         sb.from("lead_timeline")
@@ -297,6 +322,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       qualificationAnswers: lead?.qualification_answers ?? null,
       landingIntent:       lead?.landing_intent ?? null,
       closerNotes:         lead?.id ? closerNotesByLead.get(lead.id) ?? [] : [],
+      setterNotes:         lead?.id ? setterNotesByLead.get(lead.id) ?? [] : [],
       lastOffer:           lead?.id ? lastOfferByLead.get(lead.id) ?? null : null,
     };
   });

@@ -96,6 +96,22 @@ export function TrialClassCard({
               ))}
             </div>
           )}
+
+          {/* Setter notes (Gelfis 2026-11-22) */}
+          {row.setterNotes.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-sky-500 dark:text-sky-400 mb-1">
+                Notas del Setter
+              </div>
+              {row.setterNotes.map((sn, i) => (
+                <div key={i} className="mb-1">
+                  <span className="text-[10px] font-semibold text-sky-400 dark:text-sky-500">{sn.author}</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 ml-1">· {new Date(sn.created_at).toLocaleString("es-ES")}</span>
+                  <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{sn.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Action buttons */}

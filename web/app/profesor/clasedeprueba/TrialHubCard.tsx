@@ -289,6 +289,24 @@ export function TrialHubCard({
               </div>
             )}
 
+            {/* Setter notes (Gelfis 2026-11-22) */}
+            {row.setterNotes.length > 0 && (
+              <div className="rounded-lg bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 p-3 space-y-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wide text-sky-500 dark:text-sky-400">
+                  Notas del Setter
+                </div>
+                {row.setterNotes.map((sn, i) => (
+                  <div key={i}>
+                    <div className="flex items-center gap-2 text-[10px] text-sky-400 dark:text-sky-500">
+                      <span className="font-semibold">{sn.author}</span>
+                      <span>{new Date(sn.created_at).toLocaleString("es-ES")}</span>
+                    </div>
+                    <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{sn.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Notes */}
             <NotesField ref={notesRef} classId={row.classId} initialNotes={row.scriptTeacherNotes} />
 
