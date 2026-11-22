@@ -151,6 +151,8 @@ function setterItems(): NavItem[] {
     // La cola ES su home: citas por confirmar, hoy/mañana, no-shows y
     // backlog, con su marcador (métricas) arriba.
     { label: "Mi cola",   href: "/setter",           icon: "users",      priority: 1 },
+    // Citas de hoy/mañana con último contacto a la vista (Gelfis 2026-11-22).
+    { label: "Leads Urgentes", href: "/setter/urgentes", icon: "clock",  priority: 1.2 },
     // Leads ya contactados, con buscador y estados — incluye "💬
     // Respondió" para los que contestan después de un "no contestó"
     // (Gelfis 2026-10-27).
