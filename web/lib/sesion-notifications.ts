@@ -38,6 +38,7 @@ type SB = SupabaseClient;
 type SesionRow = {
   id: string;
   lead_id: string | null;
+  sesion_closer_id: string | null;
   scheduled_at: string;
   duration_minutes: number | null;
   short_code: string | null;
@@ -116,7 +117,7 @@ function closerRef(closerFullName: string | null | undefined): string {
 }
 
 const SESION_SELECT = `
-  id, lead_id, scheduled_at, duration_minutes, short_code, notes_admin,
+  id, lead_id, sesion_closer_id, scheduled_at, duration_minutes, short_code, notes_admin,
   lead:leads!inner(name, email, whatsapp_normalized, status, ai_paused_until,
                     qualification_answers, meta, reschedule_state),
   closer:users!classes_sesion_closer_id_fkey(full_name, email, phone)
@@ -362,23 +363,23 @@ export async function notifyCloserOnBooking(sb: SB, classId: string): Promise<bo
   if (!row) return false;
 
   const lead = flat(row.lead);
-  const closer = flat(row.closer);
-  if (!closer?.phone || !lead) return false;
+  if (!lead || !row.sesion_closer_id) return false;
 
-  const closerFirst = firstName(closer.full_name) || "asesor";
   const leadFirst = firstName(lead.name) || "un lead";
   const when = fmtBerlin(row.scheduled_at);
   const meta = resolveMetaLabel(lead);
 
-  const msg =
-    `📋 ${closerFirst}, nueva Sesión de Plan-Alemán agendada:\n\n` +
-    `👤 ${lead.name ?? leadFirst}\n` +
-    `🎯 Meta: ${meta}\n` +
-    `📅 ${when.full} (Berlín)\n\n` +
-    `Tienes tu tarea sesion_plan en la cola HOY del panel closer.`;
-
-  const res = await sendWhatsappText(closer.phone, msg, { kind: "sesion_closer_booked" });
-  return res.ok;
+  // Gelfis 2026-11-22: staff interno (closer) solo por notificación in-app,
+  // no WhatsApp. Antes se enviaba via sendWhatsappText(closer.phone).
+  const { error } = await sb.from("notifications").insert({
+    user_id: row.sesion_closer_id,
+    type:    "sesion_closer_booked",
+    title:   `Nueva Sesión de Plan-Alemán agendada`,
+    body:    `${lead.name ?? leadFirst} · Meta: ${meta} · ${when.full} (Berlín). Tarea sesion_plan en tu cola HOY.`,
+    link:    "/closer",
+    class_id: row.id,
+  });
+  return !error;
 }
 
 /**
@@ -410,23 +411,23 @@ export async function notifyCloserPreSession(sb: SB): Promise<number> {
     if (minsTo < 12 || minsTo > 18) continue;
 
     const lead = flat(row.lead);
-    const closer = flat(row.closer);
-    if (!closer?.phone || !lead || !row.lead_id) continue;
+    if (!lead || !row.lead_id || !row.sesion_closer_id) continue;
 
-    const closerFirst = firstName(closer.full_name) || "asesor";
     const leadFirst = firstName(lead.name) || "el lead";
     const when = fmtBerlin(row.scheduled_at);
     const meta = resolveMetaLabel(lead);
     const joinUrl = buildLeadJoinUrl({ classId: row.id, leadId: row.lead_id, shortCode: row.short_code, baseUrl: PLATFORM_URL });
 
-    const msg =
-      `⏰ ${closerFirst}, tu Sesión de Plan-Alemán con ${lead.name ?? leadFirst} empieza en 15 min.\n\n` +
-      `🎯 Meta: ${meta}\n` +
-      `📅 ${when.time} (Berlín)\n\n` +
-      `Entra aquí: ${joinUrl}`;
-
-    const res = await sendWhatsappText(closer.phone, msg, { kind: "sesion_closer_pre_15m" });
-    if (!res.ok) continue;
+    // Gelfis 2026-11-22: staff interno (closer) por notificación in-app, no WA.
+    const { error } = await sb.from("notifications").insert({
+      user_id:  row.sesion_closer_id,
+      type:     "sesion_closer_pre_15m",
+      title:    `Tu Sesión de Plan empieza en 15 min`,
+      body:     `${lead.name ?? leadFirst} · Meta: ${meta} · ${when.time} (Berlín). Entra aquí: ${joinUrl}`,
+      link:     joinUrl,
+      class_id: row.id,
+    });
+    if (error) continue;
 
     await sb.from("classes")
       .update({ notes_admin: `${row.notes_admin ?? ""} ${CLOSER_PRE_15M_MARKER}`.trim() })
