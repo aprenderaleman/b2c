@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
 import { EgressClient, EncodedFileOutput, EncodedFileType, EncodingOptionsPreset, S3Upload } from "livekit-server-sdk";
 import { auth } from "@/lib/auth";
@@ -20,8 +19,6 @@ import { supabaseAdmin } from "@/lib/supabase";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// % de clases regulares que se graban de verdad (trials: siempre 100%).
-const RECORDING_SAMPLE_PCT = 50;
 
 export async function POST(
   _req:   Request,
@@ -72,16 +69,24 @@ export async function POST(
   const roomName = (cls as { livekit_room_id: string }).livekit_room_id;
   const isTrial  = (cls as { is_trial: boolean | null }).is_trial === true;
 
-  // Muestreo de grabación (Gelfis 2026-10-13, reducción de coste LiveKit):
-  // las clases regulares solo se graban de verdad el 50% de las veces.
-  // Sorteo DETERMINISTA por id de clase (hash md5 % 100), así un refresh
-  // o una reconexión del profe cae siempre en el mismo lado. Los trials
-  // se graban SIEMPRE (evidencia de asistencia). La respuesta simulada
-  // es indistinguible para el cliente: el aula muestra el pill REC igual.
-  // Un admin que llame al endpoint sin ser el host graba de verdad.
+  // Grabación por bono (Gelfis 2026-11-26, reemplaza el muestreo 50%):
+  //   · Trials: se graban SIEMPRE (si el lead convierte con bono, es su
+  //     primera grabación; si no, el cron la borra a los 14 días).
+  //   · Regulares: solo si ALGÚN alumno de la clase tiene
+  //     recordings_enabled (Bono de Acción Rápida). Para el resto, la
+  //     respuesta simulada es indistinguible (pill REC igual en el aula).
+  //   · Un admin que llame al endpoint sin ser el host graba de verdad.
   if (!isTrial && isHost && !isAdmin) {
-    const bucket = parseInt(createHash("md5").update(classId).digest("hex").slice(0, 8), 16) % 100;
-    if (bucket >= RECORDING_SAMPLE_PCT) {
+    const { data: parts } = await sb
+      .from("class_participants")
+      .select("student:students!inner(recordings_enabled)")
+      .eq("class_id", classId);
+    const anyEnabled = ((parts ?? []) as Array<{ student: { recordings_enabled: boolean } | Array<{ recordings_enabled: boolean }> }>)
+      .some(p => {
+        const s = Array.isArray(p.student) ? p.student[0] : p.student;
+        return Boolean(s?.recordings_enabled);
+      });
+    if (!anyEnabled) {
       return NextResponse.json({ ok: true, egress_id: `sim-${classId.slice(0, 8)}` });
     }
   }

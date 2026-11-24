@@ -3,6 +3,7 @@ import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getStudentByUserId } from "@/lib/academy";
 import { getStudentRecordings, formatDurationHms } from "@/lib/recordings";
 import { formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
+import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Grabaciones · Aprender-Aleman.de" };
@@ -34,7 +35,29 @@ export default async function StudentRecordingsPage() {
     );
   }
 
-  const recs = await getStudentRecordings(student.id);
+  // Bono de Acción Rápida (Gelfis 2026-11-26): la página es solo para
+  // alumnos con recordings_enabled. Al resto no les sale en el menú; si
+  // llegan por URL directa ven el aviso.
+  const sb = supabaseAdmin();
+  const { data: flags } = await sb
+    .from("students")
+    .select("recordings_enabled, trial_class_id")
+    .eq("id", student.id)
+    .maybeSingle();
+  const f = flags as { recordings_enabled: boolean; trial_class_id: string | null } | null;
+  if (!f?.recordings_enabled) {
+    return (
+      <main className="mx-auto max-w-3xl p-6">
+        <h1 className="text-2xl font-semibold">Grabaciones</h1>
+        <p className="mt-3 text-slate-600 dark:text-slate-300">
+          Las grabaciones de clases son un beneficio del Bono de Acción
+          Rápida. Si crees que deberías tener acceso, escríbenos por el chat.
+        </p>
+      </main>
+    );
+  }
+
+  const recs = await getStudentRecordings(student.id, { includeTrialClassId: f.trial_class_id });
 
   // Agrupa por mes (YYYY-MM en zona Berlín) — usa scheduled_at, no created_at
   // de la grabación, para que el orden case con la cronología real de las
@@ -57,6 +80,10 @@ export default async function StudentRecordingsPage() {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
           Todas las clases tuyas que se grabaron y ya están listas. Las grabaciones
           se procesan después de cada clase y suelen estar disponibles en menos de 1h.
+        </p>
+        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+          Tus grabaciones están disponibles mientras tu plan esté activo y hasta
+          30 días después. Luego se eliminan automáticamente.
         </p>
       </header>
 
@@ -90,13 +117,21 @@ export default async function StudentRecordingsPage() {
                   <div className="flex items-center gap-2 shrink-0">
                     <StatusBadge status={r.status} />
                     {r.status === "ready" && (
-                      <Link
-                        href={`/grabacion/${r.id}`}
-                        prefetch={false}
-                        className="btn-primary text-xs whitespace-nowrap"
-                      >
-                        ▶ Reproducir
-                      </Link>
+                      <>
+                        <Link
+                          href={`/grabacion/${r.id}`}
+                          prefetch={false}
+                          className="btn-primary text-xs whitespace-nowrap"
+                        >
+                          ▶ Reproducir
+                        </Link>
+                        <a
+                          href={`/api/student/recordings/${r.id}/download`}
+                          className="btn-secondary text-xs whitespace-nowrap"
+                        >
+                          ⬇ Descargar
+                        </a>
+                      </>
                     )}
                   </div>
                 </div>

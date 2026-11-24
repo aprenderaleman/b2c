@@ -42,7 +42,16 @@ export async function getRecordingsForClass(classId: string): Promise<RecordingR
  * "Recordings the student has access to" — every recording attached to a
  * class where they appeared in class_participants.
  */
-export async function getStudentRecordings(studentId: string): Promise<
+export async function getStudentRecordings(
+  studentId: string,
+  opts?: {
+    /** Bono de Acción Rápida (Gelfis 2026-11-26): incluir la grabación de
+     *  SU clase de prueba como primera grabación ("desde tu clase de
+     *  prueba en adelante"). Pasar students.trial_class_id solo cuando
+     *  recordings_enabled=true. */
+    includeTrialClassId?: string | null;
+  },
+): Promise<
   Array<RecordingRow & { class_title: string; scheduled_at: string }>
 > {
   const sb = supabaseAdmin();
@@ -90,6 +99,34 @@ export async function getStudentRecordings(studentId: string): Promise<
       });
     }
   }
+  // Su clase de prueba (bono): va por classes directo — el lead no está
+  // en class_participants.
+  if (opts?.includeTrialClassId) {
+    const { data: tc } = await sb
+      .from("classes")
+      .select("id, title, scheduled_at, recordings(id, file_url, status, duration_seconds, downloadable, created_at, processed_at, error)")
+      .eq("id", opts.includeTrialClassId)
+      .maybeSingle();
+    const c = tc as { id: string; title: string | null; scheduled_at: string; recordings?: Record<string, unknown>[] } | null;
+    for (const rec of (c?.recordings ?? [])) {
+      if (rec.status === "deleted") continue;
+      out.push({
+        id:               rec.id as string,
+        class_id:         c!.id,
+        file_url:         (rec.file_url as string | null) ?? null,
+        file_size_bytes:  null,
+        duration_seconds: (rec.duration_seconds as number | null) ?? null,
+        status:           (rec.status as RecordingStatus) ?? "processing",
+        error:            (rec.error as string | null) ?? null,
+        downloadable:     Boolean(rec.downloadable),
+        created_at:       rec.created_at as string,
+        processed_at:     (rec.processed_at as string | null) ?? null,
+        class_title:      c!.title ?? "Tu clase de prueba",
+        scheduled_at:     c!.scheduled_at,
+      });
+    }
+  }
+
   // Sort newest first.
   out.sort((a, b) => b.created_at.localeCompare(a.created_at));
   return out;

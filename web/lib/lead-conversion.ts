@@ -151,7 +151,12 @@ export async function convertLeadToStudent(
     const attendedAt = (lead as { trial_attended_at?: string | null }).trial_attended_at;
     if (attendedAt && Date.now() - new Date(attendedAt).getTime() <= 48 * 3_600_000) {
       await sb.from("students")
-        .update({ bono_conversacion_at: new Date().toISOString() })
+        .update({
+          bono_conversacion_at: new Date().toISOString(),
+          // Bono de Acción Rápida (Gelfis 2026-11-26): el bono incluye
+          // "todas tus clases grabadas" — se activa el toggle aquí.
+          recordings_enabled: true,
+        })
         .eq("id", created.studentId);
       const horas = Math.round((Date.now() - new Date(attendedAt).getTime()) / 3_600_000);
       await sb.from("lead_timeline").insert({

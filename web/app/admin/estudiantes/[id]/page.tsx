@@ -11,6 +11,7 @@ import { EditStudentButton } from "@/components/admin/EditStudentButton";
 import { DeactivateStudentButton } from "@/components/admin/DeactivateStudentButton";
 import { NotesCard } from "@/components/admin/NotesCard";
 import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOutToggle";
+import { RecordingsToggle } from "@/components/admin/RecordingsToggle";
 import { listStudentCertificates } from "@/lib/certificates";
 import { listAdminNotes } from "@/lib/admin-notes";
 import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
@@ -41,6 +42,15 @@ export default async function StudentDetailPage({
     .maybeSingle();
   const optOut = Boolean(
     (optOutRow as { notifications_opt_out?: boolean } | null)?.notifications_opt_out,
+  );
+
+  const { data: recFlagRow } = await supabaseAdmin()
+    .from("students")
+    .select("recordings_enabled")
+    .eq("id", id)
+    .maybeSingle();
+  const recordingsEnabled = Boolean(
+    (recFlagRow as { recordings_enabled?: boolean } | null)?.recordings_enabled,
   );
 
   // Pull the pack numbers from the view so we can show + adjust them.
@@ -299,6 +309,12 @@ export default async function StudentDetailPage({
       <NotificationsOptOutToggle
         userId={student.user_id}
         initialOptOut={optOut}
+        personLabel={student.full_name || student.email}
+      />
+
+      <RecordingsToggle
+        studentId={id}
+        initialEnabled={recordingsEnabled}
         personLabel={student.full_name || student.email}
       />
 
