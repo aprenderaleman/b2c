@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { sendTeacherWelcomeSetPasswordEmail } from "@/lib/email/send";
 import { TEACHER_ONBOARDING_DOC_URL } from "@/lib/teacher-onboarding";
+import { sendTeacherWelcomeChat } from "@/lib/teacher-welcome-chat";
 import { buildTeacherAgreementPdf, AGREEMENT_VERSION } from "@/lib/teacher-agreement-pdf";
 import { uploadTeacherAgreement, getSignedTeacherAgreement, signedAgreementPath } from "@/lib/teacher-agreement";
 
@@ -172,9 +173,21 @@ export async function POST(
     }).eq("id", t.id);
   }
 
+  // Bienvenida de Gelfis por el chat de la plataforma (2026-11-24): el
+  // profe la encuentra al entrar por primera vez. Nunca bloquea la aprobación.
+  let welcomeChat: { ok: boolean; reason?: string } = { ok: false, reason: "not_run" };
+  try {
+    welcomeChat = await sendTeacherWelcomeChat(u.id);
+    if (!welcomeChat.ok) console.warn("[approve] bienvenida por chat no enviada:", welcomeChat.reason);
+  } catch (e) {
+    console.error("[approve] bienvenida por chat falló:", e instanceof Error ? e.message : e);
+    welcomeChat = { ok: false, reason: "exception" };
+  }
+
   return NextResponse.json({
     ok:           true,
     teacher_id:   t.id,
+    welcome_chat_sent: welcomeChat.ok,
     email_sent:   emailRes.ok,
     // Si el email falla, devolvemos el enlace para que el admin pueda
     // pasárselo manualmente (WhatsApp etc).
