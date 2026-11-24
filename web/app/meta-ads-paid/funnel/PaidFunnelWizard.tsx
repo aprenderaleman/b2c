@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
+import { WaitlistForm } from "@/components/agendar/WaitlistForm";
 import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
 import { BrandLogo } from "@/components/BrandLogo";
 import { IllustrationPanel, type StepKey } from "@/components/diagnostico/IllustrationPanel";
@@ -248,6 +249,7 @@ function CalendarStep({ onPick }: { onPick: (s: SlotItem) => void }) {
 
   if (loadErr) return <p className="text-red-600 text-sm">{loadErr}</p>;
   if (!slots) return <p className="text-slate-500 text-sm">Cargando horarios…</p>;
+  if (slots.length === 0) return <WaitlistForm landingIntent="meta-ads-paid" />;
 
   return (
     <div>

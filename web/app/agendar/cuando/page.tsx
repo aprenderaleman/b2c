@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { StepFrame, useSetIllustration } from "@/components/agendar/FunnelShell";
 import { MobileDayStrip } from "@/components/agendar/MobileDayStrip";
 import { TimeList, type SlotItem } from "@/components/agendar/TimeList";
+import { WaitlistForm } from "@/components/agendar/WaitlistForm";
 import { useBookingState } from "@/lib/booking-state";
 import { useLang } from "@/lib/lang-context";
 import { normalizePhone, resolvePhone } from "@/lib/phone";
@@ -292,6 +293,7 @@ function StepCuandoInner() {
         // Profe sin huecos: abrimos todos los profes en vez de dejar al
         // lead ante un calendario vacío.
         if (filterTeacherId && list.length === 0) { openAllSlots(true); return; }
+        if (list.length === 0) trackFunnel("waitlist_view", { landingIntent: effectiveLanding });
         setSlots(list);
       })
       .catch(() => { if (!cancelled) setLoadErr("No pudimos cargar los horarios. Recarga la página."); });
@@ -630,10 +632,13 @@ function StepCuandoInner() {
       )}
 
       {slots && slots.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-600">
-          Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te
-          avisamos en cuanto se abran horarios.
-        </div>
+        <WaitlistForm
+          landingIntent={effectiveLanding ?? null}
+          profeSlug={profe?.slug ?? (searchParams?.get("landing") === "clase-profe" ? "generico" : null)}
+          profeName={profe?.firstName ?? null}
+          defaultCountryCode={form.countryCode}
+          phonePlaceholder={phonePlaceholder}
+        />
       )}
 
       {slots && slots.length > 0 && (

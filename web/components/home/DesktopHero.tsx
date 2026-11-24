@@ -38,7 +38,7 @@ const COPY = {
     fineprint:  "Al continuar te pediremos nombre, email, nivel y WhatsApp.\nTarda menos de 2 minutos.",
     reassurance: "✓ Sin compromiso · ✓ Cancelable en 1 click",
     loadErr:    "No pudimos cargar los horarios. Recarga la página.",
-    noSlots:    "Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te avisamos en cuanto se abran horarios.",
+    noSlots:    "Esta semana estamos completos. Escríbenos por WhatsApp y te avisamos en cuanto se abran horarios.",
   },
   de: {
     eyebrow:    "Online-Kurse · Niveau A1 bis C1",
@@ -69,7 +69,7 @@ const COPY = {
     fineprint:  "Im nächsten Schritt fragen wir nach Name, E-Mail, Niveau und WhatsApp.\nDauert unter 2 Minuten.",
     reassurance: "✓ Keine Karte · ✓ Unverbindlich · ✓ Kündigbar mit 1 Klick",
     loadErr:    "Termine konnten nicht geladen werden. Bitte Seite neu laden.",
-    noSlots:    "Die nächsten 30 Tage sind ausgebucht. Schreib uns per WhatsApp, wir melden uns sobald Termine frei werden.",
+    noSlots:    "Diese Woche sind wir ausgebucht. Schreib uns per WhatsApp, wir melden uns sobald Termine frei werden.",
   },
 } as const;
 

@@ -35,6 +35,9 @@ export const FUNNEL_STEP = {
   commitment_checked: 16,
   // funnel /clase-profe: el lead abre los horarios de todos los profes
   ver_mas_horarios:  17,
+  // sin huecos en 10 días → el lead se apunta a la lista de espera
+  waitlist_view:     18,
+  waitlist_joined:   19,
 } as const;
 
 export type FunnelStepKey = keyof typeof FUNNEL_STEP;

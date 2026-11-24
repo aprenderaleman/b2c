@@ -29,6 +29,12 @@ import { getConnectedTeacherIds, getTeacherCalendarBusy } from "./google-calenda
  */
 
 const BERLIN_TZ = "Europe/Berlin";
+// Clases de prueba: máximo 10 días vista y SIN ampliación (Gelfis
+// 2026-11-24). Datos jul–nov: reservas con ≥8 días de antelación
+// convierten al 2 % (vs 7–10 % con 1–7 días). Si no hay huecos en
+// 10 días, el embudo muestra lista de espera en vez de fechas lejanas.
+export const TRIAL_HORIZON_DAYS = 10;
+// Clases normales de alumnos (self-service): conservan 15 → 30 días.
 const DEFAULT_HORIZON_DAYS = 15;
 const EXTENDED_HORIZON_DAYS = 30;
 const TRIAL_MINUTES = 40;
@@ -97,6 +103,10 @@ type SlotOpts = {
 export async function listTrialSlots(
   opts: SlotOpts = {},
 ): Promise<TrialSlot[]> {
+  return computeSlots(TRIAL_HORIZON_DAYS, opts);
+}
+
+async function listWideSlots(opts: SlotOpts): Promise<TrialSlot[]> {
   const first = await computeSlots(DEFAULT_HORIZON_DAYS, opts);
   if (first.length > 0) return first;
   return computeSlots(EXTENDED_HORIZON_DAYS, opts);
@@ -120,7 +130,7 @@ export async function listTeacherClassSlots(
     minLeadHours:    12,
     excludeClassIds: extra.excludeClassIds,
   };
-  return extra.horizonDays ? computeSlots(extra.horizonDays, opts) : listTrialSlots(opts);
+  return extra.horizonDays ? computeSlots(extra.horizonDays, opts) : listWideSlots(opts);
 }
 
 async function computeSlots(

@@ -1786,7 +1786,7 @@ function CalendarStep({
 
         {slots && slots.length === 0 && (
           <div className="rounded-2xl border border-dashed border-slate-200 bg-white/[0.03] p-6 text-center text-sm text-slate-500">
-            Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te avisamos en cuanto se abran horarios.
+            Esta semana estamos completos. Escríbenos por WhatsApp y te avisamos en cuanto se abran horarios.
           </div>
         )}
 

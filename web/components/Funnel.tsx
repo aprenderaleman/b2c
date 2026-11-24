@@ -499,7 +499,7 @@ function StepSlot({ form, setForm, refreshTrigger }: StepProps & { refreshTrigge
       {loadErr && <p className="text-sm text-red-600">{loadErr}</p>}
       {slots && slots.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border bg-muted p-6 text-center text-sm text-muted-foreground">
-          Estamos completos los próximos 30 días. Escríbenos por WhatsApp y te
+          Esta semana estamos completos. Escríbenos por WhatsApp y te
           avisamos en cuanto se abran horarios.
         </div>
       )}
