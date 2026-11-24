@@ -5,8 +5,9 @@
  *   1. el lead no ha confirmado por ninguna vía (web, WhatsApp, setter ni
  *      al propio profe),
  *   2. el profe le envió su nota de voz antes de la clase y la marcó, y
- *   3. faltan como mucho 2 horas para la clase (margen para que el lead
- *      conteste antes de perder el horario).
+ *   3. falta como mucho 1 hora para la clase (margen para que el lead
+ *      conteste antes de perder el horario). Eran 2 h el primer día;
+ *      Gelfis lo bajó a 1 h el 2026-11-24.
  * Si es el profe quien no puede dar la clase, lo indica con un motivo
  * escrito, que queda en el historial y avisa al admin; al lead solo se le
  * dice "por un imprevisto".
@@ -19,7 +20,7 @@ export type TeacherRescheduleReason = "lead_no_confirmo" | "profe_no_puede";
 export const TEACHER_RESCHEDULE_REASONS: readonly TeacherRescheduleReason[] = ["lead_no_confirmo", "profe_no_puede"];
 
 /** Desde cuántos minutos antes de la clase se puede reagendar por falta de confirmación. */
-export const NO_CONFIRM_WINDOW_MIN = 120;
+export const NO_CONFIRM_WINDOW_MIN = 60;
 
 export const NOTE_MIN_CHARS = 5;
 export const NOTE_MAX_CHARS = 500;
@@ -29,7 +30,7 @@ export type NoConfirmBlock = "no_upcoming_trial" | "confirmed" | "no_voice_note"
 export type NoConfirmEvaluation = {
   allowed: boolean;
   blockedBy: NoConfirmBlock | null;
-  /** Momento desde el que se abre la opción (clase − 2 h). Null si no hay clase futura. */
+  /** Momento desde el que se abre la opción (clase − NO_CONFIRM_WINDOW_MIN). Null si no hay clase futura. */
   availableFrom: string | null;
 };
 
@@ -54,13 +55,20 @@ export function evaluateNoConfirm(input: {
   return { allowed: true, blockedBy: null, availableFrom };
 }
 
+/** "1 hora", "2 horas", "45 minutos"… según NO_CONFIRM_WINDOW_MIN. */
+function windowLabel(): string {
+  if (NO_CONFIRM_WINDOW_MIN % 60 !== 0) return `${NO_CONFIRM_WINDOW_MIN} minutos`;
+  const h = NO_CONFIRM_WINDOW_MIN / 60;
+  return h === 1 ? "1 hora" : `${h} horas`;
+}
+
 /** Texto para el profe cuando la opción "Lead no confirmó" está bloqueada. */
 export function noConfirmBlockMessage(block: NoConfirmBlock, availableFromLabel?: string | null): string {
   switch (block) {
     case "no_upcoming_trial": return "Este lead no tiene una clase de prueba futura agendada.";
     case "confirmed":         return "El lead ya confirmó su asistencia, así que la clase se da.";
     case "no_voice_note":     return "Primero envíale tu nota de voz al lead y márcala en la tarjeta de la clase.";
-    case "too_early":         return `Disponible desde 2 horas antes de la clase${availableFromLabel ? ` (a partir de las ${availableFromLabel})` : ""}, para darle margen al lead a confirmar.`;
+    case "too_early":         return `Disponible desde ${windowLabel()} antes de la clase${availableFromLabel ? ` (a partir de las ${availableFromLabel})` : ""}, para darle margen al lead a confirmar.`;
   }
 }
 

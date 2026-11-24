@@ -5,7 +5,7 @@
  *
  * El profe elige el motivo:
  *   • "Lead no confirmó"      — solo si el lead no confirmó por ninguna vía,
- *     la nota de voz está marcada y faltan ≤ 2 h para la clase. El servidor
+ *     la nota de voz está marcada y falta ≤ 1 h para la clase. El servidor
  *     decide (GET del mismo endpoint) y aquí solo se muestra el porqué.
  *   • "No puedo dar la clase" — abre un cuadro para escribir el motivo, que
  *     ve el admin; al lead solo se le dice "por un imprevisto".

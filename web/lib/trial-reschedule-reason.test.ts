@@ -9,18 +9,21 @@ const at = (iso: string) => new Date(iso).getTime();
 const base = { scheduledAt: CLASS, leadConfirmed: false, voiceNoteSent: true };
 
 describe("evaluateNoConfirm", () => {
-  it("sin confirmar + nota de voz + dentro de las 2 h → permitido", () => {
-    expect(evaluateNoConfirm({ ...base, nowMs: at("2026-11-25T16:30:00Z") })).toEqual({
-      allowed: true, blockedBy: null, availableFrom: "2026-11-25T16:00:00.000Z",
+  it("sin confirmar + nota de voz + dentro de la última hora → permitido", () => {
+    expect(evaluateNoConfirm({ ...base, nowMs: at("2026-11-25T17:30:00Z") })).toEqual({
+      allowed: true, blockedBy: null, availableFrom: "2026-11-25T17:00:00.000Z",
     });
   });
-  it("justo a las 2 h exactas ya se puede", () => {
-    expect(evaluateNoConfirm({ ...base, nowMs: at("2026-11-25T16:00:00Z") }).allowed).toBe(true);
+  it("justo a 1 h exacta ya se puede", () => {
+    expect(evaluateNoConfirm({ ...base, nowMs: at("2026-11-25T17:00:00Z") }).allowed).toBe(true);
   });
   it("un minuto antes de la ventana → demasiado pronto", () => {
-    const r = evaluateNoConfirm({ ...base, nowMs: at("2026-11-25T15:59:00Z") });
+    const r = evaluateNoConfirm({ ...base, nowMs: at("2026-11-25T16:59:00Z") });
     expect(r).toMatchObject({ allowed: false, blockedBy: "too_early" });
-    expect(r.availableFrom).toBe("2026-11-25T16:00:00.000Z");
+    expect(r.availableFrom).toBe("2026-11-25T17:00:00.000Z");
+  });
+  it("a 2 h de la clase (regla del primer día) ya NO se puede", () => {
+    expect(evaluateNoConfirm({ ...base, nowMs: at("2026-11-25T16:00:00Z") }).blockedBy).toBe("too_early");
   });
   it("el día anterior → demasiado pronto", () => {
     expect(evaluateNoConfirm({ ...base, nowMs: at("2026-11-24T18:00:00Z") }).blockedBy).toBe("too_early");
@@ -39,12 +42,13 @@ describe("evaluateNoConfirm", () => {
       allowed: false, blockedBy: "no_upcoming_trial", availableFrom: null,
     });
   });
-  it("la ventana es de 120 minutos", () => { expect(NO_CONFIRM_WINDOW_MIN).toBe(120); });
+  it("la ventana es de 60 minutos", () => { expect(NO_CONFIRM_WINDOW_MIN).toBe(60); });
 });
 
 describe("noConfirmBlockMessage", () => {
   it("demasiado pronto incluye la hora de apertura si se le pasa", () => {
     expect(noConfirmBlockMessage("too_early", "17:00")).toContain("a partir de las 17:00");
+    expect(noConfirmBlockMessage("too_early", "17:00")).toContain("desde 1 hora antes de la clase");
     expect(noConfirmBlockMessage("too_early")).not.toContain("a partir de");
   });
   it("cada bloqueo tiene su explicación", () => {

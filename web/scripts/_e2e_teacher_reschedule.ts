@@ -85,8 +85,8 @@ const check = (name: string, cond: unknown, extra?: unknown) => {
     check("POST rechazado (400, too_early)", r.status === 400 && r.body.blockedBy === "too_early", r);
 
     // ── Caso C: dentro de las 2 h pero el lead confirmó ──────────────────────
-    origLog("\nC) Falta 1 h, pero el lead confirmó");
-    await sb.from("classes").update({ scheduled_at: new Date(Date.now() + 60 * 60_000).toISOString(), student_confirmed_at: new Date().toISOString(), student_confirmed_source: "student_web" }).eq("id", c1.id);
+    origLog("\nC) Faltan 45 min, pero el lead confirmó");
+    await sb.from("classes").update({ scheduled_at: new Date(Date.now() + 45 * 60_000).toISOString(), student_confirmed_at: new Date().toISOString(), student_confirmed_source: "student_web" }).eq("id", c1.id);
     r = await run("lead_no_confirmo");
     check("confirmó en la clase (web/WA/setter) → 400 confirmed", r.status === 400 && r.body.blockedBy === "confirmed", r);
     await sb.from("classes").update({ student_confirmed_at: null, student_confirmed_source: null }).eq("id", c1.id);
@@ -97,7 +97,7 @@ const check = (name: string, cond: unknown, extra?: unknown) => {
     check("la clase sigue agendada", (await cls(c1.id)).status === "scheduled");
 
     // ── Caso D: todo en regla → reagenda por falta de confirmación ───────────
-    origLog("\nD) Falta 1 h, sin confirmar, nota de voz marcada → se permite");
+    origLog("\nD) Faltan 45 min, sin confirmar, nota de voz marcada → se permite");
     st = await getTeacherRescheduleStatus(LEAD);
     check("estado: 'Lead no confirmó' permitido", st.noConfirm.allowed && st.noConfirm.blockedBy === null, st.noConfirm);
     waCaptured.length = 0;
@@ -123,7 +123,7 @@ const check = (name: string, cond: unknown, extra?: unknown) => {
     const c2 = await mkClass(26 * 60);
     waCaptured.length = 0;
     r = await run("profe_no_puede", `  ${NOTE}  `);
-    check("POST 200 sin exigir nota de voz ni ventana de 2 h", r.status === 200 && r.body.rescheduleReason === "profe_no_puede", r);
+    check("POST 200 sin exigir nota de voz ni ventana de 1 h", r.status === 200 && r.body.rescheduleReason === "profe_no_puede", r);
     c = await cls(c2.id);
     check("clase cancelada", c.status === "cancelled", c);
     check("la clase guarda el motivo escrito", String(c.notes_admin).includes("el profe no puede dar la clase") && String(c.notes_admin).includes(NOTE), c.notes_admin);

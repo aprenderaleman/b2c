@@ -13,7 +13,7 @@ import {
  * ruta para poder probarlo de punta a punta sin sesión.
  *
  *   reason "lead_no_confirmo" → solo si el lead no confirmó por ninguna vía,
- *       el profe marcó su nota de voz y faltan ≤ 2 h para la clase.
+ *       el profe marcó su nota de voz y falta ≤ 1 h para la clase.
  *   reason "profe_no_puede"   → motivo escrito obligatorio; queda en el
  *       historial y avisa a los admins. No se le envía al lead.
  * El profe siempre indica el motivo; closer/admin pueden seguir sin él
