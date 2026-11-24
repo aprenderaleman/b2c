@@ -137,13 +137,17 @@ async function run(req: Request) {
     } else {
       failed++;
       console.error(`[trial-reminders-2h] WA send failed for ${r.id}: ${res.reason}`);
-      await sb.from("lead_timeline").insert({
-        lead_id: lead.id,
-        type:    "send_failed",
-        author:  "system",
-        content: `💬 Falló el envío WhatsApp del recordatorio 2h antes`,
-        metadata: { channel: "whatsapp", kind: "2h_before", class_id: r.id, error: res.reason },
-      });
+      // Delegar a handleWaPermanentFail: inserta send_failed Y, si reason
+      // trae exists:false (número sin WA), desactiva whatsapp_normalized
+      // automáticamente para romper el bucle de reintentos del cron 5min.
+      const { handleWaPermanentFail } = await import("@/lib/wa-permanent-fail");
+      await handleWaPermanentFail(sb, {
+        leadId:  lead.id,
+        phone:   lead.whatsapp_normalized ?? "",
+        kind:    "2h_before",
+        reason:  res.reason,
+        context: "trial-reminders-2h",
+      }).catch(err => console.error("[trial-reminders-2h] handleWaPermanentFail threw:", err));
     }
   }
 
