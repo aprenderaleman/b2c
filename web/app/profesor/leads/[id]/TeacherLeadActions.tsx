@@ -5,7 +5,7 @@
  * 2026-08-13) — las mismas acciones que tiene el closer en su ficha,
  * usando los endpoints del Trial Hub del profe:
  *
- *  📅 Enviar enlace Clase de prueba → send-reschedule-link
+ *  📅 Reagendar clase de prueba     → RescheduleTrialModal (send-reschedule-link con motivo)
  *  💳 Enviar enlace de inscripción  → PaymentLinkModal (send-offer)
  *  ✅ Confirmar pago                → ConfirmPaymentModal (conversión)
  *  🌐 Página web
@@ -18,6 +18,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { PaymentLinkModal } from "@/app/profesor/clasedeprueba/PaymentLinkModal";
 import { ConfirmPaymentModal } from "@/components/teacher/ConfirmPaymentModal";
+import { RescheduleTrialModal } from "@/components/teacher/RescheduleTrialModal";
 
 type Props = {
   leadId: string;
@@ -35,44 +36,15 @@ export function TeacherLeadActions({
   const router = useRouter();
   const [enlaceOpen, setEnlaceOpen] = useState(false);
   const [confirmPagoOpen, setConfirmPagoOpen] = useState(false);
-  const [rescheduling, setRescheduling] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleReagendar = async () => {
-    if (!confirm(
-      "REAGENDAR clase de prueba.\n\n" +
-      "Esto va a:\n" +
-      "  • Cancelar la clase futura del lead (si existe).\n" +
-      "  • Enviar por WhatsApp el link para elegir nuevo horario.\n" +
-      "  • Cambiar el estado del lead a 'Reagendando'.\n\n" +
-      "¿Continuar?"
-    )) return;
-    setRescheduling(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/teacher/trial/${leadId}/send-reschedule-link`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.reason ?? `HTTP ${res.status}`);
-      alert("💬 Mensaje de reagendar enviado.");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al enviar reagendamiento");
-    } finally {
-      setRescheduling(false);
-    }
-  };
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
 
   const BUTTONS = [
     {
       key: "reagendar",
       icon: "📅",
-      label: "Enviar enlace Clase de prueba",
-      description: "Link para elegir nuevo horario de trial",
-      onClick: handleReagendar,
+      label: "Reagendar clase de prueba",
+      description: "Elige el motivo y se avisa al lead",
+      onClick: () => setRescheduleOpen(true),
     },
     {
       key: "enlace",
@@ -106,14 +78,11 @@ export function TeacherLeadActions({
         Acciones
       </h2>
 
-      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
-
       <div className="grid grid-cols-2 gap-2">
         {BUTTONS.map((btn) => (
           <button
             key={btn.key}
             onClick={btn.onClick}
-            disabled={rescheduling}
             className="flex items-center gap-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 text-left hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
           >
             <span className="text-lg flex-shrink-0">{btn.icon}</span>
@@ -130,6 +99,15 @@ export function TeacherLeadActions({
       </div>
 
       {/* Modales compartidos con el Trial Hub */}
+      {rescheduleOpen && (
+        <RescheduleTrialModal
+          leadId={leadId}
+          leadName={leadName}
+          onClose={() => setRescheduleOpen(false)}
+          onDone={() => { setRescheduleOpen(false); alert("💬 Clase reagendada. El lead recibió su mensaje con el enlace."); router.refresh(); }}
+        />
+      )}
+
       {enlaceOpen && (
         <PaymentLinkModal
           leadId={leadId}

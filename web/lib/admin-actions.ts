@@ -9,6 +9,8 @@ import { getLeadTrialTeacher } from "./trial-compensation";
 import { startChain, cancelActiveChain } from "./chain-engine";
 import { schedulePostTrialFollowup } from "./post-trial-followups";
 import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
+import { buildTeacherRescheduleLeadMessage, teacherRescheduleReasonLabel, type TeacherRescheduleReason } from "./trial-reschedule-reason";
+import { formatBerlinFull } from "./time";
 
 /**
  * Tag interno: cuando se setea, Stiv debe escalar a `needs_human` la
@@ -692,6 +694,14 @@ export async function sendRescheduleLinkMessage(
      *  que el setter lo mande manualmente desde su WhatsApp Web (post-bans
      *  v5/v6, Gelfis 2026-11-14). El email fallback sigue activo. */
     manualWa?: boolean;
+    /** Motivo elegido por el profe al pulsar "Reagendar" (Gelfis 2026-11-24).
+     *  Cambia el mensaje al lead y queda en el historial y en la clase.
+     *  `note` (motivo escrito de "no puedo dar la clase") NO viaja al lead. */
+    teacherReason?: {
+      reason: TeacherRescheduleReason;
+      note?: string | null;
+      teacherFirstName?: string | null;
+    };
   },
 ): Promise<{ ok: boolean; reason?: string; waSent?: boolean; emailSent?: boolean; pendingManual?: boolean; waText?: string; waLink?: string }> {
   const actorName = opts?.actorName ?? "teacher";
@@ -724,16 +734,27 @@ export async function sendRescheduleLinkMessage(
     .limit(1)
     .maybeSingle();
   const trial = currentTrial as { id: string; scheduled_at: string; teacher_id: string | null; google_calendar_event_id: string | null } | null;
+  const tr = opts?.teacherReason ?? null;
+  const trNote = tr?.note?.trim() || null;
   if (trial) {
+    const motivoTxt = tr
+      ? ` — motivo: ${teacherRescheduleReasonLabel(tr.reason)}${trNote ? ` («${trNote}»)` : ""}`
+      : "";
     await sb.from("classes")
-      .update({ status: "cancelled", updated_at: nowIso })
+      .update({
+        status: "cancelled", updated_at: nowIso,
+        ...(tr ? { notes_admin: `Reagendada por ${actorName} el ${nowIso.slice(0, 10)}${motivoTxt}` } : {}),
+      })
       .eq("id", trial.id);
     await sb.from("lead_timeline").insert({
       lead_id: leadId,
       type:    "status_change",
       author:  actorName,
-      content: `🚫 Clase de prueba cancelada por reagendamiento (${actorName}) (${new Date(trial.scheduled_at).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })} Berlín)`,
-      metadata: { class_id: trial.id, kind: "trial_cancelled_for_reschedule", actor: actorName },
+      content: `🚫 Clase de prueba cancelada por reagendamiento (${actorName}) (${new Date(trial.scheduled_at).toLocaleString("es-ES", { timeZone: "Europe/Berlin" })} Berlín)${motivoTxt}`,
+      metadata: {
+        class_id: trial.id, kind: "trial_cancelled_for_reschedule", actor: actorName,
+        ...(tr ? { reschedule_reason: tr.reason, reschedule_note: trNote } : {}),
+      },
     });
 
     // Eliminar espejos de Google Calendar (central + profe). El helper
@@ -797,7 +818,17 @@ export async function sendRescheduleLinkMessage(
 
   // Copy Gelfis 2026-11-15 — Msg 1 "Reagendar" (profe/setter marca).
   // Tono corto, directo al link + cierre con dream outcome.
-  const waText = [
+  // Desde 2026-11-24, si el profe indicó el motivo (y había una clase
+  // futura que liberar), el lead recibe el copy de ese motivo.
+  const waText = tr && trial
+    ? buildTeacherRescheduleLeadMessage({
+        reason:           tr.reason,
+        leadFirstName:    firstName,
+        teacherFirstName: tr.teacherFirstName ?? null,
+        whenText:         formatBerlinFull(trial.scheduled_at, "es"),
+        rescheduleUrl,
+      })
+    : [
     `Hola ${firstName} 👋`,
     ``,
     `Tu clase quedó liberada. Elige nueva fecha aquí`,

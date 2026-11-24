@@ -11,6 +11,7 @@ import { PriorityBadges, summarizeQualification } from "@/components/admin/Prior
 import { DeleteTrialClassButton } from "@/components/DeleteTrialClassButton";
 import Link from "next/link";
 import { ConfirmPaymentModal } from "@/components/teacher/ConfirmPaymentModal";
+import { RescheduleTrialModal } from "@/components/teacher/RescheduleTrialModal";
 import { NotesField, type NotesFieldHandle } from "./NotesField";
 import { PaymentLinkModal } from "./PaymentLinkModal";
 import { ScheduleClassModal } from "./ScheduleClassModal";
@@ -41,7 +42,7 @@ export function TrialHubCard({
   const [escalating, setEscalating] = useState(false);
   const [voiceNoteSent, setVoiceNoteSent] = useState<string | null>(row.voiceNoteSentAt);
   const [togglingVoice, setTogglingVoice] = useState(false);
-  const [reschedulingSend, setReschedulingSend] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [objectionOpen, setObjectionOpen] = useState(false);
   const [objectionSending, setObjectionSending] = useState<string | null>(null);
 
@@ -413,45 +414,18 @@ export function TrialHubCard({
                     ✗ No asistio
                   </button>
 
-                  {/* Reagendar — envía por WA el link /agendar/cuando
-                      al lead. NO cambia estado ni cancela; útil cuando
-                      el lead avisa antes que no puede en el horario. */}
+                  {/* Reagendar — abre la ventana de motivo (2026-11-24):
+                      "Lead no confirmó" o "No puedo dar la clase". Cancela
+                      la clase, pasa el lead a 'Reagendando' y le envía su
+                      mensaje con el enlace para elegir nueva fecha. */}
                   <button
                     type="button"
-                    disabled={reschedulingSend || !row.leadWhatsapp}
-                    title={row.leadWhatsapp ? "Enviar por WhatsApp el link para reagendar" : "Lead sin WhatsApp — no se puede enviar"}
-                    onClick={async () => {
-                      if (!row.leadId) return;
-                      if (!confirm(
-                        "REAGENDAR clase de prueba.\n\n" +
-                        "Esto va a:\n" +
-                        "  • Cancelar la clase actual del lead.\n" +
-                        "  • Enviar por WhatsApp el link a /agendar/cuando.\n" +
-                        "  • Cambiar el estado del lead a 'Reagendando'.\n\n" +
-                        "Cuando el lead elija nuevo horario, vuelve a 'Clase agendada' automáticamente.\n\n" +
-                        "¿Continuar?"
-                      )) return;
-                      setReschedulingSend(true);
-                      await notesRef.current?.flush();
-                      try {
-                        const res = await fetch(`/api/teacher/trial/${row.leadId}/send-reschedule-link`, {
-                          method: "POST",
-                          headers: { "content-type": "application/json" },
-                          body: "{}",
-                        });
-                        const json = await res.json().catch(() => ({}));
-                        if (!res.ok) throw new Error(json.reason ?? `HTTP ${res.status}`);
-                        alert("💬 Mensaje de reagendar enviado.");
-                        router.refresh();
-                      } catch (err) {
-                        alert(err instanceof Error ? err.message : "Error");
-                      } finally {
-                        setReschedulingSend(false);
-                      }
-                    }}
+                    disabled={!row.leadWhatsapp}
+                    title={row.leadWhatsapp ? "Reagendar: elige el motivo y se avisa al lead" : "Lead sin WhatsApp — no se puede enviar"}
+                    onClick={() => { if (row.leadId) setRescheduleOpen(true); }}
                     className="text-xs font-semibold rounded-full border border-sky-300 dark:border-sky-500/40 bg-sky-100 dark:bg-sky-500/15 px-3 py-1.5 text-sky-800 dark:text-sky-200 hover:bg-sky-200 dark:hover:bg-sky-500/25 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {reschedulingSend ? "Enviando..." : "📅 Reagendar"}
+                    📅 Reagendar
                   </button>
                 </>
               )}
@@ -605,6 +579,16 @@ export function TrialHubCard({
           leadName={row.leadName || "Lead"}
           defaultLevel={normalizedLevel}
           onClose={() => setPaymentOpen(false)}
+        />
+      )}
+
+      {rescheduleOpen && row.leadId && (
+        <RescheduleTrialModal
+          leadId={row.leadId}
+          leadName={row.leadName ?? "el lead"}
+          beforeSubmit={async () => { await notesRef.current?.flush(); }}
+          onClose={() => setRescheduleOpen(false)}
+          onDone={() => { setRescheduleOpen(false); alert("💬 Clase reagendada. El lead recibió su mensaje con el enlace."); router.refresh(); }}
         />
       )}
 

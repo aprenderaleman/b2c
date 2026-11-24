@@ -1,41 +1,46 @@
 import { NextResponse } from "next/server";
 import { requireTeacherSession, assertTeacherOwnsTrialLead } from "@/lib/teacher-trial-auth";
-import { sendRescheduleLinkMessage } from "@/lib/admin-actions";
-import { supabaseAdmin } from "@/lib/supabase";
-import { registerContact, actorFromPanelUser } from "@/lib/contacts";
+import { getTeacherRescheduleStatus, teacherRescheduleTrial } from "@/lib/teacher-reschedule";
 
 /**
- * POST /api/teacher/trial/[leadId]/send-reschedule-link
+ * /api/teacher/trial/[leadId]/send-reschedule-link
  *
- * Envía por WhatsApp al lead el enlace de /agendar/cuando para que
- * elija un nuevo horario. NO cambia estado del lead ni cancela la
- * clase — solo un mensaje. Usado desde TrialHubCard cuando el profe
- * quiere ofrecer un cambio de horario amablemente.
+ * POST — botón "Reagendar" del profe (y del closer): cancela la clase de
+ * prueba futura, pasa el lead a 'Reagendando' y le envía el enlace para
+ * elegir nuevo horario.
+ *
+ * Desde 2026-11-24 el PROFE debe indicar el motivo en el cuerpo:
+ *   { reason: "lead_no_confirmo" }
+ *   { reason: "profe_no_puede", note: "..." }
+ * Reglas, validaciones y avisos: lib/teacher-reschedule.ts. Closer/admin
+ * pueden seguir llamando sin motivo (copy genérico de siempre).
+ *
+ * GET — estado para la ventana del profe: si hay clase futura, si el lead
+ * confirmó, si la nota de voz está marcada y si puede usar "Lead no confirmó".
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ leadId: string }> }) {
+
+async function authorise(leadId: string) {
   let user;
   try { user = await requireTeacherSession({ allowCloser: true }); }
-  catch { return NextResponse.json({ error: "unauthorized" }, { status: 401 }); }
-
-  const { leadId } = await params;
-
+  catch { return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) } as const; }
   try { await assertTeacherOwnsTrialLead(user.id, leadId, user.role); }
-  catch { return NextResponse.json({ error: "forbidden" }, { status: 403 }); }
+  catch { return { error: NextResponse.json({ error: "forbidden" }, { status: 403 }) } as const; }
+  return { user } as const;
+}
 
-  const { data: userRow } = await supabaseAdmin()
-    .from("users").select("full_name").eq("id", user.id).maybeSingle();
-  const actorName = (userRow as { full_name: string | null } | null)?.full_name || user.email;
+export async function GET(_req: Request, { params }: { params: Promise<{ leadId: string }> }) {
+  const { leadId } = await params;
+  const a = await authorise(leadId);
+  if ("error" in a) return a.error;
+  return NextResponse.json(await getTeacherRescheduleStatus(leadId));
+}
 
-  const result = await sendRescheduleLinkMessage(leadId, { actorName });
-  if (!result.ok) {
-    return NextResponse.json({ ok: false, reason: result.reason }, { status: 400 });
-  }
-  await registerContact({
-    leadId,
-    actor: await actorFromPanelUser(user),
-    actionType: "agendar_prueba",
-    channel: "whatsapp",
-    note: "Enlace de agendar clase de prueba enviado",
-  });
-  return NextResponse.json({ ok: true });
+export async function POST(req: Request, { params }: { params: Promise<{ leadId: string }> }) {
+  const { leadId } = await params;
+  const a = await authorise(leadId);
+  if ("error" in a) return a.error;
+
+  const body = (await req.json().catch(() => ({}))) as { reason?: unknown; note?: unknown };
+  const r = await teacherRescheduleTrial({ leadId, user: a.user, reason: body.reason, note: body.note });
+  return NextResponse.json(r.body, { status: r.status });
 }
