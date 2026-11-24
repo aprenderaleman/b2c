@@ -58,6 +58,10 @@ export const NAV_BY_ROLE: Record<Role, NavItem[]> = {
     // habían vuelto el 09-10 para Sabine). Rutas vivas por enlace
     // directo: /profesor/materiales y /profesor/recursos.
     { label: "Grabaciones",      href: "/profesor/grabaciones",     icon: "video",          priority: 6.5 },
+    // Serie del Bono de Acción Rápida — los profes la conocen para
+    // venderla en el cierre (Gelfis 2026-11-27). Ruta /profesor/serie:
+    // /profesor/videos es el Estudio de grabación (checklist YouTube).
+    { label: "Videos (para estudiantes)", href: "/profesor/serie", icon: "video",           priority: 6.7 },
     // Cursos destacado: justo debajo de "Hoy" (Gelfis 2026-10-01).
     { label: "Cursos",           href: "/profesor/cursos",          icon: "graduationCap",  priority: 1.1 },
     // Tour guiado bajo demanda (Gelfis 2026-10-24).
