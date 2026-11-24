@@ -4,11 +4,13 @@ import Link from "next/link";
 import { useState } from "react";
 import type { UrgenteItem } from "@/lib/setter-urgentes";
 import type { SetterQueueItem } from "@/lib/setter-queue";
+import { buildGuion, type GuionTipo } from "@/lib/setter-scripts";
 
 /**
- * Pestañas Hoy / Mañana de "Leads Urgentes" (Gelfis 2026-11-22). Muestra
- * TODAS las citas del día —confirmadas o no— con el último contacto en
- * grande: si fue hace días, toca darle un toque más antes de la clase.
+ * Pestañas de "Leads Urgentes" (Gelfis 2026-11-22/24), en el ORDEN DE
+ * TRABAJO del setter: 1 Trials de hoy → 2 Leads nuevos → 3 Trials de
+ * mañana → 4 No asistieron. Cada fila lleva su "📋 Guion" (estilo
+ * Hormozi, lib/setter-scripts.ts) con los datos del lead ya rellenos.
  */
 
 const ACTION_LABELS: Record<string, string> = {
@@ -31,6 +33,12 @@ function fmtFechaCorta(iso: string): string {
   });
 }
 
+function fmtDiaLargo(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-ES", {
+    timeZone: "Europe/Berlin", weekday: "long", day: "numeric", month: "short",
+  });
+}
+
 /** Pill del último contacto: verde fresco, ámbar 3-5 días, rojo 6+ / nunca. */
 function contactoPill(it: UrgenteItem): { text: string; cls: string } {
   if (!it.lastContact) {
@@ -50,7 +58,7 @@ function contactoPill(it: UrgenteItem): { text: string; cls: string } {
   return { text, cls };
 }
 
-/** "agendó hace 25 min / 3 h / 2 días" para la pestaña de calientes. */
+/** "agendó hace 25 min / 3 h / 2 días" para Leads nuevos. */
 function hace(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const min = Math.max(1, Math.floor(ms / 60_000));
@@ -61,22 +69,71 @@ function hace(iso: string): string {
   return `hace ${d} día${d === 1 ? "" : "s"}`;
 }
 
+type TabKey = "hoy" | "calientes" | "manana" | "no_show";
+
+/** Panel desplegable con el guion relleno + botón copiar. */
+function GuionPanel({ tipo, nombre, profe, dia, hora }: {
+  tipo: GuionTipo; nombre: string | null; profe: string | null; dia: string; hora: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const g = buildGuion(tipo, {
+    nombre: (nombre ?? "").split(/\s+/)[0] || "Hola",
+    profe: (profe ?? "tu profesor").split(/\s+/)[0],
+    dia, hora,
+  });
+  return (
+    <div className="mx-4 mb-3 rounded-xl border border-brand-200 dark:border-brand-500/30 bg-brand-50/60 dark:bg-brand-500/10 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-bold text-brand-700 dark:text-brand-300">{g.titulo}</span>
+        <button
+          type="button"
+          onClick={() => {
+            try {
+              navigator.clipboard.writeText(g.texto);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            } catch { /* clipboard bloqueado — se copia a mano */ }
+          }}
+          className="btn-secondary text-[11px] px-2 py-1 shrink-0"
+        >
+          {copied ? "✓ Copiado" : "Copiar"}
+        </button>
+      </div>
+      <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap leading-relaxed">{g.texto}</p>
+      <p className="text-[10px] text-amber-700 dark:text-amber-300">{g.reglas}</p>
+    </div>
+  );
+}
+
 export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoShows, noShowBacklog }: {
   hoy: UrgenteItem[]; manana: UrgenteItem[]; calientes: UrgenteItem[];
-  /** Pestaña "No asistieron" (consolidación de Mi cola, Gelfis 2026-11-24). */
   noShows: SetterQueueItem[]; snoozedNoShows: number; noShowBacklog: number;
 }) {
-  const [active, setActive] = useState<"calientes" | "hoy" | "manana" | "no_show">("calientes");
+  const [active, setActive] = useState<TabKey>("hoy");
+  const [guionOpen, setGuionOpen] = useState<string | null>(null); // classId abierto
+
   const items = active === "hoy" ? hoy : active === "manana" ? manana : active === "calientes" ? calientes : [];
+
+  /** Qué guion toca en cada pestaña (en hoy/mañana depende de si confirmó). */
+  const tipoFor = (it: UrgenteItem): GuionTipo =>
+    active === "calientes" ? "nuevo" : it.confirmada ? "refresh" : "recordatorio";
+
+  const toggleGuion = (id: string) => setGuionOpen(g => (g === id ? null : id));
 
   return (
     <section className="space-y-3">
+      {/* Orden de trabajo — siempre visible (Gelfis 2026-11-24). */}
+      <p className="rounded-xl bg-slate-100 dark:bg-slate-800/60 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+        <strong>¿Por dónde empiezo?</strong> Trabaja las pestañas en orden, de izquierda a derecha,
+        y cada lista de arriba hacia abajo. En cada lead: toca <strong>📋 Guion</strong>, llama, y registra la acción en su ficha.
+      </p>
+
       <div className="flex flex-wrap gap-2" role="tablist">
         {([
-          { key: "calientes" as const, label: "🔥 Leads nuevos",     count: calientes.length },
-          { key: "hoy" as const,       label: "📅 Trials de hoy",    count: hoy.length },
-          { key: "manana" as const,    label: "🌅 Trials de mañana", count: manana.length },
-          { key: "no_show" as const,   label: "🔄 No asistieron",   count: noShows.length },
+          { key: "hoy" as const,       label: "1️⃣ 📅 Trials de hoy",    count: hoy.length },
+          { key: "calientes" as const, label: "2️⃣ 🔥 Leads nuevos",     count: calientes.length },
+          { key: "manana" as const,    label: "3️⃣ 🌅 Trials de mañana", count: manana.length },
+          { key: "no_show" as const,   label: "4️⃣ 🔄 No asistieron",    count: noShows.length },
         ]).map((t) => {
           const isActive = t.key === active;
           return (
@@ -85,7 +142,7 @@ export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoS
               type="button"
               role="tab"
               aria-selected={isActive}
-              onClick={() => setActive(t.key)}
+              onClick={() => { setActive(t.key); setGuionOpen(null); }}
               className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold border transition-colors ${
                 isActive
                   ? "bg-brand-600 border-brand-600 text-white"
@@ -117,32 +174,44 @@ export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoS
         ) : (
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
             {noShows.map((it) => (
-              <Link
-                key={it.classId}
-                href={`/setter/leads/${it.leadId}`}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-              >
-                <span className="font-medium text-slate-900 dark:text-slate-100 min-w-[8rem]">
-                  {it.lead.name ?? "(sin nombre)"}
-                </span>
-                <span className="text-xs rounded-full px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  {it.citaTipo === "trial" ? "Clase de prueba" : "Sesión de plan"}
-                </span>
-                <span className="text-sm text-slate-600 dark:text-slate-300">
-                  {fmtFechaCorta(it.citaAt)} · {fmtHoraBerlin(it.citaAt)}
-                  {it.hostName ? ` · ${it.hostName.split(/\s+/)[0]}` : ""}
-                </span>
-                {it.sinMarcar && (
-                  <span className="text-xs rounded-full px-2 py-0.5 bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 font-medium">
-                    sin marcar
+              <div key={it.classId}>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3">
+                  <Link href={`/setter/leads/${it.leadId}`} className="font-medium text-slate-900 dark:text-slate-100 min-w-[8rem] hover:text-brand-600 dark:hover:text-brand-400">
+                    {it.lead.name ?? "(sin nombre)"}
+                  </Link>
+                  <span className="text-xs rounded-full px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                    {it.citaTipo === "trial" ? "Clase de prueba" : "Sesión de plan"}
                   </span>
+                  <span className="text-sm text-slate-600 dark:text-slate-300">
+                    {fmtFechaCorta(it.citaAt)} · {fmtHoraBerlin(it.citaAt)}
+                    {it.hostName ? ` · ${it.hostName.split(/\s+/)[0]}` : ""}
+                  </span>
+                  {it.sinMarcar && (
+                    <span className="text-xs rounded-full px-2 py-0.5 bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 font-medium">
+                      sin marcar
+                    </span>
+                  )}
+                  <span className="ml-auto flex items-center gap-2">
+                    <span className="text-xs text-slate-400">
+                      {it.lastSetterContact
+                        ? `Último toque: ${fmtFechaCorta(it.lastSetterContact.occurred_at)}`
+                        : "Sin contactar"}
+                    </span>
+                    <button type="button" onClick={() => toggleGuion(it.classId)} className="btn-secondary text-[11px] px-2 py-1">
+                      📋 Guion
+                    </button>
+                  </span>
+                </div>
+                {guionOpen === it.classId && (
+                  <GuionPanel
+                    tipo="rescate"
+                    nombre={it.lead.name}
+                    profe={it.hostName}
+                    dia={fmtDiaLargo(it.citaAt)}
+                    hora={fmtHoraBerlin(it.citaAt)}
+                  />
                 )}
-                <span className="ml-auto text-xs text-slate-400">
-                  {it.lastSetterContact
-                    ? `Último toque: ${fmtFechaCorta(it.lastSetterContact.occurred_at)} · ${fmtHoraBerlin(it.lastSetterContact.occurred_at)}`
-                    : "Sin contactar"}
-                </span>
-              </Link>
+              </div>
             ))}
           </div>
         )
@@ -157,42 +226,54 @@ export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoS
           {items.map((it) => {
             const pill = contactoPill(it);
             return (
-              <Link
-                key={it.classId}
-                href={`/setter/leads/${it.leadId}`}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
-              >
-                <span className="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
-                  {active === "calientes"
-                    ? `${fmtFechaCorta(it.citaAt)} · ${fmtHoraBerlin(it.citaAt)}`
-                    : fmtHoraBerlin(it.citaAt)}
-                </span>
-                <span className="font-medium text-slate-900 dark:text-slate-100 min-w-[8rem]">
-                  {it.lead.name ?? "(sin nombre)"}
-                </span>
-                <span className="text-xs rounded-full px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  {it.citaTipo === "trial" ? "Clase de prueba" : "Sesión de plan"}
-                  {it.hostName ? ` · ${it.hostName.split(/\s+/)[0]}` : ""}
-                </span>
-                {it.confirmada ? (
-                  <span className="text-xs rounded-full px-2 py-0.5 bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-medium">
-                    ✅ confirmó
+              <div key={it.classId}>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
+                    {active === "calientes"
+                      ? `${fmtFechaCorta(it.citaAt)} · ${fmtHoraBerlin(it.citaAt)}`
+                      : fmtHoraBerlin(it.citaAt)}
                   </span>
-                ) : (
-                  <span className="text-xs rounded-full px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium">
-                    sin confirmar
+                  <Link href={`/setter/leads/${it.leadId}`} className="font-medium text-slate-900 dark:text-slate-100 min-w-[8rem] hover:text-brand-600 dark:hover:text-brand-400">
+                    {it.lead.name ?? "(sin nombre)"}
+                  </Link>
+                  <span className="text-xs rounded-full px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                    {it.citaTipo === "trial" ? "Clase de prueba" : "Sesión de plan"}
+                    {it.hostName ? ` · ${it.hostName.split(/\s+/)[0]}` : ""}
                   </span>
+                  {it.confirmada ? (
+                    <span className="text-xs rounded-full px-2 py-0.5 bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-medium">
+                      ✅ confirmó
+                    </span>
+                  ) : (
+                    <span className="text-xs rounded-full px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium">
+                      sin confirmar
+                    </span>
+                  )}
+                  <span className="ml-auto flex items-center gap-2">
+                    {active === "calientes" ? (
+                      <span className="text-xs rounded-full px-2.5 py-1 font-semibold bg-orange-100 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300">
+                        🔥 Agendó {hace(it.bookedAt)} · sin contactar
+                      </span>
+                    ) : (
+                      <span className={`text-xs rounded-full px-2.5 py-1 font-medium ${pill.cls}`}>
+                        {pill.text}
+                      </span>
+                    )}
+                    <button type="button" onClick={() => toggleGuion(it.classId)} className="btn-secondary text-[11px] px-2 py-1">
+                      📋 Guion
+                    </button>
+                  </span>
+                </div>
+                {guionOpen === it.classId && (
+                  <GuionPanel
+                    tipo={tipoFor(it)}
+                    nombre={it.lead.name}
+                    profe={it.hostName}
+                    dia={active === "hoy" ? "hoy" : active === "manana" ? "mañana" : fmtDiaLargo(it.citaAt)}
+                    hora={fmtHoraBerlin(it.citaAt)}
+                  />
                 )}
-                {active === "calientes" ? (
-                  <span className="ml-auto text-xs rounded-full px-2.5 py-1 font-semibold bg-orange-100 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300">
-                    🔥 Agendó {hace(it.bookedAt)} · sin contactar
-                  </span>
-                ) : (
-                  <span className={`ml-auto text-xs rounded-full px-2.5 py-1 font-medium ${pill.cls}`}>
-                    {pill.text}
-                  </span>
-                )}
-              </Link>
+              </div>
             );
           })}
         </div>
