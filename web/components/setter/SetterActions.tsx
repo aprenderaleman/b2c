@@ -23,7 +23,7 @@ import { useState, useTransition } from "react";
  * pre-rellenada para que registrar sea un clic.
  */
 
-type Mode = "confirmado" | "enlace_clase" | "reagendar" | "no_contesto" | "nota" | "descartar";
+type Mode = "confirmado" | "enlace_clase" | "reagendar" | "no_contesto" | "nota" | "descartar" | "sin_wa";
 
 const MODE_CONFIG: Record<Mode, {
   title: string;
@@ -78,6 +78,15 @@ const MODE_CONFIG: Record<Mode, {
     cta: "Descartar lead",
     pendingCta: "Descartando…",
     preview: "⚠️ El lead sale de TODAS las listas, su cita se cancela (se libera el hueco del profe) y no recibirá más mensajes. Úsalo solo cuando la cita no es real: no agendó, fue un error o número equivocado.",
+  },
+  sin_wa: {
+    title: "🚫 No tiene WhatsApp",
+    noteLabel: "Nota (obligatoria) — qué comprobaste",
+    defaultNote: "El número no existe en WhatsApp",
+    placeholder: "Ej: El número no existe en WhatsApp, intenté llamar y tampoco.",
+    cta: "Marcar sin WhatsApp",
+    pendingCta: "Marcando…",
+    preview: "El lead sale de tus listas (no puedes contactarlo por WA) y el profe verá el tag 🚫 Sin WhatsApp en su ficha. Su clase SIGUE en pie y los correos le siguen llegando — no es un descarte.",
   },
   nota: {
     title: "📝 Nota en el perfil del lead",
@@ -146,6 +155,7 @@ export function SetterActions({
         "📵 Registrar que no contestó la llamada.\n\n• WhatsApp manual listo para que lo envíes tú (pide confirmo o manda reagenda si fue no-show).\n• El lead vuelve a tu cola en 24h.\n\n¿Continuar?",
       nota: null,
       descartar: null,
+      sin_wa: null,
     };
     const msg = confirmMsg[m];
     if (msg && !window.confirm(msg)) return;
@@ -208,6 +218,12 @@ export function SetterActions({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ motivo, note: currentNote.trim() }),
         });
+      } else if (currentMode === "sin_wa") {
+        res = await fetch(`/api/setter/leads/${leadId}/sin-whatsapp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ note: currentNote.trim() }),
+        });
       } else {
         res = await fetch("/api/contacts/register", {
           method: "POST",
@@ -263,6 +279,8 @@ export function SetterActions({
       } else if (mode === "descartar") {
         const n = (body as { citas_canceladas?: number }).citas_canceladas ?? 0;
         setOkMsg(`❌ Lead descartado — fuera de todas las listas${n > 0 ? ` y ${n} cita${n > 1 ? "s" : ""} cancelada${n > 1 ? "s" : ""} (hueco liberado)` : ""}. No recibirá más mensajes.`);
+      } else if (mode === "sin_wa") {
+        setOkMsg("🚫 Marcado sin WhatsApp. Sale de tus listas y el profe verá el tag. Su clase sigue en pie.");
       } else {
         setOkMsg("📝 Nota guardada en el perfil del lead.");
       }
@@ -315,6 +333,13 @@ export function SetterActions({
           className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-slate-400 px-4 py-2 text-sm font-medium transition-colors"
         >
           📝 Nota
+        </button>
+        <button
+          type="button"
+          onClick={() => open("sin_wa")}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-500/10 px-4 py-2 text-sm font-medium transition-colors"
+        >
+          🚫 No tiene WA
         </button>
         <button
           type="button"

@@ -97,6 +97,7 @@ type LeadRow = {
   trial_attended_at: string | null;
   trial_absent_at: string | null;
   sesion_plan_at: string | null;
+  sin_whatsapp: boolean | null;
 };
 
 type SetterContactRow = {
@@ -133,7 +134,7 @@ export async function getSetterQueue(now = Date.now()): Promise<SetterQueue> {
 
   const [leadsRes, contactsRes] = await Promise.all([
     sb.from("leads")
-      .select("id, name, email, whatsapp_normalized, whatsapp_raw, german_level, goal, motivo_inicial, status, estado_cierre, trial_scheduled_at, trial_attended_at, trial_absent_at, sesion_plan_at")
+      .select("id, name, email, whatsapp_normalized, whatsapp_raw, german_level, goal, motivo_inicial, status, estado_cierre, trial_scheduled_at, trial_attended_at, trial_absent_at, sesion_plan_at, sin_whatsapp")
       .in("id", leadIds),
     sb.from("lead_contacts")
       .select("lead_id, action_type, occurred_at, actor_name")
@@ -192,7 +193,8 @@ export async function getSetterQueue(now = Date.now()): Promise<SetterQueue> {
     const lead = leadById.get(cls.lead_id);
     if (!lead) continue;
 
-    // Exclusiones globales: asistidos, convertidos, perdidos.
+    // Exclusiones globales: asistidos, convertidos, perdidos, sin WA.
+    if (lead.sin_whatsapp) continue; // 🚫 número mal/inexistente (2026-11-25)
     if (lead.trial_attended_at) continue;
     if (lead.status === "converted" || lead.estado_cierre === "convertido") continue;
     if (lead.status === "lost" || lead.status === "not_qualified" || lead.estado_cierre === "perdido") continue;

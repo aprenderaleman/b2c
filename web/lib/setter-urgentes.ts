@@ -84,7 +84,7 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
 
   const [leadsRes, contactsRes] = await Promise.all([
     sb.from("leads")
-      .select("id, name, whatsapp_normalized, whatsapp_raw, german_level, status, estado_cierre")
+      .select("id, name, whatsapp_normalized, whatsapp_raw, german_level, status, estado_cierre, sin_whatsapp")
       .in("id", leadIds),
     sb.from("lead_contacts")
       .select("lead_id, action_type, occurred_at")
@@ -97,7 +97,7 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
   type LeadRow = {
     id: string; name: string | null; whatsapp_normalized: string | null;
     whatsapp_raw: string | null; german_level: string | null;
-    status: string; estado_cierre: string | null;
+    status: string; estado_cierre: string | null; sin_whatsapp: boolean | null;
   };
   const leadById = new Map<string, LeadRow>();
   for (const l of (leadsRes.data ?? []) as LeadRow[]) leadById.set(l.id, l);
@@ -138,6 +138,9 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
     if (!lead) continue;
     if (lead.status === "converted" || lead.estado_cierre === "convertido") continue;
     if (lead.status === "lost" || lead.status === "not_qualified" || lead.estado_cierre === "perdido") continue;
+    // 🚫 Sin WhatsApp (Gelfis 2026-11-25): el setter no puede contactarlo
+    // — fuera de sus listas. La cita sigue en pie (emails sí llegan).
+    if (lead.sin_whatsapp) continue;
 
     const contacts = contactsByLead.get(cls.lead_id) ?? [];
     const last = contacts[contacts.length - 1] ?? null;

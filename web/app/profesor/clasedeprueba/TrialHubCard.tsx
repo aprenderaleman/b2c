@@ -95,6 +95,16 @@ export function TrialHubCard({
                     Convertido
                   </span>
                 )}
+                {/* 🚫 Sin WhatsApp (setter, 2026-11-25): número mal escrito o
+                    inexistente — solo se le puede escribir por email. */}
+                {row.leadSinWhatsapp && row.status !== "cancelled" && (
+                  <span
+                    className="text-[11px] font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-500/30"
+                    title="El setter comprobó que este número no existe en WhatsApp. Contacto solo por email."
+                  >
+                    🚫 Sin WhatsApp
+                  </span>
+                )}
                 {row.status !== "cancelled" && (
                   <VoiceNotePill
                     sentAt={voiceNoteSent}

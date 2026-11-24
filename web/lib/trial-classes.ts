@@ -25,6 +25,8 @@ export type TrialClassRow = {
   leadGermanLevel:    string | null;
   leadGoal:           string | null;
   leadStatus:         string | null;
+  /** 🚫 El setter marcó el número como inexistente en WhatsApp. */
+  leadSinWhatsapp:    boolean;
   leadConvertedToUserId: string | null;
   leadFirstNote:      string | null;
   leadFirstNoteAt:    string | null;
@@ -71,7 +73,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       student_confirmed_at, student_confirmed_source,
       teacher_id,
       teacher:teachers!classes_teacher_id_fkey!inner(users!inner(full_name, email)),
-      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at, trial_attended_at, trial_absent_at, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent),
+      lead:leads(id, name, email, whatsapp_normalized, language, german_level, goal, status, converted_to_user_id, trial_confirmed_at, trial_attended_at, trial_absent_at, reserva_prioritaria, priority_deadline, deposit_intent_at, qualification_answers, landing_intent, sin_whatsapp),
       script:trial_class_scripts(teacher_notes, final_outcome, voice_note_sent_at)
     `)
     .eq("is_trial", true)
@@ -127,6 +129,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       deposit_intent_at: string | null;
       qualification_answers: { goal?: string; level?: string; deadline?: string } | null;
       landing_intent: string | null;
+      sin_whatsapp: boolean | null;
     } | Array<{
       id: string;
       name: string | null;
@@ -145,6 +148,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       deposit_intent_at: string | null;
       qualification_answers: { goal?: string; level?: string; deadline?: string } | null;
       landing_intent: string | null;
+      sin_whatsapp: boolean | null;
     }> | null;
     script: {
       teacher_notes: string | null;
@@ -301,6 +305,7 @@ export async function listTrialClasses(teacherId?: string): Promise<TrialClassRo
       leadGermanLevel: lead?.german_level ?? null,
       leadGoal:        lead?.goal ?? null,
       leadStatus:      lead?.status ?? null,
+      leadSinWhatsapp: Boolean(lead?.sin_whatsapp),
       leadConvertedToUserId: lead?.converted_to_user_id ?? null,
       leadFirstNote:       note?.content ?? null,
       leadFirstNoteAt:     note?.timestamp ?? null,
