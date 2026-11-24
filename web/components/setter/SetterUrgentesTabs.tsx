@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { UrgenteItem } from "@/lib/setter-urgentes";
 import type { SetterQueueItem } from "@/lib/setter-queue";
-import { buildGuion, type GuionTipo } from "@/lib/setter-scripts";
+import { buildGuion, buildEnlaceMsg, type GuionTipo } from "@/lib/setter-scripts";
 
 /**
  * Pestañas de "Leads Urgentes" (Gelfis 2026-11-22/24), en el ORDEN DE
@@ -71,14 +71,37 @@ function hace(iso: string): string {
 
 type TabKey = "hoy" | "calientes" | "manana" | "no_show";
 
+/** Botón que copia el mensaje con el enlace del aula (lead lo pide). */
+function EnlaceButton({ nombre, fecha, enlace }: { nombre: string | null; fecha: string; enlace: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      title="Copiar mensaje con el enlace de la clase"
+      onClick={() => {
+        try {
+          navigator.clipboard.writeText(buildEnlaceMsg({
+            nombre: (nombre ?? "").split(/\s+/)[0] || "Hola",
+            fecha, enlace,
+          }));
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } catch { /* clipboard bloqueado — abrir el guion y copiar a mano */ }
+      }}
+      className="btn-secondary text-[11px] px-2 py-1"
+    >
+      {copied ? "✓ Copiado" : "🔗 Enlace"}
+    </button>
+  );
+}
+
 /** Panel desplegable con el guion relleno + botón copiar. */
-function GuionPanel({ tipo, nombre, profe, dia, hora }: {
-  tipo: GuionTipo; nombre: string | null; profe: string | null; dia: string; hora: string;
+function GuionPanel({ tipo, nombre, dia, hora }: {
+  tipo: GuionTipo; nombre: string | null; dia: string; hora: string;
 }) {
   const [copied, setCopied] = useState(false);
   const g = buildGuion(tipo, {
     nombre: (nombre ?? "").split(/\s+/)[0] || "Hola",
-    profe: (profe ?? "tu profesor").split(/\s+/)[0],
     dia, hora,
   });
   return (
@@ -206,7 +229,6 @@ export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoS
                   <GuionPanel
                     tipo="rescate"
                     nombre={it.lead.name}
-                    profe={it.hostName}
                     dia={fmtDiaLargo(it.citaAt)}
                     hora={fmtHoraBerlin(it.citaAt)}
                   />
@@ -259,6 +281,13 @@ export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoS
                         {pill.text}
                       </span>
                     )}
+                    {it.joinUrl && (
+                      <EnlaceButton
+                        nombre={it.lead.name}
+                        fecha={`${active === "hoy" ? "hoy" : active === "manana" ? "mañana" : fmtDiaLargo(it.citaAt)} a las ${fmtHoraBerlin(it.citaAt)} (hora de Alemania)`}
+                        enlace={it.joinUrl}
+                      />
+                    )}
                     <button type="button" onClick={() => toggleGuion(it.classId)} className="btn-secondary text-[11px] px-2 py-1">
                       📋 Guion
                     </button>
@@ -268,7 +297,6 @@ export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoS
                   <GuionPanel
                     tipo={tipoFor(it)}
                     nombre={it.lead.name}
-                    profe={it.hostName}
                     dia={active === "hoy" ? "hoy" : active === "manana" ? "mañana" : fmtDiaLargo(it.citaAt)}
                     hora={fmtHoraBerlin(it.citaAt)}
                   />

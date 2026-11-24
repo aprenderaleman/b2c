@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { buildTrialClassUrl } from "./trial-token";
 
 /**
  * "Leads Urgentes" del setter (Gelfis 2026-11-22): todas las citas de
@@ -30,6 +31,8 @@ export type UrgenteItem = {
   daysSinceContact: number | null;
   /** Cuándo se agendó la cita (para "agendó hace X" en calientes). */
   bookedAt: string;
+  /** Enlace /c/{short_code} del aula, para el botón "🔗 Enlace". */
+  joinUrl: string | null;
 };
 
 export type SetterUrgentes = {
@@ -59,7 +62,7 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
   // las citas más lejanas solo alimentan "calientes" (recién agendados).
   const { data: classesData } = await sb
     .from("classes")
-    .select("id, lead_id, scheduled_at, status, is_trial, sesion_closer_id, teacher_id, created_at, notify_after_at")
+    .select("id, lead_id, scheduled_at, status, is_trial, sesion_closer_id, teacher_id, created_at, notify_after_at, short_code")
     .not("lead_id", "is", null)
     .or("is_trial.eq.true,sesion_closer_id.not.is.null")
     .is("deleted_at", null)
@@ -72,7 +75,7 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
   type ClassRow = {
     id: string; lead_id: string; scheduled_at: string; status: string;
     is_trial: boolean; sesion_closer_id: string | null; teacher_id: string | null;
-    created_at: string; notify_after_at: string | null;
+    created_at: string; notify_after_at: string | null; short_code: string | null;
   };
   const classes = (classesData ?? []) as ClassRow[];
   if (classes.length === 0) return { hoy: [], manana: [], calientes: [] };
@@ -159,6 +162,7 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
       lastContact: last ? { occurred_at: last.occurred_at, action_type: last.action_type } : null,
       daysSinceContact: last ? Math.floor((now - T(last.occurred_at)) / D) : null,
       bookedAt,
+      joinUrl: cls.short_code ? buildTrialClassUrl({ classId: cls.id, shortCode: cls.short_code }) : null,
     };
 
     const day = berlinDay(new Date(cls.scheduled_at));

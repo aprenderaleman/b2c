@@ -1,7 +1,7 @@
 /**
- * Guiones de llamada del setter (Gelfis 2026-11-24), estilo Hormozi:
- * velocidad, personalización, compromiso explícito y aversión a la
- * pérdida. SIN vender y SIN precios — eso es del profe/closer.
+ * Guiones de llamada del setter (textos de Gelfis 2026-11-25): cortos,
+ * al grano, hablando de la ACADEMIA (Aprender-Aleman.de), no del profe.
+ * Objetivo único de cada toque: el CONFIRMO de conexión.
  *
  * Se rellenan con los datos del lead y se muestran con el botón
  * "📋 Guion" en cada fila de /setter/urgentes. Para cambiar un texto:
@@ -12,64 +12,56 @@ export type GuionTipo = "nuevo" | "recordatorio" | "refresh" | "rescate";
 
 export type GuionVars = {
   nombre: string;       // primer nombre del lead
-  profe: string;        // primer nombre del anfitrión
-  dia: string;          // "lunes 25 nov" | "hoy" | "mañana"
+  dia: string;          // "hoy" | "mañana" | "lunes 25 nov"
   hora: string;         // "17:10"
 };
 
 const GUIONES: Record<GuionTipo, { titulo: string; texto: (v: GuionVars) => string }> = {
   nuevo: {
-    titulo: "🔥 Acaba de agendar — llamar YA (los primeros 5 min valen oro)",
-    texto: (v) => `¡${v.nombre}! Soy Sheila, del equipo del profesor ${v.profe} en Aprender Alemán.
+    titulo: "🔥 Acaba de agendar — confirmar la conexión",
+    texto: (v) => `Hola ${v.nombre}, te habla Sheila de la academia Aprender-Aleman.de 😊
 
-Te llamo ya mismo porque acabo de ver entrar tu reserva — así de en serio nos tomamos tu clase 😄. Quedó para el ${v.dia} a las ${v.hora} (hora de Alemania).
+Solo para confirmarte tu clase de alemán de prueba el ${v.dia} a las ${v.hora} (hora de Alemania) — ya tenemos todo listo para ti.
 
-${v.profe} prepara cada clase según el objetivo del estudiante, así que cuéntame una cosa: ¿para qué quieres el alemán — trabajo, mudanza, familia?
+¿Me confirmas que podrás conectarte?
 
-[escuchar y anotar — esto va en la nota del lead]
-
-Perfecto, se lo paso a ${v.profe} para que tu clase sea 100 % sobre eso.
-
-Último favor: guarda la cita en tu calendario ahora que estamos hablando. Ese horario queda bloqueado solo para ti — ${v.profe} te va a estar esperando.`,
+[si confirma] ¡Súper! Cualquier duda me escribes por aquí.`,
   },
   recordatorio: {
-    titulo: "📅 Clase inminente sin confirmar — conseguir el COMPROMISO",
-    texto: (v) => `${v.nombre}, soy Sheila de Aprender Alemán.
+    titulo: "📅 Clase inminente sin confirmar — conseguir el confirmo",
+    texto: (v) => `Hola ${v.nombre}, te habla Sheila de la academia Aprender-Aleman.de.
 
-${v.profe} ya tiene lista tu clase de ${v.dia} a las ${v.hora} (hora de Alemania): preparó el material para tu nivel, o sea que esto ya está en marcha 💪.
+Tenemos tu clase de alemán agendada para ${v.dia} a las ${v.hora} (hora de Alemania). ¿Me confirmas que te podrás conectar?
 
-Solo me falta tu palabra: ¿cuento contigo a las ${v.hora}?
-
-[esperar el SÍ — un "creo que sí" no es un sí: "¿lo apunto como seguro entonces?"]
-
-Apuntado. El enlace te llega antes de la clase. Un dato: los que entran a esta primera clase son los que de verdad acaban hablando alemán — los que la dejan "para luego" no vuelven. Nos vemos dentro.`,
+[si confirma] ¡Súper! Cualquier duda me escribes por aquí.`,
   },
   refresh: {
-    titulo: "✅ Confirmó hace días — toque corto para que no se enfríe",
-    texto: (v) => `¡${v.nombre}! Sheila otra vez 😊
+    titulo: "✅ Ya confirmó — toque corto, ¿todo ok?",
+    texto: (v) => `Hola ${v.nombre}, te habla Sheila de la academia Aprender-Aleman.de 😊
 
-Me confirmaste tu clase con ${v.profe} y está todo listo: ${v.dia} a las ${v.hora} (hora de Alemania). Te doy un último toque porque ${v.profe} preparó tu clase y no quiero que ese trabajo se pierda.
-
-¿Sigue en pie? Dime "ahí estaré" y no te molesto más hasta la clase 🙌`,
+Ya falta poco para tu clase de prueba (${v.dia} a las ${v.hora}). ¿Tienes alguna duda de cómo unirte? ¿Me confirmas que está todo ok?`,
   },
   rescate: {
-    titulo: "🔄 No asistió — rescatar SIN culpar, reagendar en la misma llamada",
-    texto: (v) => `${v.nombre}, soy Sheila de Aprender Alemán 😊
+    titulo: "🔄 No se conectó — rescatar sin culpar y reagendar",
+    texto: (v) => `Hola ${v.nombre}, te habla Sheila de la academia Aprender-Aleman.de.
 
-${v.profe} te esperó en tu clase del ${v.dia} y no pudiste entrar — tranquilo/a, pasa en las mejores familias.
+Tenías una clase de prueba agendada y noté que no te pudiste conectar — no te preocupes, puede pasar 😊
 
-Pero te lo digo con cariño: el "luego lo retomo" es donde mueren todos los planes de aprender alemán. Tú diste el paso por algo — no lo dejes a medias.
+¿Aún mantienes el interés en aprender alemán?
 
-Te mando ahora mismo el enlace para elegir nuevo horario, son 2 clics. ¿Qué te viene mejor, entre semana o fin de semana?
-
-[si responde → mandar enlace de reagenda y quedarse hasta que elija hora]`,
+[si dice SÍ] ¡Bien! Te envío el enlace para que puedas volver a agendar. Avísame si te surge cualquier duda.`,
   },
 };
 
 const REGLAS =
-  "⚠️ Recuerda: NO vendas, NO des precios, NO prometas nada del plan. Si preguntan precio: «eso te lo explica el profesor en la clase — mi trabajo es que no te la pierdas 😊»";
+  "⚠️ No des información de más (precios, planes, niveles). Si preguntan: «Esa es una gran pregunta y entiendo por qué quieres saberlo — no te preocupes, tu profe te dará toda la información en la clase de prueba gratis. ¿Me confirmas si te podrás conectar?»";
 
 export function buildGuion(tipo: GuionTipo, v: GuionVars): { titulo: string; texto: string; reglas: string } {
   const g = GUIONES[tipo];
   return { titulo: g.titulo, texto: g.texto(v), reglas: REGLAS };
+}
+
+/** Mensaje corto con el enlace del aula, para cuando el lead lo pide. */
+export function buildEnlaceMsg(v: { nombre: string; fecha: string; enlace: string }): string {
+  return `Hola ${v.nombre}, aquí tienes el enlace para unirte a tu clase de alemán el ${v.fecha}: ${v.enlace}`;
 }
