@@ -73,9 +73,9 @@ export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoS
     <section className="space-y-3">
       <div className="flex flex-wrap gap-2" role="tablist">
         {([
-          { key: "calientes" as const, label: "🔥 Leads calientes", count: calientes.length },
-          { key: "hoy" as const,       label: "📅 Leads de hoy",    count: hoy.length },
-          { key: "manana" as const,    label: "🌅 Leads de mañana", count: manana.length },
+          { key: "calientes" as const, label: "🔥 Leads nuevos",     count: calientes.length },
+          { key: "hoy" as const,       label: "📅 Trials de hoy",    count: hoy.length },
+          { key: "manana" as const,    label: "🌅 Trials de mañana", count: manana.length },
           { key: "no_show" as const,   label: "🔄 No asistieron",   count: noShows.length },
         ]).map((t) => {
           const isActive = t.key === active;
@@ -150,7 +150,7 @@ export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoS
         <p className="text-sm text-slate-400 dark:text-slate-500">
           {active === "calientes"
             ? "Todos los recién agendados ya fueron contactados 🔥✅"
-            : active === "hoy" ? "No hay citas de leads hoy." : "No hay citas de leads mañana."}
+            : active === "hoy" ? "No hay trials hoy." : "No hay trials mañana."}
         </p>
       ) : (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
