@@ -49,16 +49,30 @@ function contactoPill(it: UrgenteItem): { text: string; cls: string } {
   return { text, cls };
 }
 
-export function SetterUrgentesTabs({ hoy, manana }: { hoy: UrgenteItem[]; manana: UrgenteItem[] }) {
-  const [active, setActive] = useState<"hoy" | "manana">("hoy");
-  const items = active === "hoy" ? hoy : manana;
+/** "agendó hace 25 min / 3 h / 2 días" para la pestaña de calientes. */
+function hace(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const min = Math.max(1, Math.floor(ms / 60_000));
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h} h`;
+  const d = Math.floor(h / 24);
+  return `hace ${d} día${d === 1 ? "" : "s"}`;
+}
+
+export function SetterUrgentesTabs({ hoy, manana, calientes }: {
+  hoy: UrgenteItem[]; manana: UrgenteItem[]; calientes: UrgenteItem[];
+}) {
+  const [active, setActive] = useState<"calientes" | "hoy" | "manana">("calientes");
+  const items = active === "hoy" ? hoy : active === "manana" ? manana : calientes;
 
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap gap-2" role="tablist">
         {([
-          { key: "hoy" as const,    label: "📅 Leads de hoy",    count: hoy.length },
-          { key: "manana" as const, label: "🌅 Leads de mañana", count: manana.length },
+          { key: "calientes" as const, label: "🔥 Leads calientes", count: calientes.length },
+          { key: "hoy" as const,       label: "📅 Leads de hoy",    count: hoy.length },
+          { key: "manana" as const,    label: "🌅 Leads de mañana", count: manana.length },
         ]).map((t) => {
           const isActive = t.key === active;
           return (
@@ -86,13 +100,16 @@ export function SetterUrgentesTabs({ hoy, manana }: { hoy: UrgenteItem[]; manana
       </div>
 
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Todas las citas del día, hayan confirmado o no. Si el último toque fue hace
-        días (ámbar/rojo), dale un toque más antes de la clase.
+        {active === "calientes"
+          ? "Acaban de agendar y nadie los ha contactado todavía. Llámalos lo antes posible — el más reciente primero."
+          : "Todas las citas del día, hayan confirmado o no. Si el último toque fue hace días (ámbar/rojo), dale un toque más antes de la clase."}
       </p>
 
       {items.length === 0 ? (
         <p className="text-sm text-slate-400 dark:text-slate-500">
-          {active === "hoy" ? "No hay citas de leads hoy." : "No hay citas de leads mañana."}
+          {active === "calientes"
+            ? "Todos los recién agendados ya fueron contactados 🔥✅"
+            : active === "hoy" ? "No hay citas de leads hoy." : "No hay citas de leads mañana."}
         </p>
       ) : (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
@@ -105,7 +122,9 @@ export function SetterUrgentesTabs({ hoy, manana }: { hoy: UrgenteItem[]; manana
                 className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
               >
                 <span className="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">
-                  {fmtHoraBerlin(it.citaAt)}
+                  {active === "calientes"
+                    ? `${fmtFechaCorta(it.citaAt)} · ${fmtHoraBerlin(it.citaAt)}`
+                    : fmtHoraBerlin(it.citaAt)}
                 </span>
                 <span className="font-medium text-slate-900 dark:text-slate-100 min-w-[8rem]">
                   {it.lead.name ?? "(sin nombre)"}
@@ -123,9 +142,15 @@ export function SetterUrgentesTabs({ hoy, manana }: { hoy: UrgenteItem[]; manana
                     sin confirmar
                   </span>
                 )}
-                <span className={`ml-auto text-xs rounded-full px-2.5 py-1 font-medium ${pill.cls}`}>
-                  {pill.text}
-                </span>
+                {active === "calientes" ? (
+                  <span className="ml-auto text-xs rounded-full px-2.5 py-1 font-semibold bg-orange-100 dark:bg-orange-500/15 text-orange-700 dark:text-orange-300">
+                    🔥 Agendó {hace(it.bookedAt)} · sin contactar
+                  </span>
+                ) : (
+                  <span className={`ml-auto text-xs rounded-full px-2.5 py-1 font-medium ${pill.cls}`}>
+                    {pill.text}
+                  </span>
+                )}
               </Link>
             );
           })}

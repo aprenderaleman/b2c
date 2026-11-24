@@ -12,7 +12,7 @@ export default async function SetterUrgentesPage() {
     redirect("/");
   }
 
-  const { hoy, manana } = await getSetterUrgentes();
+  const { hoy, manana, calientes } = await getSetterUrgentes();
 
   return (
     <main className="space-y-6">
@@ -24,7 +24,7 @@ export default async function SetterUrgentesPage() {
         </p>
       </header>
 
-      <SetterUrgentesTabs hoy={hoy} manana={manana} />
+      <SetterUrgentesTabs hoy={hoy} manana={manana} calientes={calientes} />
     </main>
   );
 }

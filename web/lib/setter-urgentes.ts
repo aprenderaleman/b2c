@@ -28,9 +28,18 @@ export type UrgenteItem = {
   lastContact: { occurred_at: string; action_type: string } | null;
   /** Días completos desde el último contacto (null si nunca). */
   daysSinceContact: number | null;
+  /** Cuándo se agendó la cita (para "agendó hace X" en calientes). */
+  bookedAt: string;
 };
 
-export type SetterUrgentes = { hoy: UrgenteItem[]; manana: UrgenteItem[] };
+export type SetterUrgentes = {
+  hoy: UrgenteItem[];
+  manana: UrgenteItem[];
+  /** 🔥 Recién agendados sin NINGÚN contacto del setter desde la agenda
+   *  (speed-to-lead, Gelfis 2026-11-24): cita futura, el más fresco
+   *  primero. Puede solaparse con hoy/mañana — a propósito. */
+  calientes: UrgenteItem[];
+};
 
 const D = 86_400_000;
 const T = (iso: string) => new Date(iso).getTime();
@@ -46,7 +55,8 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
   const todayKey = berlinDay(new Date(now));
   const tomorrowKey = berlinDay(new Date(now + D));
 
-  // Ventana generosa (ayer→+2 días en UTC) y bucketing por día de Berlín.
+  // Ventana ayer→+30 días: hoy/mañana se bucketizan por día de Berlín y
+  // las citas más lejanas solo alimentan "calientes" (recién agendados).
   const { data: classesData } = await sb
     .from("classes")
     .select("id, lead_id, scheduled_at, status, is_trial, sesion_closer_id, teacher_id, created_at, notify_after_at")
@@ -55,7 +65,7 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
     .is("deleted_at", null)
     .eq("status", "scheduled")
     .gte("scheduled_at", new Date(now - D).toISOString())
-    .lte("scheduled_at", new Date(now + 2 * D).toISOString())
+    .lte("scheduled_at", new Date(now + 30 * D).toISOString())
     .order("scheduled_at", { ascending: true })
     .limit(500);
 
@@ -64,11 +74,8 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
     is_trial: boolean; sesion_closer_id: string | null; teacher_id: string | null;
     created_at: string; notify_after_at: string | null;
   };
-  const classes = ((classesData ?? []) as ClassRow[]).filter(c => {
-    const day = berlinDay(new Date(c.scheduled_at));
-    return day === todayKey || day === tomorrowKey;
-  });
-  if (classes.length === 0) return { hoy: [], manana: [] };
+  const classes = (classesData ?? []) as ClassRow[];
+  if (classes.length === 0) return { hoy: [], manana: [], calientes: [] };
 
   const leadIds = [...new Set(classes.map(c => c.lead_id))];
 
@@ -121,6 +128,7 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
 
   const hoy: UrgenteItem[] = [];
   const manana: UrgenteItem[] = [];
+  const calientes: UrgenteItem[] = [];
 
   for (const cls of classes) {
     const lead = leadById.get(cls.lead_id);
@@ -150,10 +158,21 @@ export async function getSetterUrgentes(now = Date.now()): Promise<SetterUrgente
       },
       lastContact: last ? { occurred_at: last.occurred_at, action_type: last.action_type } : null,
       daysSinceContact: last ? Math.floor((now - T(last.occurred_at)) / D) : null,
+      bookedAt,
     };
 
-    (berlinDay(new Date(cls.scheduled_at)) === todayKey ? hoy : manana).push(item);
+    const day = berlinDay(new Date(cls.scheduled_at));
+    if (day === todayKey) hoy.push(item);
+    else if (day === tomorrowKey) manana.push(item);
+
+    // 🔥 Caliente: cita futura y CERO contactos del setter desde que se
+    // agendó — llamar ya (speed-to-lead). Se solapa con hoy/mañana.
+    const tocadoTrasAgendar = contacts.some(c => T(c.occurred_at) > T(bookedAt));
+    if (T(cls.scheduled_at) > now && !tocadoTrasAgendar) calientes.push(item);
   }
 
-  return { hoy, manana };
+  // El agendado más reciente primero: es al que hay que llamar YA.
+  calientes.sort((a, b) => T(b.bookedAt) - T(a.bookedAt));
+
+  return { hoy, manana, calientes };
 }
