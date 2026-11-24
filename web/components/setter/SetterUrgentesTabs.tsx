@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { UrgenteItem } from "@/lib/setter-urgentes";
+import type { SetterQueueItem } from "@/lib/setter-queue";
 
 /**
  * Pestañas Hoy / Mañana de "Leads Urgentes" (Gelfis 2026-11-22). Muestra
@@ -60,11 +61,13 @@ function hace(iso: string): string {
   return `hace ${d} día${d === 1 ? "" : "s"}`;
 }
 
-export function SetterUrgentesTabs({ hoy, manana, calientes }: {
+export function SetterUrgentesTabs({ hoy, manana, calientes, noShows, snoozedNoShows, noShowBacklog }: {
   hoy: UrgenteItem[]; manana: UrgenteItem[]; calientes: UrgenteItem[];
+  /** Pestaña "No asistieron" (consolidación de Mi cola, Gelfis 2026-11-24). */
+  noShows: SetterQueueItem[]; snoozedNoShows: number; noShowBacklog: number;
 }) {
-  const [active, setActive] = useState<"calientes" | "hoy" | "manana">("calientes");
-  const items = active === "hoy" ? hoy : active === "manana" ? manana : calientes;
+  const [active, setActive] = useState<"calientes" | "hoy" | "manana" | "no_show">("calientes");
+  const items = active === "hoy" ? hoy : active === "manana" ? manana : active === "calientes" ? calientes : [];
 
   return (
     <section className="space-y-3">
@@ -73,6 +76,7 @@ export function SetterUrgentesTabs({ hoy, manana, calientes }: {
           { key: "calientes" as const, label: "🔥 Leads calientes", count: calientes.length },
           { key: "hoy" as const,       label: "📅 Leads de hoy",    count: hoy.length },
           { key: "manana" as const,    label: "🌅 Leads de mañana", count: manana.length },
+          { key: "no_show" as const,   label: "🔄 No asistieron",   count: noShows.length },
         ]).map((t) => {
           const isActive = t.key === active;
           return (
@@ -102,10 +106,47 @@ export function SetterUrgentesTabs({ hoy, manana, calientes }: {
       <p className="text-xs text-slate-500 dark:text-slate-400">
         {active === "calientes"
           ? "Acaban de agendar y nadie los ha contactado todavía. Llámalos lo antes posible — el más reciente primero."
+          : active === "no_show"
+          ? "Tu lote de recuperación: los más recientes primero. Llama y envíale el enlace de reagenda — al trabajar uno, entra el siguiente solo."
           : "Todas las citas del día, hayan confirmado o no. Si el último toque fue hace días (ámbar/rojo), dale un toque más antes de la clase."}
       </p>
 
-      {items.length === 0 ? (
+      {active === "no_show" ? (
+        noShows.length === 0 ? (
+          <p className="text-sm text-slate-400 dark:text-slate-500">No hay no-shows pendientes de recuperar.</p>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
+            {noShows.map((it) => (
+              <Link
+                key={it.classId}
+                href={`/setter/leads/${it.leadId}`}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+              >
+                <span className="font-medium text-slate-900 dark:text-slate-100 min-w-[8rem]">
+                  {it.lead.name ?? "(sin nombre)"}
+                </span>
+                <span className="text-xs rounded-full px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  {it.citaTipo === "trial" ? "Clase de prueba" : "Sesión de plan"}
+                </span>
+                <span className="text-sm text-slate-600 dark:text-slate-300">
+                  {fmtFechaCorta(it.citaAt)} · {fmtHoraBerlin(it.citaAt)}
+                  {it.hostName ? ` · ${it.hostName.split(/\s+/)[0]}` : ""}
+                </span>
+                {it.sinMarcar && (
+                  <span className="text-xs rounded-full px-2 py-0.5 bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-300 font-medium">
+                    sin marcar
+                  </span>
+                )}
+                <span className="ml-auto text-xs text-slate-400">
+                  {it.lastSetterContact
+                    ? `Último toque: ${fmtFechaCorta(it.lastSetterContact.occurred_at)} · ${fmtHoraBerlin(it.lastSetterContact.occurred_at)}`
+                    : "Sin contactar"}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )
+      ) : items.length === 0 ? (
         <p className="text-sm text-slate-400 dark:text-slate-500">
           {active === "calientes"
             ? "Todos los recién agendados ya fueron contactados 🔥✅"
@@ -155,6 +196,17 @@ export function SetterUrgentesTabs({ hoy, manana, calientes }: {
             );
           })}
         </div>
+      )}
+
+      {active === "no_show" && noShowBacklog > 0 && (
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          📦 {noShowBacklog} más esperan en el backlog — entran solos a tu lista a medida que trabajas estos.
+        </p>
+      )}
+      {active === "no_show" && snoozedNoShows > 0 && (
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          ⏸️ {snoozedNoShows} en espera tras &quot;no contestó&quot; — vuelven solos a la lista a las 24h.
+        </p>
       )}
     </section>
   );
