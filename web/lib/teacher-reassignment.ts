@@ -13,7 +13,7 @@ export async function reassignTeacher(input: {
 
   const { data: student } = await sb
     .from("students")
-    .select("id, user_id, users!inner(full_name, email)")
+    .select("id, user_id, current_level, document_url, users!inner(full_name, email)")
     .eq("id", input.studentId)
     .maybeSingle();
   if (!student) return { ok: false, error: "student_not_found" };
@@ -59,12 +59,31 @@ export async function reassignTeacher(input: {
     return { ok: false, error: "same_teacher" };
   }
 
-  // 1. Update the 1:1 group's teacher_id
+  // 1. Update the 1:1 group's teacher_id — o crear el grupo si el alumno
+  //    aún no tenía profe (primera asignación desde "Asignar profe",
+  //    2026-11-25): sin grupo individual el profe no lo ve en su lista.
   if (individualGroup) {
     await sb
       .from("student_groups")
       .update({ teacher_id: input.newTeacherId })
       .eq("id", individualGroup.group_id);
+  } else {
+    const st = student as { current_level?: string | null; document_url?: string | null };
+    const { data: created, error: gErr } = await sb.from("student_groups").insert({
+      name:         studentName,
+      teacher_id:   input.newTeacherId,
+      class_type:   "individual",
+      capacity:     1,
+      level:        st.current_level ?? "A1",
+      document_url: st.document_url ?? null,
+      active:       true,
+    }).select("id").single();
+    if (gErr || !created) return { ok: false, error: `group_create_failed: ${gErr?.message ?? "unknown"}` };
+    const { error: mErr } = await sb.from("student_group_members").insert({
+      group_id: (created as { id: string }).id,
+      student_id: input.studentId,
+    });
+    if (mErr) return { ok: false, error: `group_member_failed: ${mErr.message}` };
   }
 
   // 2. Reassign future scheduled classes

@@ -9,6 +9,7 @@ import { AdjustClassesButton } from "@/components/admin/AdjustClassesButton";
 import { EditPackButton } from "@/components/admin/EditPackButton";
 import { EditStudentButton } from "@/components/admin/EditStudentButton";
 import { DeactivateStudentButton } from "@/components/admin/DeactivateStudentButton";
+import { AssignTeacherButton } from "@/components/admin/AssignTeacherButton";
 import { NotesCard } from "@/components/admin/NotesCard";
 import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOutToggle";
 import { RecordingsToggle } from "@/components/admin/RecordingsToggle";
@@ -144,6 +145,10 @@ export default async function StudentDetailPage({
               userId={student.user_id}
               userName={student.full_name ?? student.email}
               role="student"
+            />
+            <AssignTeacherButton
+              studentId={student.id}
+              studentName={student.full_name ?? student.email}
             />
             <DeactivateStudentButton
               studentId={student.id}
