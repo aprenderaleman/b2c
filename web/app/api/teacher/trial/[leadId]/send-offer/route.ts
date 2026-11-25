@@ -15,6 +15,7 @@ import {
   type GroupFormat, type GroupLevelId, type GroupRitmo,
 } from "@/lib/group-packs";
 import { sendWhatsappText } from "@/lib/whatsapp";
+import { logCloserAction } from "@/lib/closer-actions";
 
 const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://b2c.aprender-aleman.de").replace(/\/$/, "");
 
@@ -84,12 +85,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     if (!message) return NextResponse.json({ error: "message_missing_link", url }, { status: 400 });
 
     const sbG = supabaseAdmin();
-    const { data: tRow } = await sbG.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
-    if (!tRow) return NextResponse.json({ error: "teacher_not_found" }, { status: 404 });
+    // CRM Closer F4: el closer usa esta MISMA ruta (la suya era una copia
+    // divergente). Su identidad va en closer_id (098 hizo teacher_id
+    // nullable para esto).
+    let gTeacherId: string | null = null;
+    const gCloserId: string | null = user.role === "closer" ? user.id : null;
+    if (!gCloserId) {
+      const { data: tRow } = await sbG.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
+      if (!tRow) return NextResponse.json({ error: "teacher_not_found" }, { status: 404 });
+      gTeacherId = (tRow as { id: string }).id;
+    }
     const { data: lRow } = await sbG
-      .from("leads").select("name, whatsapp_normalized, meta").eq("id", leadId).maybeSingle();
+      .from("leads").select("name, whatsapp_normalized, meta, trial_attended_at").eq("id", leadId).maybeSingle();
     if (!lRow) return NextResponse.json({ error: "lead_not_found" }, { status: 404 });
-    const lead = lRow as { name: string | null; whatsapp_normalized: string | null; meta: unknown };
+    const lead = lRow as { name: string | null; whatsapp_normalized: string | null; meta: unknown; trial_attended_at: string | null };
 
     const priceMonth = GROUP_PRICES[format][lvl][r];
     const sessions   = GROUP_SESSIONS[lvl];
@@ -97,7 +106,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
 
     await sbG.from("ofertas_enviadas").insert({
       lead_id:        leadId,
-      teacher_id:     (tRow as { id: string }).id,
+      teacher_id:     gTeacherId,
+      closer_id:      gCloserId,
       meta:           lvl,
       ritmo:          `${format}_${r}sem`,
       tipo_pago:      "suscripcion",
@@ -117,7 +127,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     const existingMeta = (lead.meta && typeof lead.meta === "object") ? lead.meta as Record<string, unknown> : {};
     await sbG.from("leads").update({
       status:            "trial_attended",
-      trial_attended_at: new Date().toISOString(),
+      // No pisar la hora original: el bono de 48h y la rotación del
+      // closer cuelgan de ella (un re-envío la reseteaba).
+      trial_attended_at: lead.trial_attended_at ?? new Date().toISOString(),
       next_contact_date: new Date(Date.now() + 3 * 24 * 3600_000).toISOString(),
       meta: {
         ...existingMeta,
@@ -135,13 +147,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
       metadata: { kind: "offer_sent", category: "grupo", format, lvl, ritmo: r, url, wa_ok: wa.ok },
     });
 
-    await registerContact({
-      leadId,
-      actor: await actorFromPanelUser(user),
-      actionType: "enviar_enlace",
-      channel: "whatsapp",
-      note: `Oferta ${label} · ${priceMonth} €/mes/persona`,
-    });
+    if (gCloserId) {
+      // Atribución de comisión: acciones_closer (el espejo crea la fila
+      // de lead_contacts — no duplicar con registerContact).
+      await logCloserAction({
+        closerId: gCloserId, leadId, tipo: "whatsapp",
+        contenido: `Oferta ${label} enviada · ${priceMonth} €/mes/persona`,
+        resultado: "enlace_inscripcion",
+      }).catch(() => {});
+    } else {
+      await registerContact({
+        leadId,
+        actor: await actorFromPanelUser(user),
+        actionType: "enviar_enlace",
+        channel: "whatsapp",
+        note: `Oferta ${label} · ${priceMonth} €/mes/persona`,
+      });
+    }
 
     return NextResponse.json({ ok: true, url, waSent: wa.ok, waReason: wa.ok ? null : (wa.reason ?? "error") });
   }
@@ -228,13 +250,18 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
 
   const sb = supabaseAdmin();
 
-  const { data: teacherRow } = await sb
-    .from("teachers")
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!teacherRow) return NextResponse.json({ error: "teacher_not_found" }, { status: 404 });
-  const teacherId = (teacherRow as { id: string }).id;
+  // CRM Closer F4: closer → closer_id; profe → teachers.id.
+  let teacherId: string | null = null;
+  const closerId: string | null = user.role === "closer" ? user.id : null;
+  if (!closerId) {
+    const { data: teacherRow } = await sb
+      .from("teachers")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (!teacherRow) return NextResponse.json({ error: "teacher_not_found" }, { status: 404 });
+    teacherId = (teacherRow as { id: string }).id;
+  }
 
   const { data: leadRow } = await sb
     .from("leads")
@@ -249,6 +276,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
     .insert({
       lead_id: leadId,
       teacher_id: teacherId,
+      closer_id: closerId,
       meta,
       ritmo,
       tipo_pago,
@@ -283,6 +311,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
       kind: "offer_sent",
       oferta_id: ofertaId,
       teacher_id: teacherId,
+      closer_id: closerId,
       pack_id: packId,
       category,
     },
@@ -302,13 +331,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ leadId:
 
   await markTrialAttendedAwaitingConversion(leadId, attendedOpts);
 
-  await registerContact({
-    leadId,
-    actor: await actorFromPanelUser(user),
-    actionType: "enviar_enlace",
-    channel: "whatsapp",
-    note: `Oferta: ${packLabel} · ${(importe_cents / 100).toLocaleString("es-ES")} €`,
-  });
+  if (closerId) {
+    // Atribución de comisión: acciones_closer (el espejo crea la fila
+    // de lead_contacts — no duplicar con registerContact).
+    await logCloserAction({
+      closerId, leadId, tipo: "whatsapp",
+      contenido: `Oferta enviada: ${packLabel} · ${(importe_cents / 100).toLocaleString("es-ES")} €`,
+      resultado: "enlace_inscripcion",
+    }).catch(() => {});
+  } else {
+    await registerContact({
+      leadId,
+      actor: await actorFromPanelUser(user),
+      actionType: "enviar_enlace",
+      channel: "whatsapp",
+      note: `Oferta: ${packLabel} · ${(importe_cents / 100).toLocaleString("es-ES")} €`,
+    });
+  }
 
   return NextResponse.json({ ok: true, ofertaId, checkoutUrl });
 }

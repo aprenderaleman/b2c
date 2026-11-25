@@ -154,12 +154,13 @@ export async function markTrialAttendedAwaitingConversion(
   const sb = supabaseAdmin();
   const { data: leadRow } = await sb
     .from("leads")
-    .select("name, language, whatsapp_normalized, email")
+    .select("name, language, whatsapp_normalized, email, trial_attended_at")
     .eq("id", leadId)
     .maybeSingle();
   const lead = (leadRow ?? null) as {
     name: string | null; language: "es" | "de" | null;
     whatsapp_normalized: string | null; email: string | null;
+    trial_attended_at: string | null;
   } | null;
 
   // Seguimiento coherente:
@@ -194,7 +195,9 @@ export async function markTrialAttendedAwaitingConversion(
       // asistencia en /admin/ads (migration 063). Antes el dashboard
       // contaba con substring match en lead_timeline; ahora lee este
       // campo directamente, sin riesgo de romperse por cambios de copy.
-      trial_attended_at: new Date().toISOString(),
+      // NO se pisa si ya existe: el bono de 48h y la rotación del closer
+      // cuelgan de la hora original (un re-envío de oferta la reseteaba).
+      trial_attended_at: lead?.trial_attended_at ?? new Date().toISOString(),
       next_contact_date: followupAt,
       meta: opts ? {
         ...existingMeta,
@@ -694,8 +697,10 @@ export async function sendRescheduleLinkMessage(
   opts?: {
     actorName?: string;
     /** "setter": copy "como hablamos, aquí te envío el enlace…" — el
-     *  setter acaba de hablar con el lead por teléfono (Gelfis 2026-10-24). */
-    copy?: "setter";
+     *  setter acaba de hablar con el lead por teléfono (Gelfis 2026-10-24).
+     *  "closer": copy editable desde system_config (CRM Closer F4,
+     *  clave closer_copy_reagenda — ver lib/config-copys.ts). */
+    copy?: "setter" | "closer";
     /** Si true: no enviar por Evolution. Devolver waText + waLink para
      *  que el setter lo mande manualmente desde su WhatsApp Web (post-bans
      *  v5/v6, Gelfis 2026-11-14). El email fallback sigue activo. */
@@ -834,6 +839,11 @@ export async function sendRescheduleLinkMessage(
         whenText:         formatBerlinFull(trial.scheduled_at, "es"),
         rescheduleUrl,
       })
+    : opts?.copy === "closer"
+    ? await (async () => {
+        const { getCloserReagendaCopy } = await import("./config-copys");
+        return getCloserReagendaCopy({ nombre: firstName, enlace: rescheduleUrl });
+      })()
     : [
     `Hola ${firstName} 👋`,
     ``,

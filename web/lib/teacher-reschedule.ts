@@ -131,19 +131,35 @@ export async function teacherRescheduleTrial(args: {
 
   const result = await sendRescheduleLinkMessage(leadId, {
     actorName,
+    // CRM Closer F4: el closer envía el copy editable de system_config
+    // (clave closer_copy_reagenda), no el genérico del profe.
+    ...(user.role === "closer" ? { copy: "closer" as const } : {}),
     ...(reason ? { teacherReason: { reason, note, teacherFirstName: actorName.split(/\s+/)[0] || null } } : {}),
   });
   if (!result.ok) return { status: 400, body: { ok: false, reason: result.reason } };
 
-  await registerContact({
-    leadId,
-    actor: await actorFromPanelUser(user),
-    actionType: "agendar_prueba",
-    channel: "whatsapp",
-    note: reason === "lead_no_confirmo" ? "Reagendado por el profe: el lead no confirmó. Enlace enviado"
-        : reason === "profe_no_puede"   ? `Reagendado por el profe: no puede dar la clase (${note}). Enlace enviado`
-        : "Enlace de agendar clase de prueba enviado",
-  });
+  if (user.role === "closer") {
+    // El closer registra en acciones_closer (la atribución de comisión
+    // lee esa tabla; el trigger espejo crea la fila en lead_contacts).
+    const { logCloserAction } = await import("./closer-actions");
+    await logCloserAction({
+      closerId: user.id,
+      leadId,
+      tipo: "whatsapp",
+      contenido: "Enlace de reagenda de la clase de prueba enviado al lead",
+      resultado: "reagendado",
+    }).catch((e) => console.warn("[teacher-reschedule] logCloserAction:", e instanceof Error ? e.message : e));
+  } else {
+    await registerContact({
+      leadId,
+      actor: await actorFromPanelUser(user),
+      actionType: "agendar_prueba",
+      channel: "whatsapp",
+      note: reason === "lead_no_confirmo" ? "Reagendado por el profe: el lead no confirmó. Enlace enviado"
+          : reason === "profe_no_puede"   ? `Reagendado por el profe: no puede dar la clase (${note}). Enlace enviado`
+          : "Enlace de agendar clase de prueba enviado",
+    });
+  }
 
   // "No puedo dar la clase" → aviso a los admins: ven el motivo y pueden
   // detectar si un profe lo usa mucho. Best-effort.
