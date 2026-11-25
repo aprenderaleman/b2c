@@ -137,17 +137,18 @@ async function run(req: Request) {
     } else {
       failed++;
       console.error(`[trial-reminders-2h] WA send failed for ${r.id}: ${res.reason}`);
-      // Delegar a handleWaPermanentFail: inserta send_failed Y, si reason
-      // trae exists:false (número sin WA), desactiva whatsapp_normalized
-      // automáticamente para romper el bucle de reintentos del cron 5min.
-      const { handleWaPermanentFail } = await import("@/lib/wa-permanent-fail");
+      const { handleWaPermanentFail, stashWaManualPendingIfCap } = await import("@/lib/wa-permanent-fail");
+      // exists:false → NULL whatsapp_normalized
       await handleWaPermanentFail(sb, {
-        leadId:  lead.id,
-        phone:   lead.whatsapp_normalized ?? "",
-        kind:    "2h_before",
-        reason:  res.reason,
-        context: "trial-reminders-2h",
+        leadId: lead.id, phone: lead.whatsapp_normalized ?? "",
+        kind: "2h_before", reason: res.reason, context: "trial-reminders-2h",
       }).catch(err => console.error("[trial-reminders-2h] handleWaPermanentFail threw:", err));
+      // cap/night_gate → stash en panel pending-manual
+      await stashWaManualPendingIfCap(sb, {
+        leadId: lead.id, phone: lead.whatsapp_normalized,
+        originalKind: "trial_reminder_2h", text, reason: res.reason,
+        extraMetadata: { class_id: r.id },
+      }).catch(() => {});
     }
   }
 

@@ -86,3 +86,67 @@ export async function handleWaPermanentFail(
 
   return { wa_invalidated: false };
 }
+
+/**
+ * Stashea un envío WA fallido por CAP (setter_daily_cap, night_gate,
+ * hourly_cap, daily_cap) en un agent_note tipo "wa_manual_pending".
+ *
+ * El endpoint /api/admin/wa/pending-manual lo recoge y muestra en el panel
+ * con botones Copiar / Abrir WhatsApp / Marcar enviado. Así ningún
+ * mensaje bloqueado por cap queda invisible.
+ *
+ * Dedupe: no crea duplicado si ya hay un pending abierto para el mismo
+ * lead + original_kind en las últimas 24h.
+ *
+ * Gelfis 2026-11-25: después del bug Esteban/Dina (13 leads sin WA
+ * confirmación invisibles). Helper centralizado para todos los handlers
+ * que mandan WA al lead.
+ */
+export async function stashWaManualPendingIfCap(
+  sb: SupabaseClient,
+  input: {
+    leadId:        string;
+    phone:         string | null;
+    originalKind:  string;     // trial_confirmation, trial_reminder_2h, welcome_week_t0, etc.
+    text:          string;
+    reason:        string | undefined;
+    extraMetadata?: Record<string, unknown>;
+  },
+): Promise<{ stashed: boolean }> {
+  const reason = input.reason ?? "";
+  if (!/^(setter_daily_cap|night_gate|hourly_cap|daily_cap)/.test(reason)) return { stashed: false };
+  if (!input.phone) return { stashed: false };
+
+  // Dedupe
+  const { data: existing } = await sb
+    .from("lead_timeline")
+    .select("id")
+    .eq("lead_id", input.leadId)
+    .eq("metadata->>kind", "wa_manual_pending")
+    .eq("metadata->>original_kind", input.originalKind)
+    .is("metadata->sent_manual_at", null)
+    .gte("timestamp", new Date(Date.now() - 24 * 3600_000).toISOString())
+    .limit(1);
+  if (((existing as unknown as Array<unknown>)?.length ?? 0) > 0) return { stashed: false };
+
+  const phoneNoPlus = input.phone.replace(/^\+/, "");
+  const waLink = `https://api.whatsapp.com/send?phone=${phoneNoPlus}&text=${encodeURIComponent(input.text)}`;
+
+  await sb.from("lead_timeline").insert({
+    lead_id: input.leadId,
+    type:    "agent_note",
+    author:  "system",
+    content: `📋 WA ${input.originalKind} bloqueado (${reason}) — preparado para envío manual`,
+    metadata: {
+      kind:          "wa_manual_pending",
+      channel:       "whatsapp",
+      original_kind: input.originalKind,
+      phone:         input.phone,
+      text:          input.text,
+      wa_link:       waLink,
+      reason,
+      ...input.extraMetadata,
+    },
+  });
+  return { stashed: true };
+}

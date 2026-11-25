@@ -388,6 +388,12 @@ export async function convertLeadToStudent(
             lead_id: lead.id, type: "agent_note", author: "system",
             content: `welcome_week T+0 WA skipped: ${waResult.reason}`,
           });
+          // Si falló por cap, stash en panel pending-manual (Gelfis 2026-11-25).
+          const { stashWaManualPendingIfCap } = await import("./wa-permanent-fail");
+          await stashWaManualPendingIfCap(sb, {
+            leadId: lead.id, phone: waPhone,
+            originalKind: "welcome_week_t0", text: waText, reason: waResult.reason,
+          }).catch(() => {});
         } else {
           await sb.from("lead_timeline").insert({
             lead_id: lead.id, type: "system_message_sent", author: "system",
