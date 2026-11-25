@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
 import { Resend } from "resend";
 import { startChain } from "@/lib/chain-engine";
+import { assignCloserPostTrial } from "@/lib/closer-actions";
 
 /**
  * GET/POST /api/cron/trial-auto-absent
@@ -121,6 +122,9 @@ async function run(req: Request) {
         trial_absent_at: new Date().toISOString(),
         status:          "trial_absent",
       }).eq("id", r.id);
+
+      // CRM Closer F2: el no-show auto-marcado entra por la misma rotación.
+      await assignCloserPostTrial(r.id, "trial_absent").catch(() => {});
 
       // Gelfis 2026-11-15: chain4_absent desactivada. Invocamos a
       // markTrialAbsent que maneja Msg1 inmediato + agenda Msg2 +24h

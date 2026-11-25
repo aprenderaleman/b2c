@@ -188,6 +188,83 @@ export async function autoAssignToActiveCloser(
   return chosenId;
 }
 
+/**
+ * CRM Closer F2 (Gelfis 2026-11-25): rotación automática post-trial.
+ * Al marcarse la asistencia o la ausencia del trial, el lead entra a la
+ * cartera del closer activo con menos leads (flujo_activo). SIN cadencia
+ * tipo_a/tipo_b: el closer no contacta hasta la tarea de las 24h (F5);
+ * mientras tanto el lead aparece "en espera" en /closer/urgentes.
+ * Revierte, solo para esta cola, la regla del 2026-08-13.
+ */
+export async function assignCloserPostTrial(
+  leadId: string,
+  motivo: "trial_attended" | "trial_absent",
+): Promise<string | null> {
+  const sb = supabaseAdmin();
+
+  const { data: leadRow } = await sb
+    .from("leads")
+    .select("closer_id, status, estado_cierre")
+    .eq("id", leadId)
+    .maybeSingle();
+  const lead = leadRow as {
+    closer_id: string | null; status: string; estado_cierre: string | null;
+  } | null;
+  if (!lead) return null;
+  if (lead.closer_id) return null;
+  if (lead.status === "converted" || lead.status === "lost") return null;
+  if (lead.estado_cierre === "convertido" || lead.estado_cierre === "perdido") return null;
+
+  const { data: closers } = await sb
+    .from("users")
+    .select("id")
+    .eq("role", "closer")
+    .eq("active", true)
+    .eq("flujo_activo", true);
+  const eligible = (closers ?? []) as Array<{ id: string }>;
+  if (eligible.length === 0) return null;
+
+  let chosenId = eligible[0].id;
+  if (eligible.length > 1) {
+    const ids = eligible.map((c) => c.id);
+    const { data: counts } = await sb
+      .from("leads")
+      .select("closer_id")
+      .in("closer_id", ids)
+      .in("estado_cierre", ["activo", "seguimiento_pactado"]);
+    const loadMap: Record<string, number> = {};
+    for (const id of ids) loadMap[id] = 0;
+    for (const row of (counts ?? []) as Array<{ closer_id: string }>) {
+      loadMap[row.closer_id] = (loadMap[row.closer_id] ?? 0) + 1;
+    }
+    chosenId = ids.reduce((best, id) =>
+      (loadMap[id] ?? 0) < (loadMap[best] ?? 0) ? id : best,
+    );
+  }
+
+  await sb
+    .from("leads")
+    .update({
+      closer_id: chosenId,
+      estado_cierre: "activo",
+      fecha_asignacion_closer: new Date().toISOString(),
+    })
+    .eq("id", leadId)
+    .is("closer_id", null);   // guard contra doble asignación concurrente
+
+  await sb.from("lead_timeline").insert({
+    lead_id: leadId,
+    type: "status_change",
+    author: "system",
+    content: motivo === "trial_attended"
+      ? "Closer asignado por rotación (asistió al trial). En espera: la llamada la marca la tarea de las 24h."
+      : "Closer asignado por rotación (no asistió al trial).",
+    metadata: { kind: "closer_auto_assign_post_trial", closer_id: chosenId, motivo },
+  });
+
+  return chosenId;
+}
+
 export async function markLeadLostByCloser(
   leadId: string,
   closerId: string,

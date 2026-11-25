@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { WebhookReceiver } from "livekit-server-sdk";
 import { supabaseAdmin } from "@/lib/supabase";
 import { logClassHoursAndRollup } from "@/lib/finance";
+import { assignCloserPostTrial } from "@/lib/closer-actions";
 
 type RoomEvent = {
   event: string;
@@ -166,6 +167,10 @@ export async function handleRoomEvent(event: RoomEvent): Promise<Response> {
             class_id: classId,
           },
         }).then(() => {}, () => {});
+
+        // CRM Closer F2: rotación automática también en la asistencia
+        // auto-detectada (guard interno si ya tiene closer).
+        await assignCloserPostTrial(parsed.id, "trial_attended").catch(() => {});
 
         return NextResponse.json({ ok: true, phase: "lead_attendance_marked", leadId: parsed.id });
       }

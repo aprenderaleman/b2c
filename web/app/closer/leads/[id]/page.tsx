@@ -29,9 +29,9 @@ export default async function CloserLeadPage({
     .single();
 
   if (!lead || lead.closer_id !== closerId) redirect("/closer/leads");
-  // Regla Gelfis 2026-08-13: el closer solo ve leads del funnel
-  // /sesion-plan (sesion_plan_at seteado).
-  if (!lead.sesion_plan_at) redirect("/closer/leads");
+  // CRM Closer F2 (Gelfis 2026-11-25): además del funnel /sesion-plan,
+  // el closer vuelve a recibir leads post-trial por rotación — la ficha
+  // abre para cualquier lead asignado a él (antes exigía sesion_plan_at).
 
   const [tasks, timelineResult, accionesResult, gelfisNotes] = await Promise.all([
     getLeadTasks(leadId),

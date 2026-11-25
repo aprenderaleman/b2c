@@ -6,6 +6,7 @@ import { sendWhatsappText } from "./whatsapp";
 import { sendPostTrialFollowupEmail, sendPostTrialFollowupGenericEmail, sendTrialAttendedFollowupEmail, sendTrialAbsentFollowupEmail } from "./email/send";
 import { getPack, getPackUrlWithOverride, type PackId, type PaymentType } from "./trial-packs";
 import { getLeadTrialTeacher } from "./trial-compensation";
+import { assignCloserPostTrial } from "./closer-actions";
 import { startChain, cancelActiveChain } from "./chain-engine";
 import { schedulePostTrialFollowup } from "./post-trial-followups";
 import { OBJECTION_CHIP_TO_CHAIN, type ObjectionChip } from "./chain-definitions";
@@ -205,8 +206,10 @@ export async function markTrialAttendedAwaitingConversion(
     })
     .eq("id", leadId);
 
-  // Decisión Gelfis 2026-08-13: los closers YA NO reciben leads post-trial —
-  // su cartera es solo el funnel /sesion-plan. (antes: autoAssignToActiveCloser tipo_a)
+  // CRM Closer F2 (Gelfis 2026-11-25, revierte la regla 2026-08-13):
+  // rotación automática SIN cadencia; el closer espera a la tarea de 24h.
+  await assignCloserPostTrial(leadId, "trial_attended").catch((e) =>
+    console.warn("[markTrialAttended] assignCloserPostTrial:", e instanceof Error ? e.message : e));
 
   // FIX bug Saul 2026-06-13: si entre la "no asistencia" + reactivacion
   // y el "asistio" final se encolaron mensajes auto-generados (revival,
@@ -411,8 +414,9 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
     })
     .eq("id", leadId);
 
-  // Decisión Gelfis 2026-08-13: sin auto-asignación post-trial a closers
-  // (cartera = solo funnel /sesion-plan). (antes: autoAssignToActiveCloser tipo_a)
+  // CRM Closer F2 (Gelfis 2026-11-25): rotación automática sin cadencia.
+  await assignCloserPostTrial(leadId, "trial_attended").catch((e) =>
+    console.warn("[markTrialAttendedNoLink] assignCloserPostTrial:", e instanceof Error ? e.message : e));
 
   try {
     const phone = lead?.whatsapp_normalized ?? null;
@@ -607,8 +611,10 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     })
     .eq("id", leadId);
 
-  // Decisión Gelfis 2026-08-13: sin auto-asignación post-trial a closers
-  // (cartera = solo funnel /sesion-plan). (antes: autoAssignToActiveCloser tipo_b)
+  // CRM Closer F2 (Gelfis 2026-11-25): los no-shows entran por la misma
+  // rotación al marcarse la ausencia.
+  await assignCloserPostTrial(leadId, "trial_absent").catch((e) =>
+    console.warn("[markTrialAbsent] assignCloserPostTrial:", e instanceof Error ? e.message : e));
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,
@@ -1090,8 +1096,9 @@ export async function markTrialAttendedWithObjection(
     })
     .eq("id", leadId);
 
-  // Decisión Gelfis 2026-08-13: sin auto-asignación post-trial a closers
-  // (cartera = solo funnel /sesion-plan). (antes: autoAssignToActiveCloser tipo_a)
+  // CRM Closer F2 (Gelfis 2026-11-25): rotación automática sin cadencia.
+  await assignCloserPostTrial(leadId, "trial_attended").catch((e) =>
+    console.warn("[markTrialAttendedWithObjection] assignCloserPostTrial:", e instanceof Error ? e.message : e));
 
   await sb.from("lead_timeline").insert({
     lead_id: leadId,

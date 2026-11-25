@@ -138,6 +138,9 @@ function adminItems(): NavItem[] {
 
 function closerItems(): NavItem[] {
   return [
+    // CRM Closer F2 (Gelfis 2026-11-25): cola de cierre post-trial /
+    // no-shows / antiguos. Primera en el array = primera en el sidebar.
+    { label: "Urgentes",           href: "/closer/urgentes",       icon: "users",      priority: 0.5 },
     // "Hoy" (cola aparte) eliminada — Mis leads es la cola, ordenada
     // por semáforo (Gelfis 2026-08-17).
     { label: "Mis leads",          href: "/closer/leads",          icon: "users",      priority: 1 },
