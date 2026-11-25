@@ -163,6 +163,10 @@
       "schedule": "0 * * * *"
     },
     {
+      "path": "/api/cron/closer-llamada-24h",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/chain-processor",
       "schedule": "*/10 * * * *"
     },

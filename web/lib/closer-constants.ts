@@ -7,6 +7,8 @@ export const TIPO_LABEL: Record<string, { text: string; cls: string }> = {
   tipo_b: { text: "Tipo B", cls: "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/30" },
   seguimiento_post: { text: "Seguimiento", cls: "bg-slate-50 dark:bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-500/30" },
   llamada_rescate: { text: "Rescate", cls: "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30" },
+  // CRM Closer F5: llamada post-trial a las 24h, vence al acabar el bono.
+  llamada_24h: { text: "Llamada 24h", cls: "bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/30" },
   llamada_objecion: { text: "Objecion", cls: "bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-500/30" },
   seguimiento_absent: { text: "No-show", cls: "bg-orange-50 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-500/30" },
   inbound_response: { text: "Inbound", cls: "bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-500/30" },
@@ -22,7 +24,7 @@ export const CANAL_ICON: Record<string, string> = {
 /* ── Priority sorting ── */
 
 export function taskPriorityScore(task: TareaCloser): number {
-  if (task.tipo === "llamada_rescate") return 0;
+  if (task.tipo === "llamada_rescate" || task.tipo === "llamada_24h") return 0;
   if (task.lead_reserva_prioritaria || task.lead_priority_deadline === "concrete") return 1;
   if (task.tipo === "llamada_objecion") return 2;
   if (task.prioridad === "alta") return 3;
