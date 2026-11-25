@@ -196,8 +196,54 @@ async function run(req: Request) {
         content: r.ok
           ? `💬 WA confirmación clase de prueba enviado a ${lead.whatsapp_normalized}`
           : `💬 Falló WA confirmación: ${r.reason}`,
-        metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: c.id },
+        metadata: { channel: "whatsapp", kind: "trial_confirmation", class_id: c.id, reason: r.ok ? undefined : r.reason },
       });
+      // Gelfis 2026-11-25: si WA falla por cap/night_gate/hourly, stash
+      // en wa_manual_pending para que aparezca en el panel y Gelfis/Sheila
+      // lo envíen manual. Bug Esteban/Dina (los 13 leads afectados no
+      // recibieron ni confirmación WA ni recovery manual porque este cron
+      // no tenía la lógica que ya tenían los handlers del profe).
+      if (!r.ok && /^(setter_daily_cap|night_gate|hourly_cap|daily_cap)/.test(r.reason ?? "")) {
+        const phoneNoPlus = lead.whatsapp_normalized.replace(/^\+/, "");
+        const waLink = `https://api.whatsapp.com/send?phone=${phoneNoPlus}&text=${encodeURIComponent(waText)}`;
+        // Dedupe: no duplicar si ya hay pending abierto para este lead + kind
+        const existing = await sb
+          .from("lead_timeline")
+          .select("id")
+          .eq("lead_id", lead.id)
+          .eq("metadata->>kind", "wa_manual_pending")
+          .eq("metadata->>original_kind", "trial_confirmation")
+          .is("metadata->sent_manual_at", null)
+          .gte("timestamp", new Date(Date.now() - 24 * 3600_000).toISOString())
+          .limit(1);
+        if ((existing.data?.length ?? 0) === 0) {
+          await sb.from("lead_timeline").insert({
+            lead_id: lead.id,
+            type:    "agent_note",
+            author:  "system",
+            content: `📋 WA confirmación bloqueado (${r.reason}) — preparado para envío manual`,
+            metadata: {
+              kind: "wa_manual_pending",
+              channel: "whatsapp",
+              original_kind: "trial_confirmation",
+              phone: lead.whatsapp_normalized,
+              text: waText,
+              wa_link: waLink,
+              reason: r.reason,
+              class_id: c.id,
+            },
+          });
+        }
+      }
+      // Si exists:false (número sin WA), auto-NULL whatsapp_normalized
+      // vía handleWaPermanentFail (patrón ya usado en demás crons).
+      if (!r.ok && /exists.*false/i.test(r.reason ?? "")) {
+        const { handleWaPermanentFail } = await import("@/lib/wa-permanent-fail");
+        await handleWaPermanentFail(sb, {
+          leadId: lead.id, phone: lead.whatsapp_normalized,
+          kind: "trial_confirmation", reason: r.reason, context: "send-trial-notifications",
+        }).catch(() => {});
+      }
     }
 
     // Rollback del lock si TODO falló. Fix 2026-08-11 tras 15+
