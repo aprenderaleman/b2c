@@ -153,16 +153,17 @@ export type ActionButton = {
   needsFecha?: boolean;
   /** Botones compartidos con el Trial Hub del profesor (Gelfis 2026-08-05) */
   isEnlace?: boolean;        // abre PaymentLinkModal (mismo form que profes)
-  isConfirmarPago?: boolean; // abre ConfirmPaymentModal (mismo form que profes)
   isReagendar?: boolean;     // POST send-reschedule-link (igual que profes)
   isWebLink?: boolean;       // abre la página de inscripciones
 };
 
+// "Confirmar pago" eliminado del panel del closer (Gelfis 2026-11-25,
+// CRM Closer F1): "Pagado" solo lo pone el webhook de Stripe o el admin
+// (transferencias). El modal sigue vivo para profe/admin.
 export const ACTION_BUTTONS: ActionButton[] = [
   { action: "reagendar", label: "Enviar enlace Clase de prueba", icon: "\u{1f4c5}", description: "Link para elegir nuevo horario de trial", isReagendar: true },
   { action: "seguimiento_fecha", label: "Seguimiento", icon: "\u{1f4c6}", description: "Programar seguimiento", needsFecha: true },
   { action: "enviar_enlace", label: "Enviar enlace de inscripcion", icon: "\u{1f4b3}", description: "Enlace de pago (Stripe)", isEnlace: true },
-  { action: "confirmar_pago", label: "Confirmar pago", icon: "✅", description: "Crear estudiante y accesos", isConfirmarPago: true },
   { action: "pagina_web", label: "Página web", icon: "\u{1f310}", description: "Inscripciones en la web", isWebLink: true },
 ];
 

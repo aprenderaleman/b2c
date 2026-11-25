@@ -32,7 +32,7 @@ export async function GET(req: Request) {
       paso,
       canal,
       fecha_programada,
-      leads!inner(full_name)
+      leads!inner(name)
     `)
     .lt("fecha_programada", twentyFourHoursAgo.toISOString())
     .is("fecha_completada", null)
@@ -63,7 +63,7 @@ export async function GET(req: Request) {
   const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
   const { data: staleLeads } = await sb
     .from("leads")
-    .select("id, full_name, closer_id")
+    .select("id, name, closer_id")
     .in("estado_cierre", ["activo", "seguimiento_pactado"])
     .not("closer_id", "is", null)
     .lt("updated_at", threeDaysAgo.toISOString())

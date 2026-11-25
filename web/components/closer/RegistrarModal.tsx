@@ -25,7 +25,14 @@ type Props = {
   onVenta: () => void;
 };
 
-type Screen = "resultado" | "contactado" | "no_interesado" | "jugada";
+type Screen = "resultado" | "contactado" | "detalle" | "no_interesado" | "jugada";
+
+/** Resultados de un toque que ahora piden nota (CRM Closer F1) */
+const DETALLE_LABEL: Record<string, string> = {
+  no_contesto: "No contestó",
+  buzon: "Buzón de voz",
+  reagendado: "Reagendó",
+};
 
 const OBJECTION_CHIPS = [
   { value: "precio", label: "Precio" },
@@ -51,6 +58,10 @@ export function RegistrarModal({ leadId, leadName, taskId, onClose, onVenta }: P
   const [objectionChip, setObjectionChip] = useState<string | null>(null);
   const [motivo, setMotivo] = useState<string | null>(null);
   const [nota, setNota] = useState("");
+  const [cuando, setCuando] = useState("");
+  const [resultadoPendiente, setResultadoPendiente] = useState<string | null>(null);
+
+  const notaOk = nota.trim().length >= 5;
 
   const submit = (
     resultado: string,
@@ -66,9 +77,10 @@ export function RegistrarModal({ leadId, leadName, taskId, onClose, onVenta }: P
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           resultado,
-          notas: nota || undefined,
+          notas: nota.trim(),
           objectionChip: extras?.objectionChip,
           motivoNoInteresado: extras?.motivoNoInteresado,
+          occurredAt: cuando ? new Date(cuando).toISOString() : undefined,
         }),
       });
       if (!res.ok) {
@@ -86,6 +98,8 @@ export function RegistrarModal({ leadId, leadName, taskId, onClose, onVenta }: P
 
       // Capa 2: siguiente jugada
       setNota("");
+      setCuando("");
+      setResultadoPendiente(null);
       setScreen("jugada");
       router.refresh();
     });
@@ -105,14 +119,15 @@ export function RegistrarModal({ leadId, leadName, taskId, onClose, onVenta }: P
             <h2 className="text-base font-semibold text-slate-900 dark:text-slate-50">
               {screen === "resultado" && "¿Qué pasó?"}
               {screen === "contactado" && "Objeción"}
+              {screen === "detalle" && (DETALLE_LABEL[resultadoPendiente ?? ""] ?? "Detalle")}
               {screen === "no_interesado" && "Motivo"}
               {screen === "jugada" && "Siguiente jugada"}
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">{leadName}</p>
           </div>
-          {(screen === "contactado" || screen === "no_interesado") && (
+          {(screen === "contactado" || screen === "no_interesado" || screen === "detalle") && (
             <button
-              onClick={() => { setScreen("resultado"); setObjectionChip(null); setMotivo(null); }}
+              onClick={() => { setScreen("resultado"); setObjectionChip(null); setMotivo(null); setResultadoPendiente(null); }}
               className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
             >
               &larr; Atrás
@@ -124,9 +139,9 @@ export function RegistrarModal({ leadId, leadName, taskId, onClose, onVenta }: P
           {screen === "resultado" && (
             <div className="grid grid-cols-2 gap-2">
               <ResultBtn label="Contactado" icon="✓" cls="bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30" onClick={() => setScreen("contactado")} disabled={pending} />
-              <ResultBtn label="No contestó" icon="✗" cls="bg-slate-50 dark:bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-500/30" onClick={() => submit("no_contesto")} disabled={pending} />
-              <ResultBtn label="Buzón" icon="🎙" cls="bg-slate-50 dark:bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-500/30" onClick={() => submit("buzon")} disabled={pending} />
-              <ResultBtn label="Reagendó" icon="📅" cls="bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/30" onClick={() => submit("reagendado")} disabled={pending} />
+              <ResultBtn label="No contestó" icon="✗" cls="bg-slate-50 dark:bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-500/30" onClick={() => { setResultadoPendiente("no_contesto"); setScreen("detalle"); }} disabled={pending} />
+              <ResultBtn label="Buzón" icon="🎙" cls="bg-slate-50 dark:bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-500/30" onClick={() => { setResultadoPendiente("buzon"); setScreen("detalle"); }} disabled={pending} />
+              <ResultBtn label="Reagendó" icon="📅" cls="bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/30" onClick={() => { setResultadoPendiente("reagendado"); setScreen("detalle"); }} disabled={pending} />
               <ResultBtn label="VENTA" icon="💰" cls="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30 col-span-2" onClick={() => { onClose(); onVenta(); }} disabled={pending} />
               <ResultBtn label="No interesado" icon="—" cls="bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30 col-span-2" onClick={() => setScreen("no_interesado")} disabled={pending} />
             </div>
@@ -151,10 +166,33 @@ export function RegistrarModal({ leadId, leadName, taskId, onClose, onVenta }: P
                 </div>
               </div>
               <NotaField nota={nota} setNota={setNota} placeholder="Detalle de la conversación..." />
+              <CuandoField cuando={cuando} setCuando={setCuando} />
               <button
                 onClick={() => submit("contactado", { objectionChip: objectionChip ?? undefined })}
-                disabled={pending}
-                className="w-full btn-primary"
+                disabled={pending || !notaOk}
+                className="w-full btn-primary disabled:opacity-50"
+              >
+                {pending ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          )}
+
+          {screen === "detalle" && resultadoPendiente && (
+            <div className="space-y-4">
+              <NotaField
+                nota={nota}
+                setNota={setNota}
+                placeholder={
+                  resultadoPendiente === "reagendado"
+                    ? "¿Para cuándo quedó? ¿Qué dijo?"
+                    : "¿Qué intentaste? (llamada, WhatsApp...)"
+                }
+              />
+              <CuandoField cuando={cuando} setCuando={setCuando} />
+              <button
+                onClick={() => submit(resultadoPendiente)}
+                disabled={pending || !notaOk}
+                className="w-full btn-primary disabled:opacity-50"
               >
                 {pending ? "Guardando..." : "Guardar"}
               </button>
@@ -180,9 +218,10 @@ export function RegistrarModal({ leadId, leadName, taskId, onClose, onVenta }: P
                 </div>
               </div>
               <NotaField nota={nota} setNota={setNota} placeholder="Detalle..." />
+              <CuandoField cuando={cuando} setCuando={setCuando} />
               <button
                 onClick={() => submit("no_interesado", { motivoNoInteresado: motivo ?? undefined })}
-                disabled={pending || !motivo}
+                disabled={pending || !motivo || !notaOk}
                 className="w-full btn-primary bg-red-600 hover:bg-red-700 disabled:opacity-50"
               >
                 {pending ? "Guardando..." : "Confirmar perdido"}
@@ -263,10 +302,11 @@ function Chip({ label, active, activeCls, onClick }: {
 function NotaField({ nota, setNota, placeholder }: {
   nota: string; setNota: (v: string) => void; placeholder: string;
 }) {
+  const short = nota.trim().length > 0 && nota.trim().length < 5;
   return (
     <div>
       <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
-        Nota (opcional)
+        Nota <span className="text-red-500">*</span>
       </p>
       <textarea
         value={nota}
@@ -275,6 +315,39 @@ function NotaField({ nota, setNota, placeholder }: {
         rows={2}
         className="input-text text-sm"
       />
+      <p className={`text-[10px] mt-0.5 ${short ? "text-red-500" : "text-slate-400 dark:text-slate-500"}`}>
+        Obligatoria, mínimo 5 caracteres — queda en el historial del lead.
+      </p>
+    </div>
+  );
+}
+
+/** "¿Cuándo ocurrió?" — vacío = ahora; hasta 48h atrás (ventana del server). */
+function CuandoField({ cuando, setCuando }: {
+  cuando: string; setCuando: (v: string) => void;
+}) {
+  const fmt = (d: Date) => {
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  const now = new Date();
+  const min = new Date(now.getTime() - 48 * 3_600_000);
+  return (
+    <div>
+      <p className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wide mb-1">
+        ¿Cuándo ocurrió?
+      </p>
+      <input
+        type="datetime-local"
+        value={cuando}
+        onChange={(e) => setCuando(e.target.value)}
+        min={fmt(min)}
+        max={fmt(now)}
+        className="input-text text-sm"
+      />
+      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+        Déjalo vacío si fue ahora mismo. Máximo 48h atrás.
+      </p>
     </div>
   );
 }

@@ -21,7 +21,26 @@ export type ProcessActionArgs = {
   objectionChip?: string | null;
   motivoNoInteresado?: string | null;
   nota?: string | null;
+  /** ISO — cuándo ocurrió realmente el contacto (≤48h atrás) */
+  occurredAt?: string | null;
 };
+
+/**
+ * Valida el "cuándo ocurrió" de una acción del closer: como máximo 48h
+ * hacia atrás (misma ventana que registerContact) y nunca en el futuro.
+ * Devuelve el ISO normalizado, null si no se envió, o un error.
+ */
+export function parseOccurredAt(
+  input: string | null | undefined,
+): { iso: string | null } | { error: string } {
+  if (!input) return { iso: null };
+  const d = new Date(input);
+  if (isNaN(d.getTime())) return { error: "occurred_at_invalid" };
+  const now = Date.now();
+  if (d.getTime() > now + 5 * 60_000) return { error: "occurred_at_future" };
+  if (d.getTime() < now - 48 * 3_600_000) return { error: "occurred_at_too_old" };
+  return { iso: d.toISOString() };
+}
 
 export async function processActionResult(args: ProcessActionArgs): Promise<void> {
   const sb = supabaseAdmin();
@@ -39,6 +58,7 @@ export async function processActionResult(args: ProcessActionArgs): Promise<void
   };
   if (args.objectionChip) insertFields.objection_chip = args.objectionChip;
   if (args.motivoNoInteresado) insertFields.motivo_no_interesado = args.motivoNoInteresado;
+  if (args.occurredAt) insertFields.occurred_at = args.occurredAt;
 
   const { data: accionRow } = await sb
     .from("acciones_closer")

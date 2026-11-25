@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveCloserActor } from "@/lib/closer-auth";
 import { logCloserAction } from "@/lib/closer-actions";
+import { parseOccurredAt } from "@/lib/closer-action-flow";
 import { ensureFuturePlay } from "@/lib/semaforo";
 
+// Nota obligatoria ≥5 chars en toda acción del closer (CRM Closer F1).
 const Body = z.object({
   tipo: z.enum(["llamada", "whatsapp", "email", "nota", "otro"]),
-  contenido: z.string().max(2000).optional(),
+  contenido: z.string().max(2000),
   resultado: z.string().max(500).optional(),
   duracionSeg: z.number().int().min(0).optional(),
+  occurredAt: z.string().optional(),
 });
 
 export async function POST(
@@ -29,11 +32,22 @@ export async function POST(
   if (!parsed.success) {
     return NextResponse.json({ error: "validation_failed", details: parsed.error.flatten() }, { status: 400 });
   }
+  if (parsed.data.contenido.trim().length < 5) {
+    return NextResponse.json({ error: "nota_required" }, { status: 400 });
+  }
+  const occurred = parseOccurredAt(parsed.data.occurredAt);
+  if ("error" in occurred) {
+    return NextResponse.json({ error: occurred.error }, { status: 400 });
+  }
 
   const accionId = await logCloserAction({
     closerId,
     leadId,
-    ...parsed.data,
+    tipo: parsed.data.tipo,
+    contenido: parsed.data.contenido.trim(),
+    resultado: parsed.data.resultado,
+    duracionSeg: parsed.data.duracionSeg,
+    occurredAt: occurred.iso,
   });
 
   // Anti-limbo: registrar una nota/contacto ES guardar una acción — si

@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveCloserActor } from "@/lib/closer-auth";
 import { supabaseAdmin } from "@/lib/supabase";
-import { processActionResult } from "@/lib/closer-action-flow";
+import { processActionResult, parseOccurredAt } from "@/lib/closer-action-flow";
 
+// Nota obligatoria ≥5 chars (CRM Closer F1): la comisión depende del
+// contacto registrado, así que cada acción deja constancia verificable.
 const Body = z.object({
   resultado: z.enum(["contactado", "no_contesto", "buzon", "no_interesado", "reagendado", "venta"]),
-  notas: z.string().max(1000).optional(),
+  notas: z.string().max(1000),
   objectionChip: z.enum(["precio", "pensarlo", "pareja", "tiempo", "otra"]).optional(),
   motivoNoInteresado: z.string().max(500).optional(),
+  occurredAt: z.string().optional(),
 });
 
 export async function POST(
@@ -28,6 +31,13 @@ export async function POST(
   const parsed = Body.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json({ error: "validation_failed", details: parsed.error.flatten() }, { status: 400 });
+  }
+  if (parsed.data.notas.trim().length < 5) {
+    return NextResponse.json({ error: "nota_required" }, { status: 400 });
+  }
+  const occurred = parseOccurredAt(parsed.data.occurredAt);
+  if ("error" in occurred) {
+    return NextResponse.json({ error: occurred.error }, { status: 400 });
   }
 
   const sb = supabaseAdmin();
@@ -54,7 +64,8 @@ export async function POST(
       resultado: parsed.data.resultado,
       objectionChip: parsed.data.objectionChip ?? null,
       motivoNoInteresado: parsed.data.motivoNoInteresado ?? null,
-      nota: parsed.data.notas ?? null,
+      nota: parsed.data.notas.trim(),
+      occurredAt: occurred.iso,
     });
   } catch (err) {
     console.error("[closer/tasks/complete] processActionResult error:", err);

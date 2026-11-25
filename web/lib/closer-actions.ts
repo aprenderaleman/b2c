@@ -21,19 +21,24 @@ export async function logCloserAction(args: {
   contenido?: string;
   resultado?: string;
   duracionSeg?: number;
+  /** ISO — cuándo ocurrió realmente el contacto (≤48h atrás) */
+  occurredAt?: string | null;
 }): Promise<string> {
   const sb = supabaseAdmin();
 
+  const insertFields: Record<string, unknown> = {
+    closer_id: args.closerId,
+    lead_id: args.leadId,
+    tipo: args.tipo,
+    contenido: args.contenido ?? null,
+    resultado: args.resultado ?? null,
+    duracion_seg: args.duracionSeg ?? null,
+  };
+  if (args.occurredAt) insertFields.occurred_at = args.occurredAt;
+
   const { data, error } = await sb
     .from("acciones_closer")
-    .insert({
-      closer_id: args.closerId,
-      lead_id: args.leadId,
-      tipo: args.tipo,
-      contenido: args.contenido ?? null,
-      resultado: args.resultado ?? null,
-      duracion_seg: args.duracionSeg ?? null,
-    })
+    .insert(insertFields)
     .select("id")
     .single();
 

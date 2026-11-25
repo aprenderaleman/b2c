@@ -5,17 +5,10 @@ import { useRouter } from "next/navigation";
 import { CopyMessagePanel } from "./CopyMessagePanel";
 import { RITMOS, ACTION_BUTTONS, type ActionButton } from "@/lib/closer-constants";
 import { PaymentLinkModal } from "@/app/profesor/clasedeprueba/PaymentLinkModal";
-import { ConfirmPaymentModal } from "@/components/teacher/ConfirmPaymentModal";
 
 type Props = {
   leadId: string;
   leadName: string;
-  /** Datos para ConfirmPaymentModal (mismo form que el Trial Hub del profe) */
-  leadEmail?: string | null;
-  leadPhone?: string | null;
-  leadLanguage?: "es" | "de";
-  leadGermanLevel?: string | null;
-  leadGoal?: string | null;
 };
 
 type ActiveAction =
@@ -25,15 +18,7 @@ type ActiveAction =
   | { type: "copy_panel"; action: string; label: string; message: string; extras?: Record<string, string> };
 
 
-export function Layer2Actions({
-  leadId,
-  leadName,
-  leadEmail,
-  leadPhone,
-  leadLanguage,
-  leadGermanLevel,
-  leadGoal,
-}: Props) {
+export function Layer2Actions({ leadId, leadName }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
@@ -43,7 +28,6 @@ export function Layer2Actions({
   const [nota, setNota] = useState("");
   const [loading, setLoading] = useState(false);
   const [enlaceOpen, setEnlaceOpen] = useState(false);
-  const [confirmPagoOpen, setConfirmPagoOpen] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
 
   // Mismo comportamiento que el botón 📅 Reagendar del Trial Hub del profe
@@ -122,10 +106,6 @@ export function Layer2Actions({
   const handleClick = (btn: ActionButton) => {
     if (btn.isEnlace) {
       setEnlaceOpen(true);
-      return;
-    }
-    if (btn.isConfirmarPago) {
-      setConfirmPagoOpen(true);
       return;
     }
     if (btn.isReagendar) {
@@ -298,18 +278,6 @@ export function Layer2Actions({
         />
       )}
 
-      {confirmPagoOpen && (
-        <ConfirmPaymentModal
-          leadId={leadId}
-          leadName={leadName}
-          leadEmail={leadEmail ?? null}
-          leadPhone={leadPhone ?? null}
-          leadLanguage={leadLanguage ?? "es"}
-          leadGermanLevel={leadGermanLevel ?? null}
-          leadGoal={leadGoal ?? null}
-          onClose={() => { setConfirmPagoOpen(false); router.refresh(); }}
-        />
-      )}
     </section>
   );
 }

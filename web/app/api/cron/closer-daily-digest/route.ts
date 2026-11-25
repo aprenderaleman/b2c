@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     .from("users")
     .select("id, full_name, email")
     .eq("role", "closer")
-    .eq("is_active", true);
+    .eq("active", true);
 
   if (!closers || closers.length === 0) {
     return NextResponse.json({ ok: true, sent: 0 });

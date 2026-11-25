@@ -522,11 +522,6 @@ export function CloserLeadDetail({
             <Layer2Actions
               leadId={lead.id}
               leadName={lead.name ?? "Lead"}
-              leadEmail={lead.email}
-              leadPhone={lead.whatsapp_normalized}
-              leadLanguage={(lead.language === "de" ? "de" : "es")}
-              leadGermanLevel={lead.german_level ?? null}
-              leadGoal={lead.goal ?? null}
             />
           )}
 
@@ -601,7 +596,7 @@ function InlineNoteInput({ leadId }: { leadId: string }) {
   const [saving, startSaving] = useTransition();
 
   const handleSubmit = () => {
-    if (!note.trim()) return;
+    if (note.trim().length < 5) return;   // nota obligatoria ≥5 (F1)
     startSaving(async () => {
       const res = await fetch(`/api/closer/leads/${leadId}/action`, {
         method: "POST",
@@ -630,7 +625,7 @@ function InlineNoteInput({ leadId }: { leadId: string }) {
         />
         <button
           onClick={handleSubmit}
-          disabled={!note.trim() || saving}
+          disabled={note.trim().length < 5 || saving}
           className="self-end rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 px-4 py-2 text-sm font-medium text-white transition-colors"
         >
           {saving ? "..." : "Guardar"}

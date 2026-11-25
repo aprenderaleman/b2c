@@ -371,11 +371,13 @@ async function registerConversionExtras({
 async function isCloserAttribution(leadId: string, closerId: string): Promise<boolean> {
   const sb = supabaseAdmin();
 
+  // lead_chains no tiene columna status: una cadena está activa mientras
+  // completed_at sea NULL (mismo criterio que chain-engine y el índice).
   const { data: activeChain } = await sb
     .from("lead_chains")
     .select("id")
     .eq("lead_id", leadId)
-    .eq("status", "active")
+    .is("completed_at", null)
     .limit(1)
     .maybeSingle();
 
