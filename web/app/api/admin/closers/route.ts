@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { createUser } from "@/lib/users";
 import { sendWelcomeStaffEmail } from "@/lib/email/send";
 import { supabaseAdmin } from "@/lib/supabase";
+import { getConfigValue } from "@/lib/config-copys";
 
 const Body = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -71,6 +72,10 @@ export async function POST(req: Request) {
   await sb.from("users").update({ rango: "rookie" }).eq("id", created.userId);
 
   const platformUrl = process.env.PLATFORM_URL ?? "https://b2c.aprender-aleman.de";
+  // CRM Closer F7: enlace al documento de bienvenida, configurable en
+  // system_config (clave closer_welcome_doc_url). Sin valor, el email
+  // sale como siempre.
+  const welcomeDocUrl = await getConfigValue("closer_welcome_doc_url");
   const emailResult = await sendWelcomeStaffEmail(parsed.data.email, {
     name: parsed.data.fullName.split(/\s+/)[0] || parsed.data.fullName,
     email: parsed.data.email,
@@ -78,6 +83,7 @@ export async function POST(req: Request) {
     platformUrl,
     role: "closer",
     language: parsed.data.language,
+    welcomeDocUrl,
   });
 
   return NextResponse.json({

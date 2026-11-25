@@ -7,6 +7,10 @@ export type WelcomeStaffVars = {
   platformUrl:  string;
   role:         "admin" | "teacher" | "closer" | "setter";
   language:     "es" | "de";
+  /** Documento de bienvenida (CRM Closer F7): URL configurable en
+   *  system_config (closer_welcome_doc_url). Sin URL, el email sale
+   *  como siempre. */
+  welcomeDocUrl?: string | null;
 };
 
 export function renderWelcomeStaff(v: WelcomeStaffVars): RenderedEmail {
@@ -33,6 +37,7 @@ function renderES(v: WelcomeStaffVars): RenderedEmail {
     <div style="text-align:center;margin:22px 0 20px 0;">
       ${button(loginUrl, "Entrar a la plataforma →")}
     </div>
+    ${v.welcomeDocUrl ? p(`📄 Antes de empezar, lee tu <a href="${escapeHtml(v.welcomeDocUrl)}" style="color:#ea580c;font-weight:600;">documento de bienvenida</a> — ahí está todo lo que necesitas saber para arrancar.`) : ""}
     ${p(`Bienvenido al equipo. Cualquier duda, respóndenos este correo.`)}
     ${p(`<em style="color:#64748b;">El equipo de Aprender-Aleman.de</em>`)}
   `;
@@ -47,6 +52,7 @@ function renderES(v: WelcomeStaffVars): RenderedEmail {
     `Usuario: ${v.email}`,
     `Contraseña temporal: ${v.tempPassword}`,
     `(Se te pedirá cambiarla al entrar)`,
+    ...(v.welcomeDocUrl ? [``, `Documento de bienvenida: ${v.welcomeDocUrl}`] : []),
     ``,
     `Bienvenido al equipo.`,
     `El equipo de Aprender-Aleman.de`,
@@ -72,6 +78,7 @@ function renderDE(v: WelcomeStaffVars): RenderedEmail {
     <div style="text-align:center;margin:22px 0 20px 0;">
       ${button(loginUrl, "Zur Plattform →")}
     </div>
+    ${v.welcomeDocUrl ? p(`📄 Bevor du loslegst, lies bitte dein <a href="${escapeHtml(v.welcomeDocUrl)}" style="color:#ea580c;font-weight:600;">Willkommensdokument</a>.`) : ""}
     ${p(`Willkommen im Team. Bei Fragen antworte einfach auf diese E-Mail.`)}
     ${p(`<em style="color:#64748b;">Dein Aprender-Aleman.de Team</em>`)}
   `;
@@ -86,6 +93,7 @@ function renderDE(v: WelcomeStaffVars): RenderedEmail {
     `Benutzername: ${v.email}`,
     `Temporäres Passwort: ${v.tempPassword}`,
     `(Du wirst beim ersten Login gebeten, es zu ändern)`,
+    ...(v.welcomeDocUrl ? [``, `Willkommensdokument: ${v.welcomeDocUrl}`] : []),
     ``,
     `Willkommen im Team.`,
     `Dein Aprender-Aleman.de Team`,

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 import { ClosersTable } from "@/components/admin/ClosersTable";
+import { CloserConfigCard } from "@/components/admin/CloserConfigCard";
 
 export const metadata = { title: "Closers · Admin" };
 
@@ -57,6 +58,9 @@ export default async function ClosersPage() {
       </header>
 
       <ClosersTable closers={closerList} leadCounts={leadCounts} />
+
+      {/* Ajustes del CRM (F4+F7): doc de bienvenida + copy de reagenda */}
+      <CloserConfigCard />
     </main>
   );
 }
