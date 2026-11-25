@@ -122,6 +122,22 @@ export default async function CloserLeadPage({
 
   const lastContact = (await getLastContacts([lead.id])).get(lead.id) ?? null;
 
+  // Plan recomendado (CRM Closer F3, decisión D de Gelfis): la última
+  // oferta enviada por el PROFE si existe; el funnel queda de respaldo
+  // (lo resuelve el componente con lead.goal cuando esto es null).
+  const { data: ofertaRow } = await sb
+    .from("ofertas_enviadas")
+    .select("meta, ritmo, tipo_pago, clases_totales, importe_cents, created_at")
+    .eq("lead_id", leadId)
+    .not("teacher_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const ofertaProfe = (ofertaRow ?? null) as {
+    meta: string; ritmo: string | null; tipo_pago: string;
+    clases_totales: number; importe_cents: number; created_at: string;
+  } | null;
+
   return (
     <main className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm">
@@ -139,6 +155,7 @@ export default async function CloserLeadPage({
         leadTipo={leadTipo}
         activeTrial={activeTrial}
         teacherName={teacherName}
+        ofertaProfe={ofertaProfe}
       />
       <LeadContactsHistory leadId={lead.id} />
     </main>

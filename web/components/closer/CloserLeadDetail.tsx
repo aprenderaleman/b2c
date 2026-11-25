@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { TareaCloser } from "@/lib/closer-cadence";
 import { MarkSaleModal } from "./MarkSaleModal";
 import { RegistrarModal } from "./RegistrarModal";
@@ -71,6 +71,16 @@ type AccionCloserRow = {
   created_at: string;
 };
 
+/** Última oferta enviada por el profe (CRM Closer F3, decisión D) */
+type OfertaProfe = {
+  meta: string;
+  ritmo: string | null;
+  tipo_pago: string;
+  clases_totales: number;
+  importe_cents: number;
+  created_at: string;
+} | null;
+
 type Props = {
   lead: Lead;
   tasks: TareaCloser[];
@@ -80,6 +90,7 @@ type Props = {
   leadTipo?: string | null;
   activeTrial?: ActiveTrial;
   teacherName?: string | null;
+  ofertaProfe?: OfertaProfe;
 };
 
 const GOAL_LABEL: Record<string, string> = {
@@ -127,6 +138,7 @@ export function CloserLeadDetail({
   leadTipo,
   activeTrial,
   teacherName,
+  ofertaProfe,
 }: Props) {
   const router = useRouter();
   const [showSaleModal, setShowSaleModal] = useState(false);
@@ -303,6 +315,12 @@ export function CloserLeadDetail({
         </div>
       </header>
 
+      {/* Bono de Acción Rápida (F3): cuenta atrás en vivo — vence a las
+          48h de la asistencia. La comisión se juega en esta ventana. */}
+      {lead.trial_attended_at && lead.estado_cierre !== "convertido" && lead.estado_cierre !== "perdido" && lead.status !== "converted" && (
+        <BonoCountdown attendedAt={lead.trial_attended_at} />
+      )}
+
       {instantMeeting.result && (
         <div className="rounded-2xl border border-blue-200 dark:border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 p-4">
           <div className="flex items-start justify-between gap-3">
@@ -384,13 +402,50 @@ export function CloserLeadDetail({
             {attState && (
               <Kv
                 k="Asistencia"
-                v={attState === "attended" ? "✓ Asistió" : attState === "absent" ? "✗ No asistió" : "Pendiente"}
+                v={attState === "attended"
+                  ? `✓ Asistió · ${fmtTrialDate(lead.trial_attended_at as string)}`
+                  : attState === "absent"
+                    ? `✗ No asistió · ${fmtTrialDate(lead.trial_absent_at as string)}`
+                    : "Pendiente"}
               />
             )}
             {activeTrial?.short_code && (
               <Kv k="Enlace clase" v={`/c/${activeTrial.short_code}`} />
             )}
             <Kv k="RGPD" v={lead.gdpr_accepted ? `Sí${lead.gdpr_accepted_at ? ` · ${new Date(lead.gdpr_accepted_at).toLocaleDateString("es-ES")}` : ""}` : "No"} />
+          </Panel>
+
+          {/* Plan recomendado (F3, decisión D): oferta del profe > funnel */}
+          <Panel title="Plan recomendado">
+            {ofertaProfe ? (
+              <>
+                <p className="mb-2 inline-flex items-center rounded-full border border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  🧑‍🏫 Oferta enviada por el profe · {new Date(ofertaProfe.created_at).toLocaleDateString("es-ES", { day: "numeric", month: "short" })}
+                </p>
+                {ofertaProfe.ritmo && (
+                  <Kv k="Ritmo" v={RITMO_LABEL[ofertaProfe.ritmo] ?? ofertaProfe.ritmo} />
+                )}
+                <Kv k="Meta" v={OFERTA_META_LABEL[ofertaProfe.meta] ?? ofertaProfe.meta} />
+                <Kv k="Clases" v={String(ofertaProfe.clases_totales)} />
+                <Kv
+                  k={ofertaProfe.tipo_pago === "unico" ? "Pago único" : "Suscripción"}
+                  v={`${(ofertaProfe.importe_cents / 100).toLocaleString("es-ES")} €${ofertaProfe.tipo_pago === "unico" ? "" : "/mes"}`}
+                />
+              </>
+            ) : lead.goal || lead.german_level ? (
+              <>
+                <p className="mb-2 inline-flex items-center rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
+                  📊 Derivado del funnel (sin oferta del profe)
+                </p>
+                {lead.goal && <Kv k="Objetivo" v={GOAL_LABEL[lead.goal] ?? lead.goal} />}
+                {lead.german_level && <Kv k="Nivel actual" v={lead.german_level} />}
+                {lead.urgency && <Kv k="Urgencia" v={URGENCY_LABEL[lead.urgency] ?? lead.urgency} />}
+              </>
+            ) : (
+              <p className="text-sm text-slate-400 dark:text-slate-500 italic">
+                Sin oferta del profe ni datos del funnel.
+              </p>
+            )}
           </Panel>
 
           {/* Unified notes: teacher + Gelfis + closer */}
@@ -569,6 +624,60 @@ export function CloserLeadDetail({
         />
       )}
     </>
+  );
+}
+
+const RITMO_LABEL: Record<string, string> = {
+  viajero: "🌍 Viajero (290 €/mes)",
+  estandar: "⭐ Estándar (390 €/mes)",
+  intensivo: "🔥 Intensivo (560 €/mes)",
+  vip_express: "🚀 VIP Express (860 €/mes)",
+};
+
+const OFERTA_META_LABEL: Record<string, string> = {
+  a1_a2: "A1 → A2",
+  b1: "Hasta B1",
+  b2: "Hasta B2",
+  c1: "Hasta C1",
+  fluidez_total: "Fluidez total",
+};
+
+const BONO_MS = 48 * 3_600_000;
+
+/** Cuenta atrás en vivo del Bono de Acción Rápida (vence asistencia+48h). */
+function BonoCountdown({ attendedAt }: { attendedAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const fin = new Date(attendedAt).getTime() + BONO_MS;
+  const restante = fin - now;
+
+  if (restante <= 0) {
+    return (
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
+        🎁 Bono de Acción Rápida <strong>vencido</strong> ({new Date(fin).toLocaleString("es-ES", { timeZone: "Europe/Berlin", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}). Aún puedes cerrar sin bono.
+      </div>
+    );
+  }
+
+  const totalMin = Math.floor(restante / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const urgente = restante < 6 * 3_600_000;
+
+  return (
+    <div className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
+      urgente
+        ? "border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 text-red-800 dark:text-red-200"
+        : "border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-800 dark:text-amber-200"
+    }`}>
+      🎁 Bono de Acción Rápida: quedan <strong className="tabular-nums">{h}h {String(m).padStart(2, "0")}m</strong>
+      {" "}— vence el {new Date(fin).toLocaleString("es-ES", { timeZone: "Europe/Berlin", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} (hora de Berlín).
+      {urgente && " ⚠️ Última ventana para cerrar con bono."}
+    </div>
   );
 }
 
