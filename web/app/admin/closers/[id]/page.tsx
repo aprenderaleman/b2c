@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getCloserDetailedStats } from "@/lib/closer-commissions";
 import { getCloserQueue } from "@/lib/closer-semaforo";
+import { getCloserContactMetrics, fmtVelocidad } from "@/lib/closer-admin-metrics";
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
 
 export const metadata = { title: "Closer · Admin" };
@@ -24,11 +25,15 @@ function fmtEur(cents: number): string {
 
 export default async function AdminCloserDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ days?: string }>;
 }) {
   await requireRole(["superadmin", "admin"]);
   const { id } = await params;
+  const { days: daysParam } = await searchParams;
+  const days = daysParam === "1" ? 1 : daysParam === "7" ? 7 : 30;
 
   const sb = supabaseAdmin();
   const { data: closer } = await sb
@@ -44,8 +49,9 @@ export default async function AdminCloserDetailPage({
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 
-  const [stats, queue, leadsRes] = await Promise.all([
+  const [stats, contactMetrics, queue, leadsRes] = await Promise.all([
     getCloserDetailedStats(id, monthStart, monthEnd),
+    getCloserContactMetrics(id, days),
     getCloserQueue(id),
     sb
       .from("leads")
@@ -130,6 +136,44 @@ export default async function AdminCloserDetailPage({
         <Stat label="Convertidos" value={String(stats.leads_convertidos)} />
         <Stat label="Perdidos" value={String(stats.leads_perdidos)} />
         <Stat label="Comisiones" value={fmtEur(stats.comisiones_cents)} />
+      </section>
+
+      {/* Métricas de contacto (CRM Closer F6) — la comisión depende del
+          contacto registrado antes del pago, así que velocidad = dinero. */}
+      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+            Contacto tras la asignación
+          </h2>
+          <nav className="flex gap-1 text-xs">
+            {[{ d: 1, l: "Hoy" }, { d: 7, l: "7 días" }, { d: 30, l: "30 días" }].map((o) => (
+              <Link
+                key={o.d}
+                href={`/admin/closers/${id}?days=${o.d}`}
+                className={`rounded-full border px-3 py-1 font-medium ${
+                  days === o.d
+                    ? "bg-brand-600 border-brand-600 text-white"
+                    : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                }`}
+              >
+                {o.l}
+              </Link>
+            ))}
+          </nav>
+        </div>
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Stat label="Leads asignados" value={String(contactMetrics.asignados)} />
+          <Stat label="Contactados" value={`${contactMetrics.contactados}${contactMetrics.asignados > 0 ? ` / ${contactMetrics.asignados}` : ""}`} />
+          <Stat
+            label="% contactados <24h"
+            value={contactMetrics.pctContactados24h === null ? "—" : `${contactMetrics.pctContactados24h}%`}
+            accent
+          />
+          <Stat label="Velocidad 1er contacto" value={fmtVelocidad(contactMetrics.velocidadMedianaMs)} />
+        </div>
+        <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+          Velocidad: mediana en horas hábiles (08–22 Berlín) entre la asignación y la primera acción registrada.
+        </p>
       </section>
 
       <div className="grid gap-5 lg:grid-cols-2">
