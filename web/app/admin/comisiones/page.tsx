@@ -1,3 +1,4 @@
+import { getTeacherCommissions } from "@/lib/teacher-commission";
 import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 import { RankEditor } from "./rank-editor";
@@ -25,12 +26,9 @@ export default async function AdminComisionesPage() {
     .eq("active", true)
     .order("users(full_name)");
 
-  const { data: rangos } = await sb
-    .from("config_rangos")
-    .select("rango, comision_pct")
-    .eq("rol", "teacher");
-  const rangoMap = new Map(
-    ((rangos ?? []) as Array<{ rango: string; comision_pct: number }>).map(r => [r.rango, r.comision_pct])
+  // % efectivo por profe: comisión acordada (número libre) o la del rango.
+  const commissionByUser = await getTeacherCommissions(
+    ((teachers ?? []) as unknown as Array<{ user_id: string }>).map(t => t.user_id),
   );
 
   const { data: comisiones } = await sb
@@ -48,7 +46,9 @@ export default async function AdminComisionesPage() {
     users: { full_name: string; rango: string | null };
   }>).map(t => {
     const rango = t.users.rango ?? "starter";
-    const pct = rangoMap.get(rango) ?? 5;
+    const commission = commissionByUser.get(t.user_id);
+    const pct = commission?.pct ?? 5;
+    const custom = commission?.custom ?? false;
     const totalCents = comisionByUser.get(t.user_id) ?? 0;
     return {
       teacherId: t.id,
@@ -56,6 +56,7 @@ export default async function AdminComisionesPage() {
       name: t.users.full_name,
       rango,
       pct,
+      custom,
       totalCents,
     };
   });
@@ -82,7 +83,7 @@ export default async function AdminComisionesPage() {
                 <th className="pb-3 pr-4">Rango</th>
                 <th className="pb-3 pr-4">%</th>
                 <th className="pb-3 pr-4">Comisiones mes</th>
-                <th className="pb-3 pr-4">Cambiar rango</th>
+                <th className="pb-3 pr-4">Cambiar rango / comisión acordada</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -90,12 +91,12 @@ export default async function AdminComisionesPage() {
                 <tr key={r.teacherId} className="text-slate-800 dark:text-slate-200">
                   <td className="py-3 pr-4 font-medium">{r.name}</td>
                   <td className="py-3 pr-4">{RANK_BADGES[r.rango] ?? r.rango}</td>
-                  <td className="py-3 pr-4 tabular-nums">{r.pct}%</td>
+                  <td className="py-3 pr-4 tabular-nums">{String(r.pct).replace(".", ",")}%{r.custom ? <span className="ml-1 text-[11px] text-slate-500 dark:text-slate-400">acordado</span> : null}</td>
                   <td className="py-3 pr-4 tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
                     {(r.totalCents / 100).toFixed(2)} EUR
                   </td>
                   <td className="py-3 pr-4">
-                    <RankEditor teacherId={r.teacherId} currentRank={r.rango} />
+                    <RankEditor teacherId={r.teacherId} currentRank={r.rango} customPct={r.custom ? r.pct : null} />
                   </td>
                 </tr>
               ))}

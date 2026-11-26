@@ -1,3 +1,4 @@
+import { getTeacherCommission } from "@/lib/teacher-commission";
 import Link from "next/link";
 import { requireRoleWithImpersonation } from "@/lib/rbac";
 import { getTeacherByUserId } from "@/lib/academy";
@@ -227,21 +228,10 @@ const RANK_BADGES: Record<string, { emoji: string; label: string; color: string 
 async function CommissionSection({ userId }: { userId: string }) {
   const sb = supabaseAdmin();
 
-  const { data: userRow } = await sb
-    .from("users")
-    .select("rango")
-    .eq("id", userId)
-    .maybeSingle();
-  const rango = (userRow as { rango: string } | null)?.rango ?? "starter";
-  const badge = RANK_BADGES[rango] ?? RANK_BADGES.starter;
-
-  const { data: rangoConfig } = await sb
-    .from("config_rangos")
-    .select("comision_pct")
-    .eq("rol", "teacher")
-    .eq("rango", rango)
-    .maybeSingle();
-  const pct = (rangoConfig as { comision_pct: number } | null)?.comision_pct ?? 5;
+  // Comisión acordada con el profe (si la hay) o la de su rango.
+  const commission = await getTeacherCommission(userId);
+  const badge = RANK_BADGES[commission.rango] ?? RANK_BADGES.starter;
+  const pct = commission.pct;
 
   const currentMonth = new Date().toISOString().slice(0, 7) + "-01";
   const { data: comisiones } = await sb
@@ -262,7 +252,7 @@ async function CommissionSection({ userId }: { userId: string }) {
           Comisiones por conversion
         </h2>
         <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${badge.color}`}>
-          {badge.emoji} {badge.label} · {pct}%
+          {commission.custom ? `🤝 Comisión acordada · ${pct}%` : `${badge.emoji} ${badge.label} · ${pct}%`}
         </span>
       </div>
 

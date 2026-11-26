@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { parseCommissionPct, rangoForPct } from "@/lib/teacher-commission";
 import { auth } from "@/lib/auth";
 import { sendTeacherInvitationEmail } from "@/lib/email/send";
 import {
@@ -31,6 +32,8 @@ const CreateBody = z.object({
   name:            z.string().trim().max(120).optional().or(z.literal("")),
   rate_individual: z.coerce.number().positive().max(500),
   rango:           z.enum(["starter", "pro", "elite", "master"]).default("starter"),
+  /** Comisión (%) acordada, número libre 0–100. Si viene, manda sobre el rango. */
+  comision_pct:    z.coerce.number().min(0).max(100).optional().nullable(),
   accepts_trials:  z.boolean().default(false),
   notes:           z.string().trim().max(200).optional().or(z.literal("")),
   /** false = solo generar link, no enviar email. Default true. */
@@ -60,6 +63,7 @@ export async function GET() {
       notes:           inv.notes,
       rate_individual: inv.rate_individual_eur,
       rango:           inv.rango,
+      comision_pct:    parseCommissionPct(inv.comision_pct),
       accepts_trials:  inv.accepts_trials,
       created_at:      inv.created_at,
       expires_at:      inv.expires_at,
@@ -87,15 +91,23 @@ export async function POST(req: Request) {
   }
   const b = parsed.data;
 
-  const { invitation, url } = await createInvitation({
-    createdBy:      a.userId,
-    email:          b.email,
-    name:           b.name || null,
-    notes:          b.notes || null,
-    rateIndividual: b.rate_individual,
-    rango:          b.rango,
-    acceptsTrials:  b.accepts_trials,
-  });
+  // Comisión libre: el rango pasa a ser solo una etiqueta coherente con el %.
+  const comisionPct = parseCommissionPct(b.comision_pct);
+  let invitation, url;
+  try {
+    ({ invitation, url } = await createInvitation({
+      createdBy:      a.userId,
+      email:          b.email,
+      name:           b.name || null,
+      notes:          b.notes || null,
+      rateIndividual: b.rate_individual,
+      rango:          comisionPct != null ? rangoForPct(comisionPct) : b.rango,
+      comisionPct,
+      acceptsTrials:  b.accepts_trials,
+    }));
+  } catch (e) {
+    return NextResponse.json({ ok: false, error: e instanceof Error ? e.message : "No se pudo crear la invitación." }, { status: 500 });
+  }
 
   let emailSent = false;
   let emailError: string | null = null;

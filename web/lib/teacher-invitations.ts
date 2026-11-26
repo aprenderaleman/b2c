@@ -28,6 +28,8 @@ export type TeacherInvitation = {
   notes:               string | null;
   rate_individual_eur: number | null;
   rango:               TeacherRango;
+  /** Comisión (%) acordada al invitar (migración 165). null/ausente = la del rango. */
+  comision_pct?:       number | string | null;
   accepts_trials:      boolean;
   created_by:          string | null;
   created_at:          string;
@@ -62,24 +64,37 @@ export async function createInvitation(opts: {
   notes?:         string | null;
   rateIndividual: number;
   rango?:         TeacherRango;
+  /** Comisión (%) acordada, número libre. Si se da, manda sobre el rango. */
+  comisionPct?:   number | null;
   acceptsTrials?: boolean;
 }): Promise<{ invitation: TeacherInvitation; url: string }> {
   const sb = supabaseAdmin();
   const code = generateCode();
-  const { data, error } = await sb
+  const base = {
+    code,
+    email:               opts.email.trim().toLowerCase(),
+    name:                opts.name?.trim() || null,
+    notes:               opts.notes ?? null,
+    rate_individual_eur: opts.rateIndividual,
+    rango:               opts.rango ?? "starter",
+    accepts_trials:      opts.acceptsTrials ?? false,
+    created_by:          opts.createdBy,
+  };
+  let { data, error } = await sb
     .from("teacher_invitations")
-    .insert({
-      code,
-      email:               opts.email.trim().toLowerCase(),
-      name:                opts.name?.trim() || null,
-      notes:               opts.notes ?? null,
-      rate_individual_eur: opts.rateIndividual,
-      rango:               opts.rango ?? "starter",
-      accepts_trials:      opts.acceptsTrials ?? false,
-      created_by:          opts.createdBy,
-    })
+    .insert(opts.comisionPct != null ? { ...base, comision_pct: opts.comisionPct } : base)
     .select("*")
     .single();
+  if (error && /comision_pct/.test(error.message)) {
+    // Sin la migración 165 la columna no existe. Si el % coincide con el de
+    // un rango (5/10/12/15) la invitación funciona como siempre, porque el
+    // rango ya lo expresa. Un % libre no se puede guardar: error claro antes
+    // que crear la invitación perdiendo en silencio lo acordado.
+    if (![5, 10, 12, 15].includes(Number(opts.comisionPct))) {
+      throw new Error("Falta aplicar la migración 165 (columna teacher_invitations.comision_pct) para guardar una comisión libre.");
+    }
+    ({ data, error } = await sb.from("teacher_invitations").insert(base).select("*").single());
+  }
   if (error || !data) {
     throw new Error(`teacher_invitations insert failed: ${error?.message ?? "unknown"}`);
   }

@@ -1,3 +1,4 @@
+import { getTeacherCommission } from "./teacher-commission";
 import { supabaseAdmin } from "@/lib/supabase";
 import { buildTeacherAgreementPdf, type AgreementVars } from "@/lib/teacher-agreement-pdf";
 
@@ -46,6 +47,12 @@ export async function getAdminSignature(adminUserId: string): Promise<Buffer | n
   return download(adminSignaturePath(adminUserId));
 }
 
+/** % acordado con el profe (null si cobra por rango). */
+async function customCommissionPct(userId: string): Promise<number | null> {
+  const c = await getTeacherCommission(userId);
+  return c.custom ? c.pct : null;
+}
+
 /** Datos del profe tal y como van al PDF. `rateOverride` = tarifa que el admin fija al aprobar. */
 export async function loadAgreementVars(
   teacherId: string,
@@ -74,6 +81,7 @@ export async function loadAgreementVars(
     startDate: opts?.startDate ?? new Date(t.approved_at ?? t.created_at),
     rateEur,
     rango:     u.rango ?? null,
+    comisionPct: await customCommissionPct(t.user_id),
     language:  u.language_preference ?? "es",
   };
 }

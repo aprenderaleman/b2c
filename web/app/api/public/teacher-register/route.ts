@@ -6,6 +6,7 @@ import { sanitizeE164 } from "@/lib/phone";
 import { checkRateLimit, ipFromHeaders } from "@/lib/rate-limit";
 import { createNotification } from "@/lib/notifications";
 import { sendRaw } from "@/lib/email/send";
+import { formatPct, parseCommissionPct, setTeacherCommissionPct } from "@/lib/teacher-commission";
 import {
   validateInvitation,
   consumeInvitation,
@@ -177,6 +178,12 @@ export async function POST(req: NextRequest) {
     await sb.from("users")
       .update({ rango: inv.rango })
       .eq("id", created.userId);
+    // Comisión acordada libre (migración 165): manda sobre el rango.
+    const comisionAcordada = parseCommissionPct(inv.comision_pct);
+    if (comisionAcordada != null) {
+      const r = await setTeacherCommissionPct(created.userId, comisionAcordada);
+      if (!r.ok) console.error("[teacher-register] comisión acordada no aplicada:", r.error);
+    }
     await sb.from("teachers")
       .update({ accepts_trials: inv.accepts_trials })
       .eq("id", created.teacherId);
@@ -218,7 +225,7 @@ export async function POST(req: NextRequest) {
           u.email,
           `✅ Registro completado: ${b.name} (profesor)`,
           `<p><strong>${b.name}</strong> (${email}) completó su registro de profesor.</p>` +
-          `<p>Condiciones de la invitación: ${rateIndividual ?? "?"}€/h · rango ${inv.rango}` +
+          `<p>Condiciones de la invitación: ${rateIndividual ?? "?"}€/h · ${parseCommissionPct(inv.comision_pct) != null ? `comisión ${formatPct(parseCommissionPct(inv.comision_pct)!)}` : `rango ${inv.rango}`}` +
           `${inv.accepts_trials ? " · recibe trials" : ""}.</p>` +
           `<p><a href="${profileUrl}">Revisar y aprobar →</a></p>`,
           `${b.name} (${email}) completó su registro de profesor. Aprobar: ${profileUrl}`,

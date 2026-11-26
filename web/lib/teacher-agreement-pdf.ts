@@ -19,6 +19,8 @@ export type AgreementVars = {
   startDate: Date;             // fecha de inicio de la colaboración (aprobación)
   rateEur:   number | null;    // tarifa por clase de 50 min
   rango:     string | null;    // starter | pro | elite | master
+  /** Comisión (%) acordada con el profe. Si viene, sustituye a la línea del rango. */
+  comisionPct?: number | null;
   /** Firma de la academia (PNG) y fecha: si viene, el PDF sale firmado por Gelfis. */
   adminSignature?: { png: Buffer; date: Date } | null;
 };
@@ -97,7 +99,8 @@ export async function buildTeacherAgreementPdf(v: AgreementVars): Promise<Buffer
   KV("País / Ciudad", agreementLocation(v.country, v.address) ?? "________________________");
   KV("Fecha de inicio de la colaboración", fmtDate(v.startDate));
   KV("Tarifa por clase (50 minutos)", v.rateEur != null ? `${v.rateEur.toLocaleString("es-ES")} €` : "según su ficha en la plataforma");
-  KV("Rango de comisión inicial", v.rango ? (RANGO_ES[v.rango.toLowerCase()] ?? v.rango) : "Starter (5 %)");
+  if (v.comisionPct != null) KV("Comisión acordada", `${String(v.comisionPct).replace(".", ",")} %`);
+  else KV("Rango de comisión inicial", v.rango ? (RANGO_ES[v.rango.toLowerCase()] ?? v.rango) : "Starter (5 %)");
 
   H1("2. Naturaleza de la colaboración");
   B("El profesor colabora como profesional independiente (autónomo/freelance), no como empleado. Emite sus propias facturas a Linguify Global LLC y es responsable de sus obligaciones fiscales en su país de residencia.");

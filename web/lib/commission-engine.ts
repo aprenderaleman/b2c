@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { isCatalogActive, getActiveCatalog, getBonoCents as catalogBonoCents, getEffectiveBonusLadder } from "./catalog";
+import { getTeacherCommission } from "./teacher-commission";
 
 type RegisterOpts = {
   teacherId: string;
@@ -25,20 +26,11 @@ export async function registerCommission(opts: RegisterOpts): Promise<number> {
   }
   const teacherUserId = (teacher as { user_id: string }).user_id;
 
-  const { data: userRow } = await sb
-    .from("users")
-    .select("rango")
-    .eq("id", teacherUserId)
-    .maybeSingle();
-  const rango = (userRow as { rango: string | null } | null)?.rango ?? "starter";
-
-  const { data: rangoRow } = await sb
-    .from("config_rangos")
-    .select("comision_pct")
-    .eq("rol", "teacher")
-    .eq("rango", rango)
-    .maybeSingle();
-  const pct = (rangoRow as { comision_pct: number } | null)?.comision_pct ?? 5;
+  // % efectivo: la comisión ACORDADA con el profe (users.comision_pct,
+  // número libre desde 2026-11-26) o, si no hay acuerdo, la de su rango.
+  const commission = await getTeacherCommission(teacherUserId);
+  const rango = commission.custom ? `acordado/${commission.rango}` : commission.rango;
+  const pct = commission.pct;
 
   const commissionCents = Math.round(opts.amountCents * pct / 100);
   if (commissionCents <= 0) return 0;

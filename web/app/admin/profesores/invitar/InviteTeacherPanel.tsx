@@ -10,6 +10,7 @@ type Inv = {
   notes:           string | null;
   rate_individual: number | null;
   rango:           string;
+  comision_pct?:   number | null;
   accepts_trials:  boolean;
   created_at:      string;
   expires_at:      string;
@@ -18,12 +19,8 @@ type Inv = {
   url:             string;
 };
 
-const RANGOS = [
-  { value: "starter", label: "Starter (5%)" },
-  { value: "pro",     label: "Pro (10%)" },
-  { value: "elite",   label: "Elite (12%)" },
-  { value: "master",  label: "Master (15%)" },
-];
+/** % del rango, para las invitaciones antiguas que no guardaron una comisión libre. */
+const RANGO_PCT: Record<string, number> = { starter: 5, pro: 10, elite: 12, master: 15 };
 
 const STATUS_STYLE: Record<Inv["status"], string> = {
   pendiente:  "bg-amber-100 dark:bg-amber-500/15 text-amber-800 dark:text-amber-200",
@@ -37,7 +34,7 @@ export function InviteTeacherPanel({ initialInvitations }: { initialInvitations:
   const [email, setEmail]           = useState("");
   const [name, setName]             = useState("");
   const [rate, setRate]             = useState("");
-  const [rango, setRango]           = useState("starter");
+  const [comision, setComision]     = useState("");
   const [acceptsTrials, setTrials]  = useState(false);
   const [notes, setNotes]           = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -47,7 +44,9 @@ export function InviteTeacherPanel({ initialInvitations }: { initialInvitations:
   const [err, setErr]               = useState<string | null>(null);
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const canSubmit  = emailValid && Number(rate) > 0 && !submitting;
+  const comisionNum   = Number(comision.replace(",", "."));
+  const comisionValid = comision.trim() !== "" && Number.isFinite(comisionNum) && comisionNum >= 0 && comisionNum <= 100;
+  const canSubmit  = emailValid && Number(rate) > 0 && comisionValid && !submitting;
 
   async function refresh() {
     const r = await fetch("/api/admin/teacher-invitations");
@@ -68,7 +67,7 @@ export function InviteTeacherPanel({ initialInvitations }: { initialInvitations:
           email:           email.trim().toLowerCase(),
           name:            name.trim() || undefined,
           rate_individual: Number(rate),
-          rango,
+          comision_pct:    comisionNum,
           accepts_trials:  acceptsTrials,
           notes:           notes.trim() || undefined,
         }),
@@ -81,7 +80,7 @@ export function InviteTeacherPanel({ initialInvitations }: { initialInvitations:
         if (!data.email_sent && data.email_error) {
           setErr(`Invitación creada pero el email falló (${data.email_error}). Copia el link y envíalo manualmente.`);
         }
-        setEmail(""); setName(""); setRate(""); setRango("starter");
+        setEmail(""); setName(""); setRate(""); setComision("");
         setTrials(false); setNotes("");
         await refresh();
       }
@@ -146,10 +145,9 @@ export function InviteTeacherPanel({ initialInvitations }: { initialInvitations:
               placeholder="14" className={inputCls} required />
           </div>
           <div>
-            <label className={labelCls}>Rango de comisión inicial</label>
-            <select value={rango} onChange={e => setRango(e.target.value)} className={inputCls}>
-              {RANGOS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
+            <label className={labelCls}>Comisión acordada (%) *</label>
+            <input type="number" step="0.5" min="0" max="100" value={comision} onChange={e => setComision(e.target.value)}
+              placeholder="10" className={inputCls} required />
           </div>
         </div>
 
@@ -218,7 +216,7 @@ export function InviteTeacherPanel({ initialInvitations }: { initialInvitations:
                       </div>
                       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
                         {inv.rate_individual != null && <span>💶 {inv.rate_individual}€/h</span>}
-                        <span>🏅 {inv.rango}</span>
+                        <span>🏅 {String(inv.comision_pct ?? RANGO_PCT[inv.rango] ?? "?").replace(".", ",")} % comisión{inv.comision_pct == null ? ` (${inv.rango})` : ""}</span>
                         {inv.accepts_trials && <span>🧪 trials</span>}
                         <span>creada {new Date(inv.created_at).toLocaleDateString("es-ES")}</span>
                         {inv.status === "pendiente" && (

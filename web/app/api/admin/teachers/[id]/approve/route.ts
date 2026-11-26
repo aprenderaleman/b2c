@@ -5,6 +5,7 @@ import { supabaseAdmin } from "@/lib/supabase";
 import { sendTeacherWelcomeSetPasswordEmail } from "@/lib/email/send";
 import { TEACHER_ONBOARDING_DOC_URL } from "@/lib/teacher-onboarding";
 import { sendTeacherWelcomeChat } from "@/lib/teacher-welcome-chat";
+import { getTeacherCommission } from "@/lib/teacher-commission";
 import { buildTeacherAgreementPdf, AGREEMENT_VERSION } from "@/lib/teacher-agreement-pdf";
 import { uploadTeacherAgreement, getSignedTeacherAgreement, signedAgreementPath } from "@/lib/teacher-agreement";
 
@@ -146,6 +147,7 @@ export async function POST(
         name: u.full_name ?? u.email, email: u.email, phone: u.phone ?? null,
         country: t.country ?? null, address: t.address ?? null, startDate: new Date(), rateEur,
         rango: u.rango ?? null,
+        comisionPct: await (async () => { const c = await getTeacherCommission(u.id); return c.custom ? c.pct : null; })(),
       });
       agreementPath = await uploadTeacherAgreement(t.id, agreementPdf);
     }

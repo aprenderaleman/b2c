@@ -1,3 +1,4 @@
+import { parseCommissionPct } from "@/lib/teacher-commission";
 import Link from "next/link";
 import { requireRole } from "@/lib/rbac";
 import { listInvitations, buildInvitationUrl, invitationStatus } from "@/lib/teacher-invitations";
@@ -23,6 +24,7 @@ export default async function InviteTeacherPage() {
     notes:           inv.notes,
     rate_individual: inv.rate_individual_eur,
     rango:           inv.rango,
+    comision_pct:    parseCommissionPct(inv.comision_pct),
     accepts_trials:  inv.accepts_trials,
     created_at:      inv.created_at,
     expires_at:      inv.expires_at,

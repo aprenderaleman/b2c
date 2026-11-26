@@ -1,3 +1,4 @@
+import { getTeacherCommission } from "@/lib/teacher-commission";
 import { NextResponse } from "next/server";
 import { requireTeacherSession } from "@/lib/teacher-trial-auth";
 import { supabaseAdmin } from "@/lib/supabase";
@@ -16,18 +17,8 @@ export async function GET(req: Request) {
 
   const sb = supabaseAdmin();
 
-  const { data: rango } = await sb
-    .from("users")
-    .select("rango")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const { data: rangoConfig } = await sb
-    .from("config_rangos")
-    .select("comision_pct")
-    .eq("rol", "teacher")
-    .eq("rango", (rango as { rango: string } | null)?.rango ?? "starter")
-    .maybeSingle();
+  // Comisión acordada (si la hay) o la del rango.
+  const commission = await getTeacherCommission(user.id);
 
   const { data: comisiones } = await sb
     .from("comisiones")
@@ -41,8 +32,9 @@ export async function GET(req: Request) {
   );
 
   return NextResponse.json({
-    rango: (rango as { rango: string } | null)?.rango ?? "starter",
-    comision_pct: (rangoConfig as { comision_pct: number } | null)?.comision_pct ?? 5,
+    rango: commission.rango,
+    comision_pct: commission.pct,
+    comision_acordada: commission.custom,
     mes,
     comisiones: comisiones ?? [],
     total_cents: totalCents,
