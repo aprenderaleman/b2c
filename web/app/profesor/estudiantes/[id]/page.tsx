@@ -9,6 +9,7 @@ import { ProgressBars } from "@/components/teacher/ProgressBars";
 import { StartNowButton } from "./StartNowButton";
 import { ScheduleButton } from "./ScheduleButton";
 import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
+import { BonoConversacionLine } from "@/components/teacher/BonoConversacionLine";
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
 import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
 import { getClassBalance } from "@/lib/class-balance";
@@ -78,7 +79,6 @@ export default async function TeacherStudentDetail({
   // mientras esté pendiente. La clase es ADICIONAL — no descuenta del
   // paquete (el ajuste +1 lo aplica el admin al marcarla como dada).
   const bonoData = ofertaRow.data as { bono_conversacion_at?: string | null; bono_conversacion_usada_at?: string | null } | null;
-  const bonoPendiente = Boolean(bonoData?.bono_conversacion_at && !bonoData?.bono_conversacion_usada_at);
 
   // Balance de clases (caso Jonathan/Nancy 2026-08-20). Tras la
   // unificación 2026-08-21 aplica a todo estudiante con balance
@@ -111,33 +111,6 @@ export default async function TeacherStudentDetail({
       <Link href="/profesor" className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400">
         ← Volver al inicio
       </Link>
-
-      {/* Banner oculto (Gelfis 2026-10-24); el bono sigue vivo en el saldo. */}
-      {false && bonoPendiente && (
-        <div className="rounded-3xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-xl" aria-hidden>🎁</span>
-            <div className="text-sm text-amber-800 dark:text-amber-200">
-              <strong>Bono pendiente:</strong> este estudiante ganó una clase de
-              conversación <strong>gratis</strong> (se inscribió en sus primeras 48h).
-              Agéndala como una clase normal — es adicional, no descuenta de su
-              paquete.
-            </div>
-          </div>
-          <form
-            method="POST"
-            action={`/api/teacher/students/${studentId}/bono-conversacion`}
-            className="mt-3 flex justify-end"
-          >
-            <button
-              type="submit"
-              className="text-xs rounded-full border border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 px-3 py-1.5 font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
-            >
-              ✓ Ya di la clase de conversación
-            </button>
-          </form>
-        </div>
-      )}
 
       <header className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -188,6 +161,12 @@ export default async function TeacherStudentDetail({
         <div className="flex">
           <GroupDocButton documentUrl={student.document_url} label="Apuntes de clase" />
         </div>
+      )}
+
+      {/* Bono de Acción Rápida: línea discreta con el botón para marcar la
+          clase de conversación extra (2026-11-26). Antes era un banner. */}
+      {bonoData?.bono_conversacion_at && (
+        <BonoConversacionLine studentId={studentId} usedAt={bonoData.bono_conversacion_usada_at ?? null} />
       )}
 
       {balance && (
