@@ -19,6 +19,11 @@ import { getStripeClient } from "@/lib/stripe";
  *         renovación.
  *   { action: "cancel", email, atPeriodEnd? }
  *       → cancela la suscripción (inmediata por defecto; no reembolsa).
+ *   { action: "open_invoices", email }
+ *       → facturas ABIERTAS (impagadas) del cliente con su enlace de pago
+ *         (hosted_invoice_url), intentos y próximo reintento. No exige una
+ *         suscripción "active": sirve justo cuando está past_due (cobro
+ *         fallido) y hay que mandarle el enlace al alumno. Solo lectura.
  *
  * Auth: admin/superadmin o Bearer CRON_SECRET (las claves de Stripe solo
  * viven en Vercel).
@@ -28,6 +33,7 @@ export const dynamic = "force-dynamic";
 
 const Body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("inspect"),   account: z.enum(["us", "de"]).default("us"), email: z.string().email() }),
+  z.object({ action: z.literal("open_invoices"), account: z.enum(["us", "de"]).default("us"), email: z.string().email() }),
   z.object({ action: z.literal("set_price"), account: z.enum(["us", "de"]).default("us"), email: z.string().email(),
              amountCents: z.number().int().min(1000).max(200_000), nickname: z.string().trim().min(1).max(80).optional() }),
   z.object({ action: z.literal("cancel"),    account: z.enum(["us", "de"]).default("us"), email: z.string().email(),
@@ -69,6 +75,27 @@ export async function POST(req: Request) {
   catch { return NextResponse.json({ error: "stripe_not_configured", account: b.account }, { status: 503 }); }
 
   try {
+    if (b.action === "open_invoices") {
+      const customers = await stripe.customers.list({ email: b.email, limit: 5 });
+      const out: Array<Record<string, unknown>> = [];
+      for (const c of customers.data) {
+        const subs = await stripe.subscriptions.list({ customer: c.id, status: "all", limit: 5 });
+        const invoices = await stripe.invoices.list({ customer: c.id, status: "open", limit: 10 });
+        for (const i of invoices.data) {
+          const next = (i as unknown as { next_payment_attempt?: number | null }).next_payment_attempt ?? null;
+          out.push({
+            customerId: c.id, invoiceId: i.id, number: i.number, amountDueCents: i.amount_due, currency: i.currency,
+            created: new Date(i.created * 1000).toISOString(),
+            attemptCount: i.attempt_count,
+            nextPaymentAttempt: next ? new Date(next * 1000).toISOString() : null,
+            hostedInvoiceUrl: i.hosted_invoice_url ?? null,
+          });
+        }
+        if (invoices.data.length === 0) out.push({ customerId: c.id, invoiceId: null, subscriptions: subs.data.map(x => ({ id: x.id, status: x.status })) });
+      }
+      return NextResponse.json({ ok: true, email: b.email, customers: customers.data.length, openInvoices: out.filter(o => o.invoiceId), other: out.filter(o => !o.invoiceId) });
+    }
+
     const found = await findActive(stripe, b.email);
     if (!found) return NextResponse.json({ error: "active_subscription_not_found", email: b.email }, { status: 404 });
     const { customer, sub } = found;
