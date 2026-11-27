@@ -5,7 +5,6 @@ import { getGelfisNotes } from "@/lib/dashboard";
 import { redirect } from "next/navigation";
 import { CloserLeadDetail } from "@/components/closer/CloserLeadDetail";
 import { getLastContacts, fmtLastContact } from "@/lib/contacts";
-import { RegistrarContactoButton } from "@/components/contacts/RegistrarContactoButton";
 import { LeadContactsHistory } from "@/components/contacts/LeadContactsHistory";
 
 export const metadata = { title: "Lead · Closer" };
@@ -140,11 +139,14 @@ export default async function CloserLeadPage({
 
   return (
     <main className="space-y-5">
+      {/* Un solo botón de registro (Gelfis 2026-11-28): el "Registrar"
+          del CRM (modal con nota obligatoria + hora, escribe en
+          acciones_closer = atribución de comisión). El RegistrarContacto
+          genérico iba a lead_contacts y NO contaba para la comisión. */}
       <div className="flex items-center justify-between gap-3 flex-wrap rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm">
         <span className="text-white/55">
           Último contacto: <strong className="text-white/90">{fmtLastContact(lastContact)}</strong>
         </span>
-        <RegistrarContactoButton leadId={lead.id} />
       </div>
       <CloserLeadDetail
         lead={lead}
