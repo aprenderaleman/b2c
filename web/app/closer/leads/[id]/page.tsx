@@ -156,6 +156,7 @@ export default async function CloserLeadPage({
         activeTrial={activeTrial}
         teacherName={teacherName}
         ofertaProfe={ofertaProfe}
+        closerName={closerName}
       />
       <LeadContactsHistory leadId={lead.id} />
     </main>

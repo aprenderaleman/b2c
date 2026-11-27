@@ -91,6 +91,8 @@ type Props = {
   activeTrial?: ActiveTrial;
   teacherName?: string | null;
   ofertaProfe?: OfertaProfe;
+  /** Nombre del closer — firma los mensajes de seguimiento (2026-11-27) */
+  closerName?: string | null;
 };
 
 const GOAL_LABEL: Record<string, string> = {
@@ -139,6 +141,7 @@ export function CloserLeadDetail({
   activeTrial,
   teacherName,
   ofertaProfe,
+  closerName,
 }: Props) {
   const router = useRouter();
   const [showSaleModal, setShowSaleModal] = useState(false);
@@ -569,6 +572,8 @@ export function CloserLeadDetail({
               estado={lead.trial_attended_at ? "asistio" : lead.trial_absent_at ? "no_asistio" : "pendiente"}
               metaLabel={CLOSER_META_LABEL[lead.goal ?? ""] ?? "tu meta con el alemán"}
               sesionAt={lead.sesion_plan_at ?? null}
+              closerFirstName={closerName ?? undefined}
+              trialAttendedAt={lead.trial_attended_at ?? null}
             />
           )}
 
