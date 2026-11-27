@@ -147,6 +147,8 @@ function closerItems(): NavItem[] {
     { label: "Sesiones",           href: "/closer/sesiones",       icon: "userCheck",  priority: 2.5 },
     { label: "Calendario",         href: "/closer/calendario",     icon: "calendarDays", priority: 2.7 },
     { label: "Mis numeros",        href: "/closer/numeros",        icon: "trendingUp", priority: 3 },
+    // Chat con la academia y el equipo de ventas (Gelfis 2026-11-27).
+    { label: "Chats",              href: "/closer/chats",          icon: "messageCircle", priority: 3.2 },
     { label: "Grabaciones",         href: "/closer/grabaciones",    icon: "video",      priority: 3.5 },
     { label: "Mi disponibilidad",  href: "/closer/disponibilidad", icon: "clock",      priority: 5 },
     { label: "Perfil",             href: "/closer/perfil",         icon: "userCircle", priority: 4 },
@@ -165,6 +167,8 @@ function setterItems(): NavItem[] {
     // Buscador global: TODOS los leads, teléfono por subcadena
     // (Gelfis 2026-11-10).
     { label: "Buscar",    href: "/setter/buscar",    icon: "barChart3",  priority: 1.7 },
+    // Chat con la academia y el equipo de ventas (Gelfis 2026-11-27).
+    { label: "Chats",     href: "/setter/chats",     icon: "messageCircle", priority: 1.8 },
     { label: "Perfil",    href: "/setter/perfil",    icon: "userCircle", priority: 2 },
   ];
 }

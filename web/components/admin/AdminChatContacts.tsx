@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Contact = { userId: string; name: string; email: string; phone: string | null; active: boolean; subtitle: string };
-type Tab = "profes" | "alumnos";
+type Tab = "profes" | "alumnos" | "equipo";
 
 const norm = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 const digits = (t: string) => t.replace(/\D/g, "");
@@ -18,12 +18,12 @@ export function AdminChatContacts() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("alumnos");
   const [q, setQ] = useState("");
-  const [data, setData] = useState<{ profes: Contact[]; alumnos: Contact[] } | null>(null);
+  const [data, setData] = useState<{ profes: Contact[]; alumnos: Contact[]; equipo?: Contact[] } | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [showInactive, setShowInactive] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/chat/contacts").then(r => r.json()).then(setData).catch(() => setData({ profes: [], alumnos: [] }));
+    fetch("/api/admin/chat/contacts").then(r => r.json()).then(setData).catch(() => setData({ profes: [], alumnos: [], equipo: [] }));
   }, []);
 
   const list = useMemo(() => {
@@ -45,16 +45,20 @@ export function AdminChatContacts() {
     } finally { setOpening(null); }
   };
 
-  const counts = { profes: data?.profes.filter(c => c.active).length ?? 0, alumnos: data?.alumnos.filter(c => c.active).length ?? 0 };
+  const counts = {
+    profes: data?.profes.filter(c => c.active).length ?? 0,
+    alumnos: data?.alumnos.filter(c => c.active).length ?? 0,
+    equipo: data?.equipo?.filter(c => c.active).length ?? 0,
+  };
 
   return (
     <section className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
       <div className="flex flex-wrap items-center gap-2 p-3 border-b border-slate-200 dark:border-slate-800">
         <div className="flex rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5 text-sm">
-          {(["alumnos", "profes"] as Tab[]).map(t => (
+          {(["alumnos", "profes", "equipo"] as Tab[]).map(t => (
             <button key={t} type="button" onClick={() => setTab(t)}
               className={`px-3 py-1 rounded-md ${tab === t ? "bg-white dark:bg-slate-900 shadow text-slate-900 dark:text-slate-50 font-medium" : "text-slate-600 dark:text-slate-300"}`}>
-              {t === "alumnos" ? `Estudiantes (${counts.alumnos})` : `Profes (${counts.profes})`}
+              {t === "alumnos" ? `Estudiantes (${counts.alumnos})` : t === "profes" ? `Profes (${counts.profes})` : `Equipo (${counts.equipo})`}
             </button>
           ))}
         </div>

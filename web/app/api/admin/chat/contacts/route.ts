@@ -30,10 +30,12 @@ export async function GET() {
   }
   const sb = supabaseAdmin();
 
-  const [{ data: teachers }, { data: students }, { data: members }] = await Promise.all([
+  const [{ data: teachers }, { data: students }, { data: members }, { data: salesTeam }] = await Promise.all([
     sb.from("teachers").select("id, active, user_id, users!inner(id, full_name, email, phone, active, role)").eq("users.role", "teacher"),
     sb.from("students").select("id, user_id, subscription_status, subscription_type, classes_per_month, current_level, goal, users!inner(id, full_name, email, phone, active)"),
     sb.from("student_group_members").select("student_id, student_groups!inner(active, teachers!inner(users!inner(full_name)))").eq("student_groups.active", true),
+    // Equipo de ventas (Gelfis 2026-11-27): closers y setters en /admin/chats.
+    sb.from("users").select("id, full_name, email, phone, active, role").in("role", ["closer", "setter"]).neq("id", (session.user as { id: string }).id),
   ]);
 
   const teacherOf: Record<string, string> = {};
@@ -81,6 +83,14 @@ export async function GET() {
     };
   });
 
+  const equipo: Contact[] = ((salesTeam ?? []) as Array<UserBits & { role: string }>)
+    .filter(u => !u.email.toLowerCase().includes("prueba"))   // cuentas de test fuera
+    .map(u => ({
+      userId: u.id, name: u.full_name ?? u.email, email: u.email, phone: u.phone,
+      active: u.active,
+      subtitle: u.role === "closer" ? "Closer" : "Setter",
+    }));
+
   const byName = (a: Contact, b: Contact) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name, "es");
-  return NextResponse.json({ profes: profes.sort(byName), alumnos: alumnos.sort(byName) });
+  return NextResponse.json({ profes: profes.sort(byName), alumnos: alumnos.sort(byName), equipo: equipo.sort(byName) });
 }

@@ -42,6 +42,12 @@ type Props = {
    * ocupar el viewport completo.
    */
   embedded?: boolean;
+  /**
+   * Chat del equipo de ventas (closers/setters, Gelfis 2026-11-27): todos
+   * sus contactos son "colegas" (Gelfis + closers + setters), así que se
+   * abre directo en esa lista y sin la pestaña "Estudiantes".
+   */
+  teamMode?: boolean;
 };
 
 /**
@@ -59,12 +65,12 @@ function UrlChatSelector({ onSelect }: { onSelect: (id: string) => void }) {
   return null;
 }
 
-export function ChatShell({ currentUserId, currentUserName: _currentUserName, embedded = false }: Props) {
+export function ChatShell({ currentUserId, currentUserName: _currentUserName, embedded = false, teamMode = false }: Props) {
   const [chats,       setChats]       = useState<ChatListItem[]>([]);
   const [colleagues,  setColleagues]  = useState<Colleague[]>([]);
   const [activeId,    setActiveId]    = useState<string | null>(null);
   const [loading,     setLoading]     = useState(true);
-  const [tab,         setTab]         = useState<"students" | "colleagues">("students");
+  const [tab,         setTab]         = useState<"students" | "colleagues">(teamMode ? "colleagues" : "students");
 
   const load = useCallback(async () => {
     try {
@@ -127,7 +133,14 @@ export function ChatShell({ currentUserId, currentUserName: _currentUserName, em
       <aside className={`border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-y-auto min-h-0
         ${activeId ? "hidden md:block" : ""}`}>
         <header className="px-4 py-4 border-b border-slate-200 dark:border-slate-800 sticky top-0 bg-white dark:bg-slate-900 z-10">
-          {hasColleagues ? (
+          {teamMode ? (
+            <>
+              <h1 className="text-lg font-bold text-slate-900 dark:text-slate-50">Equipo</h1>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {colleagues.length} contacto{colleagues.length === 1 ? "" : "s"} de la academia
+              </p>
+            </>
+          ) : hasColleagues ? (
             <div className="flex gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 p-0.5">
               <button
                 type="button"

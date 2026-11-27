@@ -48,6 +48,31 @@ async function getRangoForUser(
   return rangosList[0] ?? { rango: "starter", comision_pct: 5, min_close_rate: 0, min_conversiones: 0 };
 }
 
+/**
+ * Tarifas fijas pactadas con el closer (migración 167, acuerdo con Iván
+ * 2026-11-27): si existen, sustituyen al sistema de rangos. El % depende
+ * del tipo de pago de la venta: 'unico'/'single' → closer_pct_unico;
+ * 'suscripcion'/'flexible'/'extended' → closer_pct_suscripcion (sobre la
+ * PRIMERA mensualidad — monto_cents de la venta es el primer cobro).
+ * Sin bono de rescate y sin tope de pool: el acuerdo individual promete
+ * el % plano. NULL en cualquiera de las dos columnas = por rango.
+ */
+async function getCloserCustomPct(
+  closerId: string,
+  paymentType: string | null,
+): Promise<number | null> {
+  const sb = supabaseAdmin();
+  const { data } = await sb
+    .from("users")
+    .select("closer_pct_unico, closer_pct_suscripcion")
+    .eq("id", closerId)
+    .maybeSingle();
+  const u = data as { closer_pct_unico: number | string | null; closer_pct_suscripcion: number | string | null } | null;
+  if (!u || u.closer_pct_unico == null || u.closer_pct_suscripcion == null) return null;
+  const esUnico = paymentType === "unico" || paymentType === "single";
+  return Number(esUnico ? u.closer_pct_unico : u.closer_pct_suscripcion);
+}
+
 export type ComisionResult = {
   usuario_id: string;
   rol: "teacher" | "closer";
@@ -110,6 +135,7 @@ export async function calculateCommissions(
 
   const comisiones: ComisionResult[] = [];
   let escenario: string;
+  let hasCustomCloser = false;
 
   if (!closerId) {
     escenario = "E1";
@@ -128,14 +154,16 @@ export async function calculateCommissions(
     }
   } else if (closerId && trialAttended) {
     escenario = "E2";
-    const rangoCloser = await getRangoForUser(closerId, "closer");
+    const customPct = await getCloserCustomPct(closerId, venta.payment_type as string | null);
+    const pctCloser = customPct ?? (await getRangoForUser(closerId, "closer")).comision_pct;
+    if (customPct != null) hasCustomCloser = true;
     comisiones.push({
       usuario_id: closerId,
       rol: "closer",
       tipo: "comision_base",
-      monto_cents: Math.round((montoCents * rangoCloser.comision_pct) / 100),
-      porcentaje_teorico: rangoCloser.comision_pct,
-      porcentaje_aplicado: rangoCloser.comision_pct,
+      monto_cents: Math.round((montoCents * pctCloser) / 100),
+      porcentaje_teorico: pctCloser,
+      porcentaje_aplicado: pctCloser,
       pool_cap_aplicado: false,
     });
 
@@ -154,30 +182,38 @@ export async function calculateCommissions(
     }
   } else {
     escenario = "E3";
-    const rangoCloser = await getRangoForUser(closerId, "closer");
+    const customPct = await getCloserCustomPct(closerId, venta.payment_type as string | null);
+    const pctCloser = customPct ?? (await getRangoForUser(closerId, "closer")).comision_pct;
+    if (customPct != null) hasCustomCloser = true;
     comisiones.push({
       usuario_id: closerId,
       rol: "closer",
       tipo: "comision_base",
-      monto_cents: Math.round((montoCents * rangoCloser.comision_pct) / 100),
-      porcentaje_teorico: rangoCloser.comision_pct,
-      porcentaje_aplicado: rangoCloser.comision_pct,
+      monto_cents: Math.round((montoCents * pctCloser) / 100),
+      porcentaje_teorico: pctCloser,
+      porcentaje_aplicado: pctCloser,
       pool_cap_aplicado: false,
     });
-    comisiones.push({
-      usuario_id: closerId,
-      rol: "closer",
-      tipo: "bono_rescate",
-      monto_cents: Math.round((montoCents * bonusRescate) / 100),
-      porcentaje_teorico: bonusRescate,
-      porcentaje_aplicado: bonusRescate,
-      pool_cap_aplicado: false,
-    });
+    // Bono de rescate solo en el sistema de rangos: las tarifas fijas
+    // pactadas son un % plano (ver getCloserCustomPct).
+    if (customPct == null) {
+      comisiones.push({
+        usuario_id: closerId,
+        rol: "closer",
+        tipo: "bono_rescate",
+        monto_cents: Math.round((montoCents * bonusRescate) / 100),
+        porcentaje_teorico: bonusRescate,
+        porcentaje_aplicado: bonusRescate,
+        pool_cap_aplicado: false,
+      });
+    }
   }
 
-  // Pool cap
+  // Pool cap — no aplica cuando el closer tiene tarifas fijas pactadas:
+  // su acuerdo promete el % exacto (la pre-calificación del profe queda
+  // igualmente por debajo del tope por sí sola).
   const totalPct = comisiones.reduce((sum, c) => sum + c.porcentaje_aplicado, 0);
-  if (totalPct > poolMax && comisiones.length > 0) {
+  if (!hasCustomCloser && totalPct > poolMax && comisiones.length > 0) {
     const factor = poolMax / totalPct;
     for (const c of comisiones) {
       c.porcentaje_aplicado = Math.round(c.porcentaje_aplicado * factor * 100) / 100;

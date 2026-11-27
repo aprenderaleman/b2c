@@ -13,7 +13,7 @@ export async function resolveChatCaller(): Promise<{ userId: string; role: ChatV
   if (!session?.user) return null;
   const userId = (session.user as { id: string }).id;
   const role   = (session.user as { role?: string }).role as
-    "superadmin" | "admin" | "teacher" | "student" | "closer" | undefined;
+    "superadmin" | "admin" | "teacher" | "student" | "closer" | "setter" | undefined;
   if (!role) return { userId, role: undefined };
   const eff = await resolveEffectiveUser({ fallbackUserId: userId, fallbackRole: role });
   return { userId: eff.userId, role: eff.role };

@@ -366,8 +366,58 @@ export type ColleagueContact = {
   chat_id:   string | null;
 };
 
+/** Chat directo existente del usuario con cada contacto (si lo hay). */
+async function mapDirectChats(
+  userId: string,
+  contactIds: string[],
+): Promise<Map<string, string>> {
+  const sb = supabaseAdmin();
+  const out = new Map<string, string>();
+  if (contactIds.length === 0) return out;
+  const { data: parts } = await sb
+    .from("chat_participants")
+    .select("chat_id")
+    .eq("user_id", userId);
+  const myChatIds = ((parts ?? []) as Array<{ chat_id: string }>).map(p => p.chat_id);
+  if (myChatIds.length === 0) return out;
+  const { data: otherParts } = await sb
+    .from("chat_participants")
+    .select("chat_id, user_id, chats!inner(type)")
+    .in("chat_id", myChatIds)
+    .in("user_id", contactIds);
+  for (const p of (otherParts ?? []) as Array<{ chat_id: string; user_id: string; chats: { type: string } | Array<{ type: string }> }>) {
+    const ch = Array.isArray(p.chats) ? p.chats[0] : p.chats;
+    if (ch?.type === "direct") out.set(p.user_id, p.chat_id);
+  }
+  return out;
+}
+
 export async function getColleagueContacts(userId: string): Promise<ColleagueContact[]> {
   const sb = supabaseAdmin();
+
+  // Equipo de ventas (Gelfis 2026-11-27): closers y setters tienen
+  // contacto directo con los admins (Gelfis) y entre ellos.
+  const { data: meRow } = await sb.from("users").select("role").eq("id", userId).maybeSingle();
+  const myRole = (meRow as { role?: string } | null)?.role;
+  if (myRole === "closer" || myRole === "setter") {
+    const { data: team } = await sb
+      .from("users")
+      .select("id, full_name, email, role")
+      .in("role", ["superadmin", "admin", "closer", "setter"])
+      .eq("active", true)
+      .neq("id", userId);
+    const ROLE_LABEL: Record<string, string> = { superadmin: "Academia", admin: "Academia", closer: "Closer", setter: "Setter" };
+    const members = ((team ?? []) as Array<{ id: string; full_name: string | null; email: string; role: string }>)
+      // Cuentas de prueba fuera de la lista de contactos.
+      .filter(t => !t.email.toLowerCase().includes("prueba"));
+    const chatMap = await mapDirectChats(userId, members.map(m => m.id));
+    return members.map(m => ({
+      user_id: m.id,
+      name: `${m.full_name ?? m.email} · ${ROLE_LABEL[m.role] ?? m.role}`,
+      chat_id: chatMap.get(m.id) ?? null,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   const { data: teacher } = await sb
     .from("teachers")
     .select("id, is_lead")
@@ -392,24 +442,7 @@ export async function getColleagueContacts(userId: string): Promise<ColleagueCon
     return ALLOWED_NAMES.some(n => lower.includes(n));
   });
 
-  const { data: parts } = await sb
-    .from("chat_participants")
-    .select("chat_id, user_id")
-    .eq("user_id", userId);
-  const myChatIds = ((parts ?? []) as Array<{ chat_id: string }>).map(p => p.chat_id);
-
-  const chatByColleague = new Map<string, string>();
-  if (myChatIds.length > 0) {
-    const { data: otherParts } = await sb
-      .from("chat_participants")
-      .select("chat_id, user_id, chats!inner(type)")
-      .in("chat_id", myChatIds)
-      .in("user_id", colleagues.map(c => c.user_id));
-    for (const p of (otherParts ?? []) as Array<{ chat_id: string; user_id: string; chats: { type: string } | Array<{ type: string }> }>) {
-      const ch = Array.isArray(p.chats) ? p.chats[0] : p.chats;
-      if (ch?.type === "direct") chatByColleague.set(p.user_id, p.chat_id);
-    }
-  }
+  const chatByColleague = await mapDirectChats(userId, colleagues.map(c => c.user_id));
 
   return colleagues.map(c => {
     const u = Array.isArray(c.users) ? c.users[0] : c.users;
