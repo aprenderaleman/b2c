@@ -5,7 +5,7 @@ import { getCloserUrgentes, searchLeadsForCloser } from "@/lib/closer-urgentes";
 import { LEAD_STATUS_LABEL } from "@/lib/setter-search";
 import { CloserUrgentesTabs } from "@/components/closer/CloserUrgentesTabs";
 
-export const metadata = { title: "Urgentes · Closer" };
+export const metadata = { title: "Mis Leads · Closer" };
 export const dynamic = "force-dynamic";
 
 /**
@@ -33,7 +33,7 @@ export default async function CloserUrgentesPage({
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 space-y-5">
       <header>
-        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Urgentes</h1>
+        <h1 className="text-xl font-bold text-slate-900 dark:text-slate-50">Mis Leads</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
           {total === 0
             ? "Sin cierres pendientes ahora mismo."

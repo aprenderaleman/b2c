@@ -212,7 +212,7 @@ export function CloserLeadDetail({
         onClick={() => router.push("/closer/urgentes")}
         className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400"
       >
-        &larr; Urgentes
+        &larr; Mis Leads
       </button>
 
       {/* Header */}

@@ -146,7 +146,10 @@ function closerItems(): NavItem[] {
   return [
     // CRM Closer F2 (Gelfis 2026-11-25): cola de cierre post-trial /
     // no-shows / antiguos. Primera en el array = primera en el sidebar.
-    { label: "Urgentes",           href: "/closer/urgentes",       icon: "users",      priority: 0.5 },
+    // Renombrada "Urgentes" → "Mis Leads" (Gelfis 2026-11-27); la ruta
+    // sigue siendo /closer/urgentes (la antigua /closer/leads vive fuera
+    // del menú para sesion-plan).
+    { label: "Mis Leads",          href: "/closer/urgentes",       icon: "users",      priority: 0.5 },
     { label: "Mis numeros",        href: "/closer/numeros",        icon: "trendingUp", priority: 3 },
     // Chat con la academia y el equipo de ventas (Gelfis 2026-11-27).
     { label: "Chats",              href: "/closer/chats",          icon: "messageCircle", priority: 3.2 },

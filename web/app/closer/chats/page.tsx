@@ -19,7 +19,7 @@ export default async function CloserChatsPage() {
     <main className="space-y-4">
       <header>
         <Link href="/closer/urgentes" className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400">
-          ← Volver a Urgentes
+          ← Volver a Mis Leads
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-50">Chats</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
