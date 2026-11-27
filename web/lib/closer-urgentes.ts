@@ -6,16 +6,20 @@ import { getLastContacts, type LastContact } from "./contacts";
  * Sin estado propio: todo se calcula al leer desde leads + lead_contacts.
  *
  * Tres tramos:
- *   post_trial — asistió al trial y sigue sin cierre. Las primeras 24h
- *     está "en espera" (la llamada la marca la tarea de las 24h, F5);
- *     después se ordena por bono restante (asistencia + 48h).
+ *   post_trial — asistió al trial hace MENOS de 7 días y sigue sin
+ *     cierre (ventana caliente). Las primeras 24h está "en espera" (la
+ *     llamada la marca la tarea de las 24h, F5); después se ordena por
+ *     bono restante (asistencia + 48h).
  *   no_show   — no asistió al trial.
- *   antiguo   — asignado a mano, sin trial reciente y sin sesión-plan
- *     (los de /sesion-plan viven en "Mis leads").
+ *   antiguo   — asistió hace más de 7 días sin convertir (backlog que
+ *     se trabaja poco a poco, Gelfis 2026-11-27) o asignado a mano.
+ *     Sin sesión-plan: esos viven en "Mis leads".
  */
 
 export const BONO_MS   = 48 * 3_600_000;
 export const ESPERA_MS = 24 * 3_600_000;
+/** Asistidos más viejos que esto pasan de Post-trial a Antiguos. */
+export const POST_TRIAL_VENTANA_MS = 7 * 24 * 3_600_000;
 
 export type CloserUrgenteTramo = "post_trial" | "no_show" | "antiguo";
 
@@ -94,8 +98,11 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
     // (sesion-resultado), así que sin este filtro saldrían duplicados.
     if (r.sesion_plan_at) continue;
 
-    if (r.trial_attended_at) {
+    if (r.trial_attended_at && now - new Date(r.trial_attended_at).getTime() < POST_TRIAL_VENTANA_MS) {
       postTrial.push(toItem(r, "post_trial"));
+    } else if (r.trial_attended_at) {
+      // Asistió hace más de 7 días sin convertir → backlog "Antiguos".
+      antiguos.push(toItem(r, "antiguo"));
     } else if (r.trial_absent_at) {
       noShows.push(toItem(r, "no_show"));
     } else {

@@ -100,7 +100,12 @@ function Row({ item }: { item: CloserUrgenteItem }) {
             ✗ No asistió {fmtFecha(item.trialAbsentAt)}
           </Chip>
         )}
-        {item.tramo === "antiguo" && item.fechaAsignacion && (
+        {item.tramo === "antiguo" && item.trialAttendedAt && (
+          <Chip cls="bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30">
+            ✓ Asistió {fmtFecha(item.trialAttendedAt)} — sin cierre
+          </Chip>
+        )}
+        {item.tramo === "antiguo" && !item.trialAttendedAt && item.fechaAsignacion && (
           <Chip cls="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700">
             Asignado {fmtFecha(item.fechaAsignacion)}
           </Chip>
