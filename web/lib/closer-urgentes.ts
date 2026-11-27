@@ -3,17 +3,23 @@ import { getLastContacts, type LastContact } from "./contacts";
 
 /**
  * CRM Closer F2 (Gelfis 2026-11-25) — cola derivada de /closer/urgentes.
- * Sin estado propio: todo se calcula al leer desde leads + lead_contacts.
+ * Sin estado propio: todo se calcula al leer desde leads + lead_contacts
+ * + tareas_closer.
  *
- * Tres tramos:
- *   post_trial — asistió al trial hace MENOS de 7 días y sigue sin
- *     cierre (ventana caliente). Las primeras 24h está "en espera" (la
- *     llamada la marca la tarea de las 24h, F5); después se ordena por
- *     bono restante (asistencia + 48h).
- *   no_show   — no asistió al trial.
- *   antiguo   — asistió hace más de 7 días sin convertir (backlog que
- *     se trabaja poco a poco, Gelfis 2026-11-27) o asignado a mano.
- *     Sin sesión-plan: esos viven en "Mis leads".
+ * Cuatro tramos (Gelfis 2026-11-27):
+ *   bono       — asistió hace <48h: el Bono de Acción Rápida sigue VIVO.
+ *     Las primeras 24h está "en espera" (la llamada la marca la tarea de
+ *     las 24h, F5); después se ordena por bono restante.
+ *   post_trial — asistió hace 2–7 días sin cierre (bono vencido, ventana
+ *     aún caliente).
+ *   no_show    — no asistió al trial.
+ *   antiguo    — asistió hace más de 7 días sin convertir (backlog que se
+ *     trabaja poco a poco) o asignado a mano. Sin sesión-plan: esos viven
+ *     en "Mis leads".
+ *
+ * Seguimiento pactado (Gelfis 2026-11-27): un lead con tarea
+ * seguimiento_fecha pendiente y FUTURA se oculta de la cola y reaparece
+ * en su tramo cuando llega la fecha, con chip "📆 Seguimiento".
  */
 
 export const BONO_MS   = 48 * 3_600_000;
@@ -21,7 +27,7 @@ export const ESPERA_MS = 24 * 3_600_000;
 /** Asistidos más viejos que esto pasan de Post-trial a Antiguos. */
 export const POST_TRIAL_VENTANA_MS = 7 * 24 * 3_600_000;
 
-export type CloserUrgenteTramo = "post_trial" | "no_show" | "antiguo";
+export type CloserUrgenteTramo = "bono" | "post_trial" | "no_show" | "antiguo";
 
 export type CloserUrgenteItem = {
   leadId: string;
@@ -35,13 +41,18 @@ export type CloserUrgenteItem = {
   bonoRestanteMs: number | null;
   /** true → aún no pasaron 24h del trial: no llamar todavía */
   enEspera: boolean;
+  /** Fecha del seguimiento pactado ya vencido (el lead reaparece con chip) */
+  seguimientoAt: string | null;
   ultimoContacto: LastContact | null;
 };
 
 export type CloserUrgentes = {
+  bono: CloserUrgenteItem[];
   postTrial: CloserUrgenteItem[];
   noShows: CloserUrgenteItem[];
   antiguos: CloserUrgenteItem[];
+  /** Leads ocultos por seguimiento pactado con fecha futura */
+  ocultosSeguimiento: number;
 };
 
 type LeadRow = {
@@ -69,6 +80,27 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
     .limit(500);
 
   const rows = (data ?? []) as LeadRow[];
+
+  // Seguimientos pactados pendientes: futuro → ocultar; vencido → chip.
+  const segFuturo = new Set<string>();
+  const segVencido = new Map<string, string>();
+  if (rows.length > 0) {
+    const { data: tareas } = await sb
+      .from("tareas_closer")
+      .select("lead_id, fecha_programada")
+      .eq("tipo", "seguimiento_fecha")
+      .is("fecha_completada", null)
+      .in("lead_id", rows.map((r) => r.id));
+    for (const t of (tareas ?? []) as Array<{ lead_id: string; fecha_programada: string }>) {
+      if (new Date(t.fecha_programada).getTime() > now) {
+        segFuturo.add(t.lead_id);
+      } else {
+        const prev = segVencido.get(t.lead_id);
+        if (!prev || t.fecha_programada < prev) segVencido.set(t.lead_id, t.fecha_programada);
+      }
+    }
+  }
+
   const lastContacts = await getLastContacts(rows.map((r) => r.id));
 
   const toItem = (r: LeadRow, tramo: CloserUrgenteTramo): CloserUrgenteItem => {
@@ -82,15 +114,18 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
       trialAttendedAt: r.trial_attended_at,
       trialAbsentAt: r.trial_absent_at,
       fechaAsignacion: r.fecha_asignacion_closer,
-      bonoRestanteMs: tramo === "post_trial" && bonoFin !== null && bonoFin > now ? bonoFin - now : null,
-      enEspera: tramo === "post_trial" && attendedMs !== null && now - attendedMs < ESPERA_MS,
+      bonoRestanteMs: tramo === "bono" && bonoFin !== null && bonoFin > now ? bonoFin - now : null,
+      enEspera: tramo === "bono" && attendedMs !== null && now - attendedMs < ESPERA_MS,
+      seguimientoAt: segVencido.get(r.id) ?? null,
       ultimoContacto: lastContacts.get(r.id) ?? null,
     };
   };
 
+  const bono: CloserUrgenteItem[] = [];
   const postTrial: CloserUrgenteItem[] = [];
   const noShows: CloserUrgenteItem[] = [];
   const antiguos: CloserUrgenteItem[] = [];
+  let ocultosSeguimiento = 0;
 
   for (const r of rows) {
     // Los leads del funnel /sesion-plan viven en "Mis leads" (semáforo +
@@ -98,9 +133,15 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
     // (sesion-resultado), así que sin este filtro saldrían duplicados.
     if (r.sesion_plan_at) continue;
 
-    if (r.trial_attended_at && now - new Date(r.trial_attended_at).getTime() < POST_TRIAL_VENTANA_MS) {
+    // Seguimiento pactado a futuro: fuera de la cola hasta su fecha.
+    if (segFuturo.has(r.id)) { ocultosSeguimiento++; continue; }
+
+    const attendedAge = r.trial_attended_at ? now - new Date(r.trial_attended_at).getTime() : null;
+    if (attendedAge !== null && attendedAge < BONO_MS) {
+      bono.push(toItem(r, "bono"));
+    } else if (attendedAge !== null && attendedAge < POST_TRIAL_VENTANA_MS) {
       postTrial.push(toItem(r, "post_trial"));
-    } else if (r.trial_attended_at) {
+    } else if (attendedAge !== null) {
       // Asistió hace más de 7 días sin convertir → backlog "Antiguos".
       antiguos.push(toItem(r, "antiguo"));
     } else if (r.trial_absent_at) {
@@ -110,10 +151,9 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
     }
   }
 
-  // Post-trial: primero los activos por bono restante (menos tiempo =
-  // más arriba; vencidos al final de los activos), luego los en espera
-  // por hora de asistencia.
-  postTrial.sort((a, b) => {
+  // Bono: activos por bono restante (menos tiempo arriba); los "en
+  // espera" al final, por hora de asistencia.
+  bono.sort((a, b) => {
     if (a.enEspera !== b.enEspera) return a.enEspera ? 1 : -1;
     if (!a.enEspera) {
       const ba = a.bonoRestanteMs ?? Number.MAX_SAFE_INTEGER;
@@ -122,6 +162,10 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
     }
     return new Date(a.trialAttendedAt ?? 0).getTime() - new Date(b.trialAttendedAt ?? 0).getTime();
   });
+
+  // Post-trial: el más viejo dentro de la ventana primero (se enfría).
+  postTrial.sort((a, b) =>
+    new Date(a.trialAttendedAt ?? 0).getTime() - new Date(b.trialAttendedAt ?? 0).getTime());
 
   // No-shows: el más reciente primero (rescate caliente).
   noShows.sort((a, b) =>
@@ -134,5 +178,5 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
     return ca - cb;
   });
 
-  return { postTrial, noShows, antiguos };
+  return { bono, postTrial, noShows, antiguos, ocultosSeguimiento };
 }

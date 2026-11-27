@@ -17,7 +17,7 @@ export default async function CloserUrgentesPage() {
   if (session.user.role !== "closer") redirect("/admin");
 
   const data = await getCloserUrgentes(session.user.id);
-  const total = data.postTrial.length + data.noShows.length + data.antiguos.length;
+  const total = data.bono.length + data.postTrial.length + data.noShows.length + data.antiguos.length;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 space-y-5">
@@ -27,6 +27,8 @@ export default async function CloserUrgentesPage() {
           {total === 0
             ? "Sin cierres pendientes ahora mismo."
             : `${total} lead${total === 1 ? "" : "s"} por cerrar. El bono del lead vence a las 48h de su clase de prueba.`}
+          {data.ocultosSeguimiento > 0 &&
+            ` ${data.ocultosSeguimiento} más en seguimiento pactado — reaparecen en su fecha.`}
         </p>
       </header>
 

@@ -10,18 +10,20 @@ import { useState } from "react";
 import Link from "next/link";
 import type { CloserUrgenteItem, CloserUrgentes } from "@/lib/closer-urgentes";
 
-type TabKey = "post_trial" | "no_show" | "antiguo";
+type TabKey = "bono" | "post_trial" | "no_show" | "antiguo";
 
 const TAB_META: Record<TabKey, { label: string; empty: string }> = {
-  post_trial: { label: "1️⃣ Post-trial sin cierre", empty: "Nadie pendiente de cierre. 🎉" },
-  no_show:    { label: "2️⃣ No asistieron",         empty: "Sin no-shows pendientes." },
-  antiguo:    { label: "3️⃣ Antiguos",              empty: "Sin leads antiguos asignados." },
+  bono:       { label: "1️⃣ 🎁 Bono activo",        empty: "Nadie con bono corriendo ahora mismo." },
+  post_trial: { label: "2️⃣ Post-trial sin cierre", empty: "Nadie pendiente de cierre. 🎉" },
+  no_show:    { label: "3️⃣ No asistieron",         empty: "Sin no-shows pendientes." },
+  antiguo:    { label: "4️⃣ Antiguos",              empty: "Sin leads antiguos asignados." },
 };
 
 export function CloserUrgentesTabs({ data }: { data: CloserUrgentes }) {
-  const [tab, setTab] = useState<TabKey>("post_trial");
+  const [tab, setTab] = useState<TabKey>("bono");
 
   const items: Record<TabKey, CloserUrgenteItem[]> = {
+    bono: data.bono,
     post_trial: data.postTrial,
     no_show: data.noShows,
     antiguo: data.antiguos,
@@ -78,21 +80,26 @@ function Row({ item }: { item: CloserUrgenteItem }) {
       >
         <span className="font-medium text-slate-900 dark:text-slate-100">{item.nombre}</span>
 
-        {item.tramo === "post_trial" && item.enEspera && (
+        {item.tramo === "bono" && item.enEspera && (
           <Chip cls="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700">
             ⏳ En espera — llamar a las 24h
           </Chip>
         )}
-        {item.tramo === "post_trial" && !item.enEspera && item.bonoRestanteMs !== null && (
+        {item.tramo === "bono" && !item.enEspera && item.bonoRestanteMs !== null && (
           <Chip cls={item.bonoRestanteMs < 6 * 3_600_000
             ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30"
             : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30"}>
             🎁 Bono: quedan {fmtRestante(item.bonoRestanteMs)}
           </Chip>
         )}
-        {item.tramo === "post_trial" && !item.enEspera && item.bonoRestanteMs === null && (
-          <Chip cls="bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700">
-            Bono vencido
+        {item.tramo === "post_trial" && item.trialAttendedAt && (
+          <Chip cls="bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30">
+            Asistió {fmtFecha(item.trialAttendedAt)} — bono vencido
+          </Chip>
+        )}
+        {item.seguimientoAt && (
+          <Chip cls="bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-200 dark:border-violet-500/30">
+            📆 Seguimiento pactado: {fmtFecha(item.seguimientoAt)}
           </Chip>
         )}
         {item.tramo === "no_show" && item.trialAbsentAt && (
