@@ -392,6 +392,13 @@ async function mapDirectChats(
   return out;
 }
 
+/**
+ * Cuentas espejo que NO salen como contactos del equipo: la cuenta
+ * closer de Gelfis (info@) duplicaba su contacto principal de la
+ * academia — Iván veía dos "Gelfis" (2026-11-27).
+ */
+export const TEAM_CHAT_EXCLUDED_EMAILS = ["info@aprender-aleman.de"];
+
 export async function getColleagueContacts(userId: string): Promise<ColleagueContact[]> {
   const sb = supabaseAdmin();
 
@@ -408,8 +415,9 @@ export async function getColleagueContacts(userId: string): Promise<ColleagueCon
       .neq("id", userId);
     const ROLE_LABEL: Record<string, string> = { superadmin: "Academia", admin: "Academia", closer: "Closer", setter: "Setter" };
     const members = ((team ?? []) as Array<{ id: string; full_name: string | null; email: string; role: string }>)
-      // Cuentas de prueba fuera de la lista de contactos.
-      .filter(t => !t.email.toLowerCase().includes("prueba"));
+      // Cuentas de prueba y cuentas espejo fuera de la lista de contactos.
+      .filter(t => !t.email.toLowerCase().includes("prueba")
+                && !TEAM_CHAT_EXCLUDED_EMAILS.includes(t.email.toLowerCase()));
     const chatMap = await mapDirectChats(userId, members.map(m => m.id));
     return members.map(m => ({
       user_id: m.id,

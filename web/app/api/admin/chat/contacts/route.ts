@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase";
+import { TEAM_CHAT_EXCLUDED_EMAILS } from "@/lib/chat";
 
 /**
  * GET /api/admin/chat/contacts
@@ -84,7 +85,8 @@ export async function GET() {
   });
 
   const equipo: Contact[] = ((salesTeam ?? []) as Array<UserBits & { role: string }>)
-    .filter(u => !u.email.toLowerCase().includes("prueba"))   // cuentas de test fuera
+    .filter(u => !u.email.toLowerCase().includes("prueba")                      // cuentas de test fuera
+              && !TEAM_CHAT_EXCLUDED_EMAILS.includes(u.email.toLowerCase()))    // espejos (Gelfis Closer) fuera
     .map(u => ({
       userId: u.id, name: u.full_name ?? u.email, email: u.email, phone: u.phone,
       active: u.active,
