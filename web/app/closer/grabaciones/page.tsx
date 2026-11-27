@@ -7,14 +7,29 @@ import { formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Grabaciones · Closer" };
 
-export default async function CloserRecordingsPage() {
+/** Búsqueda sin acentos: "ivan" encuentra "Iván". */
+const norm = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+export default async function CloserRecordingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const session = await requireRoleWithImpersonation(
     ["closer", "admin", "superadmin"],
     "closer",
   );
   if (session.user.role !== "closer") redirect("/admin");
 
-  const recs = await getCloserRecordings(session.user.id);
+  const { q } = await searchParams;
+  const query = (q ?? "").trim();
+  const all = await getCloserRecordings(session.user.id);
+  // Buscador (Gelfis 2026-11-27): filtra por nombre del lead o título de
+  // la clase, sin acentos.
+  const qn = norm(query);
+  const recs = qn.length >= 2
+    ? all.filter(r => norm(r.lead_name ?? "").includes(qn) || norm(r.class_title ?? "").includes(qn))
+    : all;
   const trials = recs.filter(r => r.kind === "trial");
   const sesiones = recs.filter(r => r.kind === "sesion");
 
@@ -30,7 +45,30 @@ export default async function CloserRecordingsPage() {
         </p>
       </header>
 
-      {recs.length === 0 && (
+      <form method="GET" className="flex gap-2">
+        <input
+          type="search"
+          name="q"
+          defaultValue={query}
+          placeholder="Buscar por nombre del lead…"
+          aria-label="Buscar grabación"
+          className="flex-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-400"
+        />
+        <button type="submit" className="btn-primary text-sm">Buscar</button>
+        {query && (
+          <Link href="/closer/grabaciones" className="self-center text-sm text-slate-500 hover:text-brand-600">
+            Limpiar
+          </Link>
+        )}
+      </form>
+
+      {recs.length === 0 && query && (
+        <p className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 text-center text-sm text-slate-500 dark:text-slate-400">
+          Sin grabaciones para &ldquo;{query}&rdquo;.
+        </p>
+      )}
+
+      {recs.length === 0 && !query && (
         <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 p-8 text-center">
           <div className="text-4xl">🎬</div>
           <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">
