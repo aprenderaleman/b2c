@@ -15,7 +15,8 @@ import { NotificationsOptOutToggle } from "@/components/admin/NotificationsOptOu
 import { RecordingsToggle } from "@/components/admin/RecordingsToggle";
 import { listStudentCertificates } from "@/lib/certificates";
 import { listAdminNotes } from "@/lib/admin-notes";
-import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
+import { GarantiaNivelCardV2 } from "@/components/garantia/GarantiaNivelCardV2";
+import { getGarantiaView } from "@/lib/garantia-nivel";
 import { requireRole } from "@/lib/rbac";
 import { supabaseAdmin } from "@/lib/supabase";
 
@@ -73,6 +74,9 @@ export default async function StudentDetailPage({
     classes_purchased: number; classes_adjustment: number;
     classes_consumed:  number; classes_remaining: number;
   } | null;
+
+  // Garantía con las reglas del contrato (asistencia + ejercicios de SCHULE).
+  const garantiaView = await getGarantiaView(id).catch(() => null);
 
   return (
     <main className="space-y-5">
@@ -211,11 +215,7 @@ export default async function StudentDetailPage({
         </section>
       )}
 
-      <GarantiaNivelCard
-        attendanceRate={student.attendance_rate}
-        schuleCompletionPct={student.schule_completion_pct}
-        status={(student.garantia_status as "active" | "at_risk" | "lost" | "not_applicable") ?? "not_applicable"}
-      />
+      {garantiaView && <GarantiaNivelCardV2 view={garantiaView} audience="staff" />}
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-1 space-y-5">

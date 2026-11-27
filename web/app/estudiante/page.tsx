@@ -16,6 +16,9 @@ import { getPendingReviewForStudent } from "@/lib/class-reviews";
 import { ClassReviewPrompt } from "@/components/student/ClassReviewPrompt";
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
 import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
+import { GarantiaNivelCardV2 } from "@/components/garantia/GarantiaNivelCardV2";
+import { getGarantiaView, isGarantiaV2ForStudents } from "@/lib/garantia-nivel";
+import { legacyGarantiaStatus } from "@/lib/garantia-rules";
 import { getStudentOnboarding } from "@/lib/onboarding";
 import { FirstStepsCard } from "@/components/onboarding/FirstStepsCard";
 import { OnboardingMount } from "@/components/onboarding/OnboardingMount";
@@ -72,6 +75,9 @@ export default async function StudentHome() {
   // para la sesión real del alumno; con "Ver como" (admin) el tour se puede
   // abrir a mano con ?tour=1 para revisarlo, sin tocar el estado del alumno.
   const isRealStudent = session.user.role === "student";
+
+  // Garantía v2 (asistencia + SCHULE real): solo si está activada para alumnos.
+  const garantiaV2View = (await isGarantiaV2ForStudents()) ? await getGarantiaView(student.id).catch(() => null) : null;
   const onboarding = await getStudentOnboarding(student.id, student.user_id ?? session.user.id, (student.language_preference ?? "es") as "es" | "de", { record: isRealStudent });
 
   return (
@@ -207,11 +213,16 @@ export default async function StudentHome() {
         </div>
       </section>
 
-      <GarantiaNivelCard
-        attendanceRate={student.attendance_rate ?? null}
-        schuleCompletionPct={student.schule_completion_pct ?? null}
-        status={(student.garantia_status as "active" | "at_risk" | "lost" | "not_applicable") ?? "not_applicable"}
-      />
+      {/* Garantía: el alumno sigue viendo la tarjeta de siempre (solo
+          asistencia) hasta que se active system_config.garantia_v2_alumnos.
+          Profes y admins ya ven la nueva, con el dato real de SCHULE. */}
+      {garantiaV2View
+        ? <GarantiaNivelCardV2 view={garantiaV2View} audience="student" />
+        : <GarantiaNivelCard
+            attendanceRate={student.attendance_rate ?? null}
+            schuleCompletionPct={null}
+            status={legacyGarantiaStatus(student.attendance_rate ?? null, null)}
+          />}
 
       {/* "Tu plan" movido a /estudiante/perfil (Gelfis 2026-10-30) —
           componente compartido components/student/PlanSection.tsx. */}

@@ -11,7 +11,8 @@ import { ScheduleButton } from "./ScheduleButton";
 import { IssueCertificateButton } from "@/components/admin/IssueCertificateButton";
 import { BonoConversacionLine } from "@/components/teacher/BonoConversacionLine";
 import { GroupDocButton } from "@/components/classes/GroupDocButton";
-import { GarantiaNivelCard } from "@/components/garantia/GarantiaNivelCard";
+import { GarantiaNivelCardV2 } from "@/components/garantia/GarantiaNivelCardV2";
+import { getGarantiaView } from "@/lib/garantia-nivel";
 import { getClassBalance } from "@/lib/class-balance";
 import { formatClassDateEs, formatClassTimeEs } from "@/lib/classes";
 
@@ -105,6 +106,9 @@ export default async function TeacherStudentDetail({
     .filter(Boolean)
     .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at))
     .slice(0, 12);
+
+  // Garantía con las reglas del contrato (asistencia + ejercicios de SCHULE).
+  const garantiaView = await getGarantiaView(studentId).catch(() => null);
 
   return (
     <main className="space-y-5">
@@ -250,11 +254,7 @@ export default async function TeacherStudentDetail({
         )}
       </section>
 
-      <GarantiaNivelCard
-        attendanceRate={student.attendance_rate}
-        schuleCompletionPct={student.schule_completion_pct}
-        status={(student.garantia_status as "active" | "at_risk" | "lost" | "not_applicable") ?? "not_applicable"}
-      />
+      {garantiaView && <GarantiaNivelCardV2 view={garantiaView} audience="staff" />}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
