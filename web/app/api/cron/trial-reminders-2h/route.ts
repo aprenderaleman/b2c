@@ -120,6 +120,7 @@ async function run(req: Request) {
     const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
       kind: "trial_reminder_2h",
       channel: "setter",
+      leadId: lead.id,
     });
 
     if (res.ok) {

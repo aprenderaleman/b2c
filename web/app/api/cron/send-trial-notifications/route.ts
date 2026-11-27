@@ -187,6 +187,7 @@ async function run(req: Request) {
       const r = await sendWhatsappText(lead.whatsapp_normalized, waText, {
         kind: "trial_confirmation",
         channel: "setter",
+        leadId: lead.id,
       });
       waOk = r.ok;
       await sb.from("lead_timeline").insert({

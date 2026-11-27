@@ -391,6 +391,10 @@ export type SendWaOpts = {
    *  global — es otro canal, no toca el número principal. Si la key no
    *  está configurada, se comporta como un envío normal (inerte). */
   channel?: "setter";
+  /** Lead asociado (Gelfis 2026-11-27). Si está presente y el envío
+   *  tiene éxito, se crea una fila en wa_delivery_tracking para que el
+   *  monitor detecte entregas que quedaron en "Esperando el mensaje". */
+  leadId?: string;
 };
 
 // ── Canal del setter: instancia propia para el warm-up del número nuevo ──
@@ -718,6 +722,30 @@ export async function sendWhatsappText(
     };
     const messageId = data.key?.id ?? data.messageId ?? null;
     if (setterInstance) await bumpSetterDailyCount();
+    // Delivery tracking (Gelfis 2026-11-27). Si tenemos leadId y
+    // messageId, registramos la fila para que el cron monitor detecte
+    // entregas que quedaron en "Esperando el mensaje". No bloqueante:
+    // si el insert falla el envío sigue reportándose como ok.
+    if (opts.leadId && messageId) {
+      try {
+        const { supabaseAdmin } = await import("./supabase");
+        const sb = supabaseAdmin();
+        await sb.from("wa_delivery_tracking").insert({
+          lead_id:       opts.leadId,
+          wa_message_id: messageId,
+          phone_e164:    phoneE164,
+          instance,
+          kind:          opts.kind ?? "unknown",
+          text_preview:  text.slice(0, 200),
+          original_text: text,
+          context: {
+            channel: setterInstance ? "setter" : "main",
+          },
+        });
+      } catch (e) {
+        console.warn("[wa-tracking] insert failed (non-blocking):", e instanceof Error ? e.message : e);
+      }
+    }
     return { ok: true, messageId };
   } catch (e) {
     return { ok: false, reason: e instanceof Error ? e.message : "unknown" };

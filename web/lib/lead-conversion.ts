@@ -382,6 +382,7 @@ export async function convertLeadToStudent(
         const waResult = await sendWhatsappText(waPhone, waText, {
           kind: "welcome_week_t0",
           channel: "setter",
+          leadId: lead.id,
         });
         if (!waResult.ok) {
           await sb.from("lead_timeline").insert({

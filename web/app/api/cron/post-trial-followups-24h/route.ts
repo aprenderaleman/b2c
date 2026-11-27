@@ -145,6 +145,7 @@ async function run(req: Request) {
     const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
       kind: waKindFor(r.kind),
       channel: "setter",
+      leadId: r.lead_id,
     });
 
     if (res.ok) {

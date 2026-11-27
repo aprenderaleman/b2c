@@ -291,6 +291,7 @@ export async function markTrialAttendedAwaitingConversion(
   const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
     kind: opts ? "trial_inscription_initial" : "trial_attended_initial",
     channel: "setter",
+    leadId,
   });
   if (res.ok) {
     await sb.from("lead_timeline").insert({
@@ -510,6 +511,7 @@ export async function markTrialAttendedNoLink(leadId: string): Promise<void> {
   const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
     kind: "trial_attended_initial",
     channel: "setter",
+    leadId,
   });
   if (res.ok) {
     await sb.from("lead_timeline").insert({
@@ -647,6 +649,7 @@ export async function markTrialAbsent(leadId: string): Promise<void> {
     const res = await sendWhatsappText(lead.whatsapp_normalized, text, {
       kind: "trial_absent_initial",
       channel: "setter",
+      leadId,
     });
     await sb.from("lead_timeline").insert({
       lead_id: leadId,
@@ -877,6 +880,7 @@ export async function sendRescheduleLinkMessage(
       kind: "trial_reschedule_link",
       // El setter envía por su propio canal (número en warm-up).
       ...(opts?.copy === "setter" ? { channel: "setter" as const } : {}),
+      leadId,
     });
     waOk = waRes.ok;
     waReason = waRes.ok ? null : (waRes.reason ?? "unknown");
@@ -1070,6 +1074,7 @@ export async function sendSesionRescheduleLinkMessage(
     kind: "sesion_reschedule_link",
     // El setter envía por su propio canal (número en warm-up).
     ...(opts?.copy === "setter" ? { channel: "setter" as const } : {}),
+    leadId,
   });
   await sb.from("lead_timeline").insert({
     lead_id: leadId,

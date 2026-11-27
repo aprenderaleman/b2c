@@ -209,6 +209,14 @@
     {
       "path": "/api/cron/hours-reconciliation",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/wa-delivery-monitor",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/wa-delivery-recover",
+      "schedule": "*/10 * * * *"
     }
   ]
 }
