@@ -92,11 +92,38 @@ describe("buildTeacherRescheduleLeadMessage", () => {
     expect(t).toContain("👉 https://b2c.aprender-aleman.de/agendar/cuando?lead=x");
     expect(t).not.toContain("no recibimos respuesta");
   });
+  it("lead canceló: agradece el aviso, libera el horario y pide avisar al agendar", () => {
+    const t = buildTeacherRescheduleLeadMessage({ ...common, reason: "lead_cancelo" });
+    expect(t).toContain("Hola Ana 👋");
+    expect(t).toContain("Gracias por avisarnos que no podrás venir a tu clase de prueba del miércoles 25 de noviembre, 19:00 (Berlín). ¡No pasa nada! Ya liberamos ese horario.");
+    expect(t).toContain("👉 https://b2c.aprender-aleman.de/agendar/cuando?lead=x");
+    expect(t).toContain("avísame por favor cuando hayas agendado 🙌");
+    expect(t).not.toContain("no recibimos respuesta");
+    expect(t).not.toContain("disculpas");
+  });
   it("sin nombre de profe ni de lead sigue siendo legible", () => {
     const a = buildTeacherRescheduleLeadMessage({ ...common, leadFirstName: "", teacherFirstName: null, reason: "lead_no_confirmo" });
     expect(a.startsWith("Hola 👋")).toBe(true);
     expect(a).toContain("19:00 (Berlín) y no recibimos respuesta");
     const b = buildTeacherRescheduleLeadMessage({ ...common, teacherFirstName: null, reason: "profe_no_puede" });
     expect(b).toContain("tu profesor/a no podrá darte");
+  });
+});
+
+describe("renderTeacherRescheduleEmail", () => {
+  const common = { leadName: "Ana", teacherFirstName: "Sabine", whenText: "miércoles 25 de noviembre, 19:00 (Berlín)", rescheduleUrl: "https://b2c.aprender-aleman.de/agendar/cuando?lead=x" };
+  it("cada motivo tiene su asunto y su texto, con el enlace", async () => {
+    const { renderTeacherRescheduleEmail } = await import("./email/templates/trial-teacher-reschedule");
+    const a = renderTeacherRescheduleEmail({ ...common, reason: "lead_no_confirmo" });
+    const b = renderTeacherRescheduleEmail({ ...common, reason: "profe_no_puede" });
+    const c = renderTeacherRescheduleEmail({ ...common, reason: "lead_cancelo" });
+    expect(new Set([a.subject, b.subject, c.subject]).size).toBe(3);
+    expect(a.text).toContain("no recibimos respuesta");
+    expect(b.text).toContain("Sabine no podrá darte la clase");
+    expect(c.text).toContain("Gracias por avisarnos que no podrás venir");
+    for (const m of [a, b, c]) {
+      expect(m.text).toContain("👉 https://b2c.aprender-aleman.de/agendar/cuando?lead=x");
+      expect(m.html).toContain("https://b2c.aprender-aleman.de/agendar/cuando?lead=x");
+    }
   });
 });

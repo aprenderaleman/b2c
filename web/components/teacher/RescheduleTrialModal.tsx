@@ -9,6 +9,8 @@
  *     decide (GET del mismo endpoint) y aquí solo se muestra el porqué.
  *   • "No puedo dar la clase" — abre un cuadro para escribir el motivo, que
  *     ve el admin; al lead solo se le dice "por un imprevisto".
+ *   • "Lead ha cancelado"     — el lead avisó de que no puede venir (aunque
+ *     hubiera confirmado). Sin espera; el profe anota qué le dijo.
  * En ambos casos se cancela la clase, el lead pasa a "Reagendando" y recibe
  * su mensaje con el enlace para elegir nueva fecha.
  */
@@ -60,7 +62,7 @@ export function RescheduleTrialModal({ leadId, leadName, beforeSubmit, onClose, 
   const canSend =
     !!status?.hasUpcomingTrial && !sending &&
     ((reason === "lead_no_confirmo" && noConfirmOk) ||
-     (reason === "profe_no_puede" && noteClean.length >= NOTE_MIN_CHARS));
+     ((reason === "profe_no_puede" || reason === "lead_cancelo") && noteClean.length >= NOTE_MIN_CHARS));
 
   const whenLabel = status?.scheduledAt
     ? new Date(status.scheduledAt).toLocaleString("es-ES", {
@@ -77,7 +79,7 @@ export function RescheduleTrialModal({ leadId, leadName, beforeSubmit, onClose, 
       const res = await fetch(`/api/teacher/trial/${leadId}/send-reschedule-link`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(reason === "profe_no_puede" ? { reason, note: noteClean } : { reason }),
+        body: JSON.stringify(reason === "lead_no_confirmo" ? { reason } : { reason, note: noteClean }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.reason ?? json.error ?? `HTTP ${res.status}`);
@@ -156,9 +158,25 @@ export function RescheduleTrialModal({ leadId, leadName, beforeSubmit, onClose, 
                 </span>
               </button>
 
-              {reason === "profe_no_puede" && (
+              <button
+                type="button"
+                disabled={sending}
+                aria-pressed={reason === "lead_cancelo"}
+                onClick={() => setReason("lead_cancelo")}
+                className={optionCls(reason === "lead_cancelo", false)}
+              >
+                <span className="block text-sm font-semibold text-slate-900 dark:text-slate-50">Lead ha cancelado</span>
+                <span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">
+                  {firstName} te avisó de que no puede venir. Recibirá el enlace para elegir otra fecha.
+                </span>
+              </button>
+
+              {(reason === "profe_no_puede" || reason === "lead_cancelo") && (
                 <label className="block">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Motivo</span>
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    {reason === "lead_cancelo" ? "¿Qué te dijo?" : "Motivo"}
+                    <span className="ml-1 font-normal text-slate-500 dark:text-slate-400">(solo lo ve la academia)</span>
+                  </span>
                   <textarea
                     value={note}
                     onChange={e => setNote(e.target.value.slice(0, NOTE_MAX_CHARS))}
@@ -166,7 +184,7 @@ export function RescheduleTrialModal({ leadId, leadName, beforeSubmit, onClose, 
                     autoFocus
                     disabled={sending}
                     className="input-text mt-1 w-full"
-                    placeholder="Ej.: se me cruza con otra clase a esa hora"
+                    placeholder={reason === "lead_cancelo" ? "Ej.: le ha surgido un viaje de trabajo" : "Ej.: se me cruza con otra clase a esa hora"}
                   />
                   <span className="mt-1 block text-[11px] text-slate-500 dark:text-slate-400">
                     {noteClean.length}/{NOTE_MAX_CHARS}

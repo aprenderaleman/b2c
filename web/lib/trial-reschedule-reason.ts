@@ -15,9 +15,12 @@
  * Este archivo es puro (sin BD) para poder testearlo.
  */
 
-export type TeacherRescheduleReason = "lead_no_confirmo" | "profe_no_puede";
+// "lead_cancelo" (Gelfis 2026-11-27): el lead avisó al profe de que no
+// puede venir — aunque hubiera confirmado. Sin ventana ni nota de voz;
+// el profe escribe qué le dijo (solo lo ve la academia).
+export type TeacherRescheduleReason = "lead_no_confirmo" | "profe_no_puede" | "lead_cancelo";
 
-export const TEACHER_RESCHEDULE_REASONS: readonly TeacherRescheduleReason[] = ["lead_no_confirmo", "profe_no_puede"];
+export const TEACHER_RESCHEDULE_REASONS: readonly TeacherRescheduleReason[] = ["lead_no_confirmo", "profe_no_puede", "lead_cancelo"];
 
 /** Desde cuántos minutos antes de la clase se puede reagendar por falta de confirmación. */
 export const NO_CONFIRM_WINDOW_MIN = 60;
@@ -107,6 +110,18 @@ export function buildTeacherRescheduleLeadMessage(input: {
       `Cuando te escribamos para confirmar, respóndenos con un "Sí" y tu lugar queda asegurado 🙌`,
     ].join("\n");
   }
+  if (input.reason === "lead_cancelo") {
+    return [
+      hola,
+      ``,
+      `Gracias por avisarnos que no podrás venir a tu clase de prueba del ${input.whenText}. ¡No pasa nada! Ya liberamos ese horario.`,
+      ``,
+      `Cuando te venga bien, elige una nueva fecha aquí:`,
+      `👉 ${input.rescheduleUrl}`,
+      ``,
+      `Tu clase gratuita te sigue esperando, avísame por favor cuando hayas agendado 🙌`,
+    ].join("\n");
+  }
   const quien = input.teacherFirstName ?? "tu profesor/a";
   return [
     hola,
@@ -122,5 +137,7 @@ export function buildTeacherRescheduleLeadMessage(input: {
 
 /** Etiqueta corta para historial y notas. */
 export function teacherRescheduleReasonLabel(reason: TeacherRescheduleReason): string {
-  return reason === "lead_no_confirmo" ? "lead no confirmó" : "el profe no puede dar la clase";
+  return reason === "lead_no_confirmo" ? "lead no confirmó"
+       : reason === "lead_cancelo"     ? "el lead canceló"
+       : "el profe no puede dar la clase";
 }

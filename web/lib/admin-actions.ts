@@ -906,12 +906,26 @@ export async function sendRescheduleLinkMessage(
   let emailOk = false;
   if ((!waOk || manualWa) && linfo.email) {
     try {
-      const { sendTrialCancelledEmail } = await import("./email/send");
-      const res = await sendTrialCancelledEmail(linfo.email, {
-        leadName: firstName,
-        language: linfo.language === "de" ? "de" : "es",
-        rescheduleUrl,
-      });
+      const { sendTrialCancelledEmail, sendRaw } = await import("./email/send");
+      // Con motivo del profe (Gelfis 2026-11-27): el email lleva el mismo
+      // mensaje que el WhatsApp de ese motivo. Sin motivo → el genérico.
+      const res = tr && trial
+        ? await (async () => {
+            const { renderTeacherRescheduleEmail } = await import("./email/templates/trial-teacher-reschedule");
+            const m = renderTeacherRescheduleEmail({
+              reason:           tr.reason,
+              leadName:         firstName,
+              teacherFirstName: tr.teacherFirstName ?? null,
+              whenText:         formatBerlinFull(trial.scheduled_at, "es"),
+              rescheduleUrl,
+            });
+            return sendRaw(linfo.email!, m.subject, m.html, m.text);
+          })()
+        : await sendTrialCancelledEmail(linfo.email, {
+            leadName: firstName,
+            language: linfo.language === "de" ? "de" : "es",
+            rescheduleUrl,
+          });
       emailOk = res.ok;
       await sb.from("lead_timeline").insert({
         lead_id: leadId,

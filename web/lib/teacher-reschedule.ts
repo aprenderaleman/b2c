@@ -16,6 +16,9 @@ import {
  *       el profe marcó su nota de voz y falta ≤ 1 h para la clase.
  *   reason "profe_no_puede"   → motivo escrito obligatorio; queda en el
  *       historial y avisa a los admins. No se le envía al lead.
+ *   reason "lead_cancelo"     → el lead avisó de que no puede venir (aunque
+ *       hubiera confirmado). Sin ventana ni nota de voz; el profe escribe qué
+ *       le dijo el lead (historial, no avisa a admins ni viaja al lead).
  * El profe siempre indica el motivo; closer/admin pueden seguir sin él
  * (copy genérico de siempre).
  */
@@ -157,6 +160,7 @@ export async function teacherRescheduleTrial(args: {
       channel: "whatsapp",
       note: reason === "lead_no_confirmo" ? "Reagendado por el profe: el lead no confirmó. Enlace enviado"
           : reason === "profe_no_puede"   ? `Reagendado por el profe: no puede dar la clase (${note}). Enlace enviado`
+          : reason === "lead_cancelo"     ? `Reagendado por el profe: el lead canceló (${note}). Enlace enviado`
           : "Enlace de agendar clase de prueba enviado",
     });
   }
