@@ -5,6 +5,8 @@ import { createUser } from "@/lib/users";
 import { sendWelcomeStaffEmail } from "@/lib/email/send";
 import { supabaseAdmin } from "@/lib/supabase";
 import { getConfigValue } from "@/lib/config-copys";
+import { buildAgreementForNewCloser } from "@/lib/closer-agreement";
+import { CLOSER_AGREEMENT_VERSION } from "@/lib/closer-agreement-pdf";
 
 const Body = z.object({
   email: z.string().trim().toLowerCase().email(),
@@ -76,6 +78,18 @@ export async function POST(req: Request) {
   // system_config (clave closer_welcome_doc_url). Sin valor, el email
   // sale como siempre.
   const welcomeDocUrl = await getConfigValue("closer_welcome_doc_url");
+
+  // Acuerdo de Colaboración (2026-11-27): PDF personalizado adjunto al
+  // email de alta — firmado con la firma guardada del admin si existe
+  // (mismo flujo que los profes). Nunca bloquea la creación.
+  const adminUserId = (session.user as { id: string }).id;
+  let agreement: { pdf: Buffer; path: string; signed: boolean } | null = null;
+  try {
+    agreement = await buildAgreementForNewCloser({ closerUserId: created.userId, adminUserId });
+  } catch (e) {
+    console.error("[closers] agreement pdf failed:", e instanceof Error ? e.message : e);
+  }
+
   const emailResult = await sendWelcomeStaffEmail(parsed.data.email, {
     name: parsed.data.fullName.split(/\s+/)[0] || parsed.data.fullName,
     email: parsed.data.email,
@@ -84,12 +98,23 @@ export async function POST(req: Request) {
     role: "closer",
     language: parsed.data.language,
     welcomeDocUrl,
-  });
+    agreementAttached: !!agreement,
+  }, agreement ? [{ filename: "Acuerdo_Colaboracion_Closer_Aprender-Aleman.pdf", content: agreement.pdf, contentType: "application/pdf" }] : undefined);
+
+  if (agreement && emailResult.ok) {
+    await sb.from("users").update({
+      closer_agreement_sent_at: new Date().toISOString(),
+      closer_agreement_version: CLOSER_AGREEMENT_VERSION,
+      closer_agreement_path: agreement.path,
+    }).eq("id", created.userId);
+  }
 
   return NextResponse.json({
     ok: true,
     userId: created.userId,
     emailSent: emailResult.ok,
+    agreementAttached: !!agreement,
+    agreementSigned: agreement?.signed ?? false,
     tempPassword: emailResult.ok ? null : created.tempPassword,
   });
 }

@@ -6,6 +6,7 @@ import { getCloserDetailedStats } from "@/lib/closer-commissions";
 import { getCloserQueue } from "@/lib/closer-semaforo";
 import { getCloserContactMetrics, fmtVelocidad } from "@/lib/closer-admin-metrics";
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
+import { CloserAgreementActions } from "./CloserAgreementActions";
 
 export const metadata = { title: "Closer · Admin" };
 
@@ -38,7 +39,7 @@ export default async function AdminCloserDetailPage({
   const sb = supabaseAdmin();
   const { data: closer } = await sb
     .from("users")
-    .select("id, email, full_name, phone, active, rango, flujo_activo, created_at")
+    .select("id, email, full_name, phone, active, rango, flujo_activo, created_at, closer_agreement_sent_at, closer_agreement_signed_at, closer_agreement_received_at")
     .eq("id", id)
     .eq("role", "closer")
     .maybeSingle();
@@ -136,6 +137,24 @@ export default async function AdminCloserDetailPage({
         <Stat label="Convertidos" value={String(stats.leads_convertidos)} />
         <Stat label="Perdidos" value={String(stats.leads_perdidos)} />
         <Stat label="Comisiones" value={fmtEur(stats.comisiones_cents)} />
+      </section>
+
+      {/* Acuerdo de Colaboración (2026-11-27) — mismo flujo que profes */}
+      <section className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Acuerdo de Colaboración
+        </h2>
+        <div className="mt-3">
+          <CloserAgreementActions
+            closerId={closer.id}
+            sent={!!closer.closer_agreement_sent_at}
+            signedAt={closer.closer_agreement_signed_at as string | null}
+            receivedAt={closer.closer_agreement_received_at as string | null}
+          />
+        </div>
+        <p className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+          Se adjunta automáticamente (firmado con tu firma guardada) en el email de alta de cada closer nuevo.
+        </p>
       </section>
 
       {/* Métricas de contacto (CRM Closer F6) — la comisión depende del

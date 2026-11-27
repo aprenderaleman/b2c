@@ -11,6 +11,8 @@ export type WelcomeStaffVars = {
    *  system_config (closer_welcome_doc_url). Sin URL, el email sale
    *  como siempre. */
   welcomeDocUrl?: string | null;
+  /** true → el email lleva adjunto el Acuerdo de Colaboración (2026-11-27). */
+  agreementAttached?: boolean;
 };
 
 export function renderWelcomeStaff(v: WelcomeStaffVars): RenderedEmail {
@@ -38,6 +40,7 @@ function renderES(v: WelcomeStaffVars): RenderedEmail {
       ${button(loginUrl, "Entrar a la plataforma →")}
     </div>
     ${v.welcomeDocUrl ? p(`📄 Antes de empezar, lee tu <a href="${escapeHtml(v.welcomeDocUrl)}" style="color:#ea580c;font-weight:600;">documento de bienvenida</a> — ahí está todo lo que necesitas saber para arrancar.`) : ""}
+    ${v.agreementAttached ? p(`📎 Adjunto encontrarás tu <strong>Acuerdo de Colaboración</strong> en PDF. Léelo con calma y, si estás de acuerdo, respóndenos a este correo con el PDF firmado (vale una firma digital o una foto del documento firmado).`) : ""}
     ${p(`Bienvenido al equipo. Cualquier duda, respóndenos este correo.`)}
     ${p(`<em style="color:#64748b;">El equipo de Aprender-Aleman.de</em>`)}
   `;
@@ -53,6 +56,7 @@ function renderES(v: WelcomeStaffVars): RenderedEmail {
     `Contraseña temporal: ${v.tempPassword}`,
     `(Se te pedirá cambiarla al entrar)`,
     ...(v.welcomeDocUrl ? [``, `Documento de bienvenida: ${v.welcomeDocUrl}`] : []),
+    ...(v.agreementAttached ? [``, `Adjunto: tu Acuerdo de Colaboración en PDF. Respóndenos con el PDF firmado.`] : []),
     ``,
     `Bienvenido al equipo.`,
     `El equipo de Aprender-Aleman.de`,
@@ -79,6 +83,7 @@ function renderDE(v: WelcomeStaffVars): RenderedEmail {
       ${button(loginUrl, "Zur Plattform →")}
     </div>
     ${v.welcomeDocUrl ? p(`📄 Bevor du loslegst, lies bitte dein <a href="${escapeHtml(v.welcomeDocUrl)}" style="color:#ea580c;font-weight:600;">Willkommensdokument</a>.`) : ""}
+    ${v.agreementAttached ? p(`📎 Im Anhang findest du deine <strong>Kooperationsvereinbarung</strong> als PDF. Lies sie in Ruhe und sende sie uns unterschrieben per Antwort zurück.`) : ""}
     ${p(`Willkommen im Team. Bei Fragen antworte einfach auf diese E-Mail.`)}
     ${p(`<em style="color:#64748b;">Dein Aprender-Aleman.de Team</em>`)}
   `;
@@ -94,6 +99,7 @@ function renderDE(v: WelcomeStaffVars): RenderedEmail {
     `Temporäres Passwort: ${v.tempPassword}`,
     `(Du wirst beim ersten Login gebeten, es zu ändern)`,
     ...(v.welcomeDocUrl ? [``, `Willkommensdokument: ${v.welcomeDocUrl}`] : []),
+    ...(v.agreementAttached ? [``, `Anhang: deine Kooperationsvereinbarung als PDF. Bitte unterschrieben zurücksenden.`] : []),
     ``,
     `Willkommen im Team.`,
     `Dein Aprender-Aleman.de Team`,

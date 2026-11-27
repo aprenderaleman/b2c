@@ -446,13 +446,15 @@ export async function sendPostTrialFinalEmail(
 
 /**
  * Send the "welcome to the team" email for a newly-created admin or teacher.
+ * `attachments`: p. ej. el Acuerdo de Colaboración del closer (2026-11-27).
  */
 export async function sendWelcomeStaffEmail(
   to: string,
   vars: WelcomeStaffVars,
+  attachments?: Array<{ filename: string; content: Buffer; contentType: string }>,
 ): Promise<SendResult> {
   const { subject, html, text } = renderWelcomeStaff(vars);
-  return sendRaw(to, subject, html, text, undefined, { critical: true });
+  return sendRaw(to, subject, html, text, attachments, { critical: true });
 }
 
 /**
