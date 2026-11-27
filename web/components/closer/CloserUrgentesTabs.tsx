@@ -10,13 +10,14 @@ import { useState } from "react";
 import Link from "next/link";
 import type { CloserUrgenteItem, CloserUrgentes } from "@/lib/closer-urgentes";
 
-type TabKey = "bono" | "post_trial" | "no_show" | "antiguo";
+type TabKey = "bono" | "post_trial" | "no_show" | "antiguo" | "seguimiento";
 
 const TAB_META: Record<TabKey, { label: string; empty: string }> = {
-  bono:       { label: "1️⃣ 🎁 Bono activo",        empty: "Nadie con bono corriendo ahora mismo." },
-  post_trial: { label: "2️⃣ Post-trial sin cierre", empty: "Nadie pendiente de cierre. 🎉" },
-  no_show:    { label: "3️⃣ No asistieron",         empty: "Sin no-shows pendientes." },
-  antiguo:    { label: "4️⃣ Antiguos",              empty: "Sin leads antiguos asignados." },
+  bono:        { label: "1️⃣ 🎁 Bono activo",        empty: "Nadie con bono corriendo ahora mismo." },
+  post_trial:  { label: "2️⃣ Post-trial sin cierre", empty: "Nadie pendiente de cierre. 🎉" },
+  no_show:     { label: "3️⃣ No asistieron",         empty: "Sin no-shows pendientes." },
+  antiguo:     { label: "4️⃣ Antiguos",              empty: "Sin leads antiguos asignados." },
+  seguimiento: { label: "5️⃣ En seguimiento",        empty: "Aún no has contactado a nadie sin cerrar." },
 };
 
 export function CloserUrgentesTabs({ data }: { data: CloserUrgentes }) {
@@ -27,6 +28,7 @@ export function CloserUrgentesTabs({ data }: { data: CloserUrgentes }) {
     post_trial: data.postTrial,
     no_show: data.noShows,
     antiguo: data.antiguos,
+    seguimiento: data.seguimiento,
   };
 
   return (
@@ -85,7 +87,7 @@ function Row({ item }: { item: CloserUrgenteItem }) {
             ⏳ En espera — llamar a las 24h
           </Chip>
         )}
-        {item.tramo === "bono" && !item.enEspera && item.bonoRestanteMs !== null && (
+        {(item.tramo === "bono" || item.tramo === "seguimiento") && !item.enEspera && item.bonoRestanteMs !== null && (
           <Chip cls={item.bonoRestanteMs < 6 * 3_600_000
             ? "bg-red-50 dark:bg-red-500/10 text-red-700 dark:text-red-300 border-red-200 dark:border-red-500/30"
             : "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/30"}>

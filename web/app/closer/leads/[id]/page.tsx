@@ -28,7 +28,7 @@ export default async function CloserLeadPage({
     .eq("id", leadId)
     .single();
 
-  if (!lead || lead.closer_id !== closerId) redirect("/closer/leads");
+  if (!lead || lead.closer_id !== closerId) redirect("/closer/urgentes");
   // CRM Closer F2 (Gelfis 2026-11-25): además del funnel /sesion-plan,
   // el closer vuelve a recibir leads post-trial por rotación — la ficha
   // abre para cualquier lead asignado a él (antes exigía sesion_plan_at).

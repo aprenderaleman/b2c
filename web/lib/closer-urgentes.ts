@@ -15,11 +15,15 @@ import { getLastContacts, type LastContact } from "./contacts";
  *   no_show    — no asistió al trial.
  *   antiguo    — asistió hace más de 7 días sin convertir (backlog que se
  *     trabaja poco a poco) o asignado a mano. Sin sesión-plan: esos viven
- *     en "Mis leads".
+ *     en /closer/leads (ruta viva, fuera del menú).
+ *   seguimiento — ya CONTACTADO por el closer (≥1 acción registrada que
+ *     no sea nota) y aún sin cerrar: su pipeline de trabajo. Las otras
+ *     pestañas quedan como colas de "a quién me falta tocar"
+ *     (Gelfis 2026-11-27).
  *
  * Seguimiento pactado (Gelfis 2026-11-27): un lead con tarea
  * seguimiento_fecha pendiente y FUTURA se oculta de la cola y reaparece
- * en su tramo cuando llega la fecha, con chip "📆 Seguimiento".
+ * cuando llega la fecha, con chip "📆 Seguimiento".
  */
 
 export const BONO_MS   = 48 * 3_600_000;
@@ -27,7 +31,7 @@ export const ESPERA_MS = 24 * 3_600_000;
 /** Asistidos más viejos que esto pasan de Post-trial a Antiguos. */
 export const POST_TRIAL_VENTANA_MS = 7 * 24 * 3_600_000;
 
-export type CloserUrgenteTramo = "bono" | "post_trial" | "no_show" | "antiguo";
+export type CloserUrgenteTramo = "bono" | "post_trial" | "no_show" | "antiguo" | "seguimiento";
 
 export type CloserUrgenteItem = {
   leadId: string;
@@ -51,6 +55,8 @@ export type CloserUrgentes = {
   postTrial: CloserUrgenteItem[];
   noShows: CloserUrgenteItem[];
   antiguos: CloserUrgenteItem[];
+  /** Ya contactados por el closer, sin cerrar: su pipeline */
+  seguimiento: CloserUrgenteItem[];
   /** Leads ocultos por seguimiento pactado con fecha futura */
   ocultosSeguimiento: number;
 };
@@ -101,6 +107,20 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
     }
   }
 
+  // Leads YA contactados por este closer (cualquier acción registrada
+  // menos las notas sueltas) → pestaña "En seguimiento".
+  const contactados = new Set<string>();
+  if (rows.length > 0) {
+    const { data: acciones } = await sb
+      .from("acciones_closer")
+      .select("lead_id, tipo")
+      .eq("closer_id", closerId)
+      .in("lead_id", rows.map((r) => r.id));
+    for (const a of (acciones ?? []) as Array<{ lead_id: string; tipo: string }>) {
+      if (a.tipo !== "nota") contactados.add(a.lead_id);
+    }
+  }
+
   const lastContacts = await getLastContacts(rows.map((r) => r.id));
 
   const toItem = (r: LeadRow, tramo: CloserUrgenteTramo): CloserUrgenteItem => {
@@ -114,7 +134,7 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
       trialAttendedAt: r.trial_attended_at,
       trialAbsentAt: r.trial_absent_at,
       fechaAsignacion: r.fecha_asignacion_closer,
-      bonoRestanteMs: tramo === "bono" && bonoFin !== null && bonoFin > now ? bonoFin - now : null,
+      bonoRestanteMs: (tramo === "bono" || tramo === "seguimiento") && bonoFin !== null && bonoFin > now ? bonoFin - now : null,
       enEspera: tramo === "bono" && attendedMs !== null && now - attendedMs < ESPERA_MS,
       seguimientoAt: segVencido.get(r.id) ?? null,
       ultimoContacto: lastContacts.get(r.id) ?? null,
@@ -125,16 +145,22 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
   const postTrial: CloserUrgenteItem[] = [];
   const noShows: CloserUrgenteItem[] = [];
   const antiguos: CloserUrgenteItem[] = [];
+  const seguimiento: CloserUrgenteItem[] = [];
   let ocultosSeguimiento = 0;
 
   for (const r of rows) {
-    // Los leads del funnel /sesion-plan viven en "Mis leads" (semáforo +
-    // cadencias). OJO: la sesión de plan también escribe trial_attended_at
-    // (sesion-resultado), así que sin este filtro saldrían duplicados.
+    // Los leads del funnel /sesion-plan viven en /closer/leads (semáforo
+    // + cadencias). OJO: la sesión de plan también escribe
+    // trial_attended_at (sesion-resultado) — sin este filtro saldrían
+    // duplicados.
     if (r.sesion_plan_at) continue;
 
     // Seguimiento pactado a futuro: fuera de la cola hasta su fecha.
     if (segFuturo.has(r.id)) { ocultosSeguimiento++; continue; }
+
+    // Ya contactado → pipeline "En seguimiento" (las demás pestañas son
+    // colas de pendientes por tocar).
+    if (contactados.has(r.id)) { seguimiento.push(toItem(r, "seguimiento")); continue; }
 
     const attendedAge = r.trial_attended_at ? now - new Date(r.trial_attended_at).getTime() : null;
     if (attendedAge !== null && attendedAge < BONO_MS) {
@@ -178,5 +204,73 @@ export async function getCloserUrgentes(closerId: string): Promise<CloserUrgente
     return ca - cb;
   });
 
-  return { bono, postTrial, noShows, antiguos, ocultosSeguimiento };
+  // En seguimiento: seguimiento vencido primero, luego bono vivo, luego
+  // último contacto más viejo (toca re-tocar).
+  seguimiento.sort((a, b) => {
+    const sa = a.seguimientoAt ? 0 : 1;
+    const sb2 = b.seguimientoAt ? 0 : 1;
+    if (sa !== sb2) return sa - sb2;
+    const ba = a.bonoRestanteMs !== null ? 0 : 1;
+    const bb = b.bonoRestanteMs !== null ? 0 : 1;
+    if (ba !== bb) return ba - bb;
+    const ca = a.ultimoContacto ? new Date(a.ultimoContacto.occurred_at).getTime() : 0;
+    const cb = b.ultimoContacto ? new Date(b.ultimoContacto.occurred_at).getTime() : 0;
+    return ca - cb;
+  });
+
+  return { bono, postTrial, noShows, antiguos, seguimiento, ocultosSeguimiento };
+}
+
+// ── Buscador del closer (Gelfis 2026-11-27, clonado del setter) ─────────
+// Busca SOLO entre los leads asignados al closer, en todos los campos:
+// nombre, email y teléfono por subcadena de dígitos.
+
+export type CloserSearchRow = {
+  leadId: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  status: string;
+  createdAt: string;
+};
+
+export async function searchLeadsForCloser(closerId: string, q: string): Promise<CloserSearchRow[]> {
+  const query = q.trim();
+  if (query.length < 2) return [];
+
+  const sb = supabaseAdmin();
+  const safe = query.replace(/[%,()]/g, "");
+  const digits = query.replace(/\D/g, "");
+
+  const ors = [
+    `name.ilike.%${safe}%`,
+    `email.ilike.%${safe}%`,
+    `whatsapp_normalized.ilike.%${safe}%`,
+    `whatsapp_raw.ilike.%${safe}%`,
+  ];
+  if (digits.length >= 3 && digits !== safe) {
+    ors.push(`whatsapp_normalized.ilike.%${digits}%`);
+    ors.push(`whatsapp_raw.ilike.%${digits}%`);
+  }
+
+  const { data } = await sb
+    .from("leads")
+    .select("id, name, email, whatsapp_normalized, whatsapp_raw, status, created_at")
+    .eq("closer_id", closerId)
+    .or(ors.join(","))
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  return ((data ?? []) as Array<{
+    id: string; name: string | null; email: string | null;
+    whatsapp_normalized: string | null; whatsapp_raw: string | null;
+    status: string; created_at: string;
+  }>).map((l) => ({
+    leadId: l.id,
+    name: l.name,
+    phone: l.whatsapp_normalized ?? l.whatsapp_raw,
+    email: l.email,
+    status: l.status,
+    createdAt: l.created_at,
+  }));
 }

@@ -6,5 +6,5 @@ import { redirect } from "next/navigation";
  * (rojo → amarillo → verde) con el último contacto visible.
  */
 export default function CloserHomePage() {
-  redirect("/closer/leads");
+  redirect("/closer/urgentes");
 }

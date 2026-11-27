@@ -209,10 +209,10 @@ export function CloserLeadDetail({
     <>
       {/* Back link */}
       <button
-        onClick={() => router.push("/closer/leads")}
+        onClick={() => router.push("/closer/urgentes")}
         className="text-sm text-slate-500 dark:text-slate-400 hover:text-brand-600 dark:hover:text-brand-400"
       >
-        &larr; Mis leads
+        &larr; Urgentes
       </button>
 
       {/* Header */}
