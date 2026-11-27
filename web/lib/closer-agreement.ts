@@ -45,13 +45,18 @@ export async function loadCloserAgreementVars(
   opts?: { startDate?: Date },
 ): Promise<(CloserAgreementVars & { email: string; language: "es" | "de" }) | null> {
   const { data } = await supabaseAdmin().from("users")
-    .select("id, email, full_name, phone, language_preference, rango, created_at, role")
+    .select("id, email, full_name, phone, language_preference, rango, created_at, role, closer_pct_unico, closer_pct_suscripcion")
     .eq("id", userId).eq("role", "closer").maybeSingle();
   if (!data) return null;
   const u = data as {
     id: string; email: string; full_name: string | null; phone: string | null;
     language_preference: "es" | "de" | null; rango: string | null; created_at: string;
+    closer_pct_unico: number | string | null; closer_pct_suscripcion: number | string | null;
   };
+  // Tarifas fijas pactadas (mig 167): si existen, el acuerdo las usa y
+  // no menciona rangos.
+  const unico = u.closer_pct_unico != null ? Number(u.closer_pct_unico) : null;
+  const susc  = u.closer_pct_suscripcion != null ? Number(u.closer_pct_suscripcion) : null;
   return {
     name:      u.full_name ?? u.email,
     email:     u.email,
@@ -60,6 +65,7 @@ export async function loadCloserAgreementVars(
     address:   null,
     startDate: opts?.startDate ?? new Date(u.created_at),
     rango:     u.rango ?? null,
+    customTerms: unico != null && susc != null ? { unicoPct: unico, suscripcionPct: susc } : null,
     language:  u.language_preference ?? "es",
   };
 }

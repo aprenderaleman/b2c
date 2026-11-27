@@ -9,7 +9,7 @@ import { agreementLocation } from "./teacher-agreement-pdf";
  *
  * Al cambiar el texto del acuerdo: actualizar CLOSER_AGREEMENT_VERSION.
  */
-export const CLOSER_AGREEMENT_VERSION = "acuerdo-closers-v1.0 (noviembre 2026)";
+export const CLOSER_AGREEMENT_VERSION = "acuerdo-closers-v1.1 (noviembre 2026)";
 
 export type CloserAgreementVars = {
   name:      string;
@@ -21,6 +21,10 @@ export type CloserAgreementVars = {
   rango:     string | null;     // rookie | closer | elite | master
   /** Comisión (%) pactada a medida. Si viene, sustituye la línea del rango. */
   comisionPct?: number | null;
+  /** Tarifas fijas pactadas (users.closer_pct_*): si vienen, el acuerdo
+   *  las usa en vez del sistema de rangos y NO menciona rangos ni bonos
+   *  (Gelfis 2026-11-27, acuerdo con Iván). */
+  customTerms?: { unicoPct: number; suscripcionPct: number } | null;
   /** Firma de la academia (PNG) y fecha: si viene, el PDF sale firmado. */
   adminSignature?: { png: Buffer; date: Date } | null;
 };
@@ -33,6 +37,11 @@ const RANGOS_LINEA = "Rookie: 8 %  ·  Closer: 10 %  ·  Elite: 12 %  ·  Master
 
 function fmtDate(d: Date): string {
   return d.toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Berlin" });
+}
+
+/** 10 → "10" · 12.5 → "12,5" */
+function fmtPct(n: number): string {
+  return String(Number(n)).replace(".", ",");
 }
 
 export async function buildCloserAgreementPdf(v: CloserAgreementVars): Promise<Buffer> {
@@ -84,7 +93,8 @@ export async function buildCloserAgreementPdf(v: CloserAgreementVars): Promise<B
   KV("WhatsApp", v.phone ?? "________________________");
   KV("País / Ciudad", agreementLocation(v.country, v.address) ?? "________________________");
   KV("Fecha de inicio de la colaboración", fmtDate(v.startDate));
-  if (v.comisionPct != null) KV("Comisión acordada", `${String(v.comisionPct).replace(".", ",")} %`);
+  if (v.customTerms) KV("Comisión acordada", `${fmtPct(v.customTerms.unicoPct)} % en pagos únicos · ${fmtPct(v.customTerms.suscripcionPct)} % de la primera mensualidad`);
+  else if (v.comisionPct != null) KV("Comisión acordada", `${String(v.comisionPct).replace(".", ",")} %`);
   else KV("Rango de comisión inicial", v.rango ? (RANGO_CLOSER_ES[v.rango.toLowerCase()] ?? v.rango) : "Rookie (8 %)");
 
   H1("2. Naturaleza de la colaboración");
@@ -103,11 +113,17 @@ export async function buildCloserAgreementPdf(v: CloserAgreementVars): Promise<B
   H1("4. Compensación");
   H2("4.1 Comisión por venta");
   B("El closer cobra comisión sobre cada venta que el sistema le atribuya y que haya sido efectivamente cobrada por la academia (pago confirmado por la pasarela o por la administración en caso de transferencia). No hay salario fijo ni pago por llamada.");
-  B("El porcentaje depende de su rango vigente en el sistema de comisiones (rango inicial: " + (v.rango ? (RANGO_CLOSER_ES[v.rango.toLowerCase()] ?? v.rango) : "Rookie (8 %)") + "; sube por resultados):");
-  doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#0f172a").text(RANGOS_LINEA, { width: W, align: "center" }); doc.moveDown(0.3);
-  B("Bono de rescate: si la venta corresponde a un lead que NO asistió a su clase de prueba y el closer lo recupera hasta la inscripción, recibe un 3 % adicional sobre el importe de esa venta.");
-  B("Cuando la clase de prueba fue impartida por un profesor de la academia, este percibe su comisión de pre-calificación por cuenta de la academia; no se descuenta de la comisión del closer. La suma de comisiones de una venta está sujeta a un tope conjunto del 18 % del importe.");
-  B("Los porcentajes por rango, los criterios de ascenso y el detalle de cada comisión se publican en el panel del closer (sección Mis números) y pueden actualizarse; cualquier cambio se comunica con antelación y nunca se aplica con efecto retroactivo.");
+  if (v.customTerms) {
+    B(`Ventas de pago único: el closer recibe el ${fmtPct(v.customTerms.unicoPct)} % del importe cobrado de la venta.`);
+    B(`Ventas por suscripción: el closer recibe el ${fmtPct(v.customTerms.suscripcionPct)} % de la primera mensualidad cobrada al alumno. Las mensualidades siguientes no generan comisión.`);
+    B("Estas condiciones son las pactadas individualmente entre las partes. El detalle de cada comisión se publica en el panel del closer (sección Mis números); cualquier cambio se acuerda entre las partes y nunca se aplica con efecto retroactivo.");
+  } else {
+    B("El porcentaje depende de su rango vigente en el sistema de comisiones (rango inicial: " + (v.rango ? (RANGO_CLOSER_ES[v.rango.toLowerCase()] ?? v.rango) : "Rookie (8 %)") + "; sube por resultados):");
+    doc.font("Helvetica-Bold").fontSize(9.5).fillColor("#0f172a").text(RANGOS_LINEA, { width: W, align: "center" }); doc.moveDown(0.3);
+    B("Bono de rescate: si la venta corresponde a un lead que NO asistió a su clase de prueba y el closer lo recupera hasta la inscripción, recibe un 3 % adicional sobre el importe de esa venta.");
+    B("Cuando la clase de prueba fue impartida por un profesor de la academia, este percibe su comisión de pre-calificación por cuenta de la academia; no se descuenta de la comisión del closer. La suma de comisiones de una venta está sujeta a un tope conjunto del 18 % del importe.");
+    B("Los porcentajes por rango, los criterios de ascenso y el detalle de cada comisión se publican en el panel del closer (sección Mis números) y pueden actualizarse; cualquier cambio se comunica con antelación y nunca se aplica con efecto retroactivo.");
+  }
   H2("4.2 Liquidación y pago");
   B("Liquidación mensual sobre las ventas cobradas y aprobadas en el mes, previa emisión de factura del closer a Linguify Global LLC con el desglose que entrega la academia.");
   B("Si un pago que generó comisión es devuelto, reembolsado o impagado (chargeback), la comisión correspondiente se descuenta de la siguiente liquidación.");
