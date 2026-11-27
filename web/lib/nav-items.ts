@@ -137,6 +137,11 @@ function adminItems(): NavItem[] {
 }
 
 function closerItems(): NavItem[] {
+  // Menú simplificado (Gelfis 2026-11-27): Urgentes, Mis leads, Mis
+  // números, Chats, Grabaciones y Perfil. "Sesiones", "Calendario" y
+  // "Mi disponibilidad" quedan fuera del menú pero con rutas vivas por
+  // enlace directo (/closer/sesiones, /closer/calendario,
+  // /closer/disponibilidad) — las usan los closers con acepta_sesiones.
   return [
     // CRM Closer F2 (Gelfis 2026-11-25): cola de cierre post-trial /
     // no-shows / antiguos. Primera en el array = primera en el sidebar.
@@ -144,13 +149,10 @@ function closerItems(): NavItem[] {
     // "Hoy" (cola aparte) eliminada — Mis leads es la cola, ordenada
     // por semáforo (Gelfis 2026-08-17).
     { label: "Mis leads",          href: "/closer/leads",          icon: "users",      priority: 1 },
-    { label: "Sesiones",           href: "/closer/sesiones",       icon: "userCheck",  priority: 2.5 },
-    { label: "Calendario",         href: "/closer/calendario",     icon: "calendarDays", priority: 2.7 },
     { label: "Mis numeros",        href: "/closer/numeros",        icon: "trendingUp", priority: 3 },
     // Chat con la academia y el equipo de ventas (Gelfis 2026-11-27).
     { label: "Chats",              href: "/closer/chats",          icon: "messageCircle", priority: 3.2 },
     { label: "Grabaciones",         href: "/closer/grabaciones",    icon: "video",      priority: 3.5 },
-    { label: "Mi disponibilidad",  href: "/closer/disponibilidad", icon: "clock",      priority: 5 },
     { label: "Perfil",             href: "/closer/perfil",         icon: "userCircle", priority: 4 },
   ];
 }

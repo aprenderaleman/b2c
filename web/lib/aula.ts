@@ -237,6 +237,26 @@ export async function canViewRecording(
         return { ok: true, classId: (rec as { class_id: string }).class_id };
       }
     }
+    // CRM Closer (Gelfis 2026-11-27): el closer ve las grabaciones de las
+    // clases de prueba de SUS leads — contexto para la llamada de cierre.
+    if (role === "closer") {
+      const { data: trialCls } = await sb
+        .from("classes")
+        .select("lead_id")
+        .eq("id", (rec as { class_id: string }).class_id)
+        .maybeSingle();
+      const leadId = (trialCls as { lead_id: string | null } | null)?.lead_id;
+      if (leadId) {
+        const { data: lead } = await sb
+          .from("leads")
+          .select("closer_id")
+          .eq("id", leadId)
+          .maybeSingle();
+        if ((lead as { closer_id: string | null } | null)?.closer_id === userId) {
+          return { ok: true, classId: (rec as { class_id: string }).class_id };
+        }
+      }
+    }
     return { ok: false };
   }
 

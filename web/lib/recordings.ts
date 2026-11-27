@@ -274,51 +274,80 @@ export async function getLeadTeacherRecordings(myTeacherId: string): Promise<Lea
   return { recordings: out, teacherNames: allTeacherNames };
 }
 
-export async function getCloserRecordings(closerUserId: string): Promise<
-  Array<RecordingRow & { class_title: string; scheduled_at: string; lead_name: string | null }>
-> {
+export type CloserRecordingRow = RecordingRow & {
+  class_title: string;
+  scheduled_at: string;
+  lead_name: string | null;
+  /** sesion = Sesión de Plan del propio closer · trial = clase de prueba de un lead suyo */
+  kind: "sesion" | "trial";
+};
+
+/**
+ * Grabaciones visibles para el closer: sus Sesiones de Plan y, desde el
+ * 2026-11-27 (Gelfis), las clases de prueba de SUS leads asignados —
+ * así escucha exactamente qué se habló antes de la llamada de cierre.
+ */
+export async function getCloserRecordings(closerUserId: string): Promise<CloserRecordingRow[]> {
   const sb = supabaseAdmin();
-  const { data, error } = await sb
-    .from("classes")
-    .select(`
+  const SELECT_SESION = `
       id, title, scheduled_at,
       lead:leads(name),
       recordings(
         id, file_url, status, duration_seconds, downloadable, created_at, processed_at, error
       )
-    `)
-    .eq("sesion_closer_id", closerUserId)
-    .is("deleted_at", null);
-  if (error) return [];
+    `;
+  const SELECT_TRIAL = `
+      id, title, scheduled_at,
+      leads!inner(name, closer_id),
+      recordings(
+        id, file_url, status, duration_seconds, downloadable, created_at, processed_at, error
+      )
+    `;
+  const [sesionRes, trialRes] = await Promise.all([
+    sb.from("classes").select(SELECT_SESION)
+      .eq("sesion_closer_id", closerUserId)
+      .is("deleted_at", null),
+    sb.from("classes").select(SELECT_TRIAL)
+      .eq("is_trial", true)
+      .eq("leads.closer_id", closerUserId)
+      .is("deleted_at", null),
+  ]);
 
   type Raw = {
     id: string; title: string; scheduled_at: string;
-    lead: { name: string | null } | Array<{ name: string | null }> | null;
+    lead?: { name: string | null } | Array<{ name: string | null }> | null;
+    leads?: { name: string | null } | Array<{ name: string | null }> | null;
     recordings: Record<string, unknown>[] | undefined;
   };
-  const out: Array<RecordingRow & { class_title: string; scheduled_at: string; lead_name: string | null }> = [];
-  for (const c of (data ?? []) as Raw[]) {
-    const recs = c.recordings ?? [];
-    const leadFlat = Array.isArray(c.lead) ? c.lead[0] : c.lead;
-    for (const rec of recs) {
-      if (rec.status === "deleted") continue;   // purgadas por retención 90d
-      out.push({
-        id:               rec.id as string,
-        class_id:         c.id,
-        file_url:         (rec.file_url as string | null) ?? null,
-        file_size_bytes:  null,
-        duration_seconds: (rec.duration_seconds as number | null) ?? null,
-        status:           (rec.status as RecordingStatus) ?? "processing",
-        error:            (rec.error as string | null) ?? null,
-        downloadable:     Boolean(rec.downloadable),
-        created_at:       rec.created_at as string,
-        processed_at:     (rec.processed_at as string | null) ?? null,
-        class_title:      c.title,
-        scheduled_at:     c.scheduled_at,
-        lead_name:        leadFlat?.name ?? null,
-      });
+  const out: CloserRecordingRow[] = [];
+  const push = (rows: Raw[], kind: "sesion" | "trial") => {
+    for (const c of rows) {
+      const recs = c.recordings ?? [];
+      const leadRaw = c.lead ?? c.leads ?? null;
+      const leadFlat = Array.isArray(leadRaw) ? leadRaw[0] : leadRaw;
+      for (const rec of recs) {
+        if (rec.status === "deleted") continue;   // purgadas por retención
+        out.push({
+          id:               rec.id as string,
+          class_id:         c.id,
+          file_url:         (rec.file_url as string | null) ?? null,
+          file_size_bytes:  null,
+          duration_seconds: (rec.duration_seconds as number | null) ?? null,
+          status:           (rec.status as RecordingStatus) ?? "processing",
+          error:            (rec.error as string | null) ?? null,
+          downloadable:     Boolean(rec.downloadable),
+          created_at:       rec.created_at as string,
+          processed_at:     (rec.processed_at as string | null) ?? null,
+          class_title:      c.title,
+          scheduled_at:     c.scheduled_at,
+          lead_name:        leadFlat?.name ?? null,
+          kind,
+        });
+      }
     }
-  }
+  };
+  push((sesionRes.data ?? []) as Raw[], "sesion");
+  push((trialRes.data ?? []) as Raw[], "trial");
   out.sort((a, b) => b.created_at.localeCompare(a.created_at));
   return out;
 }

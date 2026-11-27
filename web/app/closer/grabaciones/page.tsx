@@ -15,6 +15,8 @@ export default async function CloserRecordingsPage() {
   if (session.user.role !== "closer") redirect("/admin");
 
   const recs = await getCloserRecordings(session.user.id);
+  const trials = recs.filter(r => r.kind === "trial");
+  const sesiones = recs.filter(r => r.kind === "sesion");
 
   return (
     <main className="mx-auto max-w-4xl p-4 sm:p-6 space-y-8">
@@ -23,8 +25,8 @@ export default async function CloserRecordingsPage() {
           Mis grabaciones
         </h1>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Grabaciones de tus sesiones de plan. Revisa la conversaci&oacute;n para
-          mejorar tu t&eacute;cnica de cierre.
+          Las clases de prueba de tus leads y tus sesiones de plan. Escucha
+          qu&eacute; se habl&oacute; con el lead antes de llamar: m&aacute;s contexto, mejor cierre.
         </p>
       </header>
 
@@ -37,8 +39,11 @@ export default async function CloserRecordingsPage() {
         </div>
       )}
 
-      {recs.length > 0 && (
-        <RecordingList recs={recs} />
+      {trials.length > 0 && (
+        <RecordingList recs={trials} title="Clases de prueba de tus leads" />
+      )}
+      {sesiones.length > 0 && (
+        <RecordingList recs={sesiones} title="Sesiones de plan" />
       )}
     </main>
   );
@@ -46,7 +51,7 @@ export default async function CloserRecordingsPage() {
 
 type Rec = Awaited<ReturnType<typeof getCloserRecordings>>[number];
 
-function RecordingList({ recs }: { recs: Rec[] }) {
+function RecordingList({ recs, title }: { recs: Rec[]; title: string }) {
   const byMonth = new Map<string, Rec[]>();
   for (const r of recs) {
     const key = monthKeyBerlin(r.scheduled_at);
@@ -60,7 +65,7 @@ function RecordingList({ recs }: { recs: Rec[] }) {
     <section className="space-y-3">
       <div className="flex items-center gap-2">
         <h2 className="text-base font-bold tracking-tight text-slate-900 dark:text-slate-100">
-          Sesiones de plan
+          {title}
         </h2>
         <span className="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300">
           {recs.length}
