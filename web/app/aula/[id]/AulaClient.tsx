@@ -136,6 +136,11 @@ export function AulaClient(p: Props) {
   // luego mid-call desde la barra inferior.
   const [bgChoice, setBgChoice] = useState<BgMode>("off");
   const [mediaWarning, setMediaWarning] = useState<string | null>(null);
+  // Permisos de cámara/mic BLOQUEADOS en el navegador (caso Doris
+  // 2026-11-28): el navegador ya ni pregunta, así que "recarga y pulsa
+  // Permitir" no sirve. Mostramos una guía paso a paso para
+  // desbloquearlos + botón de entrar como espectador.
+  const [permBlocked, setPermBlocked] = useState(false);
   // "handoff": tras submit del PreJoin, esperamos antes de montar
   // LiveKitRoom. iOS Safari sólo permite UN getUserMedia por origen a
   // la vez, y si Room intenta pedir cámara/mic mientras PreJoin aún
@@ -205,6 +210,24 @@ export function AulaClient(p: Props) {
   // Pre-join: el usuario verifica cámara/mic + escoge dispositivos
   // antes de conectar. Estilo Google Meet "Ready to join".
   if (!userChoices && !leadListenOnly) {
+    if (permBlocked) {
+      return (
+        <PermissionGuideScreen
+          classTitle={p.classTitle}
+          backHref={p.backHref}
+          onJoinWithoutMedia={() => {
+            setPermBlocked(false);
+            setUserChoices({
+              username:      p.displayName,
+              videoEnabled:  false,
+              audioEnabled:  false,
+              videoDeviceId: "",
+              audioDeviceId: "",
+            });
+          }}
+        />
+      );
+    }
     return (
       <AulaPreJoin
         classTitle={p.classTitle}
@@ -216,10 +239,17 @@ export function AulaClient(p: Props) {
         onSubmit={(choices) => setUserChoices(choices)}
         onError={(e) => {
           console.warn("[aula/prejoin] media error:", e);
-          setMediaWarning(
-            "Tu navegador no permitió usar cámara o micrófono. " +
-            "Puedes entrar como espectador o recargar y pulsar 'Permitir'.",
-          );
+          // Permiso denegado/bloqueado → guía paso a paso (solo cuando
+          // salta el error, pedido de Gelfis 2026-11-28). Otros fallos
+          // (sin dispositivo, cámara ocupada) mantienen el aviso suave.
+          if (/NotAllowed|PermissionDenied|Permission denied|not allowed/i.test(`${e.name} ${e.message}`)) {
+            setPermBlocked(true);
+          } else {
+            setMediaWarning(
+              "Tu navegador no permitió usar cámara o micrófono. " +
+              "Puedes entrar como espectador o recargar y pulsar 'Permitir'.",
+            );
+          }
         }}
       />
     );
@@ -1249,6 +1279,98 @@ function LoadingScreen({ classTitle }: { classTitle: string }) {
             Pulsa <strong>“Permitir”</strong> — sin eso el profesor no podrá
             oírte ni verte.
           </p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/**
+ * Guía de desbloqueo de permisos (caso Doris 2026-11-28). Se muestra
+ * SOLO cuando el navegador devuelve NotAllowedError en el PreJoin: o el
+ * usuario pulsó "Bloquear" en algún momento (el navegador ya no vuelve
+ * a preguntar) o denegó el prompt. Pasos por plataforma + entrar como
+ * espectador para no perderse la clase mientras tanto.
+ */
+function PermissionGuideScreen({ classTitle, backHref, onJoinWithoutMedia }: {
+  classTitle: string;
+  backHref: string;
+  onJoinWithoutMedia: () => void;
+}) {
+  const ios = isIOS();
+  const android = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+  const steps: Array<{ titulo: string; pasos: string[] }> = [];
+  if (ios) {
+    steps.push({
+      titulo: "En iPhone / iPad (Safari)",
+      pasos: [
+        "Toca el botón «AA» (o el de ajustes) junto a la dirección, arriba.",
+        "Entra en «Configuración del sitio web».",
+        "Pon Cámara y Micrófono en «Permitir».",
+        "Si no aparece: Ajustes del iPhone → Apps → Safari → Cámara y Micrófono → «Permitir».",
+      ],
+    });
+  }
+  if (android || !ios) {
+    steps.push({
+      titulo: android ? "En Android (Chrome)" : "En la computadora (Chrome / Edge)",
+      pasos: [
+        "Toca el candado 🔒 (o el icono de ajustes) junto a la dirección, arriba.",
+        "Entra en «Permisos» (o «Configuración del sitio»).",
+        "Activa Cámara y Micrófono → «Permitir».",
+        ...(android
+          ? ["Si no aparecen: Ajustes del teléfono → Aplicaciones → Chrome → Permisos → activa Cámara y Micrófono."]
+          : []),
+      ],
+    });
+  }
+  return (
+    <main className="min-h-screen w-full flex flex-col bg-slate-950 text-slate-100">
+      <header className="flex items-center gap-3 px-4 py-3 border-b border-slate-800/80">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            Aprender-Aleman.de
+          </div>
+          <div className="text-sm font-semibold truncate">{classTitle}</div>
+        </div>
+      </header>
+      <div className="flex-1 flex items-center justify-center px-4 py-8">
+        <div className="w-full max-w-md space-y-5">
+          <div className="text-center">
+            <div className="text-4xl mb-2">🎥🔒</div>
+            <h1 className="text-xl font-bold">Tu navegador tiene bloqueada la cámara</h1>
+            <p className="mt-1 text-sm text-slate-400">
+              No es un fallo de la plataforma: el permiso está bloqueado en tu
+              navegador y se arregla en 20 segundos.
+            </p>
+          </div>
+          {steps.map((s) => (
+            <section key={s.titulo} className="rounded-2xl bg-slate-900 border border-slate-800 p-4">
+              <h2 className="text-sm font-semibold text-slate-200 mb-2">{s.titulo}</h2>
+              <ol className="space-y-1.5 text-sm text-slate-300 list-decimal list-inside">
+                {s.pasos.map((paso, i) => <li key={i}>{paso}</li>)}
+              </ol>
+            </section>
+          ))}
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition-colors"
+            >
+              ✅ Ya lo activé — volver a intentar
+            </button>
+            <button
+              type="button"
+              onClick={onJoinWithoutMedia}
+              className="w-full rounded-xl border border-slate-700 hover:border-slate-500 px-4 py-3 text-sm font-medium text-slate-200 transition-colors"
+            >
+              👀 Entrar sin cámara ni micrófono (ver y escuchar la clase)
+            </button>
+            <Link href={backHref} className="block text-center text-xs text-slate-500 hover:text-slate-300 pt-1">
+              ← Volver
+            </Link>
+          </div>
         </div>
       </div>
     </main>
