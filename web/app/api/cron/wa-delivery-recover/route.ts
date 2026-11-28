@@ -112,9 +112,10 @@ async function run(req: Request) {
   const fallbackCutoff = new Date(Date.now() - FALLBACK_AFTER_MS).toISOString();
 
   // ─── Fase A: recovery activo ──────────────────────────────────────────
-  const { data: stuckRows, error: stuckErr } = await sb
+  // Paso 1: leer candidatos (stuck sin recovery).
+  const { data: stuckCandidates, error: stuckErr } = await sb
     .from("wa_delivery_tracking")
-    .select("id, lead_id, wa_message_id, phone_e164, instance, kind, original_text, sent_at, stuck_at, context")
+    .select("id")
     .not("stuck_at", "is", null)
     .is("recovery_attempted_at", null)
     .is("delivered_at", null)
@@ -125,11 +126,30 @@ async function run(req: Request) {
     return NextResponse.json({ error: "select_stuck_failed", detail: stuckErr.message }, { status: 500 });
   }
 
+  // Paso 2: CAS atómico — marca recovery_attempted_at=now solo en filas
+  // cuyo campo sigue NULL. Si dos ticks solapan, solo UNO gana cada fila
+  // (Postgres garantiza atomicidad por UPDATE). Las otras filas que otro
+  // tick ya claimed no vuelven en el .select() del update → no reenvío.
+  const candidateIds = (stuckCandidates ?? []).map((c) => c.id as string);
+  let claimed: StuckRow[] = [];
+  if (candidateIds.length > 0) {
+    const { data: claimedRows, error: claimErr } = await sb
+      .from("wa_delivery_tracking")
+      .update({ recovery_attempted_at: nowIso })
+      .in("id", candidateIds)
+      .is("recovery_attempted_at", null)
+      .select("id, lead_id, wa_message_id, phone_e164, instance, kind, original_text, sent_at, stuck_at, context");
+    if (claimErr) {
+      return NextResponse.json({ error: "claim_failed", detail: claimErr.message }, { status: 500 });
+    }
+    claimed = (claimedRows ?? []) as StuckRow[];
+  }
+
   let recoveryTried = 0;
   let recoveryOk    = 0;
   let recoveryFail  = 0;
 
-  for (const r of (stuckRows ?? []) as StuckRow[]) {
+  for (const r of claimed) {
     const sessionReset = await resetSignalSession(evoUrl, evoKey, r.instance, r.phone_e164);
     const channel = (r.context as { channel?: string } | null)?.channel === "setter" ? "setter" as const : undefined;
 
@@ -140,8 +160,9 @@ async function run(req: Request) {
       bypassDedup: true,
     });
 
+    // recovery_attempted_at ya está seteado por el CAS; aquí solo
+    // escribimos el resultado detallado del intento.
     await sb.from("wa_delivery_tracking").update({
-      recovery_attempted_at: nowIso,
       recovery_action: `session_reset=${sessionReset ? "ok" : "fail"};resend=${res.ok ? "ok" : "fail"}`,
     }).eq("id", r.id);
 
@@ -169,9 +190,12 @@ async function run(req: Request) {
   }
 
   // ─── Fase B: fallback manual (recovery agotado) ───────────────────────
-  const { data: fallbackRows, error: fbErr } = await sb
+  // Mismo patrón CAS que Fase A: candidatos → claim atómico de failed_at.
+  // Si dos ticks pisan el mismo row, solo uno lo gana → solo un
+  // wa_manual_pending en lead_timeline.
+  const { data: fallbackCandidates, error: fbErr } = await sb
     .from("wa_delivery_tracking")
-    .select("id, lead_id, wa_message_id, phone_e164, instance, kind, original_text, sent_at, stuck_at, recovery_attempted_at, context")
+    .select("id")
     .not("recovery_attempted_at", "is", null)
     .lt("recovery_attempted_at", fallbackCutoff)
     .is("delivered_at", null)
@@ -182,10 +206,25 @@ async function run(req: Request) {
     return NextResponse.json({ error: "select_fallback_failed", detail: fbErr.message }, { status: 500 });
   }
 
+  const fbIds = (fallbackCandidates ?? []).map((c) => c.id as string);
+  let fallbackClaimed: StuckRow[] = [];
+  if (fbIds.length > 0) {
+    const { data: claimedFb, error: claimFbErr } = await sb
+      .from("wa_delivery_tracking")
+      .update({ failed_at: nowIso, fail_reason: "delivery_stuck_after_recovery" })
+      .in("id", fbIds)
+      .is("failed_at", null)
+      .select("id, lead_id, wa_message_id, phone_e164, instance, kind, original_text, sent_at, stuck_at, context");
+    if (claimFbErr) {
+      return NextResponse.json({ error: "claim_fallback_failed", detail: claimFbErr.message }, { status: 500 });
+    }
+    fallbackClaimed = (claimedFb ?? []) as StuckRow[];
+  }
+
   let fallbacks = 0;
   const fallbackLines: string[] = [];
 
-  for (const r of (fallbackRows ?? []) as StuckRow[]) {
+  for (const r of fallbackClaimed) {
     const phoneNoPlus = r.phone_e164.replace(/^\+/, "");
     const waLink = `https://api.whatsapp.com/send?phone=${phoneNoPlus}&text=${encodeURIComponent(r.original_text)}`;
 
@@ -219,11 +258,6 @@ async function run(req: Request) {
         }).then(() => {}, () => {});
       }
     }
-
-    await sb.from("wa_delivery_tracking").update({
-      failed_at: nowIso,
-      fail_reason: "delivery_stuck_after_recovery",
-    }).eq("id", r.id);
 
     fallbacks++;
     fallbackLines.push(`  · ${r.phone_e164}  kind=${r.kind}  sent=${r.sent_at.slice(0, 16)}`);
