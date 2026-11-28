@@ -158,6 +158,12 @@ async function run(req: Request) {
       ...(channel ? { channel } : {}),
       leadId: r.lead_id ?? undefined,
       bypassDedup: true,
+      // CRÍTICO (Gelfis 2026-11-28, tras loop Saurelis): el resend NO
+      // debe crear otra fila de tracking, o si tampoco entrega entraría
+      // en un segundo ciclo stuck → recovery → resend → … infinito.
+      // Con skipTracking el resend es "fire and forget": si no llega,
+      // la fila original pasará a Fase B (manual) a los 15 min.
+      skipTracking: true,
     });
 
     // recovery_attempted_at ya está seteado por el CAS; aquí solo

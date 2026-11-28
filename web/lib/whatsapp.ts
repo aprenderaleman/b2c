@@ -395,6 +395,12 @@ export type SendWaOpts = {
    *  tiene éxito, se crea una fila en wa_delivery_tracking para que el
    *  monitor detecte entregas que quedaron en "Esperando el mensaje". */
   leadId?: string;
+  /** Desactiva el insert en wa_delivery_tracking para ESTE envío
+   *  concreto (Gelfis 2026-11-28, tras loop de Saurelis). Lo usa el
+   *  propio cron de recovery al reenviar: si el resend también creara
+   *  una fila, al no entregar tampoco entraría en un nuevo ciclo de
+   *  stuck → recovery → resend → … (loop infinito). */
+  skipTracking?: boolean;
 };
 
 // ── Canal del setter: instancia propia para el warm-up del número nuevo ──
@@ -726,7 +732,9 @@ export async function sendWhatsappText(
     // messageId, registramos la fila para que el cron monitor detecte
     // entregas que quedaron en "Esperando el mensaje". No bloqueante:
     // si el insert falla el envío sigue reportándose como ok.
-    if (opts.leadId && messageId) {
+    // Si skipTracking=true (recovery cron), NO insertamos para no crear
+    // loop infinito de stuck → recovery → resend → stuck.
+    if (opts.leadId && messageId && !opts.skipTracking) {
       try {
         const { supabaseAdmin } = await import("./supabase");
         const sb = supabaseAdmin();
